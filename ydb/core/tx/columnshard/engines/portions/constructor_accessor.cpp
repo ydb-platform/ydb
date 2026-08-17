@@ -10,27 +10,22 @@ void TPortionAccessorConstructor::ChunksValidation() const {
     AFL_VERIFY(Records.size());
     CheckChunksOrder(Records);
     CheckChunksOrder(Indexes);
-    if (BlobIdxs.size()) {
-        AFL_VERIFY(BlobIdxs.size() <= Records.size() + Indexes.size())("blobs", BlobIdxs.size())("records", Records.size())(
-                                                       "indexes", Indexes.size());
+    std::set<ui32> blobIdxs;
+    for (auto&& i : Records) {
+        TBlobRange::Validate(GetBlobIds(), i.GetBlobRange()).Validate();
+        blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
+    }
+    for (auto&& i : Indexes) {
+        if (i.HasBlobRange()) {
+            TBlobRange::Validate(GetBlobIds(), i.GetBlobRangeVerified()).Validate();
+            blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
+        }
+    }
+    if (GetBlobIdsCount()) {
+        AFL_VERIFY(GetBlobIdsCount() == blobIdxs.size());
+        AFL_VERIFY(GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
     } else {
-        std::set<ui32> blobIdxs;
-        for (auto&& i : Records) {
-            TBlobRange::Validate(GetBlobIds(), i.GetBlobRange()).Validate();
-            blobIdxs.emplace(i.GetBlobRange().GetBlobIdxVerified());
-        }
-        for (auto&& i : Indexes) {
-            if (i.HasBlobRange()) {
-                TBlobRange::Validate(GetBlobIds(), i.GetBlobRangeVerified()).Validate();
-                blobIdxs.emplace(i.GetBlobRangeVerified().GetBlobIdxVerified());
-            }
-        }
-        if (GetBlobIdsCount()) {
-            AFL_VERIFY(GetBlobIdsCount() == blobIdxs.size());
-            AFL_VERIFY(GetBlobIdsCount() == *blobIdxs.rbegin() + 1);
-        } else {
-            AFL_VERIFY(blobIdxs.empty());
-        }
+        AFL_VERIFY(blobIdxs.empty());
     }
 }
 

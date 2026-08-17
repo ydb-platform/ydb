@@ -3,7 +3,28 @@
 #include <util/generic/algorithm.h>
 #include <util/system/types.h>
 
+#include <vector>
+
 namespace NYql::NUdf {
+
+std::shared_ptr<arrow::Scalar> CreateOptionalUnionScalar(
+    std::shared_ptr<arrow::Scalar> unionScalar,
+    std::shared_ptr<arrow::DataType> optionalUnionType) {
+    return std::make_shared<arrow::StructScalar>(
+        std::vector<std::shared_ptr<arrow::Scalar>>{std::move(unionScalar)},
+        std::move(optionalUnionType));
+}
+
+std::shared_ptr<arrow::ArrayData> CreateOptionalUnionArray(
+    i64 length,
+    std::shared_ptr<arrow::Buffer> validityBitmap,
+    std::shared_ptr<arrow::ArrayData> unionArray,
+    i64 nullCount,
+    std::shared_ptr<arrow::DataType> optionalUnionType) {
+    return arrow::ArrayData::Make(std::move(optionalUnionType), length,
+                                  {std::move(validityBitmap)},
+                                  {std::move(unionArray)}, nullCount, /*offset=*/0);
+}
 
 namespace {
 

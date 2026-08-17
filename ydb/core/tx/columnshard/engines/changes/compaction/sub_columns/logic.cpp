@@ -15,13 +15,15 @@ void TSubColumnsMerger::DoStart(const std::vector<std::shared_ptr<NArrow::NAcces
     for (auto&& i : input) {
         OrderedIterators.emplace_back(NSubColumns::TChunksIterator(i, Context.GetLoader(), RemapKeyIndex, OrderedIterators.size()));
     }
-    std::vector<const TDictStats*> stats;
+    // Deduce value types over every chunk of every source, not just the first one: a portion's chunks
+    // may disagree on a key's native scalar type, and sampling one chunk would mislabel the merged column.
+    std::vector<TDictStats> stats;
     ui32 statRecordsCount = 0;
     for (auto&& i : OrderedIterators) {
-        if (i.GetCurrentSubColumnsArray()) {
-            stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetColumnsData().GetStats());
-            stats.emplace_back(&i.GetCurrentSubColumnsArray()->GetOthersData().GetStats());
-            statRecordsCount += i.GetCurrentSubColumnsArray()->GetRecordsCount();
+        for (auto&& sub : i.MaterializePerChunkArrays()) {
+            stats.emplace_back(sub->GetColumnsData().GetStats());
+            stats.emplace_back(sub->GetOthersData().GetStats());
+            statRecordsCount += sub->GetRecordsCount();
         }
     }
     AFL_VERIFY(stats.size());

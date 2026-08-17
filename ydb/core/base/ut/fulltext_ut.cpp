@@ -540,6 +540,39 @@ Y_UNIT_TEST_SUITE(NFulltext) {
             (TVector<T>{{"foo bar", false}}));
     }
 
+    Y_UNIT_TEST(MidNumberChainedStandard) {
+        // Regression test: after consuming a MidNumber separator + digit, prev was
+        // incorrectly set to LETTER instead of DIGIT, so a second separator would not
+        // satisfy the (prev == DIGIT || prev == MID_DIGIT) guard and the token was cut short.
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+
+        // Two separators: "1,2,3" must be one token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3", analyzers), (TVector<TString>{"1,2,3"}));
+
+        // Mix of MidNumber chars (comma and period).
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2.3", analyzers), (TVector<TString>{"1,2.3"}));
+
+        // Trailing separator does not join — "1," ends at safeEnd before the comma.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,", analyzers), (TVector<TString>{"1,2"}));
+
+        // Longer chain.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3,4,5", analyzers), (TVector<TString>{"1,2,3,4,5"}));
+
+        // Multiple tokens separated by whitespace — each chained number is its own token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3 4,5,6", analyzers), (TVector<TString>{"1,2,3", "4,5,6"}));
+
+        // Mixed: a word token followed by a chained number token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("price 1,234,567", analyzers), (TVector<TString>{"price", "1,234,567"}));
+
+        // Chained number token followed by a letter token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3 end", analyzers), (TVector<TString>{"1,2,3", "end"}));
+
+        // Punctuation breaks tokens: "1,2.foo" — the period before a letter is MidLetter territory,
+        // but here it follows digits so the chain stops at "1,2" and "foo" is separate.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2.foo", analyzers), (TVector<TString>{"1,2", "foo"}));
+    }
+
     Y_UNIT_TEST(WordBreakTest) {
         // Generated from
         // http://www.unicode.org/Public/12.1.0/ucd/auxiliary/WordBreakTest.txt

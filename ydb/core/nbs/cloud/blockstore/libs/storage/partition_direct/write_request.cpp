@@ -35,10 +35,12 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , WriteMode(directBlockGroup->GetOracle()->GetWriteMode())
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
-          {{"t", ToString(WriteMode)},
-           {"lsn", ToString(bundle->GetLsn())},
-           {"r", bundle->GetRange().Print()},
-           {"rv", bundle->GetVChunkRange().Print()}}))
+          {{"t",
+            WriteMode == EWriteMode::IndirectWrite ? "IndirectWrite"
+                                                   : "DirectWrite"},
+           {"lsn", bundle->GetLsn()},
+           {"r", bundle->GetRange()},
+           {"rv", bundle->GetVChunkRange()}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Bundle(std::move(bundle))
@@ -145,7 +147,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 NKikimrServices::NBS_PARTITION,
                 "%s OnIndirectWriteResponse %s OK",
                 LogTitle.GetWithTime().c_str(),
-                PrintHostIndex(host).c_str());
+                PrintHostAndNode(host).c_str());
 
             completedWritesOfCurrentResponse.Set(host);
         } else {
@@ -154,8 +156,8 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
                 NKikimrServices::NBS_PARTITION,
                 "%s OnIndirectWriteResponse %s %s",
                 LogTitle.GetWithTime().c_str(),
-                PrintHostIndex(host).c_str(),
-                FormatError(pbufferResponse.Error).c_str());
+                PrintHostAndNode(host).c_str(),
+                FormatError(pbufferResponse.Error).Quote().c_str());
 
             FailedWrites.Set(host);
             // The error will be set and replied below.
@@ -164,7 +166,7 @@ void TWriteRequestExecutor::OnIndirectWriteResponse(
 
     CompletedWrites = CompletedWrites.Include(completedWritesOfCurrentResponse);
 
-    if (ShouldReplyOk()) {
+    if (IsQuorumReached()) {
         ReplyOrNotifyBelated(MakeError(S_OK), completedWritesOfCurrentResponse);
         return;
     }
@@ -273,7 +275,7 @@ void TWriteRequestExecutor::SendDirectWriteRequest(THostIndex host)
         NKikimrServices::NBS_PARTITION,
         "%s Send DirectWriteRequest to %s %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(host).c_str(),
+        PrintHostAndNode(host).c_str(),
         ExtendedDebugState().c_str());
 
     auto span = DirectBlockGroup->CreateChildSpan(
@@ -310,12 +312,12 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
         NKikimrServices::NBS_PARTITION,
         "%s OnDirectWriteResponse %s %s",
         LogTitle.GetWithTime().c_str(),
-        PrintHostIndex(host).c_str(),
-        FormatError(response.Error).c_str());
+        PrintHostAndNode(host).c_str(),
+        FormatError(response.Error).Quote().c_str());
 
     if (!HasError(response.Error)) {
         CompletedWrites.Set(host);
-        if (ShouldReplyOk()) {
+        if (IsQuorumReached()) {
             ReplyOrNotifyBelated(MakeError(S_OK), THostMask::MakeOne(host));
         }
         return;
@@ -335,7 +337,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
             "%s It is impossible to reach a quorum. %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
         Reply(response.Error);
         return;
     }
@@ -354,7 +356,7 @@ void TWriteRequestExecutor::OnDirectWriteResponse(
             "%s All hand-offs attempts are over. %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
-            FormatError(response.Error).c_str());
+            FormatError(response.Error).Quote().c_str());
         return;
     }
 
@@ -395,7 +397,9 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
             "%s [!] Reply error %s %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str(),
-            FormatError(error).c_str());
+            FormatError(error).Quote().c_str());
+
+        Y_ABORT_UNLESS(!IsQuorumReached());
     } else {
         LOG_DEBUG(
             *ActorSystem,
@@ -403,6 +407,8 @@ void TWriteRequestExecutor::Reply(NProto::TError error)
             "%s Reply OK. %s",
             LogTitle.GetWithTime().c_str(),
             ExtendedDebugState().c_str());
+
+        Y_ABORT_UNLESS(IsQuorumReached());
     }
 
     Bundle->Reply(
@@ -508,7 +514,7 @@ void TWriteRequestExecutor::OnRequestTimeout()
     ReplyOrNotifyBelated(MakeError(E_TIMEOUT, "Write request timeout"), {});
 }
 
-bool TWriteRequestExecutor::ShouldReplyOk() const
+bool TWriteRequestExecutor::IsQuorumReached() const
 {
     return CompletedWrites.Count() >= QuorumDirectBlockGroupHostCount;
 }
@@ -545,6 +551,11 @@ TString TWriteRequestExecutor::ExtendedDebugState() const
     result << " c:" << CompletedWrites.Print();
     result << " f:" << FailedWrites.Print();
     return result;
+}
+
+TString TWriteRequestExecutor::PrintHostAndNode(THostIndex host) const
+{
+    return PrintHostAndNodeId(host, DirectBlockGroup->GetNodeId(host));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

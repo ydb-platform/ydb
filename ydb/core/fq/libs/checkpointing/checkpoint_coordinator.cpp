@@ -7,7 +7,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-#include <ydb/library/yql/dq/state/dq_state_load_plan.h>
+#include <ydb/core/fq/libs/state/dq_state_load_plan.h>
 
 #include <util/string/builder.h>
 #include <util/system/env.h>
@@ -260,7 +260,7 @@ void TCheckpointCoordinator::TryToRestoreOffsetsFromForeignCheckpoint(const TChe
 
     NYql::TIssues issues;
     THashMap<ui64, NYql::NDqProto::NDqStateLoadPlan::TTaskPlan> plan;
-    const bool result = NYql::NDq::MakeContinueFromStreamingOffsetsPlan(
+    const bool result = MakeContinueFromStreamingOffsetsPlan(
         checkpoint.Graph->GetTasks(),
         GraphParams.GetTasks(),
         StreamingDisposition.from_last_checkpoint().force(),
@@ -570,9 +570,6 @@ void TCheckpointCoordinator::Handle(const NYql::NDq::TEvDqCompute::TEvSaveTaskSt
                 {"coordinatorId", CoordinatorId},
                 {"checkpointId", checkpointId});
             Send(StorageProxy, new TEvCheckpointStorage::TEvSetCheckpointPendingCommitStatusRequest(CoordinatorId, checkpointId, checkpoint.GetStats().StateSize), IEventHandle::FlagTrackDelivery);
-            if (InitingZeroCheckpoint) {
-                Send(RunActorId, new TEvCheckpointCoordinator::TEvZeroCheckpointDone());
-            }
         }
     }
 }
@@ -611,6 +608,11 @@ void TCheckpointCoordinator::Handle(const TEvCheckpointStorage::TEvSetCheckpoint
     UpdateInProgressMetric();
     for (const auto& [toTrigger, transport] : ActorsToNotify) {
         transport->EventsQueue.Send(new NYql::NDq::TEvDqCompute::TEvCommitState(checkpointId.SeqNo, checkpointId.CoordinatorGeneration, CoordinatorId.Generation));
+    }
+
+    // Fact of completed zero checkpoint must be saved after checkpoint become available for restoration as own checkpoint
+    if (InitingZeroCheckpoint) {
+        Send(RunActorId, new TEvCheckpointCoordinator::TEvZeroCheckpointDone());
     }
 }
 

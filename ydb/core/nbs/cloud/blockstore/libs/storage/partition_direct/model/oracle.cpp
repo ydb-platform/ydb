@@ -46,6 +46,7 @@ EHostState HealthToState(EHostHealth health)
         case EHostHealth::TemporaryOffline:
             return EHostState::TemporaryOffline;
         case EHostHealth::Offline:
+        case EHostHealth::Broken:
             return EHostState::Offline;
     }
 }
@@ -142,6 +143,7 @@ TOracleHostStat::TOracleHostStat(
     const THostState& state,
     EHostHealth health,
     const THostStat& hostStat,
+    TLatencyByOperation latencyByOperation,
     TInstant now)
     : Index(index)
     , State(state.State)
@@ -149,6 +151,7 @@ TOracleHostStat::TOracleHostStat(
     , InflightByOperation(hostStat.GetInflightByOperation())
     , Errors(hostStat.GetErrorsInfo(now))
     , PBufferUsedSize(state.PBufferUsedSize)
+    , LatencyByOperation(std::move(latencyByOperation))
 {}
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -199,6 +202,11 @@ void TOracle::Think(TInstant now)
 
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
+        if (newHostsHealths[i] == EHostHealth::Broken) {
+            // Host with broken ddisk can not be restored.
+            continue;
+        }
+
         const bool hasSufferingSymptom =
             (errorsInfo.ConsecutiveErrorCount != 0);
         const bool hasTemporaryOfflineSymptom =
@@ -239,12 +247,7 @@ void TOracle::Think(TInstant now)
         }
     }
 
-    if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
-        GetHostCount() < MaxHostCount)
-    {
-        const THostIndex newHostIndex = GetHostCount();
-        HostStateController->QueryAddHost(newHostIndex);
-    }
+    MaybeQueryAddHost();
 }
 
 void TOracle::OnRequestStarted(
@@ -283,6 +286,21 @@ void TOracle::OnDDiskConnected(THostIndex hostIndex, TInstant now)
 {
     Y_UNUSED(now);
     HostsReconnectDelays[hostIndex].Reset();
+}
+
+void TOracle::OnDDiskBroken(THostIndex hostIndex)
+{
+    const auto oldState = HostStates[hostIndex].State;
+    HostsHealths[hostIndex] = EHostHealth::Broken;
+    if (oldState != EHostState::Offline) {
+        HostStates[hostIndex].State = EHostState::Offline;
+        HostStateController->SetHostState(
+            hostIndex,
+            oldState,
+            EHostState::Offline);
+
+        MaybeQueryAddHost();
+    }
 }
 
 TDuration TOracle::GetHostReconnectDelay(THostIndex hostIndex)
@@ -456,19 +474,43 @@ void TOracle::AddHostIfNeeded(THostIndex hostIndex)
     }
 }
 
+void TOracle::MaybeQueryAddHost()
+{
+    if (GetAliveHostCount(HostStates) < DirectBlockGroupHostCount &&
+        GetHostCount() < MaxHostCount)
+    {
+        const THostIndex newHostIndex = GetHostCount();
+        HostStateController->QueryAddHost(newHostIndex);
+    }
+}
+
 TVector<TOracleHostStat> TOracle::BuildHostStats(TInstant now) const
 {
     TVector<TOracleHostStat> stats;
     stats.reserve(HostStatistics.size());
     for (THostIndex hostIndex = 0; hostIndex < GetHostCount(); ++hostIndex) {
+        // Compute latency stats for monitoring snapshot.
+        TLatencyByOperation latencyByOperation{};
+        for (size_t operation = 0; operation < OperationCount; ++operation) {
+            latencyByOperation[operation] =
+                GetTimePredictor(static_cast<EOperation>(operation))
+                    .GetLatencyStats(hostIndex);
+        }
         stats.emplace_back(
             hostIndex,
             HostStates[hostIndex],
             HostsHealths[hostIndex],
             HostStatistics[hostIndex],
+            std::move(latencyByOperation),
             now);
     }
     return stats;
+}
+
+size_t TOracle::GetLatencyHistoryCapacity() const
+{
+    // All predictors share the same capacity from OracleConfig.
+    return TimePredictors.empty() ? 0 : TimePredictors.front().GetCapacity();
 }
 
 TTimePredictor& TOracle::AccessTimePredictor(EOperation operation)

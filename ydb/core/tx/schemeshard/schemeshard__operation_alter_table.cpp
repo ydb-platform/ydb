@@ -255,6 +255,8 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableParameterizedDecimal = AppData()->FeatureFlags.GetEnableParameterizedDecimal(),
         .EnableDetailedMetrics = AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics(),
         .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
+        .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
+        .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
     };
 
 

@@ -413,7 +413,7 @@ void TBlockState::FillArrays() {
         if (const auto& value = Values[i]) {
             const auto& datum = TArrowBlock::From(value).GetDatum();
             if (datum.is_scalar()) {
-                return;
+                continue;
             }
             MKQL_ENSURE(datum.is_arraylike(), "Unexpected block type (expecting array or chunked array)");
             ForEachArrayData(datum, [this, i](const auto& arrayData) {

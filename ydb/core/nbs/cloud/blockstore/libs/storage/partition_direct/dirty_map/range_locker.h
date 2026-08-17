@@ -1,5 +1,7 @@
 #pragma once
 
+#include "public.h"
+
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
 
@@ -44,15 +46,15 @@ private:
     friend class TDDiskDataCopier;
 
     // Lock PBuffer with given lsn.
-    TRangeLock(ILockableRanges* lockableRanges, ui64 lsn);
+    TRangeLock(ILockableRangesWeakPtr lockableRanges, ui64 lsn);
 
     // Lock the range on the DDisks specified by the mask.
     TRangeLock(
-        ILockableRanges* lockableRanges,
+        ILockableRangesWeakPtr lockableRanges,
         TBlockRange64 range,
         THostMask mask);
 
-    ILockableRanges* LockableRanges = nullptr;
+    ILockableRangesWeakPtr LockableRanges;
     ui64 Lsn = 0;
     TBlockRange64 Range;
     THostMask Mask;

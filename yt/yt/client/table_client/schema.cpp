@@ -1300,8 +1300,8 @@ TTableSchemaPtr TTableSchema::ToSorted(const TSortColumns& sortColumns) const
                     EErrorCode::IncompatibleKeyColumns,
                     "Column %Qv is not found in strict schema",
                     sortColumns[index].Name)
-                    << TErrorAttribute("schema", *this)
-                    << TErrorAttribute("sort_columns", sortColumns);
+                    .With("schema", *this)
+                    .With("sort_columns", sortColumns);
             } else {
                 columns.push_back(TColumnSchema(sortColumns[index].Name, EValueType::Any));
                 it = columns.end();
@@ -1417,8 +1417,8 @@ TTableSchemaPtr TTableSchema::ToModifiedSchema(ETableSchemaModification schemaMo
 {
     if (HasNontrivialSchemaModification()) {
         THROW_ERROR_EXCEPTION("Cannot apply schema modification because schema is already modified")
-            << TErrorAttribute("existing_modification", GetSchemaModification())
-            << TErrorAttribute("requested_modification", schemaModification);
+            .With("existing_modification", GetSchemaModification())
+            .With("requested_modification", schemaModification);
     }
     YT_VERIFY(GetSchemaModification() == ETableSchemaModification::None);
 
@@ -1761,8 +1761,8 @@ std::optional<TNestedColumn> TryParseNestedAggregate(TStringBuf description)
         int location = ptr - description.data();
 
         THROW_ERROR_EXCEPTION("Error while parsing nested aggregate description: %v", message)
-            << TErrorAttribute("position", Format("%v", location))
-            << TErrorAttribute("description", description);
+            .With("position", Format("%v", location))
+            .With("description", description);
     };
 
     auto nestedFunction = parseName();
@@ -1898,8 +1898,8 @@ void ValidateSystemColumnSchema(
 
     if (columnSchema.IsRenamed()) {
         THROW_ERROR_EXCEPTION("System column schema must have equal name and stable name")
-            << TErrorAttribute("name", name)
-            << TErrorAttribute("stable_name", columnSchema.StableName().Underlying());
+            .With("name", name)
+            .With("stable_name", columnSchema.StableName().Underlying());
     }
 
     const auto& allowedSystemColumns = isTableSorted
@@ -2104,7 +2104,7 @@ void ValidateColumnSchema(
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error validating schema of column %v",
             columnSchema.GetDiagnosticNameString())
-            << ex;
+            .With(ex);
     }
 }
 
@@ -2137,7 +2137,7 @@ void ValidateDynamicTableConstraints(const TTableSchema& schema)
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error validating column %v in dynamic table schema",
                 column.GetDiagnosticNameString())
-                << ex;
+                .With(ex);
         }
     }
 }
@@ -2411,7 +2411,7 @@ void ValidateNoDescendingSortOrder(const TTableSchema& schema)
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::InvalidSchemaValue,
                 "Descending sort order is not available in this context yet")
-                << TErrorAttribute("column_name", column.Name());
+                .With("column_name", column.Name());
         }
     }
 }
@@ -2429,7 +2429,7 @@ void ValidateNoDescendingSortOrder(
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::InvalidSchemaValue,
                 "Descending sort order is not available in this context yet")
-                << TErrorAttribute("column_name", column);
+                .With("column_name", column);
         }
     }
 }
@@ -2441,7 +2441,7 @@ void ValidateNoRenamedColumns(const TTableSchema& schema)
             THROW_ERROR_EXCEPTION(
                 NTableClient::EErrorCode::InvalidSchemaValue,
                 "Table column renaming is not available yet")
-                << TErrorAttribute("renamed_column", column.GetDiagnosticNameString());
+                .With("renamed_column", column.GetDiagnosticNameString());
         }
     }
 }

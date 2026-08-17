@@ -143,6 +143,11 @@
                 "ColumnType": "String"
             },
             {
+                "ColumnId": 126,
+                "ColumnName": "IsBackup",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 11,
                 "ColumnName": "ActorToNotify",
                 "ColumnType": "ActorID"
@@ -213,6 +218,7 @@
                     7,
                     124,
                     125,
+                    126,
                     11,
                     13,
                     17,

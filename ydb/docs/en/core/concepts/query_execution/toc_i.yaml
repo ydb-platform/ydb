@@ -1,8 +1,6 @@
 items:
   - name: Overview
     href: index.md
-  - name: Query Execution Process
-    href: execution_process.md
   - name: Query optimizer
     href: optimizer.md
   - name: Multi-Version Concurrency Control (MVCC)
@@ -15,6 +13,8 @@ items:
     href: fulltext_search.md
   - name: Hybrid search
     href: hybrid_search.md
+  - name: JSON Search
+    href: json_search.md
   - name: Local indexes
     href: local_indexes.md
   - name: Federated query
@@ -25,5 +25,7 @@ items:
     href: spilling.md
   - name: Scan queries
     href: scan_query.md
+  - name: Query Execution Process
+    href: execution_process.md
   - name: YQL queries to topics
     href: topics.md

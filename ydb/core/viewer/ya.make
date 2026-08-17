@@ -847,6 +847,7 @@ PEERDIR(
     ydb/library/actors/core
     ydb/library/actors/helpers
     library/cpp/archive
+    library/cpp/json
     library/cpp/mime/types
     library/cpp/protobuf/json
     ydb/core/base

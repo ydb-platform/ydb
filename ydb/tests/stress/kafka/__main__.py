@@ -16,6 +16,12 @@ if __name__ == '__main__':
     parser.add_argument("-c", "--consumer", help="Consumer name")
     parser.add_argument("-n", "--num-workers", help="Number of workers")
     parser.add_argument("--duration", help="Duration of waiting")
+    parser.add_argument(
+        "--source-writer",
+        default="topic",
+        choices=["topic", "kafka", "kafka-direct"],
+        help="Source topic writer",
+    )
     args = parser.parse_args()
 
     os.environ["YDB_ANONYMOUS_CREDENTIALS"] = "1"
@@ -23,5 +29,5 @@ if __name__ == '__main__':
     with Workload(args.endpoint, args.database, bootstrap=args.bootstrap,
                   test_topic_path=args.source_path, target_topic_path=args.target_path,
                   workload_consumer_name=args.consumer, num_workers=int(args.num_workers),
-                  duration=int(args.duration)) as workload:
+                  duration=int(args.duration), source_writer=args.source_writer) as workload:
         workload.loop()

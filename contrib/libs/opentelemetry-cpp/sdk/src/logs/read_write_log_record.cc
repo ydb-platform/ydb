@@ -6,16 +6,15 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 #include "opentelemetry/common/attribute_value.h"
 #include "opentelemetry/common/timestamp.h"
-#include "opentelemetry/logs/severity.h"
 #include "opentelemetry/nostd/string_view.h"
 #include "opentelemetry/nostd/variant.h"
 #include "opentelemetry/sdk/common/attribute_utils.h"
-#include "opentelemetry/sdk/instrumentationscope/instrumentation_scope.h"
+#include "opentelemetry/sdk/logs/log_record_limits.h"
 #include "opentelemetry/sdk/logs/read_write_log_record.h"
-#include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/trace/span_id.h"
 #include "opentelemetry/trace/trace_flags.h"
 #include "opentelemetry/trace/trace_id.h"
@@ -158,8 +157,32 @@ void ReadWriteLogRecord::SetAttribute(nostd::string_view key,
                                       const opentelemetry::common::AttributeValue &value) noexcept
 {
   std::string safe_key(key);
-  opentelemetry::sdk::common::AttributeConverter converter;
-  attributes_map_[safe_key] = nostd::visit(converter, value);
+
+  auto it = attributes_map_.find(safe_key);
+  if (it == attributes_map_.end())
+  {
+    if (attributes_map_.size() >= limits_.attribute_count_limit)
+    {
+      ++dropped_attributes_count_;
+      return;
+    }
+    opentelemetry::sdk::common::AttributeConverter converter(limits_.attribute_value_length_limit);
+    attributes_map_.emplace(std::move(safe_key), nostd::visit(converter, value));
+    return;
+  }
+
+  opentelemetry::sdk::common::AttributeConverter converter(limits_.attribute_value_length_limit);
+  it->second = nostd::visit(converter, value);
+}
+
+void ReadWriteLogRecord::SetLogRecordLimits(const LogRecordLimits &limits) noexcept
+{
+  limits_ = limits;
+}
+
+uint32_t ReadWriteLogRecord::GetDroppedAttributesCount() const noexcept
+{
+  return dropped_attributes_count_;
 }
 
 const std::unordered_map<std::string, opentelemetry::sdk::common::OwnedAttributeValue> &

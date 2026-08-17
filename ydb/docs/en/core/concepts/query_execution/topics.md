@@ -4,7 +4,7 @@ To read and write messages to [topics](../datamodel/topic.md), familiar YQL cons
 
 ## Local and external topics {#local-external-topics}
 
-YQL queries to topics work the same regardless of whether the topic is in the current database or in another {{ ydb-short-name }} database. The source and receiver of messages can be either a topic **in the same database** where the query is executed, or a topic **in another database**.
+YQL queries to topics work the same regardless of whether the topic is in the current database or in another {{ ydb-short-name }} database. The source and destination of messages can be either a topic **in the same database** where the query is executed, or a topic **in another database**.
 
 ### Local topics {#local-topics}
 
@@ -29,7 +29,7 @@ INSERT INTO output_topic SELECT ...;
 
 Access to them is performed only through a pre-created [external data source](../datamodel/external_data_source.md) with the YDB source type.
 
-After creating a source, for example named `ext_source`, accessing topic `input_topic` in an external database is written as follows:
+After creating a source, for example named `ext_source`, referring to the topic `input_topic` in the external database is written as follows:
 
 
 ```yql
@@ -41,11 +41,11 @@ The name `ext_source` in the documentation is **conditional** — in your databa
 
 ## Reading from a topic {#topic-read}
 
-Reading from a topic can be performed in [table](#table-read) and [streaming](#streaming-read) modes (not to be confused with streaming queries).
+Reading from a topic can be limited to only the current data of the topic, or it can wait for newly written messages.
 
-### Table reading {#table-read}
+### Reading current data {#table-read}
 
-In table mode, reading is performed from the first to the last offset stored in the topic at the time the query is started. If data continues to be written to the topic, the query will stop after reaching the last offset known at startup. Specifying filters on [Service fields](#system-metadata) speeds up reading, as reading occurs only over the specified ranges.
+In this mode, reading is performed from the first to the last offset stored in the topic at the time the query is started. If data continues to be written to the topic, the query will stop after reaching the last offset known at the time of start. Specifying filters on [service fields](#system-metadata) speeds up reading, since reading occurs only over the specified ranges.
 
 
 ```yql
@@ -57,9 +57,9 @@ LIMIT 10;
 ```
 
 
-### Streaming reading {#streaming-read}
+### Reading with data waiting {#streaming-read}
 
-To read new messages, use the `WITH (STREAMING = "TRUE")` option — see more in the [Streaming reading of data from a topic](../../yql/reference/syntax/select/streaming.md) section. Reading starts from the current moment and continues until the number of messages specified in the `LIMIT` expression is read. The `LIMIT` parameter is required — without it, the query will not complete, as it will wait for new messages indefinitely.
+To wait for new messages, use the `WITH (STREAMING = "TRUE")` option. Reading starts from the current moment and continues until the number of messages specified in the `LIMIT` expression is read. The `LIMIT` parameter is mandatory — without it, the query will not complete, as it will wait for new messages indefinitely.
 
 
 ```yql
@@ -80,7 +80,7 @@ When reading from a topic, the message body can be obtained in two ways: [raw da
 
 #### Raw data {#raw-read}
 
-Use when the message content does not need to be parsed — it is enough to read the body as is.
+Use this when the message content does not need to be parsed — it is enough to read the body as is.
 
 
 ```yql
@@ -104,7 +104,7 @@ The same result can be obtained without the `WITH` block — see [table reading]
 
 #### Formatted data {#formatted-read}
 
-Use when messages are serialized in a known format (JSON, CSV, etc.). The `FORMAT` parameter specifies the parsing method, and `SCHEMA` specifies the names and types of fields that will appear in the `SELECT` result:
+Use this when messages are serialized in a known format (JSON, CSV, etc.). The `FORMAT` parameter specifies the parsing method, and `SCHEMA` specifies the names and types of fields that will appear in the `SELECT` result:
 
 
 ```yql
@@ -158,7 +158,7 @@ SELECT
     __ydb_write_time AS WriteTime,                          -- message write time
     __ydb_offset AS Offset,                                 -- message offset in topic
     __ydb_partition_id AS Partition,                        -- partition number
-    __ydb_message_group_id AS MessageGroupId,               -- message group identifier
+    __ydb_message_group_id AS MessageGroupId,               -- message group ID
     __ydb_seq_no AS SeqNo                                   -- sequence number within partition
 FROM
     input_topic  -- local topic; for external: ext_source.input_topic
@@ -166,7 +166,7 @@ LIMIT 10;
 ```
 
 
-Filters on service fields are evaluated before reading data from the topic and significantly reduce the volume of messages read. Supported are comparison operators (`=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`), logical conditions (`AND`, `OR`), and fields `partition_id`, `write_time`, `offset`. Predicates on other service fields do not limit the read volume.
+Filters on service fields are evaluated before reading data from the topic and significantly reduce the volume of messages read. The following comparison operators are supported: `=`, `<>`, `<`, `<=`, `>`, `>=`, `IN`, logical conditions `AND`, `OR`, and fields `partition_id`, `write_time`, `offset`. Predicates on other service fields do not limit the read volume.
 
 
 ```yql

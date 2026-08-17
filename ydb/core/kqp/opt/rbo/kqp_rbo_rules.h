@@ -99,6 +99,19 @@ class TRewriteRightJoinRule : public ISimplifiedRule {
 };
 
 /**
+ * Rewrite join into index lookup join if possible.
+ */
+class TRewriteJoinToIndexLookupJoinRule: public ISimplifiedRule {
+public:
+    TRewriteJoinToIndexLookupJoinRule()
+        : ISimplifiedRule("Rewrite join into index lookup join", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {
+    }
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
  * Remove a left join when the right side cannot change left-side row multiplicity
  * and no right-side output is used above the join.
  */
@@ -261,6 +274,17 @@ class TPushFilterIntoJoinRule : public ISimplifiedRule {
 };
 
 /**
+ * Push out simple join filter than can go on the left or right side of the join
+ */
+class TPushSimpleJoinFilterRule : public IRule {
+  public:
+    TPushSimpleJoinFilterRule() : IRule("Push simple join filter", ERuleProperties::RequireParents) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Peephole predicate.
  */
 class TPeepholePredicate : public ISimplifiedRule {
@@ -274,12 +298,16 @@ class TPeepholePredicate : public ISimplifiedRule {
 /**
  * Push ranges to read.
  */
-class TPushRangesRule : public ISimplifiedRule {
-  public:
-      TPushRangesRule() : ISimplifiedRule("Push ranges", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {}
+class TPushRangesRule: public ISimplifiedRule {
+public:
+    TPushRangesRule(NYql::EStorageType applicableTableType)
+        : ISimplifiedRule("Push ranges", ERuleProperties::RequireParents | ERuleProperties::RequireTypes)
+        , ApplicableTableType(applicableTableType) {
+    }
 
-      virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
-      virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+    NYql::EStorageType ApplicableTableType;
 };
 
 /**
@@ -429,6 +457,19 @@ class TPruneDeadUnionAllColumnsRule : public IRule {
   public:
     TPruneDeadUnionAllColumnsRule()
         : IRule("Prune dead UnionAll columns", ERuleProperties::RequireLiveness) {}
+
+    virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
+    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+};
+
+/**
+ * Merge a nested UnionAll into its parent, turning a chain of binary unions into a single
+ * own branches and merging it would hand that guarantee over to the parent.
+ */
+class TMergeUnionAllRule : public IRule {
+  public:
+    TMergeUnionAllRule()
+        : IRule("Merge nested UnionAll", ERuleProperties::RequireParents | ERuleProperties::RequireOutputIUs) {}
 
     virtual bool QuickMatch(const TIntrusivePtr<IOperator>& input) const override;
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;

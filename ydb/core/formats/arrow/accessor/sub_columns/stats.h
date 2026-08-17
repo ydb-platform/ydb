@@ -152,7 +152,7 @@ public:
         }
     };
 
-    static TDictStats Merge(const std::vector<const TDictStats*>& stats, const TSettings& settings, const ui32 recordsCount);
+    static TDictStats Merge(const std::vector<TDictStats>& stats, const TSettings& settings, const ui32 recordsCount);
 
     // Selects which keys become separated columns;
     // the rest fall into the Others store, whose stats are built by the caller.
@@ -194,7 +194,7 @@ public:
     std::shared_ptr<arrow::Field> GetField(const ui32 index) const {
         AFL_VERIFY(index < DataNames->length());
         auto name = DataNames->GetView(index);
-        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetCodecForValueType(GetValueType(index))->GetArrowType());
+        return std::make_shared<arrow::Field>(std::string(name.data(), name.size()), GetArrowTypeForValueType(GetValueType(index)));
     }
 
     TRTStats GetRTStats(const ui32 index) const {

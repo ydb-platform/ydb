@@ -49,6 +49,13 @@ public:
   bool Shutdown(
       std::chrono::microseconds timeout = (std::chrono::microseconds::max)()) noexcept override;
 
+  bool HasEnabledFilter() const noexcept override { return false; }
+
+  bool RecordableEnforcesLogRecordLimits() const noexcept override
+  {
+    return exporter_ != nullptr && exporter_->RecordableEnforcesLogRecordLimits();
+  }
+
   bool IsShutdown() const noexcept;
 
 private:

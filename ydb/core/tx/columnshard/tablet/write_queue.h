@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/counters/columnshard.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
 #include <ydb/core/tx/data_events/common/modification_type.h>
@@ -76,11 +77,13 @@ public:
     bool Execute(TColumnShard* owner, const TActorContext& ctx) const;
     void Abort(TColumnShard* owner, const TString& reason, const TActorContext& ctx,
         const NKikimrDataEvents::TEvWriteResult::EStatus& status = NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR) const;
+    void FailByOverload(TColumnShard* owner, const EOverloadStatus overloadStatus, const TActorContext& ctx) const;
 };
 
 class TWriteTasksQueue {
 private:
     bool WriteTasksOverloadCheckerScheduled = false;
+    bool CompactionOverloadReported = false;
     std::set<TWriteTask> WriteTasks;
     TColumnShard* Owner;
 

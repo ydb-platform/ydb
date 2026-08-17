@@ -21,7 +21,9 @@ class IAutoParamBuilderFactory;
 } // namespace NYql
 
 namespace NSQLTranslation {
+
 constexpr const size_t SQL_MAX_PARSER_ERRORS = 100;
+constexpr const size_t SQL_MAX_PARSE_TREE_DEPTH = 4096;
 
 enum class ESqlMode {
     QUERY = 0,
@@ -121,6 +123,7 @@ struct TTranslationSettings {
     bool PGDisable;
     bool WarnOnV0;
     bool TestAntlr4; // TODO(YQL-19017): remove.
+    TMaybe<size_t> MaxParseTreeDepth;
     ISqlFeaturePolicy::TPtr V0WarnAsError;
     ISqlFeaturePolicy::TPtr DqDefaultAuto;
     ISqlFeaturePolicy::TPtr BlockDefaultAuto;

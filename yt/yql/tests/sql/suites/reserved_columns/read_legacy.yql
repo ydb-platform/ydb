@@ -1,0 +1,2 @@
+-- reserved columns are still readable before the YtReservedColumnPrefix language version
+SELECT key, `_yql_extra` FROM plato.Reserved;

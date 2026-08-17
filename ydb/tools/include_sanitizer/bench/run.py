@@ -16,6 +16,10 @@ Reliability model:
     gets the whole machine.
   * We take the MIN across N reps — the fastest run has the least
     interference and is the most reproducible estimator.
+  * Where the machine allows it, each compile is also counted with
+    ``perf stat``. Instructions retired barely move between runs (0.2%
+    versus ~11% for CPU time), so they decide close calls that timing
+    alone cannot.
 
 Typical use:
     # record a baseline for the heaviest editable TUs
@@ -153,6 +157,17 @@ def _collect(tt_dir: Path, target_rels: set) -> Dict[str, int]:
     return out
 
 
+def _collect_counters(ps_dir: Optional[Path], perf_dir: Optional[Path],
+                      target_rels: set) -> Dict[str, Tuple[int, float]]:
+    """Map target files to ``(user_us, instructions)`` for this repetition."""
+    from ..buildbench.parse import collect_tu_costs
+    out: Dict[str, Tuple[int, float]] = {}
+    for rel, cost in collect_tu_costs(ps_dir, perf_dir).items():
+        if rel in target_rels:
+            out[rel] = (cost.user_us, cost.instructions)
+    return out
+
+
 def _run_ya(argv: List[str], env: dict) -> int:
     from ..compdb.generate import CLANG_WRAPPER, RETRY_CC, patched_wrapper
     recorder_bin = env.get("_YDB_BENCH_RECORDER_BIN") or None
@@ -176,6 +191,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                         help="repetitions per file; the MIN is reported (default 5)")
     parser.add_argument("--granularity", default="500",
                         help="-ftime-trace-granularity in us (default 500)")
+    parser.add_argument("--no-perf", dest="use_perf", action="store_false",
+                        default=True,
+                        help="skip per-file instruction counts even if perf "
+                             "works on this machine")
+    parser.add_argument("--no-procstat", dest="use_procstat",
+                        action="store_false", default=True,
+                        help="skip clang's per-file CPU time report")
+    parser.add_argument("--perf-bin", default=None,
+                        help="path to perf (default: auto-detect)")
     parser.add_argument("--out", default=None, metavar="NAME",
                         help="save results as reports/bench/NAME.json")
     parser.add_argument("--compare", default=None, metavar="NAME",
@@ -222,11 +246,24 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     tt_dir = ensure_dir(PATHS.cache_dir / "bench_trace")
 
+    from ..buildbench.parse import PER_TU_EVENTS_DEFAULT, probe_perf
+    perf_bin = probe_perf(args.perf_bin) if args.use_perf else None
+    ps_dir = ensure_dir(PATHS.cache_dir / "bench_pstat") if args.use_procstat else None
+    perf_dir = ensure_dir(PATHS.cache_dir / "bench_perf") if perf_bin else None
+    if args.use_perf and not perf_bin:
+        log.info("no usable perf; reporting compile time only")
+
     base_env = os.environ.copy()
     base_env["YDB_REPO_ROOT"] = str(REPO_ROOT)
     base_env["YDB_TIMETRACE_DIR"] = str(tt_dir)
     base_env["YDB_TIMETRACE_GRANULARITY"] = args.granularity
     base_env["RETRY"] = "yes"
+    if ps_dir:
+        base_env["YDB_PSTAT_DIR"] = str(ps_dir)
+    if perf_dir:
+        base_env["YDB_PERF_DIR"] = str(perf_dir)
+        base_env["YDB_PERF_BIN"] = perf_bin or ""
+        base_env["YDB_PERF_EVENTS"] = PER_TU_EVENTS_DEFAULT
     if recorder_bin:
         base_env["_YDB_BENCH_RECORDER_BIN"] = recorder_bin
 
@@ -240,28 +277,24 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     # Warm-up: make sure everything (deps, generated headers, the targets'
     # modules) is built once, so measured reps only recompile our files.
+    _instrumentation = ("YDB_TIMETRACE_DIR", "YDB_PSTAT_DIR", "YDB_PERF_DIR")
     if args.warmup:
         log.info("warm-up build (ensures deps/generated headers exist)...")
         rc = subprocess.call(list(ya_argv), env={k: v for k, v in base_env.items()
-                                                 if k != "YDB_TIMETRACE_DIR"})
+                                                 if k not in _instrumentation})
         if rc != 0:
             log.warning("warm-up build exited %d; continuing anyway", rc)
 
     originals: Dict[Path, bytes] = {ap: ap.read_bytes() for _, ap in targets}
     runs: Dict[str, List[int]] = {rel: [] for rel in target_rels}
+    user_runs: Dict[str, List[int]] = {rel: [] for rel in target_rels}
+    instr_runs: Dict[str, List[float]] = {rel: [] for rel in target_rels}
+
+    from ..buildbench.parse import clear_artifacts
 
     try:
         for rep in range(args.repeat):
-            for p in tt_dir.glob("*.json"):
-                try:
-                    p.unlink()
-                except OSError:
-                    pass
-            for p in tt_dir.glob("*.src"):
-                try:
-                    p.unlink()
-                except OSError:
-                    pass
+            clear_artifacts((tt_dir, ps_dir, perf_dir))
             nonce = f"r{rep}-{time.time_ns()}"
             for _, ap in targets:
                 ap.write_bytes(originals[ap] + f"\n{_MARKER} {nonce}\n".encode())
@@ -272,6 +305,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             for rel in target_rels:
                 if rel in got:
                     runs[rel].append(got[rel])
+            for rel, (user_us, instructions) in _collect_counters(
+                    ps_dir, perf_dir, target_rels).items():
+                if user_us:
+                    user_runs[rel].append(user_us)
+                if instructions:
+                    instr_runs[rel].append(instructions)
             log.info("rep %d/%d: %d/%d traces (%.1fs, ya rc=%d)",
                      rep + 1, args.repeat, len(got), len(target_rels), dt, rc)
     finally:
@@ -287,11 +326,22 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not rs:
             log.warning("no measurements for %s (not built by this target?)", rel)
             continue
-        results[rel] = {
+        entry = {
             "min_us": rs[0],
             "median_us": rs[len(rs) // 2],
             "runs_us": rs,
         }
+        users = sorted(user_runs[rel])
+        if users:
+            entry["min_user_us"] = users[0]
+            entry["runs_user_us"] = users
+        # Instructions hardly vary, so the median is the honest summary —
+        # unlike timings, where the minimum is the least-disturbed run.
+        instructions = sorted(instr_runs[rel])
+        if instructions:
+            entry["instructions"] = instructions[len(instructions) // 2]
+            entry["runs_instructions"] = instructions
+        results[rel] = entry
 
     _print_results(results)
 
@@ -304,6 +354,7 @@ def main(argv: Optional[List[str]] = None) -> int:
             "created": time.strftime("%Y-%m-%d %H:%M:%S"),
             "granularity": args.granularity,
             "repeat": args.repeat,
+            "tiers": {"procstat": bool(ps_dir), "perf": bool(perf_dir)},
             "results": results,
         }
         outp.write_text(json.dumps(payload, indent=1), encoding="utf-8")
@@ -316,13 +367,33 @@ def _print_results(results: Dict[str, dict]) -> None:
     if not results:
         log.warning("no results")
         return
+    from ..buildbench.parse import human_count
+    has_instructions = any("instructions" in d for d in results.values())
+    has_user = any("min_user_us" in d for d in results.values())
     width = max((len(r) for r in results), default=10)
-    print(f"\n{'file'.ljust(width)}   min(ms)  median(ms)  runs")
-    print("-" * (width + 30))
+
+    header = f"{'file'.ljust(width)}   min(ms)  median(ms)"
+    if has_user:
+        header += "   CPU(ms)"
+    if has_instructions:
+        header += "   instructions"
+    header += "  runs"
+    print("")
+    print(header)
+    print("-" * len(header))
     for rel in sorted(results, key=lambda r: -results[r]["min_us"]):
         d = results[rel]
         runs_ms = ",".join(f"{u/1000:.0f}" for u in d["runs_us"])
-        print(f"{rel.ljust(width)}   {d['min_us']/1000:7.1f}  {d['median_us']/1000:9.1f}  [{runs_ms}]")
+        line = (f"{rel.ljust(width)}   {d['min_us']/1000:7.1f}  "
+                f"{d['median_us']/1000:9.1f}")
+        if has_user:
+            user = d.get("min_user_us")
+            line += f"  {user/1000:8.1f}" if user else f"  {'-':>8s}"
+        if has_instructions:
+            instructions = d.get("instructions")
+            line += (f"   {human_count(instructions):>12s}" if instructions
+                     else f"   {'-':>12s}")
+        print(f"{line}  [{runs_ms}]")
 
 
 def _print_comparison(baseline_name: str, cur: Dict[str, dict]) -> None:
@@ -352,6 +423,41 @@ def _print_comparison(baseline_name: str, cur: Dict[str, dict]) -> None:
     tpct = (td / tb * 100.0) if tb else 0.0
     print("-" * (width + 36))
     print(f"{'TOTAL'.ljust(width)}   {tb:6.1f}  {ta:6.1f}  {td:+7.1f}  {tpct:+5.1f}%")
+
+    _print_instruction_comparison(baseline_name, base, cur, common, width)
+
+
+def _print_instruction_comparison(baseline_name: str, base: Dict[str, dict],
+                                  cur: Dict[str, dict], common: List[str],
+                                  width: int) -> None:
+    """The same comparison in instructions, when both sides counted them.
+
+    Worth printing separately because it is the line to trust: a timing
+    delta under a few percent is usually the machine talking, whereas an
+    instruction delta of that size is real.
+    """
+    from ..buildbench.parse import human_count
+    counted = [r for r in common
+               if base[r].get("instructions") and cur[r].get("instructions")]
+    if not counted:
+        return
+    print(f"\n=== compare vs '{baseline_name}' (instructions) ===")
+    print(f"{'file'.ljust(width)}         before          after        %")
+    print("-" * (width + 40))
+    tb = ta = 0.0
+    for rel in sorted(counted,
+                      key=lambda r: cur[r]["instructions"] - base[r]["instructions"]):
+        b = base[rel]["instructions"]
+        a = cur[rel]["instructions"]
+        pct = ((a - b) / b * 100.0) if b else 0.0
+        tb += b
+        ta += a
+        print(f"{rel.ljust(width)}   {human_count(b):>12s}   {human_count(a):>12s}  "
+              f"{pct:+6.1f}%")
+    tpct = ((ta - tb) / tb * 100.0) if tb else 0.0
+    print("-" * (width + 40))
+    print(f"{'TOTAL'.ljust(width)}   {human_count(tb):>12s}   {human_count(ta):>12s}  "
+          f"{tpct:+6.1f}%")
 
 
 if __name__ == "__main__":

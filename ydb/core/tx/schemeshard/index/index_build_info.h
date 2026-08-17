@@ -194,6 +194,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     NKikimrSchemeOp::EIndexType IndexType = NKikimrSchemeOp::EIndexTypeInvalid;
 
     EBuildKind BuildKind = EBuildKind::BuildKindUnspecified;
+    bool IsRebuild = false;
 
     TString IndexName;
     TVector<TString> IndexColumns;
@@ -230,6 +231,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Recompute,
             Filter,
             FilterBorders,
+            RebuildDrop,    // dropping old impl tables for rebuild
+            RebuildCreate,  // creating new impl tables for rebuild
         };
         ui32 Level = 1;
         ui32 Round = 0;
@@ -674,6 +677,9 @@ public:
         indexInfo->ParentBuildId =
             row.template GetValueOrDefault<Schema::IndexBuild::ParentBuildId>(
                 indexInfo->ParentBuildId);
+
+        indexInfo->IsRebuild =
+            row.template GetValueOrDefault<Schema::IndexBuild::IsRebuild>(false);
 
         indexInfo->Billed.SetUploadRows(row.template GetValueOrDefault<Schema::IndexBuild::UploadRowsBilled>(0));
         indexInfo->Billed.SetUploadBytes(row.template GetValueOrDefault<Schema::IndexBuild::UploadBytesBilled>(0));

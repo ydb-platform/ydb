@@ -71,7 +71,9 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
                     .FiberId = fiberId,
                     .WaitingSince = fiber->GetWaitingSince(),
                     .TraceId = traceContext ? traceContext->GetTraceId() : TTraceId(),
-                    .TraceLoggingTag = traceContext ? traceContext->GetLoggingTag() : std::string(),
+                    .TraceLoggingTags = traceContext
+                        ? traceContext->GetLoggingTags().GetPayload()
+                        : NLogging::TLoggingTagListPayload(),
                 };
 
                 auto optionalContext = TrySynthesizeLibunwindContextFromMachineContext(*fiber->GetMachineContext());
@@ -126,7 +128,7 @@ std::vector<TFiberIntrospectionInfo> IntrospectFibers()
             .ThreadId = info.ThreadId,
             .ThreadName = std::move(info.ThreadName),
             .TraceId = info.TraceId,
-            .TraceLoggingTag = std::move(info.TraceLoggingTag),
+            .TraceLoggingTags = std::move(info.TraceLoggingTags),
             .Backtrace = std::move(info.Backtrace),
         });
     }
@@ -183,8 +185,8 @@ std::string FormatIntrospectionInfos(const std::vector<TThreadIntrospectionInfo>
         if (info.TraceId) {
             builder.AppendFormat("Trace id: %v\n", info.TraceId);
         }
-        if (!info.TraceLoggingTag.empty()) {
-            builder.AppendFormat("Trace logging tag: %v\n", info.TraceLoggingTag);
+        if (!info.TraceLoggingTags.Underlying().empty()) {
+            builder.AppendFormat("Trace logging tag: %v\n", info.TraceLoggingTags);
         }
         FormatBacktrace(&builder, info.Backtrace);
         builder.AppendString("\n");
@@ -210,8 +212,8 @@ std::string FormatIntrospectionInfos(const std::vector<TFiberIntrospectionInfo>&
         if (info.TraceId) {
             builder.AppendFormat("Trace id: %v\n", info.TraceId);
         }
-        if (!info.TraceLoggingTag.empty()) {
-            builder.AppendFormat("Trace logging tag: %v\n", info.TraceLoggingTag);
+        if (!info.TraceLoggingTags.Underlying().empty()) {
+            builder.AppendFormat("Trace logging tag: %v\n", info.TraceLoggingTags);
         }
         FormatBacktrace(&builder, info.Backtrace);
         builder.AppendString("\n");

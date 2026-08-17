@@ -453,6 +453,8 @@ namespace {
         if (auto inheritPermissions = TString(createSecret.InheritPermissions())) {
             settings.InheritPermissions = FromString<bool>(inheritPermissions);
         }
+        settings.ReplaceIfExists = (TString(createSecret.ReplaceIfExists()) == "1");
+        settings.ExistingOk = (TString(createSecret.ExistingOk()) == "1");
         return settings;
     }
 
@@ -465,12 +467,14 @@ namespace {
         if (auto paramName = TString(alterSecret.ValueParamName())) {
             settings.ValueParamName = std::move(paramName);
         }
+        settings.MissingOk = (TString(alterSecret.MissingOk()) == "1");
         return settings;
     }
 
     TSecretSettings ParseSecretSettings(TKiDropSecret dropSecret) {
         TSecretSettings settings;
         settings.Name = TString(dropSecret.Secret());
+        settings.MissingOk = (TString(dropSecret.MissingOk()) == "1");
         return settings;
     }
 
@@ -798,6 +802,9 @@ namespace {
             } else if (name == "setMetricsLevel") {
                 auto metricsLevel = FromString<i32>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 request->set_metrics_level(metricsLevel);
+            } else if (name == "setContentBasedDeduplication") {
+                auto value = FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_content_based_deduplication(value);
             }
         }
     }
@@ -873,6 +880,9 @@ namespace {
                 request->set_set_metrics_level(metricsLevel);
             } else if (name == "resetMetricsLevel") {
                 request->mutable_reset_metrics_level();
+            } else if (name == "setContentBasedDeduplication") {
+                auto value = FromString<bool>(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                request->set_set_content_based_deduplication(value);
             }
         }
     }
@@ -990,7 +1000,7 @@ namespace {
 
     bool ParseAsyncReplicationSettingsBase(
         TReplicationSettingsBase& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
-        const TString& objectName = "replication"
+        bool disableOldSecretCreation, const TString& objectName = "replication"
     ) {
         for (auto setting : srcSettings) {
             auto name = setting.Name().Value();
@@ -1089,14 +1099,40 @@ namespace {
             return false;
         }
 
+        if (disableOldSecretCreation) {
+            auto checkSecret = [&](const TString& secretName) {
+                if (secretName && !secretName.StartsWith('/')) {
+                    ctx.AddError(
+                        TIssue(
+                            ctx.GetPosition(pos),
+                            "Old secrets are disabled for creating new objects. Please use new secrets"
+                        )
+                    );
+                    return false;
+                }
+                return true;
+            };
+
+            if (const auto& x = dstSettings.OAuthToken; x && !checkSecret(x->TokenSecretName)) {
+                return false;
+            }
+            if (const auto& x = dstSettings.StaticCredentials; x && !checkSecret(x->PasswordSecretName)) {
+                return false;
+            }
+            if (const auto& x = dstSettings.IamCredentials; x && !checkSecret(x->InitialToken.TokenSecretName)) {
+                return false;
+            }
+        }
+
         return true;
     }
 
     bool ParseAsyncReplicationSettings(
-        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+        TReplicationSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
+        bool disableOldSecretCreation
     ) {
 
-        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos)) {
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, disableOldSecretCreation)) {
             return false;
         }
 
@@ -1138,9 +1174,10 @@ namespace {
     }
 
     bool ParseTransferSettings(
-        TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
+        TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos,
+        bool disableOldSecretCreation
     ) {
-        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, "transfer")) {
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, disableOldSecretCreation, "transfer")) {
             return false;
         }
 
@@ -1806,12 +1843,6 @@ public:
         }
 
         if (auto maybeTruncateTable = TMaybeNode<TKiTruncateTable>(input)) {
-            if (!SessionCtx->Config().FeatureFlags.GetEnableTruncateTable()) {
-                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),
-                    TStringBuilder() << "TRUNCATE TABLE statement is disabled. Please contact your system administrator to enable it"));
-                return SyncError();
-            }
-
             auto requireStatus = RequireChild(*input, TKiExecDataQuery::idx_World);
             if (requireStatus.Level != TStatus::Ok) {
                 return SyncStatus(requireStatus);
@@ -2035,6 +2066,10 @@ public:
                                     ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
                                         "Column addition with serial data type is unsupported"));
                                     return SyncError();
+                                } else if (constraint.Name().Value() == "generated") {
+                                    ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                        "Column addition with a GENERATED ALWAYS AS expression is not supported"));
+                                    return SyncError();
                                 } else if (constraint.Name().Value() == "default") {
                                     if (table.Metadata->Kind == EKikimrTableKind::Olap) {
                                         ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
@@ -2145,6 +2180,26 @@ public:
                 } else if (name == "alterColumns") {
                     std::vector<TString> notNullColumns;
                     auto listNode = action.Value().Cast<TExprList>();
+
+                    THashSet<TString> generatedColumns;
+                    THashSet<TString> virtualGeneratedColumns;
+                    THashSet<TString> generatedDependencyColumns;
+
+                    for (const auto& [genName, genMeta] : table.Metadata->Columns) {
+                        if (!genMeta.IsDefaultFromExpression()) {
+                            continue;
+                        }
+
+                        generatedColumns.insert(genName);
+                        if (!genMeta.DefaultExpression->Stored) {
+                            virtualGeneratedColumns.insert(genName);
+                        }
+
+                        for (const auto& dep : genMeta.DefaultExpression->Dependencies) {
+                            generatedDependencyColumns.insert(dep);
+                        }
+                    }
+
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
                         auto columnTuple = item.Cast<TExprList>();
@@ -2154,6 +2209,34 @@ public:
 
                         auto alter_columns = alterTableRequest.add_alter_columns();
                         alter_columns->set_name(TString(columnName));
+
+                        const TString columnNameStr(columnName.Value());
+                        const bool isGenerated = generatedColumns.contains(columnNameStr);
+                        const bool isGeneratedDependency = generatedDependencyColumns.contains(columnNameStr);
+
+                        if (alterColumnAction == "changeColumnConstraints" && (isGenerated || isGeneratedDependency)) {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                << "Cannot alter the NOT NULL constraint of column " << columnNameStr
+                                << (isGenerated ? ": it is a GENERATED column" : ": it is referenced by a GENERATED column")));
+                            return SyncError();
+                        }
+
+                        if ((alterColumnAction == "setDefault" || alterColumnAction == "setDefaultValue"
+                            || alterColumnAction == "dropDefault") && isGenerated)
+                        {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                << "Cannot alter the DEFAULT of GENERATED column " << columnNameStr));
+                            return SyncError();
+                        }
+
+                        if ((alterColumnAction == "setFamily" || alterColumnAction == "changeEncoding" ||
+                            alterColumnAction == "changeCompression") && virtualGeneratedColumns.contains(columnNameStr))
+                        {
+                            ctx.AddError(TIssue(ctx.GetPosition(columnName.Pos()), TStringBuilder()
+                                << "Cannot alter the column family, encoding or compression of VIRTUAL GENERATED column "
+                                << columnNameStr));
+                            return SyncError();
+                        }
 
                         if (alterColumnAction == "setDefault") {
                             auto setDefault = alterColumnList.Item(1).Cast<TCoAtomList>();
@@ -2811,7 +2894,6 @@ public:
                                 return SyncError();
                             }
 
-
                             TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
                             for (auto&& is : alterIndexSettings) {
                                 YQL_ENSURE(is.Value().Maybe<TCoAtom>());
@@ -3149,6 +3231,132 @@ public:
                             return SyncError();
                         }
                     }
+                } else if (name == "rebuildIndex") {
+                    auto listNode = action.Value().Cast<TExprList>();
+                    auto add_index = alterTableRequest.add_add_indexes();
+                    TString rebuildIndexName;
+                    bool hasUserColumns = false;
+
+                    // Parse the same way as addIndex
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto item = listNode.Item(i);
+                        auto columnTuple = item.Cast<TExprList>();
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto n = TString(nameNode.Value());
+                        if (n == "indexName") {
+                            rebuildIndexName = TString(columnTuple.Item(1).Cast<TCoAtom>().Value());
+                            add_index->set_name(rebuildIndexName);
+                        } else if (n == "indexType") {
+                            // Will be resolved from existing index below
+                        } else if (n == "indexColumns") {
+                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto column : columnList) {
+                                add_index->add_index_columns(TString(column.Value()));
+                            }
+                            hasUserColumns = columnList.Size() > 0;
+                        } else if (n == "dataColumns") {
+                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto column : columnList) {
+                                add_index->add_data_columns(TString(column.Value()));
+                            }
+                        } else if (n == "indexSettings") {
+                            // Defer settings parsing until after we resolve the index type
+                        }
+                    }
+
+                    // Find existing index in table metadata
+                    const NYql::TIndexDescription* existingIndex = nullptr;
+                    for (const auto& idx : table.Metadata->Indexes) {
+                        if (idx.Name == rebuildIndexName) {
+                            existingIndex = &idx;
+                            break;
+                        }
+                    }
+
+                    if (!existingIndex) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            TStringBuilder() << "Index '" << rebuildIndexName << "' not found"));
+                        return SyncError();
+                    }
+
+                    // Only vector_kmeans_tree is supported for rebuild
+                    if (existingIndex->Type != NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            TStringBuilder() << "REBUILD INDEX is only supported for vector_kmeans_tree indexes"));
+                        return SyncError();
+                    }
+
+                    // Set the index type
+                    add_index->mutable_global_vector_kmeans_tree_index();
+
+                    // If user didn't provide ON columns, inherit from existing index
+                    if (!hasUserColumns) {
+                        for (const auto& col : existingIndex->KeyColumns) {
+                            add_index->add_index_columns(col);
+                        }
+                    }
+                    // Inherit data columns if user didn't provide any
+                    if (add_index->data_columns().empty()) {
+                        for (const auto& col : existingIndex->DataColumns) {
+                            add_index->add_data_columns(col);
+                        }
+                    }
+
+                    // Parse user-provided index settings (don't pre-populate with existing;
+                    // schemeshard will merge with existing settings in Prepare)
+                    auto* vectorSettings = add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto item = listNode.Item(i);
+                        auto columnTuple = item.Cast<TExprList>();
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto n = TString(nameNode.Value());
+                        if (n == "indexSettings") {
+                            auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
+                                YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
+                                const auto& settingName = to_lower(indexSetting.Name().StringValue());
+                                const auto& value = indexSetting.Value().Cast<TCoAtom>();
+
+                                if (settingName == "distance" || settingName == "similarity"
+                                    || settingName == "vector_type" || settingName == "vector_dimension")
+                                {
+                                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()),
+                                        "Can't override parameters distance, similarity, vector_type or vector_dimension on index rebuild"));
+                                    return SyncError();
+                                }
+
+                                TString error;
+                                if (settingName == "parallel") {
+                                    ui32 result = 0;
+                                    if (TryFromString(value.StringValue(), result) && result > 0) {
+                                        add_index->set_parallel(result);
+                                    } else {
+                                        error = TStringBuilder() << "Invalid " << settingName << ": " << value.StringValue();
+                                    }
+                                } else {
+                                    NKikimr::NKMeans::FillSetting(
+                                        *vectorSettings,
+                                        settingName, value.StringValue(), error);
+                                }
+                                if (error) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
+                                    return SyncError();
+                                }
+                            }
+                        }
+                    }
+
+                    // NB: don't run ValidateSettingsPartial here. On rebuild the nested
+                    // VectorIndexSettings (metric/vector_type/vector_dimension) is inherited
+                    // from the existing index and cannot be provided by the user, so it is
+                    // always empty at this point and the check would spuriously fail with
+                    // "vector index settings should be set". levels/clusters are already
+                    // bounds-checked in FillSetting, and full validation runs on the
+                    // schemeshard side after merging with the existing index settings.
+
+                    // Mark as rebuild via flags
+                    alterTableFlags |= NKqpProto::TKqpSchemeOperation::FLAG_REBUILD_INDEX;
+
                 } else if (name == "compact") {
                     if (table.Metadata->StoreType == EStoreType::Row && !SessionCtx->Config().FeatureFlags.GetEnableForcedCompactions()) {
                         ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
@@ -3392,7 +3600,13 @@ public:
                 );
             }
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, createReplication.ReplicationSettings(), ctx, createReplication.Pos())) {
+            if (!ParseAsyncReplicationSettings(
+                settings.Settings,
+                createReplication.ReplicationSettings(),
+                ctx,
+                createReplication.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3448,7 +3662,10 @@ public:
             TAlterReplicationSettings settings;
             settings.Name = TString(alterReplication.Replication());
 
-            if (!ParseAsyncReplicationSettings(settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos())) {
+            if (!ParseAsyncReplicationSettings(
+                settings.Settings, alterReplication.ReplicationSettings(), ctx, alterReplication.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3503,7 +3720,13 @@ public:
                 createTransfer.TransformLambda()
             };
 
-            if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos())) {
+            if (!ParseTransferSettings(
+                settings.Settings,
+                createTransfer.TransferSettings(),
+                ctx,
+                createTransfer.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 
@@ -3560,7 +3783,9 @@ public:
             settings.Name = TString(alterTransfer.Transfer());
             settings.TranformLambda = alterTransfer.TransformLambda();
 
-            if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos())) {
+            if (!ParseTransferSettings(settings.Settings, alterTransfer.TransferSettings(), ctx, alterTransfer.Pos(),
+                SessionCtx->Config().FeatureFlags.GetDisableOldSecretCreation())
+            ) {
                 return SyncError();
             }
 

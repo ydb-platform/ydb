@@ -37,7 +37,7 @@ PEERDIR(
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
     yql/essentials/sql
-    yql/essentials/sql/v1
+    yql/essentials/sql/v1/translation
     yql/essentials/udfs/common/string
 )
 

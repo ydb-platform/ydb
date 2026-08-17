@@ -90,7 +90,7 @@ public:
 };
 
 TFsPath SnapshotSystemRoot(const TString& name) {
-    return TFsPath(ArcadiaSourceRoot()) / "ydb/library/actors/util/testdata/cpu_topology" / name / "sys/devices/system";
+    return TFsPath(SRC_("testdata/cpu_topology")) / name / "sys/devices/system";
 }
 
 TCpuTopology LoadSnapshot(const TString& name) {

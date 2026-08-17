@@ -91,6 +91,7 @@ THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr target
     }
 
     ev->Record.SetObjectId(targetPath->PathId.LocalPathId);
+    ev->Record.SetIsBackup(ss->IsBackupTable(targetPath->PathId));
 
     if (shard.TabletID) {
         ev->Record.SetTabletID(ui64(shard.TabletID));

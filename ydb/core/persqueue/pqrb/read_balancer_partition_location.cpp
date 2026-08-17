@@ -32,14 +32,8 @@ void TPersQueueReadBalancer::SchedulePartitionsLocationWakeup(const TActorContex
         return;
     }
 
-    const auto now = TAppData::TimeProvider->Now();
-    const auto& deadline = PartitionsLocationQueue.front().Deadline;
-    const auto delay = deadline > now
-        ? std::max(deadline - now, TDuration::MilliSeconds(50))
-        : TDuration::MilliSeconds(50);
-
     PartitionsLocationWakeupScheduled = true;
-    ctx.Schedule(delay, new TEvents::TEvWakeup(PARTITIONS_LOCATION_WAKEUP_TAG));
+    ctx.Schedule(PARTITIONS_LOCATION_WAKEUP_QUANTUM, new TEvents::TEvWakeup(PARTITIONS_LOCATION_WAKEUP_TAG));
 }
 
 void TPersQueueReadBalancer::EnqueuePartitionsLocationRequest(
@@ -66,11 +60,9 @@ void TPersQueueReadBalancer::EnqueuePartitionsLocationRequest(
 void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext& ctx)
 {
     const auto now = TAppData::TimeProvider->Now();
-    std::deque<TPartitionsLocationRequest> deferred;
-
-    while (!PartitionsLocationQueue.empty()) {
-        auto request = std::move(PartitionsLocationQueue.front());
-        PartitionsLocationQueue.pop_front();
+    size_t write = 0;
+    for (size_t read = 0; read < PartitionsLocationQueue.size(); ++read) {
+        auto& request = PartitionsLocationQueue[read];
 
         // Prefer a successful answer whenever possible, even past the deadline.
         if (TryRespondPartitionsLocation(request.Sender, request.Record, ctx)) {
@@ -85,10 +77,12 @@ void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext&
             continue;
         }
 
-        deferred.push_back(std::move(request));
+        if (write != read) {
+            PartitionsLocationQueue[write] = std::move(request);
+        }
+        ++write;
     }
-
-    PartitionsLocationQueue = std::move(deferred);
+    PartitionsLocationQueue.erase(PartitionsLocationQueue.begin() + write, PartitionsLocationQueue.end());
     SchedulePartitionsLocationWakeup(ctx);
 }
 
@@ -97,9 +91,7 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
     const NKikimrPQ::TGetPartitionsLocation& request,
     const TActorContext& ctx)
 {
-    auto evResponse = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
-
-    auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
+    auto pipeIsReady = [&](ui64 tabletId) {
         if (PipesRequested.contains(tabletId)) {
             return false;
         }
@@ -110,23 +102,9 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
             return false;
         }
 
-        if (!iter->second.Ready) {
-            return false;
-        }
-
-        auto* pResponse = evResponse->Record.AddLocations();
-        pResponse->SetPartitionId(partitionId);
-        pResponse->SetNodeId(iter->second.NodeId.GetRef());
-        pResponse->SetGeneration(iter->second.Generation.GetRef());
-
-        YDB_LOG_DEBUG("The partition location was added to response",
-            {"logPrefix", LogPrefix()},
-            {"tabletId", tabletId},
-            {"partitionId", partitionId},
-            {"nodeId", pResponse->GetNodeId()},
-            {"generation", pResponse->GetGeneration()});
-
-        return true;
+        return iter->second.Ready
+            && iter->second.NodeId.Defined()
+            && iter->second.Generation.Defined();
     };
 
     if (request.PartitionsSize() == 0) {
@@ -135,7 +113,7 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
         }
 
         for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
-            if (!addPartitionToResponse(partitionId, partitionInfo.TabletId)) {
+            if (!pipeIsReady(partitionInfo.TabletId)) {
                 return false;
             }
         }
@@ -147,10 +125,56 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
                 return true; // answered with error, drop from queue
             }
 
-            if (!addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId)) {
+            if (!pipeIsReady(partitionInfoIter->second.TabletId)) {
                 return false;
             }
         }
+    }
+
+    auto evResponse = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
+
+    auto addPartitionToResponse = [&](ui64 partitionId, ui64 tabletId) {
+        auto iter = TabletPipes.find(tabletId);
+        if (iter == TabletPipes.end() || !iter->second.NodeId.Defined() || !iter->second.Generation.Defined()) {
+            return false;
+        }
+        auto* pResponse = evResponse->Record.AddLocations();
+        pResponse->SetPartitionId(partitionId);
+        pResponse->SetNodeId(*iter->second.NodeId);
+        pResponse->SetGeneration(*iter->second.Generation);
+
+        YDB_LOG_DEBUG("The partition location was added to response",
+            {"logPrefix", LogPrefix()},
+            {"tabletId", tabletId},
+            {"partitionId", partitionId},
+            {"nodeId", pResponse->GetNodeId()},
+            {"generation", pResponse->GetGeneration()});
+        return true;
+    };
+
+    bool filled = true;
+    if (request.PartitionsSize() == 0) {
+        for (const auto& [partitionId, partitionInfo] : PartitionsInfo) {
+            if (!addPartitionToResponse(partitionId, partitionInfo.TabletId)) {
+                filled = false;
+                break;
+            }
+        }
+    } else {
+        for (const auto& partitionInRequest : request.GetPartitions()) {
+            auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
+            if (partitionInfoIter == PartitionsInfo.end()
+                || !addPartitionToResponse(partitionInRequest, partitionInfoIter->second.TabletId))
+            {
+                filled = false;
+                break;
+            }
+        }
+    }
+
+    if (!filled) {
+        SendPartitionsLocationError(sender, ctx);
+        return true;
     }
 
     evResponse->Record.SetStatus(true);

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 
 
 class Workload():
-    def __init__(self, endpoint, database, duration, partitions_count, prefix):
+    def __init__(self, endpoint: str, database: str, duration: int, partitions_count: int, prefix: str):
         self.database = database
         self.endpoint = endpoint
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
@@ -72,9 +72,52 @@ class Workload():
             """
         )
 
+    def create_join_tables(self):
+        logger.info("Workload::create_join_tables")
+        self.pool.execute_with_retries(
+            f"""
+                CREATE TABLE `{self.prefix}/join_row_table` (
+                    level Utf8,
+                    descr Utf8,
+                    PRIMARY KEY (level)
+                );
+                CREATE TABLE `{self.prefix}/join_column_table` (
+                    level Utf8 NOT NULL,
+                    descr Utf8,
+                    PRIMARY KEY (level)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            """
+        )
+        self.pool.execute_with_retries(
+            f"""
+                UPSERT INTO `{self.prefix}/join_row_table` (level, descr) VALUES ('error', 'row-descr');
+            """
+        )
+        self.pool.execute_with_retries(
+            f"""
+                UPSERT INTO `{self.prefix}/join_column_table` (level, descr) VALUES ('error', 'col-descr');
+            """
+        )
+
+    def create_output_tables(self):
+        logger.info("Workload::create_output_tables")
+        for suffix in ('ext', 'loc'):
+            self.pool.execute_with_retries(
+                f"""
+                    CREATE TABLE `{self.prefix}/output_table_{suffix}` (
+                        ts Utf8 NOT NULL,
+                        error_count Uint64,
+                        PRIMARY KEY (ts)
+                    );
+                """
+            )
+
     def create_streaming_query(self, external):
         logger.info("Workload::create_streaming_query")
         source = f"`{self.prefix}/source_name`." if external else ""
+        output_table = f"{self.prefix}/output_table_{'ext' if external else 'loc'}"
         self.pool.execute_with_retries(
             f"""
                 CREATE STREAMING QUERY `{self.prefix}/query_name_{'ext' if external else 'loc'}` AS DO BEGIN
@@ -91,9 +134,16 @@ class Workload():
                 );
                 $filtered = (SELECT * FROM $input WHERE level = 'error');
 
+                $joined = (
+                    SELECT f.time AS time, f.level AS level, jr.descr AS row_descr, jc.descr AS col_descr
+                    FROM $filtered AS f
+                    LEFT JOIN `{self.prefix}/join_row_table` AS jr ON f.level = jr.level
+                    LEFT JOIN `{self.prefix}/join_column_table` AS jc ON f.level = jc.level
+                );
+
                 $number_errors = (
-                    SELECT COUNT(*) AS error_count, CAST(HOP_START() AS String) AS ts
-                    FROM $filtered
+                    SELECT COUNT(*) AS error_count, CAST(HOP_START() AS String) AS ts, SOME(row_descr) AS row_descr, SOME(col_descr) AS col_descr
+                    FROM $joined
                     GROUP BY
                         HoppingWindow(CAST(time AS Timestamp), 'PT1S', 'PT1S')
                 );
@@ -104,6 +154,9 @@ class Workload():
 
                 INSERT INTO {source}`{self.output_topic}`
                 SELECT * FROM $json;
+
+                UPSERT INTO `{output_table}`
+                SELECT Unwrap(CAST(ts || "{'ext' if external else 'loc'}" AS Utf8)) AS ts, error_count FROM $number_errors;
                 END DO;
             """
         )
@@ -175,15 +228,29 @@ class Workload():
         if count < expected * 0.7:
             raise Exception(f"Insufficient data in output topic: expected ~{expected} messages, got {count}")
 
+    def check_output_tables(self):
+        logger.info("Workload::check_output_tables")
+        for suffix in ('ext', 'loc'):
+            result_sets = self.pool.execute_with_retries(
+                f"SELECT COUNT(*) AS cnt FROM `{self.prefix}/output_table_{suffix}`"
+            )
+            count = result_sets[0].rows[0].cnt
+            expected = self.duration - 30  # Group by HOP 1s - checkpoint duration
+            if count < expected * 0.7:
+                raise Exception(f"Insufficient data in output table: expected ~{expected} messages, got {count}")
+
     def loop(self):
         self.create_topics()
         self.create_external_data_source()
         self.create_table()
+        self.create_join_tables()
+        self.create_output_tables()
         self.create_streaming_query(external=True)
         self.create_streaming_query(external=False)
         self.check_status()
         self.write_to_input_topic()
         self.read_from_output_topic()
+        self.check_output_tables()
         self.drop_topics()
 
     def __enter__(self):

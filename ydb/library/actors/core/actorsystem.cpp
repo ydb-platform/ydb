@@ -292,6 +292,32 @@ namespace NActors {
         if (Y_UNLIKELY(!ev))
             return false;
 
+        if (Y_UNLIKELY(ev->Flags & IEventHandle::FlagSystemMessage)) {
+            switch (ev->Type) {
+                case TEvents::TSystem::CheckActorLiveness: {
+                    const TActorId recipient = ev->GetRecipientRewrite();
+                    const ui32 recipientNodeId = recipient.NodeId();
+                    if (recipientNodeId != NodeId && recipientNodeId != 0) {
+                        // TODO: Support distributed actor liveness checks
+                        // through interconnect. Liveness events are local-only
+                        // for now.
+                        return Send(std::make_unique<IEventHandle>(
+                            TEvents::TSystem::ActorLivenessUnsure,
+                            0,
+                            ev->Sender,
+                            recipient,
+                            nullptr,
+                            ev->Cookie,
+                            nullptr,
+                            std::move(ev->TraceId)));
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SEND, false> activityGuard;
 #ifdef USE_ACTOR_CALLSTACK
         ev->Callstack.TraceIfEmpty();
@@ -313,6 +339,7 @@ namespace NActors {
                 "Event rewrite from " << ev->Recipient << " to " << recipient << " would be lost via interconnect");
             recipient = InterconnectProxy(recpNodeId);
             if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
+                const TActorId originalRecipient = ev->Recipient;
                 const TActorId sender = ev->Sender;
                 const ui64 cookie = ev->Cookie;
                 const ui32 flags = ev->Flags & ~IEventHandle::FlagSubscribeOnSession;
@@ -329,9 +356,10 @@ namespace NActors {
                 const TString stackTrace = collectTrace
                     ? ExtractCurrentStackTrace()
                     : TString();
-                auto wrapped = std::make_unique<IEventHandle>(recipient, sender,
+                auto wrapped = std::make_unique<IEventHandle>(originalRecipient, sender,
                     new TEvForwardSubscribeSession(ev.release(), activityIndex, eventTypeName, stackTrace),
                     flags, cookie, forwardOnNondelivery, std::move(traceId));
+                wrapped->Rewrite(TEvForwardSubscribeSession::EventType, recipient);
                 ev = std::move(wrapped);
             } else {
                 ev->Rewrite(TEvInterconnect::EvForward, recipient);

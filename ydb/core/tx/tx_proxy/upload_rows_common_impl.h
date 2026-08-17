@@ -100,12 +100,13 @@ private:
 
 namespace NTxProxy {
 
-TActorId DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
+void DoLongTxWriteSameMailbox(const TActorContext& ctx, const TActorId& replyTo,
     const NLongTxService::TLongTxId& longTxId, const TString& dedupId,
     const TString& databaseName, const TString& path,
     std::shared_ptr<const NSchemeCache::TSchemeCacheNavigate> navigateResult, std::shared_ptr<arrow::RecordBatch> batch,
     std::shared_ptr<NYql::TIssues> issues,
-    TIntrusivePtr<NACLib::TUserContext> userCtx);
+    TIntrusivePtr<NACLib::TUserContext> userCtx, bool forceNoFlowControl = false,
+    TInstant deadline = TInstant::Max(), TDuration operationTimeout = TDuration::Seconds(5 * 60));
 
 template <NKikimrServices::TActivity::EType DerivedActivityType>
 class TUploadRowsBase : public TActorBootstrapped<TUploadRowsBase<DerivedActivityType>> {
@@ -401,7 +402,8 @@ private:
         SrcColumns.reserve(entry.Columns.size());
         THashSet<TString> HasInternalConversion;
 
-        bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
+        const bool fillBuildInProgressColumns = AllowWriteToPrivateTable && AllowWriteToIndexImplTable && !IsIndexImplTable;
+        const bool isPublicBulkUpsert = !AllowWriteToPrivateTable && !AllowWriteToIndexImplTable;
 
         for (const auto& [_, colInfo] : entry.Columns) {
             ui32 id = colInfo.Id;
@@ -422,6 +424,12 @@ private:
 
             if (colInfo.IsDefaultFromLiteral()) {
                 defaultColumnsLeft.insert(name);
+            }
+
+            if (colInfo.IsDefaultFromExpression() && colInfo.DefaultExpression->Stored && isPublicBulkUpsert) {
+                return TConclusionStatus::Fail(TStringBuilder()
+                    << "Bulk upsert is not supported for tables with STORED generated columns: column "
+                    << name);
             }
         }
 
@@ -997,7 +1005,8 @@ private:
         ui32 batchNo = 0;
         TString dedupId = ToString(batchNo);
         DoLongTxWriteSameMailbox(
-            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, UserCtx);
+            ctx, ctx.SelfID, LongTxId, dedupId, GetDatabase(), GetTable(), ResolveNamesResult, Batch, Issues, UserCtx, false,
+            Deadline(), Timeout);
     }
 
     void RollbackLongTx(const TActorContext& ctx) {

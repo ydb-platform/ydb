@@ -46,6 +46,7 @@ from s3transfer.manager import TransferManager
 from s3transfer.utils import (
     CallArgs,
     OSUtils,
+    create_nested_client,
     get_callbacks,
     is_s3express_bucket,
 )
@@ -481,7 +482,7 @@ class BotocoreCRTRequestSerializer(BaseCRTRequestSerializer):
         if client_kwargs is None:
             client_kwargs = {}
         self._resolve_client_config(session, client_kwargs)
-        self._client = session.create_client(**client_kwargs)
+        self._client = create_nested_client(session, **client_kwargs)
         self._client.meta.events.register(
             'request-created.s3.*', self._capture_http_request
         )

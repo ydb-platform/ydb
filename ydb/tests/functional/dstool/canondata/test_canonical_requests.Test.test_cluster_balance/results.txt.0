@@ -114,6 +114,7 @@ VSlot {
     Replicated: true
   }
   Status: "READY"
+  Ready: true
 }
 VSlot {
   VSlotId {
@@ -130,6 +131,7 @@ VSlot {
     Replicated: true
   }
   Status: "READY"
+  Ready: true
 }
 Group {
   GroupId: 2147483649

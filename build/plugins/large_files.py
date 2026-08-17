@@ -7,7 +7,7 @@ PLACEHOLDER_EXT = "external"
 
 
 @ymake.macro
-def LARGE_FILES(unit: ymake.Unit, *args: tuple[str, ...]):
+def LARGE_FILES(unit: ymake.Unit, *args: str):
     """
     @usage LARGE_FILES([AUTOUPDATED] Files...)
 

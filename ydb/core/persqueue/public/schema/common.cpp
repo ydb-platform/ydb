@@ -10,6 +10,7 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -384,9 +385,11 @@ TResult AddConsumer(
         return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << "service type cannot be empty for consumer '" << consumerConfig.name() << "'"};
     }
 
-    Y_ABORT_UNLESS(supportedClientServiceTypes.find(serviceType) != supportedClientServiceTypes.end());
+    auto serviceTypeIt = supportedClientServiceTypes.find(serviceType);
+    AFL_ENSURE(serviceTypeIt != supportedClientServiceTypes.end())
+        ("service_type", serviceType)("consumer", consumerConfig.name());
 
-    const TClientServiceType& clientServiceType = supportedClientServiceTypes.find(serviceType)->second;
+    const TClientServiceType& clientServiceType = serviceTypeIt->second;
 
     if (checkServiceType) {
         bool found = clientServiceType.PasswordHashes.empty() && !hasPassword;
@@ -433,6 +436,38 @@ TResult AddConsumer(
         }
     } else {
         return period.error();
+    }
+
+    // Per-consumer read quota for a single partition is stored in TPartitionConfig.ReadQuota keyed by consumer name.
+    if (consumerConfig.has_read_speed_bytes_per_second()) {
+        if (consumerConfig.read_speed_bytes_per_second() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "read_speed_bytes_per_second can't be negative, provided "
+                << consumerConfig.read_speed_bytes_per_second()};
+        }
+        auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
+        if (consumerConfig.read_speed_bytes_per_second() == 0) {
+            readQuota->ClearSpeedInBytesPerSecond();
+            readQuota->ClearBurstSize();
+        } else {
+            readQuota->SetSpeedInBytesPerSecond(consumerConfig.read_speed_bytes_per_second());
+            readQuota->SetBurstSize(consumerConfig.read_speed_bytes_per_second());
+        }
+    }
+    if (consumerConfig.has_read_speed_messages_per_second()) {
+        if (consumerConfig.read_speed_messages_per_second() < 0) {
+            return {Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "read_speed_messages_per_second can't be negative, provided "
+                << consumerConfig.read_speed_messages_per_second()};
+        }
+        auto* readQuota = NPQ::GetOrAddReadQuota(*config, consumerName);
+        if (consumerConfig.read_speed_messages_per_second() == 0) {
+            readQuota->ClearSpeedInMessagesPerSecond();
+            readQuota->ClearBurstSizeInMessages();
+        } else {
+            readQuota->SetSpeedInMessagesPerSecond(consumerConfig.read_speed_messages_per_second());
+            readQuota->SetBurstSizeInMessages(consumerConfig.read_speed_messages_per_second());
+        }
     }
 
     if (consumersAdvancedMonitoringSettings) {

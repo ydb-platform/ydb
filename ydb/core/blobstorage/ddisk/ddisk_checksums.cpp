@@ -46,6 +46,10 @@ std::vector<ui64> CalculatePayloadChecksums(const TRope& payload) {
     return checksums;
 }
 
+ui64 CalculateRawChecksum(const void* data, size_t size) {
+    return XXH3_64bits(data, size);
+}
+
 ui64 Contribution(ui64 vchunkGeneration, ui64 blockIdx, ui64 blockChecksum) {
     ui64 parts[3] = {vchunkGeneration, blockIdx, blockChecksum};
     return XXH3_64bits(parts, sizeof(parts));

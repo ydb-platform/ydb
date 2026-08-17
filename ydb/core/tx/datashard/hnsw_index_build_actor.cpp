@@ -89,7 +89,7 @@ void TDataShard::Handle(TEvPrivate::TEvHnswIndexBuildResult::TPtr& ev, const TAc
     if (IsHnswIndexBuildObsolete(result->LocalTid)) {
         SetHnswIndexBuilding(result->LocalTid, false);
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD,
-            TabletID() << " HNSW: discarding lazy build invalidated by follower update for localTid="
+            TabletID() << " HNSW: discarding lazy build invalidated by a concurrent update for localTid="
             << result->LocalTid);
         return;
     }

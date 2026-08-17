@@ -1873,13 +1873,13 @@ public:
         auto& entry = HnswIndexCache[localTid];
         entry.Building = building;
         if (!building) {
-            entry.InvalidatedWhileBuilding = false;
+            entry.BuildObsolete = false;
         }
     }
 
     bool IsHnswIndexBuildObsolete(ui32 localTid) const {
         auto it = HnswIndexCache.find(localTid);
-        return it != HnswIndexCache.end() && it->second.InvalidatedWhileBuilding;
+        return it != HnswIndexCache.end() && it->second.BuildObsolete;
     }
 
     void InvalidateHnswIndexes() {
@@ -1889,7 +1889,7 @@ public:
             entry.VectorColumnTag = 0;
             entry.DeltaReservations.clear();
             entry.NextScanAttemptAt = TInstant::Zero();
-            entry.InvalidatedWhileBuilding = entry.Building;
+            entry.BuildObsolete = entry.Building;
         }
     }
 
@@ -1953,18 +1953,26 @@ public:
         entry.VectorColumnTag = vectorColumnTag;
         entry.DeltaReservations.clear();
         entry.Building = false;
-        entry.InvalidatedWhileBuilding = false;
+        entry.BuildObsolete = false;
         entry.NextScanAttemptAt = TInstant::Zero();
     }
 
     void UpdateHnswIndex(ui32 localTid, NTable::ERowOp rowOp,
             TConstArrayRef<TCell> keyCells, TArrayRef<const NIceDb::TUpdateOp> ops) {
         auto it = HnswIndexCache.find(localTid);
-        if (it == HnswIndexCache.end() || !it->second.Index || !it->second.VectorColumnTag) {
+        if (it == HnswIndexCache.end()) {
             return;
         }
 
         auto& entry = it->second;
+        if (entry.Building) {
+            // The asynchronous build owns a snapshot taken before this write.
+            // Do not install it after the mutation completes.
+            entry.BuildObsolete = true;
+        }
+        if (!entry.Index || !entry.VectorColumnTag) {
+            return;
+        }
         const TString key = TSerializedCellVec::Serialize(keyCells);
         if (!entry.Index->HasDelta(key)) {
             auto reservation = TryReserveHnswCacheMemory(
@@ -3123,7 +3131,7 @@ private:
         ui32 VectorColumnTag = 0;
         THashMap<TString, std::shared_ptr<void>> DeltaReservations;
         bool Building = false;
-        bool InvalidatedWhileBuilding = false;
+        bool BuildObsolete = false;
         TInstant NextScanAttemptAt;
         ui64 CacheHits = 0;
         ui64 CacheMisses = 0;

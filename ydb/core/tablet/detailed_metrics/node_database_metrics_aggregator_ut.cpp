@@ -5,8 +5,15 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/generic/array_size.h>
+#include <util/generic/ptr.h>
+#include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 #include <util/string/builder.h>
 #include <util/string/cast.h>
+#include <util/system/mutex.h>
+
+#include <atomic>
+#include <thread>
 
 using namespace NKikimr;
 using namespace NKikimr::NDetailedMetricsTests;
@@ -283,9 +290,9 @@ NMonitoring::TDynamicCounterPtr FindAppTableBucketCounters(
  * @param[in] tabletId The ID of the tablet
  * @param[in] followerId The follower ID of the tablet (0 for the leader)
  *
- * @return The executor counters of the leaf (or nullptr if there is none)
+ * @return The counter group of the leaf itself (or nullptr if there is none)
  */
-NMonitoring::TDynamicCounterPtr FindLeafCounters(
+NMonitoring::TDynamicCounterPtr FindLeafGroup(
     NMonitoring::TDynamicCounterPtr rootGroup,
     ui64 tabletId,
     ui32 followerId,
@@ -306,7 +313,16 @@ NMonitoring::TDynamicCounterPtr FindLeafCounters(
         return nullptr;
     }
 
-    return FindExecutorCountersGroup(tabletGroup->FindSubgroup("follower_id", ToString(followerId)));
+    return tabletGroup->FindSubgroup("follower_id", ToString(followerId));
+}
+
+NMonitoring::TDynamicCounterPtr FindLeafCounters(
+    NMonitoring::TDynamicCounterPtr rootGroup,
+    ui64 tabletId,
+    ui32 followerId,
+    const TString& relativeTablePath = RELATIVE_TABLE_PATH
+) {
+    return FindExecutorCountersGroup(FindLeafGroup(rootGroup, tabletId, followerId, relativeTablePath));
 }
 
 /**
@@ -322,22 +338,7 @@ NMonitoring::TDynamicCounterPtr FindAppLeafCounters(
     ui32 followerId,
     const TString& relativeTablePath = RELATIVE_TABLE_PATH
 ) {
-    auto tableGroup = FindTableGroup(rootGroup, relativeTablePath);
-    if (!tableGroup) {
-        return nullptr;
-    }
-
-    auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
-    if (!perPartitionGroup) {
-        return nullptr;
-    }
-
-    auto tabletGroup = perPartitionGroup->FindSubgroup("tablet_id", ToString(tabletId));
-    if (!tabletGroup) {
-        return nullptr;
-    }
-
-    return FindAppCountersGroup(tabletGroup->FindSubgroup("follower_id", ToString(followerId)));
+    return FindAppCountersGroup(FindLeafGroup(rootGroup, tabletId, followerId, relativeTablePath));
 }
 
 /**
@@ -446,6 +447,88 @@ struct TRoleTrees {
         Leaders->RecalculateAllCounters();
         Followers->RecalculateAllCounters();
     }
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * A reader thread, which runs the given check over and over under the shared tree lock,
+ * the way the SysView Service actor reads the tree off its own mailbox, until the writer
+ * on the main thread says it is done.
+ *
+ * @param[in] check Returns the description of the very first violation it finds, or an
+ *                   empty string when the tree looks whole
+ *
+ * @note The check does NOT assert on its own. UNIT_ASSERT off the unittest thread does
+ *       not throw: it panics ("assertion failed in non-unittest thread"), which aborts
+ *       the whole test chunk instead of failing this one test. So the failure is handed
+ *       back to the main thread by Join(), which is where the assertion happens.
+ */
+class TLockedReaderThread {
+public:
+    template <typename TCheck>
+    explicit TLockedReaderThread(TCheck check)
+        : Thread([this, check]() {
+              while (!Stopped.load(std::memory_order_acquire)) {
+                  try {
+                      TGuard<TMutex> guard(DetailedMetricsLock());
+                      Failure = check();
+                  } catch (...) {
+                      // Nothing here is expected to throw, but a panic on this thread
+                      // would be even less readable than a reported failure
+                      Failure = CurrentExceptionMessage();
+                  }
+
+                  if (Failure) {
+                      return;
+                  }
+
+                  ++Reads;
+
+                  // TMutex is not fair, and a reader, which relocks the very moment it
+                  // unlocks, can starve the writer for the whole test
+                  std::this_thread::yield();
+              }
+          })
+    {}
+
+    /**
+     * @note Stops the thread as well, so that an assertion, which fails on the writer
+     *       side, does not leave a joinable thread behind and terminate the process
+     *       instead of failing the test.
+     */
+    ~TLockedReaderThread() {
+        Stop();
+    }
+
+    /**
+     * @return The number of the completed reads, asserting that none of them failed
+     */
+    ui64 Join() {
+        Stop();
+
+        UNIT_ASSERT_C(Failure.empty(), Failure);
+
+        return Reads;
+    }
+
+private:
+    void Stop() {
+        Stopped.store(true, std::memory_order_release);
+
+        if (Thread.joinable()) {
+            Thread.join();
+        }
+    }
+
+private:
+    TString Failure;
+    ui64 Reads = 0;
+    std::atomic<bool> Stopped = false;
+
+    // Declared last on purpose: the thread starts as soon as it is constructed, and it
+    // touches every member above
+    std::thread Thread;
 };
 
 } // namespace <anonymous>
@@ -628,6 +711,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
             // No replicas_only aggregate is synthesized on the node
             UNIT_ASSERT(!tabletGroup->FindSubgroup("follower_id", "replicas_only"));
         }
+
     }
 
     /**
@@ -2170,5 +2254,184 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(!HasCounter(leafCounters, "NotInTheAllowList"));
         UNIT_ASSERT(!HasCounter(leafCounters, "SUM(NotInTheAllowList)"));
         UNIT_ASSERT(!HasCounter(leafCounters, "MAX(NotInTheAllowList)"));
+    }
+
+    /**
+     * Verify that a reader, which holds the shared tree lock, never observes a partially
+     * rebuilt histogram while the writer recalculates the aggregates.
+     *
+     * @note This is the regression test for the guard in RecalculateAllCounters().
+     *       TAggregatedTabletCounters republishes a HIST(x) aggregate by resetting the
+     *       histogram and refilling it one tablet at a time, so without that guard the
+     *       reader sees a total anywhere between 0 and the number of the partitions. A
+     *       torn histogram is a perfectly valid looking snapshot, which is why this
+     *       asserts the contents rather than the absence of a crash.
+     */
+    Y_UNIT_TEST(ConcurrentReadDuringRecalculationSeesWholeHistogram) {
+        constexpr ui32 PARTITION_COUNT = 8;
+        constexpr ui32 WRITER_ITERATIONS = 2000;
+
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        TInstant now = TInstant::Seconds(100);
+
+        // The set of the partitions never changes, and neither do their simple counters:
+        // everything the reader asserts below is a constant of the whole test
+        TVector<THolder<TFakeTablet>> partitions;
+        ui64 expectedRowsSum = 0;
+        for (ui32 i = 0; i < PARTITION_COUNT; ++i) {
+            auto& partition = partitions.emplace_back(MakeHolder<TFakeTablet>(1000 + i, 0));
+            partition->SetSimple(DB_UNIQUE_ROWS_TOTAL, i + 1);
+            expectedRowsSum += i + 1;
+        }
+
+        // Report once up front, so that the reader finds the whole tree in place from its
+        // very first iteration
+        for (auto& partition : partitions) {
+            partition->Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        }
+        aggregator->RecalculateAllCounters();
+
+        auto bucketCounters = FindTableBucketCounters(rootGroup);
+        UNIT_ASSERT(bucketCounters);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetHistogramTotal(bucketCounters, "HIST(ConsumedCPU)"),
+            PARTITION_COUNT
+        );
+
+        TLockedReaderThread reader([&]() -> TString {
+            // Every partition contributes exactly one observation, so any other total
+            // means the reader landed inside the reset-then-refill window of a
+            // recalculation
+            const ui64 observations = GetHistogramTotal(bucketCounters, "HIST(ConsumedCPU)");
+            if (observations != PARTITION_COUNT) {
+                return TStringBuilder() << "a torn HIST(ConsumedCPU): " << observations
+                    << " observations instead of " << PARTITION_COUNT;
+            }
+
+            // The simple counter aggregates are assigned rather than rebuilt, and their
+            // sources never change, so they must not budge either
+            const ui64 rowsSum = GetCounterValue(bucketCounters, "SUM(DbUniqueRowsTotal)");
+            if (rowsSum != expectedRowsSum) {
+                return TStringBuilder() << "SUM(DbUniqueRowsTotal) is " << rowsSum
+                    << " instead of " << expectedRowsSum;
+            }
+
+            return {};
+        });
+
+        for (ui32 iteration = 0; iteration < WRITER_ITERATIONS; ++iteration) {
+            // The recalculation rebuilds a histogram only for a counter, whose value has
+            // actually changed, so the per second rate of ConsumedCPU has to differ from
+            // the one of the previous iteration, or there would be no window to hit
+            now += TDuration::Seconds(1);
+            const ui64 consumedCpu = 1 + iteration % 3;
+
+            for (auto& partition : partitions) {
+                partition->AddCumulative(CONSUMED_CPU, consumedCpu);
+                partition->Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+            }
+
+            aggregator->RecalculateAllCounters();
+        }
+
+        UNIT_ASSERT(reader.Join() > 0);
+    }
+
+    /**
+     * Verify that a reader, which holds the shared tree lock, never observes a half built
+     * leaf while the writer creates and drops the leaves of a partition level table.
+     *
+     * @note A leaf group and the low level counters underneath it are created in two
+     *       steps, and this is what asserts that both steps are inside one critical
+     *       section: a leaf, which the reader can see, always carries its counters.
+     */
+    Y_UNIT_TEST(ConcurrentStructuralChurnKeepsTheTreeConsistent) {
+        constexpr ui32 PARTITION_COUNT = 16;
+        constexpr ui32 WRITER_ITERATIONS = 200;
+
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        TInstant now = TInstant::Seconds(100);
+
+        TVector<THolder<TFakeTablet>> partitions;
+        for (ui32 i = 0; i < PARTITION_COUNT; ++i) {
+            auto& partition = partitions.emplace_back(MakeHolder<TFakeTablet>(1000 + i, 0));
+            partition->SetSimple(DB_UNIQUE_ROWS_TOTAL, i + 1);
+        }
+
+        TLockedReaderThread reader([&]() -> TString {
+            for (ui32 i = 0; i < PARTITION_COUNT; ++i) {
+                const ui64 tabletId = 1000 + i;
+
+                auto leafGroup = FindLeafGroup(rootGroup, tabletId, 0);
+                if (!leafGroup) {
+                    // The writer has not created this leaf yet, or has already dropped it
+                    continue;
+                }
+
+                // A leaf, which exists at all, is fully built: its type=/category=
+                // subtree is there and the low level counters are already published.
+                // Their VALUES are not checked, because a freshly created leaf carries
+                // its aggregates only from the next recalculation on
+                auto leafCounters = FindExecutorCountersGroup(leafGroup);
+                if (!leafCounters || !leafCounters->FindNamedCounter("sensor", "SUM(DbUniqueRowsTotal)")) {
+                    return TStringBuilder() << "a half built leaf: the tablet " << tabletId
+                        << " has no executor counters";
+                }
+
+                auto leafAppCounters = FindAppCountersGroup(leafGroup);
+                if (!leafAppCounters
+                    || !leafAppCounters->FindNamedCounter("sensor", "DataShard/EngineHostRowUpdates"))
+                {
+                    return TStringBuilder() << "a half built leaf: the tablet " << tabletId
+                        << " has no application counters";
+                }
+            }
+
+            return {};
+        });
+
+        for (ui32 iteration = 0; iteration < WRITER_ITERATIONS; ++iteration) {
+            now += TDuration::Seconds(1);
+
+            for (ui32 i = 0; i < PARTITION_COUNT; ++i) {
+                auto& partition = partitions[i];
+                partition->AddCumulative(CONSUMED_CPU, 1 + i);
+                partition->Report(aggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+                // Drop the previous leaf right after creating this one, so that the whole
+                // per_partition subtree — and, on the wrap around, the table= and
+                // database= nodes above it — is torn down and rebuilt under the reader
+                const ui32 previous = (i + PARTITION_COUNT - 1) % PARTITION_COUNT;
+                aggregator->ForgetTablet(partitions[previous]->TabletId, 0);
+            }
+
+            aggregator->RecalculateAllCounters();
+
+            // Now and then drop the very last leaf too, so that the emptied table= and
+            // database= nodes above it are reclaimed and rebuilt under the reader
+            if (iteration % 8 == 0) {
+                for (auto& partition : partitions) {
+                    aggregator->ForgetTablet(partition->TabletId, 0);
+                }
+
+                UNIT_ASSERT(!rootGroup->FindSubgroup("database", DATABASE_PATH));
+            }
+        }
+
+        UNIT_ASSERT(reader.Join() > 0);
     }
 }

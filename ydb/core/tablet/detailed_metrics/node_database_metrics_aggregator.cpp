@@ -11,12 +11,12 @@
 
 namespace NKikimr {
 
-namespace {
-
-TMutex& Lock() {
+TMutex& DetailedMetricsLock() {
     static TMutex lock;
     return lock;
 }
+
+namespace {
 
 // Labels of the detailed metrics counter tree
 const TString DATABASE_LABEL = "database";
@@ -216,7 +216,7 @@ public:
         const TTabletCountersBase& appCounters,
         TInstant now
     ) override {
-        TGuard<TMutex> guard(Lock());
+        TGuard<TMutex> guard(DetailedMetricsLock());
 
         CheckSingleRole(followerId);
 
@@ -305,7 +305,7 @@ public:
     }
 
     void ForgetTablet(ui64 tabletId, ui32 followerId) override {
-        TGuard<TMutex> guard(Lock());
+        TGuard<TMutex> guard(DetailedMetricsLock());
 
         const TTabletKey tablet(tabletId, followerId);
 
@@ -324,6 +324,14 @@ public:
     }
 
     void RecalculateAllCounters() override {
+        // The guard is NOT here to keep other writers out: recalculation runs on the very
+        // same Tablet Counters Aggregator mailbox as AddCounters and ForgetTablet. It is
+        // here for the READER, because TAggregatedTabletCounters republishes every HIST(x)
+        // aggregate by resetting the histogram and refilling it one tablet at a time
+        // (aggregated_counters.cpp), so a reader landing inside that window would see a
+        // zeroed or a half filled histogram rather than a torn structure.
+        TGuard<TMutex> guard(DetailedMetricsLock());
+
         for (auto& [_, entry] : Tables) {
             if (entry.TableBucket) {
                 entry.TableBucket->RecalcAll();

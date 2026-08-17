@@ -13,6 +13,7 @@ SRCS(
     cms_tx_get_log_tail.cpp
     cms_tx_init_scheme.cpp
     cms_tx_load_state.cpp
+    cms_tx_persist_ddisk_info.cpp
     cms_tx_log_and_send.cpp
     cms_tx_log_cleanup.cpp
     cms_tx_process_notification.cpp

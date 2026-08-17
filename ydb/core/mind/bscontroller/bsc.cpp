@@ -1023,6 +1023,8 @@ STFUNC(TBlobStorageController::StateWork) {
         cFunc(TEvPrivate::EvCheckSyncerDisconnectedNodes, CheckSyncerDisconnectedNodes);
         hFunc(TEvBlobStorage::TEvControllerUpdateSyncerState, Handle);
         hFunc(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup, Handle);
+        hFunc(TEvBlobStorage::TEvControllerDDiskInfoListTablets, Handle);
+        hFunc(TEvBlobStorage::TEvControllerDDiskInfoGetTablet, Handle);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_ERROR("StateWork unexpected event",

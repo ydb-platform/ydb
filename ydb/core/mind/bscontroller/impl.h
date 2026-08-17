@@ -103,6 +103,8 @@ public:
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
+    class TTxListDDiskInfoTablets;
+    class TTxGetDDiskInfoTablet;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -2676,6 +2678,8 @@ public:
     class TTxAllocateDDiskBlockGroup;
 
     void Handle(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::TPtr ev);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoListTablets::TPtr ev);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTablet::TPtr ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NODE WARDEN PIPE LIFETIME MANAGEMENT

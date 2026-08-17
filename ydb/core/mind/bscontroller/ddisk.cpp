@@ -359,11 +359,20 @@ namespace NKikimr::NBsController {
             NIceDb::TNiceDb db(txc.DB);
             const ui64 tabletId = record.GetTabletId();
             using Table = Schema::DirectBlockGroupClaims;
+            using TabletStateTable = Schema::DirectBlockGroupTabletState;
 
             // prefetch direct block group ids we are going to work with
             if (!Prefetch(db, tabletId, record)) {
                 return false;
             }
+
+            auto tabletState = db.Table<TabletStateTable>().Key(tabletId).Select();
+            if (!tabletState.IsReady()) {
+                return false;
+            }
+            const ui64 currentRevision = tabletState.IsValid()
+                ? tabletState.GetValueOrDefault<TabletStateTable::Revision>(0)
+                : 0;
 
             Result = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>();
             auto& rr = Result->Record;
@@ -653,6 +662,14 @@ namespace NKikimr::NBsController {
                 const bool success = allocation.SerializeToString(&s);
                 Y_ABORT_UNLESS(success);
                 db.Table<Table>().Key(key).Update<Table::Allocation>(s);
+            }
+
+            if (!updates.empty()) {
+                db.Table<TabletStateTable>().Key(tabletId).Update<
+                    TabletStateTable::Revision,
+                    TabletStateTable::LastChangedAt>(
+                        currentRevision + 1,
+                        TInstant::Now());
             }
 
             for (auto& [vslotId, update] : vslotUpdates) {

@@ -1995,6 +1995,47 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
         ctx.Send(State->Sentinel, new TEvSentinel::TEvBSCPipeDisconnected);
 }
 
+void TCms::StartDDiskSync(const TActorContext& ctx) {
+    if (!State->BSControllerPipe) {
+        NTabletPipe::TClientConfig config;
+        config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        State->BSControllerPipe = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(), config));
+    }
+
+    auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoListTablets>();
+    NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
+}
+
+void TCms::Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxPersistDDiskInfo(ev), ctx);
+}
+
+void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    if (record.GetStatus() != NKikimrProto::OK || !State->BSControllerPipe) {
+        return;
+    }
+
+    for (const auto& tablet : record.GetTablets()) {
+        const auto it = State->DDiskInfo.find(tablet.GetTabletId());
+        const ui64 knownRevision = it == State->DDiskInfo.end() ? 0 : it->second.Revision;
+        if (tablet.GetRevision() != knownRevision) {
+            auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
+            request->Record.SetTabletId(tablet.GetTabletId());
+            request->Record.SetKnownRevision(knownRevision);
+            NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
+        }
+    }
+}
+
+void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
+        auto persist = MakeHolder<TEvPrivate::TEvPersistDDiskInfo>();
+        persist->Record.CopyFrom(ev->Get()->Record);
+        ctx.Send(SelfId(), persist.Release());
+    }
+}
+
 void TCms::Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx) {
     TAutoPtr<TEvCms::TEvGetClusterInfoResponse> resp = new TEvCms::TEvGetClusterInfoResponse;
     resp->Info = ClusterInfo;

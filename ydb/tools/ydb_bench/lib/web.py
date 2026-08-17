@@ -11,6 +11,7 @@ import json
 import math
 import mimetypes
 import socket
+import statistics
 import tempfile
 import threading
 import uuid
@@ -421,28 +422,40 @@ _JS = (
     "em=>item.trim()).filter(Boolean).some(mask=>{if(mask==='*')return true;const parts=mask.split('*');let offset=0;if(parts"
     '[0]&&!value.startsWith(parts[0]))return false;for(const part of parts){if(!part)continue;const found=value.indexOf(part,'
     "offset);if(found<0)return false;offset=found+part.length}return mask.endsWith('*')||offset===value.length})}\n"
+    'function chartMultiplierDimensions(data,state,series){\n'
+    "  const queried=new Set(state.queries.flatMap(query=>Object.keys(query)).filter(name=>name!=='metric'));return data.dime"
+    'nsions.filter(name=>name!==state.x&&data.dimension_metadata?.[name]?.series!==false&&(queried.has(name)||new Set(series'
+    '.flatMap(item=>item.rows.map(row=>row[name]).filter(value=>value!==undefined)).map(String)).size>1))\n'
+    '}\n'
+    'function labelExpandedSeries(result,queries,scope){\n'
+    "  const matches=(item,query)=>Object.entries(query).every(([name,value])=>name==='metric'||globLabelMatch(item.facets[na"
+    'me],value)),matched=result.filter(item=>queries.some(query=>matches(item,query))),facetNames=[...new Set(matched.flatMa'
+    'p(item=>Object.keys(item.facets)))],varyingFacets=facetNames.filter(name=>new Set(matched.map(item=>item.facets[name]))'
+    '.size>1);\n'
+    "  for(const item of result){const labels=varyingFacets.map(name=>name+'='+item.facets[name]),prefix=scope.profile?'':ite"
+    "m.run+' / '+item.profile;item.label=scope.profile?(labels.join('; ')||'value'):prefix+(labels.length?'['+labels.join(';"
+    " ')+']':'')}return result\n"
+    '}\n'
     'function mountSingleChart(container,data,scope={}){\n'
     '  if(!container)return;\n'
     "  if(!data.series.length){container.innerHTML='<div class=empty>No completed summary.csv data is available for this sele"
     "ction.</div>';return}\n"
-    "  const state={benchmark:scope.benchmark||'',profile:scope.profile||'',x:data.dimensions.includes('threads')?'threads':d"
-    "ata.dimensions[0],ys:new Set(data.metrics.includes('median_msgs_per_sec')?['median_msgs_per_sec']:data.metrics.slice(0,1"
-    ')),lines:null,lineFilters:{},queries:[{}],settingsOpen:Boolean(scope.open)};\n'
+    "  const state={benchmark:scope.benchmark||'',profile:scope.profile||'',x:scope.x||(data.dimensions.includes('threads')?'"
+    "threads':data.dimensions[0]),ys:new Set(data.metrics.includes('median_msgs_per_sec')?['median_msgs_per_sec']:data.metrics"
+    '.slice(0,1)),lines:null,lineFilters:{},queries:(scope.queries||[{}]).map(query=>({...query})),settingsOpen:Boolean(scope'
+    '.open)};\n'
     '  const available=(all=false)=>data.series.filter(series=>(!state.benchmark||series.benchmark===state.benchmark)&&(!stat'
     'e.profile||series.profile===state.profile));\n'
     '  const resetSeriesState=()=>{state.lines=null;state.lineFilters={}};\n'
     '  function expandedSeries(series){\n'
-    '    const multiplierDimensions=data.dimensions.filter(name=>name!==state.x&&data.dimension_metadata?.[name]?.series!==fa'
-    'lse&&new Set(series.flatMap(item=>item.rows.map(row=>row[name]).filter(value=>value!==undefined)).map(String)).size>1);\n'
-    '    const affinityVaries=new Set(series.map(item=>item.affinity)).size>1,result=[];\n'
+    '    const multiplierDimensions=chartMultiplierDimensions(data,state,series);\n'
+    '    const result=[];\n'
     '    for(const item of series){const groups=new Map;for(const row of item.rows){const values=multiplierDimensions.map(nam'
     'e=>row[name]),key=JSON.stringify(values);if(!groups.has(key))groups.set(key,{values,rows:[]});groups.get(key).rows.push('
-    "row)}for(const [key,group] of groups){const labels=[],facets={};if(affinityVaries){labels.push('affinity='+item.affinity"
-    ");facets.affinity=String(item.affinity)}multiplierDimensions.forEach((name,index)=>{labels.push(name+'='+group.values[in"
-    "dex]);facets[name]=String(group.values[index])});const prefix=scope.profile?item.profile:item.run+' / '+item.profile;res"
-    "ult.push({...item,id:item.id+'::'+key,label:prefix+(labels.length?'['+labels.join('; ')+']':''),facets,rows:group.rows})"
+    'row)}for(const [key,group] of groups){const facets={affinity:String(item.affinity)};multiplierDimensions.forEach((name,in'
+    "dex)=>{facets[name]=String(group.values[index])});result.push({...item,id:item.id+'::'+key,facets,rows:group.rows})"
     '}}\n'
-    '    return result\n'
+    '    return labelExpandedSeries(result,state.queries,scope)\n'
     '  }\n'
     '  function render(){\n'
     '    const benchmarks=[...new Set(data.series.map(item=>item.benchmark))].sort();if(!state.benchmark)state.benchmark=benc'
@@ -531,19 +544,48 @@ _JS = (
     "    const colors=indexed.map((_,index)=>chartColors[index%chartColors.length]);const legend='<div class=chart-legend>'+i"
     'ndexed.map((item,index)=>\'<span><i class="legend-swatch chart-bg-\'+index%chartColors.length+\'"></i>\'+esc(item.label)+\'</'
     "span>').join('')+'</div>';\n"
-    '    const metricTitle=selectedMetrics.join(\', \');output.innerHTML=legend+\'<section class=chart-panel data-metric="combin'
-    'ed"><h3>\'+esc(metricTitle)+\'</h3>\'+svgChart(\'combined\',state.x,common,indexed,colors)+\'</section>\';bindChartTooltips(out'
+    "    const metricTitle=selectedMetrics.join(', '),chartTitle=scope.title?metricTitle+' — '+scope.title:metricTitle;output."
+    'innerHTML=legend+\'<section class=chart-panel data-metric="combined"><h3>\'+esc(chartTitle)+\'</h3>\'+svgChart(\'combined\',s'
+    'tate.x,common,indexed,colors)+\'</section>\';bindChartTooltips(out'
     "put,state.x,common,indexed,['combined'],colors)\n"
     '  }\n'
     '  render()\n'
     '}\n'
+    'function defaultActorCharts(data,scope){\n'
+    "  const facets=scope.benchmark==='ping-bench'?['actorPairs','in_flight']:scope.benchmark==='star-ping-bench'?['actorPa"
+    "irs','star_multiply']:null;if(!facets||!scope.profile||!data.metrics.includes('median_msgs_per_sec'))return [];\n"
+    '  const combinations=new Map;for(const series of data.series){if(series.benchmark!==scope.benchmark||series.profile!==s'
+    'cope.profile)continue;for(const row of series.rows){if(facets.some(name=>row[name]===undefined))continue;const values=fa'
+    'cets.map(name=>String(row[name])),key=JSON.stringify(values);combinations.set(key,Object.fromEntries(facets.map((name'
+    ',index)=>[name,values[index]])))}}\n'
+    "  return [...combinations.entries()].sort(([left],[right])=>left.localeCompare(right,undefined,{numeric:true})).map(([,"
+    "query])=>({open:false,x:'threads',title:facets.map(name=>name+'='+query[name]).join(', '),queries:[{metric:'median_msgs_"
+    "per_sec',...query}]}))\n"
+    '}\n'
+    'function defaultMemoryCharts(data,scope){\n'
+    "  if(scope.benchmark!=='memory-bandwidth-bench'||!scope.profile)return [];const facets=['random_percent','random_mode','"
+    "buffer_size_mb','part_size_kb','scope'],metrics=[['memory_traffic_mb_per_sec','sum'],['ops_per_sec','sum']];for(const me"
+    "tric of ['worker_max_min_spread_pct','worker_mean_min_gap_pct'])if(data.metrics.includes(metric))metrics.push([metric,'"
+    "fairness']);if(metrics.some(([metric])=>!data.metrics.includes(metric)))return [];\n"
+    '  const combinations=new Map;for(const series of data.series){if(series.benchmark!==scope.benchmark||series.profile!==s'
+    "cope.profile)continue;for(const row of series.rows){if(row.repeat_aggregation!=='median'||row.worker_aggregation!=='sum"
+    "'||!['sequential','random'].includes(row.scope)||facets.some(name=>row[name]===undefined))continue;const values=facets.m"
+    'ap(name=>String(row[name])),key=JSON.stringify(values);combinations.set(key,Object.fromEntries(facets.map((name,index)'
+    '=>[name,values[index]])))}}\n'
+    "  return [...combinations.entries()].sort(([left],[right])=>left.localeCompare(right,undefined,{numeric:true})).flatMap"
+    "(([,fixed])=>metrics.map(([metric,workerAggregation])=>({open:false,x:'threads',title:facets.map(name=>name+'='+fixed["
+    "name]).join(', '),queries:[{metric,...fixed,worker_aggregation:workerAggregation,repeat_aggregation:'median',repeat:'*'"
+    '}]})))\n'
+    '}\n'
     'function mountChartBuilder(container,data,scope={}){\n'
-    '  if(!container)return;let nextId=1,charts=[{id:nextId++,open:false}];\n'
+    '  if(!container)return;let nextId=1,charts=[...defaultActorCharts(data,scope),...defaultMemoryCharts(data,scope)];if(!c'
+    'harts.length)charts=[{open:false}];chart'
+    's=charts.map(chart=>({id:nextId++,...chart}));\n'
     "  function renderBoard(){container.innerHTML='<div class=toolbar><button class=primary id=add-chart>Add chart</button></"
     'div><div class=chart-board>\'+charts.map(chart=>\'<section class=card data-chart="\'+chart.id+\'"></section>\').join(\'\')+\'</d'
     "iv>';container.querySelector('#add-chart').onclick=()=>{charts.push({id:nextId++,open:true});renderBoard()};for(const ch"
     'art of charts){const target=container.querySelector(\'[data-chart="\'+chart.id+\'"]\');mountSingleChart(target,data,{...scop'
-    'e,open:chart.open,onRemove:charts.length>1?()=>{charts=charts.filter(item=>item.id!==chart.id);renderBoard()}:null});cha'
+    'e,...chart,onRemove:charts.length>1?()=>{charts=charts.filter(item=>item.id!==chart.id);renderBoard()}:null});cha'
     'rt.open=false}}\n'
     '  renderBoard()\n'
     '}\n'
@@ -904,6 +946,75 @@ def _summary_value(value):
     return int(number) if number.is_integer() else number
 
 
+_MEMORY_FAIRNESS_METRICS = (
+    "worker_max_min_spread_pct",
+    "worker_mean_min_gap_pct",
+)
+
+
+def _add_memory_fairness_rows(grouped, dimension_fields):
+    """Derive per-repeat worker imbalance, then aggregate those percentages."""
+    key_fields = [name for name in dimension_fields if name != "worker_aggregation"] + ["repeat"]
+    aggregate_key_fields = [name for name in key_fields if name != "repeat"]
+    derived_count = 0
+    for rows in grouped.values():
+        raw_groups = {}
+        for row in rows:
+            if row.get("repeat_aggregation") != "raw" or row.get("scope") not in ("sequential", "random"):
+                continue
+            key = tuple(row.get(name) for name in key_fields)
+            raw_groups.setdefault(key, {})[row.get("worker_aggregation")] = row
+        derived = []
+        for values in raw_groups.values():
+            if not all(name in values for name in ("min", "max", "mean")):
+                continue
+            minimum = values["min"].get("ops_per_sec")
+            maximum = values["max"].get("ops_per_sec")
+            mean = values["mean"].get("ops_per_sec")
+            if not all(isinstance(value, (int, float)) and math.isfinite(value) for value in (minimum, maximum, mean)):
+                continue
+            if mean == 0:
+                continue
+            derived.append(
+                {
+                    **{name: values["mean"].get(name) for name in dimension_fields},
+                    "worker_aggregation": "fairness",
+                    "repeat_aggregation": "raw",
+                    "repeat": values["mean"].get("repeat"),
+                    _MEMORY_FAIRNESS_METRICS[0]: (maximum - minimum) / mean * 100,
+                    _MEMORY_FAIRNESS_METRICS[1]: (mean - minimum) / mean * 100,
+                }
+            )
+        rows.extend(derived)
+        derived_count += len(derived)
+        aggregate_groups = {}
+        for row in derived:
+            key = tuple(row.get(name) for name in aggregate_key_fields)
+            aggregate_groups.setdefault(key, []).append(row)
+        aggregators = {
+            "median": statistics.median,
+            "mean": statistics.mean,
+            "min": min,
+            "max": max,
+        }
+        for key, repetitions in aggregate_groups.items():
+            base = dict(zip(aggregate_key_fields, key))
+            for name, aggregate in aggregators.items():
+                rows.append(
+                    {
+                        **base,
+                        "worker_aggregation": "fairness",
+                        "repeat_aggregation": name,
+                        "repeat": "*",
+                        **{
+                            metric: aggregate([row[metric] for row in repetitions])
+                            for metric in _MEMORY_FAIRNESS_METRICS
+                        },
+                    }
+                )
+    return derived_count
+
+
 def chart_data(output, run_ids):
     """Read bounded profile summaries into UI-facing affinity series."""
     if not isinstance(run_ids, list) or not run_ids or len(run_ids) > 20:
@@ -939,6 +1050,7 @@ def chart_data(output, run_ids):
                 benchmark_name = path.relative_to(root).parts[0]
                 benchmark_definition = BENCHMARKS.get(benchmark_name) if benchmark_name in BENCHMARKS else None
                 normalized_repetitions = benchmark_name == "memory-bandwidth-bench"
+                has_memory_fairness = False
                 prefixes = ("median_", "mean_", "min_", "max_")
                 metric_fields = [name for name in fields if name.startswith(prefixes)]
                 dimension_fields = [
@@ -983,8 +1095,11 @@ def chart_data(output, run_ids):
                                         }
                                         | {"repeat_aggregation": "raw"}
                                     )
+                    has_memory_fairness = bool(_add_memory_fairness_rows(grouped, dimension_fields))
                     dimension_fields += ["repeat_aggregation", "repeat"]
                     metric_fields = [metric.name for metric in benchmark_definition.metrics]
+                    if has_memory_fairness:
+                        metric_fields += list(_MEMORY_FAIRNESS_METRICS)
                 dimensions.update(dimension_fields)
                 metrics.update(metric_fields)
                 if benchmark_definition is not None:
@@ -999,6 +1114,19 @@ def chart_data(output, run_ids):
                                     "unit": metric.unit,
                                     "description": metric.description,
                                 }
+                    if has_memory_fairness:
+                        metric_metadata.update(
+                            {
+                                _MEMORY_FAIRNESS_METRICS[0]: {
+                                    "unit": "%",
+                                    "description": "Worker max-minus-min spread as a percentage of the mean.",
+                                },
+                                _MEMORY_FAIRNESS_METRICS[1]: {
+                                    "unit": "%",
+                                    "description": "Slowest worker gap from the mean as a percentage of the mean.",
+                                },
+                            }
+                        )
                 for affinity, rows in grouped.items():
                     benchmark, profile = path.relative_to(root).parts[:2]
                     series = {

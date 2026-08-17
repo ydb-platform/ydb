@@ -425,9 +425,9 @@ private:
     void HandleClientMessage(TMessageInfo&& message);
     void HandleClientFlush(NThreading::TPromise<TFlushResult>&& promise);
 
-    TWriteResult WriteInternal(TWriteMessage&& message, bool checkMemory);
+    TWriteResult WriteInternal(TWriteMessage& message, bool checkMemory);
     TWriteResult WriteToExplicitPartition(
-        TWriteMessage&& message,
+        TWriteMessage& message,
         std::uint32_t partition,
         std::uint64_t memoryUsage,
         bool checkMemory);

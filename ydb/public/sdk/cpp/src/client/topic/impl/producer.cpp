@@ -2102,7 +2102,7 @@ void TProducer::ValidateSeqNoStrategy(bool hasSeqNo) {
 }
 
 TWriteResult TProducer::WriteToExplicitPartition(
-        TWriteMessage&& message,
+        TWriteMessage& message,
         std::uint32_t partition,
         std::uint64_t memoryUsage,
         bool checkMemory) {
@@ -2329,7 +2329,7 @@ void TProducer::RunMainWorkerAcquired(std::int64_t owner) {
     }
 }
 
-TWriteResult TProducer::WriteInternal(TWriteMessage&& message, bool checkMemory) {
+TWriteResult TProducer::WriteInternal(TWriteMessage& message, bool checkMemory) {
     const auto makeClosedResult = [this]() {
         auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
         return TWriteResult{
@@ -2368,14 +2368,14 @@ TWriteResult TProducer::WriteInternal(TWriteMessage&& message, bool checkMemory)
         };
     }
 
-    return WriteToExplicitPartition(std::move(message), *partition, memoryUsage, checkMemory);
+    return WriteToExplicitPartition(message, *partition, memoryUsage, checkMemory);
 }
 
 TWriteResult TProducer::Write(TWriteMessage&& message) {
     auto remainingTimeout = Settings.MaxBlockTimeout_;
     auto sleepTimeMs = DEFAULT_START_BLOCK_TIMEOUT;
     for (;;) {
-        auto result = WriteInternal(std::move(message), true);
+        auto result = WriteInternal(message, true);
         if (!result.IsTimeout() || remainingTimeout == TDuration::Zero()) {
             return result;
         }
@@ -2395,7 +2395,7 @@ TWriteResult TProducer::Write(TWriteMessage&& message) {
 }
 
 void TProducer::Write(TContinuationToken&&, TWriteMessage&& message) {
-    WriteInternal(std::move(message), false);
+    WriteInternal(message, false);
 }
 
 TWriteStats TProducer::GetWriteStats() {

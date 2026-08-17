@@ -48,7 +48,7 @@ public:
      * @note The layout of the counter set is a property of the tablet type,
      *       so it is defined once and for all by the very first reporting tablet.
      */
-    void Initialize(const TTabletCountersBase* counters);
+    void Initialize(const TTabletCountersBase* counters, THashSet<TString> nameFilter = {});
 
     /**
      * Add the counters of a single tablet to the aggregate.
@@ -83,7 +83,13 @@ private:
     template <bool IsSaving>
     void Convert(NKikimrSysView::TDbCounters& sumCounters, NKikimrSysView::TDbCounters& maxCounters);
 
+    bool IsPublished(const char* name) const {
+        return name && (NameFilter.empty() || NameFilter.contains(name));
+    }
+
 private:
+    THashSet<TString> NameFilter;
+
     ui32 FullSizeSimple = 0;
     THashSet<ui32> DeprecatedSimple;
     ui32 FullSizeCumulative = 0;

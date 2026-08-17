@@ -59,8 +59,8 @@ void TKqpComputeActor::DoBootstrap() {
     }
 
     std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
-    if (WasmQueryCompartment_ && WasmQueryCompartment_->Active()) {
-        wasmGuard.emplace(WasmQueryCompartment_->Activate());
+    if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
+        wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
     }
 
     TLogFunc logger;
@@ -182,8 +182,8 @@ STFUNC(TKqpComputeActor::StateFunc) {
         {"logPrefix", this->LogPrefix},
         {"eventType", ev->GetTypeRewrite()});
     std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
-    if (WasmQueryCompartment_ && WasmQueryCompartment_->Active()) {
-        wasmGuard.emplace(WasmQueryCompartment_->Activate());
+    if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
+        wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
     }
     try {
         switch (ev->GetTypeRewrite()) {

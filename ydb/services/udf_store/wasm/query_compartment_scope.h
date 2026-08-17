@@ -53,7 +53,7 @@ inline TVector<TString> FilterLoadedWasmUdfModules(
 }
 
 // Owns a per-query compartment. Install it as the current TLS compartment only
-// for the duration of an activation guard (actor event / task run).
+// for the duration of a TLS guard (actor event / task run).
 class TQueryCompartmentScope : public TNonCopyable {
 public:
     explicit TQueryCompartmentScope(const TVector<TString>& modules) {
@@ -63,11 +63,11 @@ public:
         }
     }
 
-    bool Active() const {
+    bool HasHandle() const {
         return Handle_ != nullptr;
     }
 
-    TCurrentQueryCompartmentGuard Activate() const {
+    TCurrentQueryCompartmentGuard MakeTlsGuard() const {
         return TCurrentQueryCompartmentGuard(Handle_.get());
     }
 

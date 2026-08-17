@@ -205,8 +205,8 @@ public:
         std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
         if (stage.WasmUdfModulesSize() > 0) {
             wasmScope.emplace(NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules()));
-            if (wasmScope->Active()) {
-                wasmGuard.emplace(wasmScope->Activate());
+            if (wasmScope->HasHandle()) {
+                wasmGuard.emplace(wasmScope->MakeTlsGuard());
             }
         }
 

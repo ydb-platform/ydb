@@ -40,7 +40,7 @@ ydb/library/wasm/
 
 ydb/core/kqp/
   query_data/kqp_predictor.*      # HasUdf + WasmUdfModules → TKqpPhyStage
-  compute_actor/kqp_*_compute_actor.*  # Acquire scope + Activate TLS
+  compute_actor/kqp_*_compute_actor.*  # Acquire scope + MakeTlsGuard
   executer_actor/kqp_literal_executer.cpp
   executer_actor/kqp_executer_stats.cpp  # пустые Tasks при early CA fail
 

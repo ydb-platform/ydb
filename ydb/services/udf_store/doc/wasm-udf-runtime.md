@@ -211,7 +211,7 @@ Shared context: один модуль линкует `object_framework`, пер�
 | `TCurrentQueryCompartmentGuard` / `GetCurrentQueryCompartment()` | query handle с Exports (нужен `TWasmUdfFunction::Run`) |
 | `TCurrentCompartmentGuard` / `GetCurrentCompartment()` (NYdb::NWasm) | WAVM compartment для PtrFromVM / host ThrowException |
 
-`TQueryCompartmentScope::Activate()` ставит query TLS; внутри `Run` дополнительно ставится NYdb compartment guard.
+`TQueryCompartmentScope::MakeTlsGuard()` ставит query TLS; внутри `Run` дополнительно ставится NYdb compartment guard.
 
 ---
 
@@ -223,7 +223,7 @@ Shared context: один модуль линкует `object_framework`, пер�
 4. **Compute actor** / **literal executer**:
    - CA читает `TaskParams`; literal — напрямую `stage.GetWasmUdfModules()`;
    - `TQueryCompartmentScope(modules)` → `FilterLoadedWasmUdfModules` (только каталог) → `Acquire`;
-   - на обработке событий / DoExecute: `Activate()` → TLS guard;
+   - на обработке событий / DoExecute: `MakeTlsGuard()` → TLS guard;
    - при ошибке Acquire — `ErrorFromIssue` / failure state **до** `SetTaskRunner`.
 5. Исполнение UDF → `TWasmUdfFunction::Run` / `TWasmConfiguredCallable::Run` читает TLS query compartment.
 

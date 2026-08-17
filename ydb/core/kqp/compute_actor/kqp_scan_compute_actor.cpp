@@ -281,8 +281,8 @@ void TKqpScanComputeActor::DoBootstrap() {
     }
 
     std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
-    if (WasmQueryCompartment_ && WasmQueryCompartment_->Active()) {
-        wasmGuard.emplace(WasmQueryCompartment_->Activate());
+    if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
+        wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
     }
 
     NDq::TDqTaskRunnerContext execCtx;

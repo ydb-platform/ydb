@@ -2315,6 +2315,38 @@ namespace NSchemeShardUT_Private {
         }, expectedStatus);
     }
 
+    void TestRebuildVectorIndex(TTestActorRuntime& runtime, ui64 id, ui64 schemeShard, const TString &dbName,
+                              const TString &src, const TString &name, TVector<TString> columns,
+                              Ydb::StatusIds::StatusCode expectedStatus)
+    {
+        Ydb::Table::TableIndex index;
+        index.set_name(name);
+        *index.mutable_index_columns() = {columns.begin(), columns.end()};
+        index.mutable_global_vector_kmeans_tree_index();
+
+        NKikimrIndexBuilder::TIndexBuildSettings settings;
+        settings.set_source_path(src);
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
+        settings.set_max_shards_in_flight(2);
+        settings.set_is_rebuild(true);
+        *settings.mutable_index() = index;
+
+        auto sender = runtime.AllocateEdgeActor();
+        auto request = new TEvIndexBuilder::TEvCreateRequest(id, dbName, std::move(settings));
+        ForwardToTablet(runtime, schemeShard, sender, request);
+
+        TAutoPtr<IEventHandle> handle;
+        TEvIndexBuilder::TEvCreateResponse* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+        UNIT_ASSERT(event);
+
+        Cerr << "REBUILD INDEX RESPONSE CREATE: " << event->ToString() << Endl;
+        UNIT_ASSERT_EQUAL_C(event->Record.GetStatus(), expectedStatus,
+                            "status mismatch"
+                                << " got " << Ydb::StatusIds::StatusCode_Name(event->Record.GetStatus())
+                                << " expected "  << Ydb::StatusIds::StatusCode_Name(expectedStatus)
+                                << " issues was " << event->Record.GetIssues());
+    }
+
     TEvIndexBuilder::TEvCancelRequest* CreateCancelBuildIndexRequest(
         const ui64 id, const TString& dbName, const ui64 buildIndexId)
     {

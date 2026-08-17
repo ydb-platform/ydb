@@ -713,7 +713,12 @@ bool TProducer::TEventsWorker::TransferEventsToOutputQueue() {
         return ackEvent;
     };
     auto finishWithAck = [this, messagesWorker](std::uint64_t seqNo) {
-        Producer->LastWrittenSeqNo = std::max(Producer->LastWrittenSeqNo, seqNo);
+        auto lastWrittenSeqNo = Producer->LastWrittenSeqNo.load();
+        while (lastWrittenSeqNo < seqNo) {
+            if (Producer->LastWrittenSeqNo.compare_exchange_weak(lastWrittenSeqNo, seqNo)) {
+                break;
+            }
+        }
         Producer->MessagesWritten++;
         messagesWorker->HandleAck();
     };
@@ -1316,7 +1321,7 @@ void TProducer::TMessagesWorker::PopInFlightMessage() {
 
     auto flushResult = TFlushResult{
         .Status = EFlushStatus::Success,
-        .LastWrittenSeqNo = Producer->LastWrittenSeqNo,
+        .LastWrittenSeqNo = Producer->LastWrittenSeqNo.load(),
         .ClosedDescription = std::nullopt,
     };
     for (auto& flushPromise : it->FlushPromises) {
@@ -1375,7 +1380,7 @@ void TProducer::TMessagesWorker::SetClosedStatusToFlushPromises(std::optional<TC
         for (auto& flushPromise : inFlightMessage.FlushPromises) {
             flushPromise.TrySetValue(TFlushResult{
                 .Status = EFlushStatus::ProducerClosed,
-                .LastWrittenSeqNo = Producer->LastWrittenSeqNo,
+                .LastWrittenSeqNo = Producer->LastWrittenSeqNo.load(),
                 .ClosedDescription = closedDescription,
             });
         }
@@ -2179,7 +2184,7 @@ void TProducer::HandleClientFlush(NThreading::TPromise<TFlushResult> promise) {
         auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
         FlushPromises.push_back(std::make_pair(std::move(promise), TFlushResult{
             .Status = EFlushStatus::Success,
-            .LastWrittenSeqNo = LastWrittenSeqNo,
+            .LastWrittenSeqNo = LastWrittenSeqNo.load(),
             .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
         }));
         return;
@@ -2401,12 +2406,21 @@ void TProducer::Write(TContinuationToken&&, TWriteMessage&& message) {
 TWriteStats TProducer::GetWriteStats() {
     std::lock_guard lock(GlobalLock);
     return TWriteStats{
-        .LastWrittenSeqNo = LastWrittenSeqNo,
+        .LastWrittenSeqNo = LastWrittenSeqNo.load(),
         .MessagesWritten = MessagesWritten,
     };
 }
 
 NThreading::TFuture<TFlushResult> TProducer::Flush() {
+    if (Closed.load()) {
+        auto sessionClosedEvent = EventsWorker->GetSessionClosedEvent();
+        return NThreading::MakeFuture(TFlushResult{
+            .Status = EFlushStatus::Success,
+            .LastWrittenSeqNo = LastWrittenSeqNo.load(),
+            .ClosedDescription = sessionClosedEvent ? std::make_optional(TCloseDescription(*sessionClosedEvent)) : std::nullopt,
+        });
+    }
+
     auto promise = NThreading::NewPromise<TFlushResult>();
     auto future = promise.GetFuture();
 

@@ -525,7 +525,7 @@ private:
     // - subsession callback, in this case the value of MainWorkerOwner is the subsession's partition ID
     std::int64_t MainWorkerOwner = -1;
 
-    std::uint64_t LastWrittenSeqNo = 0;
+    std::atomic<std::uint64_t> LastWrittenSeqNo = 0;
     std::uint64_t MessagesWritten = 0;
 
     std::atomic<size_t> Epoch = 0;

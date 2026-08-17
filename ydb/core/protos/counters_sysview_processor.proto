@@ -15,4 +15,16 @@ enum ETxTypes {
     TXTYPE_INTERVAL_SUMMARY = 5 [(TxTypeOpts) = {Name: "TxIntervalSummary"}];
     TXTYPE_INTERVAL_METRICS = 6 [(TxTypeOpts) = {Name: "TxIntervalMetrics"}];
     TXTYPE_TOP_PARTITIONS = 7   [(TxTypeOpts) = {Name: "TxTopPartitions"}];
+    TXTYPE_CLEANUP_HOUR_METRICS = 8
+        [(TxTypeOpts) = {Name: "TxCleanupHourMetrics"}];
+}
+
+enum ESimpleCounters {
+    COUNTER_QUERY_METRICS_ONE_HOUR_RETAINED_BYTES = 0
+        [(CounterOpts) = {Name: "QueryMetricsOneHourRetainedBytes"}];
+}
+
+enum ECumulativeCounters {
+    COUNTER_QUERY_METRICS_ONE_HOUR_BUCKETS_EVICTED_BY_SIZE = 0
+        [(CounterOpts) = {Name: "QueryMetricsOneHourBucketsEvictedBySize"}];
 }

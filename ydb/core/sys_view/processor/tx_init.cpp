@@ -1,4 +1,5 @@
 #include "processor_impl.h"
+#include "query_metrics_retention_db.h"
 #include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
@@ -52,6 +53,45 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         return true;
     };
+
+    bool LoadMetricsOneHour(NIceDb::TNiceDb& db) {
+        Self->MetricsOneHour.clear();
+
+        TQueryMetricsOneHourLoadResult loaded;
+        if (!LoadQueryMetricsOneHour(
+                db,
+                Self->CurrentHourEnd.MicroSeconds(),
+                Self->MetricsOneHourByteLimit,
+                Self->MetricsOneHourEvictBeforeHourEndUs,
+                loaded))
+        {
+            return false;
+        }
+
+        Self->MetricsOneHourEvictBeforeHourEndUs = loaded.EvictBeforeHourEnd;
+        for (auto& row : loaded.Rows) {
+            TQueryToMetrics result;
+            result.Text = std::move(row.Text);
+            if (row.Data) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD
+                    result.Metrics.ParseFromString(row.Data);
+            }
+            Self->MetricsOneHour.emplace(
+                std::make_pair(row.HourEnd, row.Rank), std::move(result));
+        }
+
+        if (Self->MetricsOneHourEvictBeforeHourEndUs) {
+            Self->PersistMetricsOneHourEvictBeforeHourEnd(
+                db, Self->MetricsOneHourEvictBeforeHourEndUs);
+        }
+
+        Self->UpdateMetricsOneHourRetentionCounters(loaded.RetainedBytes, 0);
+        SVLOG_D("[" << Self->TabletID() << "] Loading byte-bounded hour metrics: "
+            << "result count# " << Self->MetricsOneHour.size()
+            << ", retained bytes# " << loaded.RetainedBytes
+            << ", evict before# " << Self->MetricsOneHourEvictBeforeHourEndUs);
+        return true;
+    }
 
     template <typename S>
     bool LoadPartitionResults(NIceDb::TNiceDb& db, TSelf::TResultPartitionsMap& results) {
@@ -144,7 +184,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             auto intervalTopsRowset = db.Table<Schema::IntervalTops>().Range().Select();
             auto nodesToRequestRowset = db.Table<Schema::NodesToRequest>().Range().Select();
             auto metricsOneMinuteRowset = db.Table<Schema::MetricsOneMinute>().Range().Select();
-            auto metricsOneHourRowset = db.Table<Schema::MetricsOneHour>().Range().Select();
             auto durationOneMinuteRowset = db.Table<Schema::TopByDurationOneMinute>().Range().Select();
             auto durationOneHourRowset = db.Table<Schema::TopByDurationOneHour>().Range().Select();
             auto readBytesOneMinuteRowset = db.Table<Schema::TopByDurationOneMinute>().Range().Select();
@@ -164,7 +203,6 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                 !intervalTopsRowset.IsReady() ||
                 !nodesToRequestRowset.IsReady() ||
                 !metricsOneMinuteRowset.IsReady() ||
-                !metricsOneHourRowset.IsReady() ||
                 !durationOneMinuteRowset.IsReady() ||
                 !durationOneHourRowset.IsReady() ||
                 !readBytesOneMinuteRowset.IsReady() ||
@@ -184,6 +222,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         // SysParams
         {
+            Self->MetricsOneHourEvictBeforeHourEndUs = 0;
             auto rowset = db.Table<Schema::SysParams>().Range().Select();
             if (!rowset.IsReady()) {
                 return false;
@@ -207,6 +246,18 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
                     case Schema::SysParam_IntervalEnd:
                         Self->IntervalEnd = TInstant::MicroSeconds(FromString<ui64>(value));
                         SVLOG_D("[" << Self->TabletID() << "] Loading interval end: " << Self->IntervalEnd);
+                        break;
+                    case Schema::SysParam_LastMergedQueryMetricsIntervalEnd:
+                        Self->LastMergedQueryMetricsIntervalEnd =
+                            TInstant::MicroSeconds(FromString<ui64>(value));
+                        SVLOG_D("[" << Self->TabletID() << "] Loading last merged query metrics interval end: "
+                            << Self->LastMergedQueryMetricsIntervalEnd);
+                        break;
+                    case Schema::SysParam_MetricsOneHourEvictBeforeHourEnd:
+                        Self->MetricsOneHourEvictBeforeHourEndUs = FromString<ui64>(value);
+                        SVLOG_D("[" << Self->TabletID()
+                            << "] Loading query metrics one hour eviction cutoff: "
+                            << Self->MetricsOneHourEvictBeforeHourEndUs);
                         break;
                     default:
                         SVLOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);
@@ -282,6 +333,38 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
             SVLOG_D("[" << Self->TabletID() << "] Loading interval metrics: "
                 << "query count# " << Self->QueryMetrics.size());
+        }
+
+        // IntervalMetricsOneHour
+        {
+            Self->CurrentHourMetrics.clear();
+            Self->CurrentHourEnd = Self->EndOfHourInterval(Self->IntervalEnd);
+
+            auto rowset = db.Table<Schema::IntervalMetricsOneHour>()
+                .Prefix(Self->CurrentHourEnd.MicroSeconds())
+                .Select();
+            if (!rowset.IsReady()) {
+                return false;
+            }
+
+            while (!rowset.EndOfSet()) {
+                TQueryHash queryHash =
+                    rowset.GetValue<Schema::IntervalMetricsOneHour::QueryHash>();
+                TString data = rowset.GetValue<Schema::IntervalMetricsOneHour::Data>();
+
+                if (data) {
+                    Y_PROTOBUF_SUPPRESS_NODISCARD
+                        Self->CurrentHourMetrics[queryHash].ParseFromString(data);
+                }
+
+                if (!rowset.Next()) {
+                    return false;
+                }
+            }
+
+            SVLOG_D("[" << Self->TabletID() << "] Loading hour query metrics: "
+                << "hour end# " << Self->CurrentHourEnd
+                << ", query count# " << Self->CurrentHourMetrics.size());
         }
 
         // IntervalTops
@@ -373,8 +456,19 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
 
             size_t totalHashesCount = 0;
+            size_t staleRequestsCount = 0;
             while (!rowset.EndOfSet()) {
                 TNodeId nodeId = rowset.GetValue<Schema::NodesToRequest::NodeId>();
+                const ui64 requestIntervalEndUs =
+                    rowset.GetValueOrDefault<Schema::NodesToRequest::IntervalEnd>(0);
+                if (requestIntervalEndUs != Self->IntervalEnd.MicroSeconds()) {
+                    db.Table<Schema::NodesToRequest>().Key(nodeId).Delete();
+                    ++staleRequestsCount;
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                    continue;
+                }
                 TString hashes = rowset.GetValue<Schema::NodesToRequest::QueryHashes>();
                 TString textsToGet = rowset.GetValue<Schema::NodesToRequest::TextsToGet>();
                 TString byDuration = rowset.GetValue<Schema::NodesToRequest::ByDuration>();
@@ -405,13 +499,14 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             }
             SVLOG_D("[" << Self->TabletID() << "] Loading nodes to request: "
                 << "nodes count# " << Self->NodesToRequest.size()
-                << ", hashes count# " << totalHashesCount);
+                << ", hashes count# " << totalHashesCount
+                << ", stale requests deleted# " << staleRequestsCount);
         }
 
         // Metrics...
         if (!LoadQueryResults<Schema::MetricsOneMinute>(db, Self->MetricsOneMinute))
             return false;
-        if (!LoadQueryResults<Schema::MetricsOneHour>(db, Self->MetricsOneHour))
+        if (!LoadMetricsOneHour(db))
             return false;
 
         // TopBy...
@@ -478,6 +573,9 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         auto deadline = Self->IntervalEnd + Self->TotalInterval;
         if (ctx.Now() >= deadline) {
+            if (Self->CurrentStage == AGGREGATE) {
+                Self->PersistQueryResults(db);
+            }
             Self->Reset(db, ctx);
         }
 
@@ -504,6 +602,7 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
 
         Self->SignalTabletActive(ctx);
         Self->Become(&TThis::StateWork);
+        Self->ScheduleHourMetricsCleanup();
     }
 };
 

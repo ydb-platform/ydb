@@ -243,6 +243,7 @@ THolder<NActors::IActor> CreateSystemViewScan(
     case ESysViewType::ETablets:
          return CreateTabletsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::EQueryMetricsOneMinute:
+    case ESysViewType::EQueryMetricsOneHour:
         return CreateQueryMetricsScan(ownerId, scanId, database, sysViewDescription, tableRange, columns);
     case ESysViewType::ETopPartitionsByCpuOneMinute:
     case ESysViewType::ETopPartitionsByCpuOneHour:

@@ -29,7 +29,8 @@ public:
         , TxId(txId)
         , UserToken(userToken)
         , SkipUnresolvedNames(skipUnresolvedNames)
-        , TasksGraph(tasksGraph) {}
+        , TasksGraph(tasksGraph)
+        , CollectTimeline(tasksGraph.GetMeta().CollectTimeline) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -65,7 +66,9 @@ private:
     }
 
     void HandleResolveNames(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        NavigateWindow.End = TInstant::Now();
+        if (CollectTimeline) {
+            NavigateWindow.End = TInstant::Now();
+        }
         if (ShouldTerminate) {
             PassAway();
             return;
@@ -271,7 +274,9 @@ private:
     }
 
     void HandleResolveKeys(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr &ev) {
-        ResolveKeysWindow.End = TInstant::Now();
+        if (CollectTimeline) {
+            ResolveKeysWindow.End = TInstant::Now();
+        }
         AFL_ENSURE(ResolvingNamesFinished);
         if (ShouldTerminate) {
             PassAway();
@@ -470,19 +475,25 @@ private:
         }
 
         if (!ResolvingNamesFinished) {
-            NavigateWindow.Start = TInstant::Now();
+            if (CollectTimeline) {
+                NavigateWindow.Start = TInstant::Now();
+            }
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
             Become(&TKqpTableResolver::ResolveNamesState);
             return;
         }
 
         if (requestNavigate->ResultSet.size()) {
-            NavigateWindow.Start = TInstant::Now();
+            if (CollectTimeline) {
+                NavigateWindow.Start = TInstant::Now();
+            }
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
         } else {
             NavigationFinished = true;
         }
-        ResolveKeysWindow.Start = TInstant::Now();
+        if (CollectTimeline) {
+            ResolveKeysWindow.Start = TInstant::Now();
+        }
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
         Become(&TKqpTableResolver::ResolveKeysState);
     }
@@ -557,6 +568,7 @@ private:
 
     // TODO: TableResolver should not populate TasksGraph as it's not related to its job (bad API).
     TKqpTasksGraph& TasksGraph;
+    const bool CollectTimeline;
 
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;

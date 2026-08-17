@@ -161,8 +161,18 @@ public:
         TasksGraph.GetMeta().UserRequestContext = userRequestContext;
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
         ResponseStatsMode = Request.StatsMode;
-        CollectionStatsMode = Max(ResponseStatsMode, Request.UserFacingTraceCollectionMode);
+        CollectionStatsMode = ResponseStatsMode;
+        if (Request.DiagnosticsPolicy.CollectStageAggregates
+                || Request.DiagnosticsPolicy.CollectTaskSamples) {
+            CollectionStatsMode = Max(CollectionStatsMode,
+                Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+        } else if (Request.DiagnosticsPolicy.CollectTimeline) {
+            CollectionStatsMode = Max(CollectionStatsMode,
+                Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+        }
         TasksGraph.GetMeta().StatsMode = CollectionStatsMode;
+        TasksGraph.GetMeta().CollectShardDiagnostics = Request.DiagnosticsPolicy.CollectShardSamples;
+        TasksGraph.GetMeta().CollectTimeline = Request.DiagnosticsPolicy.CollectTimeline;
         for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
             TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
         }
@@ -1806,9 +1816,10 @@ protected:
 
 protected:
     void InitializeExecutionTrace() {
-        const bool collect =
-            Request.UserFacingTraceCollectionMode != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
-        Stats->CollectTraceDiagnostics = collect;
+        const bool collect = bool(Request.DiagnosticsPolicy);
+        Stats->CollectTraceDiagnostics = Request.DiagnosticsPolicy.CollectStageAggregates
+            || Request.DiagnosticsPolicy.CollectTaskSamples;
+        Stats->CollectBufferLookupDiagnostics = Request.DiagnosticsPolicy.CollectBufferLookup;
         if (!collect) {
             return;
         }
@@ -1833,6 +1844,7 @@ protected:
         ExecutionTrace->Timeline.Execute.End = TInstant::Now();
         ExecutionTrace->Status = ResponseEv->Record.GetResponse().GetStatus();
         Stats->ExportTraceSnapshot(*ExecutionTrace);
+        TrimExecutionTraceSnapshot(*ExecutionTrace);
         ResponseEv->ExecutionTraces.push_back(std::move(*ExecutionTrace));
         ExecutionTrace.reset();
     }

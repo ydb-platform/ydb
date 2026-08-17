@@ -2936,7 +2936,7 @@ public:
         , PrefixCells(TIndexTableImplReader::ParsePrefixCells(Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
         , ReadsState(Counters, LogPrefix,
-            NYql::NDq::StatsLevelCollectFull(statsLevel) ? &ShardReadDiagnostics : nullptr)
+            Settings->GetCollectDiagnostics() ? &ShardReadDiagnostics : nullptr)
         , DocsReadingQueue(this->SelfId(), ReadsState)
         , WordsReadingQueue(this->SelfId(), ReadsState)
     {
@@ -3032,7 +3032,7 @@ public:
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode,
         const NYql::TIssues& subIssues = {})
     {
-        if (IngressStats.CollectFull()) {
+        if (Settings->GetCollectDiagnostics()) {
             ShardReadDiagnostics.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
                 ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
         }
@@ -3559,7 +3559,7 @@ public:
             if (UniqueIndexReader) {
                 ExportTableReaderStats(stats, UniqueIndexReader);
             }
-            if (!ShardReadDiagnostics.Empty()) {
+            if (Settings->GetCollectDiagnostics() && !ShardReadDiagnostics.Empty()) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
@@ -3710,7 +3710,7 @@ public:
             {"txLocks", txLocks},
             {"brokenTxLocks", borkenTxlocks});
 
-        if (IngressStats.CollectFull()) {
+        if (Settings->GetCollectDiagnostics()) {
             ShardReadDiagnostics.OnFinish(readInfo.ShardId, record.GetRowCount(),
                 ReadsState.GetRetries(readInfo.ShardId), record.HasNodeId() ? record.GetNodeId() : 0,
                 record.GetStatus().GetCode(), record.GetFinished());

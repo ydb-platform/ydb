@@ -22,7 +22,8 @@ struct TEvKqpBuffer {
 struct TEvCommit : public TEventLocal<TEvCommit, TKqpBufferWriterEvents::EvCommit> {
     TActorId ExecuterActorId;
     ui64 TxId;
-    bool CollectDiagnostics = false;
+    bool CollectTimeline = false;
+    bool CollectShards = false;
 };
 
 struct TEvRollback : public TEventLocal<TEvRollback, TKqpBufferWriterEvents::EvRollback> {
@@ -54,11 +55,13 @@ struct TEvError : public TEventLocal<TEvError, TKqpBufferWriterEvents::EvError> 
     NYql::NDqProto::StatusIds::StatusCode StatusCode;
     NYql::TIssues Issues;
     std::optional<NYql::NDqProto::TDqTaskStats> Stats;
+    TCommitDiagnostics CommitDiagnostics;
 
     TEvError(
         NYql::NDqProto::StatusIds::StatusCode statusCode,
         NYql::TIssues&& issues,
-        std::optional<NYql::NDqProto::TDqTaskStats>&& stats);
+        std::optional<NYql::NDqProto::TDqTaskStats>&& stats,
+        TCommitDiagnostics&& commitDiagnostics = {});
 };
 
 };

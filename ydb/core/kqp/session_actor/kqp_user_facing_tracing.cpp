@@ -2,10 +2,12 @@
 #include "kqp_query_state.h"
 #include "kqp_query_stats.h"
 
+#include <ydb/core/kqp/common/events/query.h>
 #include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
 
@@ -14,6 +16,7 @@
 
 #include <algorithm>
 #include <functional>
+#include <tuple>
 #include <vector>
 #include <util/string/builder.h>
 
@@ -53,6 +56,78 @@ using TQueryLevels = TComponentTracingLevels::TQueryProcessor;
 
 using TSpanBudget = TUserFacingSpanBudget;
 
+struct TUserFacingQuerySnapshot {
+    NWilson::TTraceId TraceId;
+    TString RootName;
+    TString ObfuscatedQueryText;
+    TInstant RootEnd;
+    TInstant StartTime;
+    TInstant ProxyRequestStartTime;
+    std::vector<NKikimrKqp::TProxyRequestHop> ProxyRequestHops;
+    TInstant ContinueTime;
+    TString PoolId;
+    TKqpQueryStats QueryStats;
+    std::vector<TCompileAttemptDiagnostic> CompileAttempts;
+    size_t CompileAttemptsDropped = 0;
+    bool ExecutionDelegated = false;
+    bool Success = false;
+    TString StatusCode;
+};
+
+void TrimCompileDependencies(std::vector<TCompileAttemptDiagnostic>& attempts) {
+    struct TOwnedDependency {
+        size_t Attempt;
+        TCompileDependencyDiagnostic Value;
+    };
+
+    std::vector<TOwnedDependency> dependencies;
+    std::vector<size_t> originalSizes(attempts.size());
+    std::vector<size_t> sourceDropped(attempts.size());
+    for (size_t attempt = 0; attempt < attempts.size(); ++attempt) {
+        if (!attempts[attempt].Dependencies) {
+            continue;
+        }
+        const auto& source = *attempts[attempt].Dependencies;
+        originalSizes[attempt] = source.Dependencies.size();
+        sourceDropped[attempt] = source.Dropped;
+        for (const auto& dependency : source.Dependencies) {
+            dependencies.push_back({attempt, dependency});
+        }
+    }
+    auto rank = [](const TCompileDependencyDiagnostic& dependency) {
+        const bool pending = dependency.Status == ECompileDependencyStatus::Unknown;
+        const bool failed = dependency.Status == ECompileDependencyStatus::Error;
+        const ui64 durationUs = dependency.Start != TInstant::Zero() && dependency.End >= dependency.Start
+            ? (dependency.End - dependency.Start).MicroSeconds() : 0;
+        return std::tuple(pending, failed, durationUs);
+    };
+    if (dependencies.size() > MaxCompileDependencyDiagnosticsPerQuery) {
+        std::nth_element(dependencies.begin(),
+            dependencies.begin() + MaxCompileDependencyDiagnosticsPerQuery, dependencies.end(),
+            [&](const auto& lhs, const auto& rhs) { return rank(lhs.Value) > rank(rhs.Value); });
+        dependencies.resize(MaxCompileDependencyDiagnosticsPerQuery);
+    }
+
+    std::vector<std::vector<TCompileDependencyDiagnostic>> retained(attempts.size());
+    for (auto& dependency : dependencies) {
+        retained[dependency.Attempt].push_back(std::move(dependency.Value));
+    }
+    for (size_t attempt = 0; attempt < attempts.size(); ++attempt) {
+        if (!attempts[attempt].Dependencies) {
+            continue;
+        }
+        const size_t retainedSize = retained[attempt].size();
+        attempts[attempt].Dependencies = std::make_shared<const TCompileDiagnostics>(TCompileDiagnostics{
+            .Dependencies = std::move(retained[attempt]),
+            .Dropped = sourceDropped[attempt] + originalSizes[attempt]
+                - retainedSize,
+        });
+    }
+    std::sort(attempts.begin(), attempts.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.Start < rhs.Start;
+    });
+}
+
 NWilson::NTraceProto::Status::StatusCode ToWilsonStatus(Ydb::StatusIds::StatusCode status) {
     if (status == Ydb::StatusIds::SUCCESS) {
         return NWilson::NTraceProto::Status::STATUS_CODE_OK;
@@ -61,6 +136,27 @@ NWilson::NTraceProto::Status::StatusCode ToWilsonStatus(Ydb::StatusIds::StatusCo
         return NWilson::NTraceProto::Status::STATUS_CODE_UNSET;
     }
     return NWilson::NTraceProto::Status::STATUS_CODE_ERROR;
+}
+
+NWilson::NTraceProto::Status::StatusCode CompletedChildStatus(
+        Ydb::StatusIds::StatusCode executionStatus) {
+    return executionStatus == Ydb::StatusIds::SUCCESS
+        ? NWilson::NTraceProto::Status::STATUS_CODE_OK
+        : NWilson::NTraceProto::Status::STATUS_CODE_UNSET;
+}
+
+NWilson::NTraceProto::Status::StatusCode PhaseStatus(
+        const TExecutionTraceSnapshot& trace, const TTimeWindow& window) {
+    if (trace.Status == Ydb::StatusIds::SUCCESS) {
+        return NWilson::NTraceProto::Status::STATUS_CODE_OK;
+    }
+    if (trace.Status == Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+        return NWilson::NTraceProto::Status::STATUS_CODE_UNSET;
+    }
+    return window && trace.Timeline.Execute.End != TInstant::Zero()
+            && window.End >= trace.Timeline.Execute.End
+        ? NWilson::NTraceProto::Status::STATUS_CODE_ERROR
+        : NWilson::NTraceProto::Status::STATUS_CODE_OK;
 }
 
 NWilson::TSpan MakePhase(const NWilson::TTraceId& parentId, TInstant start, TInstant end,
@@ -95,13 +191,14 @@ void EmitPhase(const NWilson::TTraceId& parentId, TInstant start, TInstant end,
 
 void EmitMarker(const NWilson::TTraceId& parentId, TInstant at,
         const TString& name, TPhaseAttrs attrs = {}, TSpanBudget* budget = nullptr,
-        ui8 requiredVerbosity = TQueryLevels::TopLevel) {
+        ui8 requiredVerbosity = TQueryLevels::TopLevel,
+        NWilson::NTraceProto::Status::StatusCode status = NWilson::NTraceProto::Status::STATUS_CODE_OK) {
     if (budget && !budget->Admit(requiredVerbosity)) {
         return;
     }
     NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
         parentId, parentId.Span(parentId.GetVerbosity()), at, at,
-        NWilson::NTraceProto::Status::STATUS_CODE_OK, name,
+        status, name,
         NWilson::MakeUserFacingWilsonUploaderId());
     for (const auto& [key, value] : attrs) {
         span.Attribute(key, value);
@@ -183,6 +280,9 @@ void EmitShardReadSpans(const NWilson::TTraceId& parent,
         span.Attribute("ydb.code.component", TString("KqpShardRead"));
         span.Attribute("ydb.peer.actor.type", TString("DataShard"));
         span.Attribute("ydb.rows", static_cast<i64>(shard.GetRows()));
+        if (shard.GetStartTimeMs() == shard.GetFinishTimeMs()) {
+            span.Attribute("ydb.duration.measured", false);
+        }
         if (status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
             span.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(status));
             span.Attribute("ydb.finished", shard.GetFinished());
@@ -202,7 +302,8 @@ void EmitShardReadSpans(const NWilson::TTraceId& parent,
 
 void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVerb,
         const TString& actorType, const std::vector<TTaskTraceSnapshot>& tasks,
-        const TTimeWindow& stageBounds, TSpanBudget& budget) {
+        const TTimeWindow& stageBounds, Ydb::StatusIds::StatusCode executionStatus,
+        TSpanBudget& budget) {
     for (const auto& task : tasks) {
         const auto bounds = FitUserFacingRemoteWindow(task.Window, stageBounds);
         if (!bounds) {
@@ -214,7 +315,8 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVer
         NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
             stageParent, stageParent.Span(stageParent.GetVerbosity()),
             bounds.Start, bounds.End,
-            NWilson::NTraceProto::Status::STATUS_CODE_OK,
+            task.Failed ? NWilson::NTraceProto::Status::STATUS_CODE_ERROR
+                : CompletedChildStatus(executionStatus),
             TStringBuilder() << stageVerb << " task " << task.TaskId,
             NWilson::MakeUserFacingWilsonUploaderId());
         if (!span) {
@@ -228,6 +330,9 @@ void EmitTaskSpans(const NWilson::TTraceId& stageParent, const TString& stageVer
         span.Attribute("ydb.input_rows", static_cast<i64>(task.InputRows));
         span.Attribute("ydb.output_rows", static_cast<i64>(task.OutputRows));
         span.Attribute("ydb.duration_us", static_cast<i64>(task.DurationUs()));
+        if (task.Failed) {
+            span.Attribute("ydb.status_code", TString("ERROR"));
+        }
         if (task.QueueDelayUs > 0) {
             span.Attribute("ydb.queue_delay_us", static_cast<i64>(task.QueueDelayUs));
         }
@@ -268,7 +373,8 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TExecutionTraceSnapsh
         NWilson::TSpan span = NWilson::TSpan::ConstructTerminated(
             parent, parent.Span(parent.GetVerbosity()),
             stageBounds.Start, stageBounds.End,
-            NWilson::NTraceProto::Status::STATUS_CODE_OK, description.Name,
+            stage.FailedTasks > 0 ? NWilson::NTraceProto::Status::STATUS_CODE_ERROR
+                : CompletedChildStatus(trace.Status), description.Name,
             NWilson::MakeUserFacingWilsonUploaderId());
         if (!span) {
             continue;
@@ -277,6 +383,9 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TExecutionTraceSnapsh
         span.Attribute("ydb.actor.type", trace.ComputeActorType);
         span.Attribute("ydb.timing_source", TString("compute_actor_stats"));
         span.Attribute("ydb.tasks", static_cast<i64>(stage.Tasks));
+        if (stage.FailedTasks > 0) {
+            span.Attribute("ydb.failed_tasks", static_cast<i64>(stage.FailedTasks));
+        }
         span.Attribute("ydb.cpu_us", static_cast<i64>(stage.CpuUs));
         span.Attribute("ydb.input_rows", static_cast<i64>(stage.InputRows));
         span.Attribute("ydb.output_rows", static_cast<i64>(stage.OutputRows));
@@ -308,6 +417,9 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TExecutionTraceSnapsh
             }
             span.Attribute("ydb.tasks_by_node", TString(byNode));
         }
+        if (stage.NodesTruncated > 0) {
+            span.Attribute("ydb.nodes_truncated", static_cast<i64>(stage.NodesTruncated));
+        }
         if (stage.Tasks > 1 && stage.Durations.Count > 0) {
             span.Attribute("ydb.slowest_task_node", static_cast<i64>(stage.SlowestTaskNode));
             span.Attribute("ydb.fastest_task_node", static_cast<i64>(stage.FastestTaskNode));
@@ -317,22 +429,23 @@ void EmitStageSpans(const NWilson::TTraceId& parent, const TExecutionTraceSnapsh
                 static_cast<i64>(stage.Tasks - stage.InterestingTasks.size()));
         }
         EmitTaskSpans(span.GetTraceId(), description.Verb, trace.ComputeActorType,
-            stage.InterestingTasks, stageBounds, budget);
+            stage.InterestingTasks, stageBounds, trace.Status, budget);
         span.End();
     }
 }
 
-void EmitProxySpans(const NWilson::TTraceId& parentId, const TKqpQueryState& state,
-        TSpanBudget& budget) {
-    const auto& hops = state.ProxyRequestHops;
-    std::vector<TTimeWindow> windows(hops.size());
-    TInstant cursor = state.StartTime;
-    for (int i = static_cast<int>(hops.size()) - 1; i >= 0; --i) {
+template <typename THops>
+void EmitProxySpans(const NWilson::TTraceId& parentId, const THops& hops,
+        TInstant sessionStart, TSpanBudget& budget) {
+    const size_t hopCount = static_cast<size_t>(hops.size());
+    std::vector<TTimeWindow> windows(hopCount);
+    TInstant cursor = sessionStart;
+    for (int i = static_cast<int>(hopCount) - 1; i >= 0; --i) {
         const TDuration duration = TDuration::MicroSeconds(hops[i].GetDurationUs());
         windows[i] = {cursor - duration, cursor};
         cursor -= duration;
     }
-    for (size_t i = 0; i < hops.size(); ++i) {
+    for (size_t i = 0; i < hopCount; ++i) {
         const auto& hop = hops[i];
         const auto& window = windows[i];
         if (window.End == window.Start) {
@@ -352,7 +465,7 @@ void EmitProxySpans(const NWilson::TTraceId& parentId, const TKqpQueryState& sta
             proxy.Attribute("ydb.duration.source", TString("local_monotonic"));
             proxy.End();
         }
-        if (i + 1 >= hops.size() || hop.GetNodeId() == hop.GetTargetNodeId()) {
+        if (i + 1 >= hopCount || hop.GetNodeId() == hop.GetTargetNodeId()) {
             continue;
         }
         EmitMarker(parentId, window.End, "Forward to KQP proxy", {
@@ -364,7 +477,12 @@ void EmitProxySpans(const NWilson::TTraceId& parentId, const TKqpQueryState& sta
     }
 }
 
-TInstant GetProxyTimelineStart(const TKqpQueryState& state) {
+void EmitProxySpans(const NWilson::TTraceId& parentId, const TUserFacingQuerySnapshot& state,
+        TSpanBudget& budget) {
+    EmitProxySpans(parentId, state.ProxyRequestHops, state.StartTime, budget);
+}
+
+TInstant GetProxyTimelineStart(const TUserFacingQuerySnapshot& state) {
     return state.ProxyRequestStartTime;
 }
 
@@ -455,8 +573,9 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TExecutionTraceSnaps
             prepareEnd = Max(prepareEnd, window.End);
         }
     }
+    const TTimeWindow prepareBounds{prepareStart, prepareEnd};
     if (NWilson::TSpan prepareSpan = MakePhase(executeId, prepareStart, prepareEnd, "Prepare", {},
-            &budget, TQueryLevels::Detailed)) {
+            &budget, TQueryLevels::Detailed, PhaseStatus(trace, prepareBounds))) {
         prepareSpan.Attribute("ydb.code.component", TString("KqpExecuter.Prepare"));
         for (const auto& [phase, displayName, machineName] : preparePhases) {
             const auto& window = tl.Phase(phase);
@@ -511,10 +630,14 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TExecutionTraceSnaps
     NWilson::TSpan runSpan;
     const TInstant runStart = runBounds.Start;
     const TInstant runEnd = runBounds.End;
-    runSpan = MakePhase(executeId, runStart, runEnd, "Run", {}, &budget, TQueryLevels::Basic);
+    runSpan = MakePhase(executeId, runStart, runEnd, "Run", {}, &budget, TQueryLevels::Basic,
+        PhaseStatus(trace, runBounds));
     if (runSpan) {
         runSpan.Attribute("ydb.actor.type", trace.ComputeActorType);
         runSpan.Attribute("ydb.code.component", TString("DqExecution"));
+        if (trace.StagesTruncated > 0) {
+            runSpan.Attribute("ydb.stages_truncated", static_cast<i64>(trace.StagesTruncated));
+        }
     }
     const NWilson::TTraceId runId = runSpan ? runSpan.GetTraceId() : NWilson::TTraceId{};
     EmitStageSpans(runSpan ? runId : executeId, trace, runBounds, budget);
@@ -525,12 +648,15 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TExecutionTraceSnaps
     if (const auto& commit = tl.Phase(EExecutionPhase::Commit)) {
         // Per-shard children end at each acknowledgement, exposing commit stragglers.
         if (NWilson::TSpan commitSpan = MakePhase(executeId, commit.Start, commit.End, "Commit", {},
-                &budget, TQueryLevels::Basic)) {
+                &budget, TQueryLevels::Basic, PhaseStatus(trace, commit))) {
             commitSpan.Attribute("ydb.actor.type", TString("TKqpBufferWriteActor"));
-            const auto& acks = trace.Commit.Shards;
-            if (trace.Commit.ShardsTruncated > 0) {
+            const auto& preparedAcks = trace.Commit.PreparedShards;
+            const auto& committedAcks = trace.Commit.CommittedShards;
+            const size_t truncated = Max(trace.Commit.PreparedShardsTruncated,
+                trace.Commit.CommittedShardsTruncated);
+            if (truncated > 0) {
                 commitSpan.Attribute("ydb.shards_truncated",
-                    static_cast<i64>(trace.Commit.ShardsTruncated));
+                    static_cast<i64>(truncated));
             }
             if (const auto& w = trace.Commit.PrepareShards) {
                 if (NWilson::TSpan prep = MakePhase(commitSpan.GetTraceId(), w.Start, w.End, "Prepare shards", {
@@ -539,9 +665,13 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TExecutionTraceSnaps
                         &budget, TQueryLevels::Detailed)) {
                     prep.Attribute("ydb.actor.type", TString("TKqpBufferWriteActor"));
                     prep.Attribute("ydb.peer.actor.type", TString("DataShard"));
-                    for (const auto& ack : acks) {
-                        if (ack.PreparedAt >= w.Start) {
-                            EmitPhase(prep.GetTraceId(), w.Start, ack.PreparedAt,
+                    if (trace.Commit.PreparedShardsTruncated > 0) {
+                        prep.Attribute("ydb.shards_truncated",
+                            static_cast<i64>(trace.Commit.PreparedShardsTruncated));
+                    }
+                    for (const auto& ack : preparedAcks) {
+                        if (ack.AcknowledgedAt >= w.Start) {
+                            EmitPhase(prep.GetTraceId(), w.Start, ack.AcknowledgedAt,
                                 ShardDisplayName("Prepare", ack.ShardId),
                                 {
                                     {"ydb.shard_id", static_cast<i64>(ack.ShardId)},
@@ -566,9 +696,13 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TExecutionTraceSnaps
                         &budget, TQueryLevels::Detailed)) {
                     apply.Attribute("ydb.actor.type", TString("TKqpBufferWriteActor"));
                     apply.Attribute("ydb.peer.actor.type", TString("DataShard"));
-                    for (const auto& ack : acks) {
-                        if (ack.CommittedAt >= w.Start) {
-                            EmitPhase(apply.GetTraceId(), w.Start, ack.CommittedAt,
+                    if (trace.Commit.CommittedShardsTruncated > 0) {
+                        apply.Attribute("ydb.shards_truncated",
+                            static_cast<i64>(trace.Commit.CommittedShardsTruncated));
+                    }
+                    for (const auto& ack : committedAcks) {
+                        if (ack.AcknowledgedAt >= w.Start) {
+                            EmitPhase(apply.GetTraceId(), w.Start, ack.AcknowledgedAt,
                                 ShardDisplayName("Commit", ack.ShardId),
                                 {
                                     {"ydb.shard_id", static_cast<i64>(ack.ShardId)},
@@ -587,7 +721,7 @@ void RenderExecution(const NWilson::TTraceId& rootId, const TExecutionTraceSnaps
 }
 
 void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
-        const TKqpQueryState& state, TSpanBudget& budget) {
+        const TUserFacingQuerySnapshot& state, TSpanBudget& budget) {
     i64 rowsRead = 0;
     i64 rowsWritten = 0;
     i64 bytesRead = 0;
@@ -637,7 +771,7 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
     }
 
     if (state.ContinueTime != TInstant::Zero() && state.ContinueTime > state.StartTime) {
-        const TString poolId = state.UserRequestContext ? state.UserRequestContext->PoolId : TString();
+        const TString& poolId = state.PoolId;
         if (poolId) {
             EmitPhase(parentId, state.StartTime, state.ContinueTime, "Queued", {
                 {"ydb.pool_id", poolId},
@@ -650,21 +784,25 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
         }
     }
 
-    if (state.CompileWallStart && state.CompileWallEnd > state.CompileWallStart) {
-        if (NWilson::TSpan compile = MakePhase(parentId, state.CompileWallStart, state.CompileWallEnd, "Compile",
-                {{"ydb.compile.cache_hit", state.CompileStats.FromCache}}, &budget, TQueryLevels::Basic,
-                ToWilsonStatus(state.CompileStatus))) {
+    for (const auto& attempt : state.CompileAttempts) {
+        if (attempt.FromCache) {
+            userSpan.Attribute("ydb.compile.cache_hit", true);
+            continue;
+        }
+        if (NWilson::TSpan compile = MakePhase(parentId, attempt.Start, attempt.End, "Compile",
+                {{"ydb.compile.cache_hit", false}}, &budget, TQueryLevels::Basic,
+                ToWilsonStatus(attempt.Status))) {
             compile.Attribute("ydb.actor.type", TString("TKqpCompileService"));
-            if (state.CompileStatus != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
-                compile.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(state.CompileStatus));
+            if (attempt.Status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
+                compile.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(attempt.Status));
             }
             auto emitDependencies = [&](const NWilson::TTraceId& dependencyParent,
                     TInstant windowStart, TInstant windowEnd) {
-                if (!state.UserFacingCompileSpans) {
+                if (!attempt.Dependencies) {
                     return;
                 }
-                for (const auto& dependency : state.UserFacingCompileSpans->Spans) {
-                    const bool metadata = dependency.Dependency == EUserFacingCompileDependency::SchemeCache;
+                for (const auto& dependency : attempt.Dependencies->Dependencies) {
+                    const bool metadata = dependency.Dependency == ECompileDependency::SchemeCache;
                     TStringBuilder name;
                     name << (metadata ? "Load metadata" : "Load statistics");
                     if (dependency.Target) {
@@ -672,9 +810,9 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
                     }
                     const TInstant start = Max(dependency.Start, windowStart);
                     const TInstant end = Min(dependency.End, windowEnd);
-                    const auto status = dependency.Status == EUserFacingCompileStatus::Ok
+                    const auto status = dependency.Status == ECompileDependencyStatus::Ok
                         ? NWilson::NTraceProto::Status::STATUS_CODE_OK
-                        : dependency.Status == EUserFacingCompileStatus::Error
+                        : dependency.Status == ECompileDependencyStatus::Error
                             ? NWilson::NTraceProto::Status::STATUS_CODE_ERROR
                             : NWilson::NTraceProto::Status::STATUS_CODE_UNSET;
                     if (NWilson::TSpan child = MakePhase(dependencyParent, start, end, TString(name), {},
@@ -686,22 +824,22 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
                             child.Attribute("db.collection.name", dependency.Target);
                         }
                         child.Attribute("ydb.status_code",
-                            dependency.Status == EUserFacingCompileStatus::Ok ? TString("SUCCESS")
-                            : dependency.Status == EUserFacingCompileStatus::Error ? TString("ERROR")
+                            dependency.Status == ECompileDependencyStatus::Ok ? TString("SUCCESS")
+                            : dependency.Status == ECompileDependencyStatus::Error ? TString("ERROR")
                             : TString("UNKNOWN"));
                         child.End();
                     }
                 }
-                if (state.UserFacingCompileSpans->Dropped > 0) {
+                if (attempt.Dependencies->Dropped > 0) {
                     compile.Attribute("ydb.dependencies_truncated",
-                        static_cast<i64>(state.UserFacingCompileSpans->Dropped));
+                        static_cast<i64>(attempt.Dependencies->Dropped));
                 }
             };
             bool actorEmitted = false;
-            if (state.UserFacingCompileActorSpan) {
-                const auto& actorWindow = *state.UserFacingCompileActorSpan;
-                const TInstant actorStart = Max(actorWindow.Start, state.CompileWallStart);
-                const TInstant actorEnd = Min(actorWindow.End, state.CompileWallEnd);
+            if (attempt.Actor) {
+                const auto& actorWindow = *attempt.Actor;
+                const TInstant actorStart = Max(actorWindow.Start, attempt.Start);
+                const TInstant actorEnd = Min(actorWindow.End, attempt.End);
                 if (NWilson::TSpan actor = MakePhase(
                         compile.GetTraceId(), actorStart, actorEnd, "Compile query", {},
                         &budget, TQueryLevels::Basic)) {
@@ -712,16 +850,22 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
                 }
             }
             if (!actorEmitted) {
-                emitDependencies(compile.GetTraceId(), state.CompileWallStart, state.CompileWallEnd);
+                emitDependencies(compile.GetTraceId(), attempt.Start, attempt.End);
             }
             compile.End();
         }
-    } else if (state.CompileStats.FromCache) {
-        userSpan.Attribute("ydb.compile.cache_hit", true);
+    }
+    if (state.CompileAttemptsDropped > 0) {
+        userSpan.Attribute("ydb.compile_attempts_truncated",
+            static_cast<i64>(state.CompileAttemptsDropped));
     }
 
     for (const auto& trace : state.QueryStats.ExecutionTraces) {
         RenderExecution(parentId, trace, budget);
+    }
+    if (state.QueryStats.ExecutionTracesDropped > 0) {
+        userSpan.Attribute("ydb.executions_truncated",
+            static_cast<i64>(state.QueryStats.ExecutionTracesDropped));
     }
     if (budget.Dropped() > 0) {
         userSpan.Attribute("ydb.spans_truncated", static_cast<i64>(budget.Dropped()));
@@ -755,20 +899,19 @@ void InitializeUserFacingQueryText(TKqpQueryState& state) {
     }
 }
 
-void FinishUserFacingSpan(TKqpQueryState& state, bool success, const TString& statusCode) {
-    NWilson::TTraceId traceId = std::move(state.UserFacingTraceId);
+void RenderUserFacingSpan(TUserFacingQuerySnapshot state) {
+    NWilson::TTraceId traceId = std::move(state.TraceId);
     if (!traceId) {
         return;
     }
-    const TString rootName = state.UserFacingRootName
-        ? state.UserFacingRootName : FallbackUserFacingQueryName(state);
+    const TString& rootName = state.RootName;
     const TInstant rootStart = GetProxyTimelineStart(state);
-    const TInstant rootEnd = TInstant::Now();
+    const TInstant rootEnd = state.RootEnd;
     TSpanBudget budget(traceId.GetVerbosity());
     NWilson::TSpan userSpan = NWilson::TSpan::ConstructTerminated(
         traceId, traceId.Span(traceId.GetVerbosity()),
         rootStart, rootEnd,
-        success ? NWilson::NTraceProto::Status::STATUS_CODE_OK
+        state.Success ? NWilson::NTraceProto::Status::STATUS_CODE_OK
                 : NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
         rootName,
         NWilson::MakeUserFacingWilsonUploaderId());
@@ -788,11 +931,14 @@ void FinishUserFacingSpan(TKqpQueryState& state, bool success, const TString& st
     if (state.ObfuscatedQueryText) {
         userSpan.Attribute("db.query.text", state.ObfuscatedQueryText);
     }
+    if (state.ExecutionDelegated) {
+        userSpan.Attribute("ydb.trace.coverage", TString("routing_session_only"));
+    }
     EmitProxySpans(userSpan.GetTraceId(), state, budget);
     NWilson::TSpan sessionSpan = NWilson::TSpan::ConstructTerminated(
         userSpan.GetTraceId(), userSpan.GetTraceId().Span(userSpan.GetTraceId().GetVerbosity()),
         state.StartTime, rootEnd,
-        success ? NWilson::NTraceProto::Status::STATUS_CODE_OK
+        state.Success ? NWilson::NTraceProto::Status::STATUS_CODE_OK
                 : NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
         "Session", NWilson::MakeUserFacingWilsonUploaderId());
     if (sessionSpan) {
@@ -802,12 +948,117 @@ void FinishUserFacingSpan(TKqpQueryState& state, bool success, const TString& st
     } else {
         BuildPhases(userSpan, userSpan.GetTraceId(), state, budget);
     }
-    userSpan.Attribute("db.response.status_code", statusCode);
-    if (success) {
+    userSpan.Attribute("db.response.status_code", state.StatusCode);
+    if (state.Success) {
         userSpan.EndOk();
     } else {
-        userSpan.EndError(statusCode);
+        userSpan.EndError(state.StatusCode);
     }
+}
+
+class TUserFacingTraceRendererActor
+    : public NActors::TActorBootstrapped<TUserFacingTraceRendererActor> {
+public:
+    explicit TUserFacingTraceRendererActor(TUserFacingQuerySnapshot snapshot)
+        : Snapshot(std::move(snapshot))
+    {}
+
+    void Bootstrap() {
+        RenderUserFacingSpan(std::move(Snapshot));
+        PassAway();
+    }
+
+private:
+    TUserFacingQuerySnapshot Snapshot;
+};
+
+NActors::IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
+        const TString& statusCode) {
+    NWilson::TTraceId traceId = std::move(state.UserFacingTraceId);
+    if (!traceId) {
+        return nullptr;
+    }
+
+    const TInstant rootEnd = TInstant::Now();
+    if (state.ActiveCompileAttempt) {
+        state.CompileAttempts[*state.ActiveCompileAttempt].End = rootEnd;
+        state.ActiveCompileAttempt.reset();
+    }
+    if (state.OverflowCompileAttempt) {
+        state.OverflowCompileAttempt->End = rootEnd;
+        KeepCompileAttempt(state.CompileAttempts, std::move(*state.OverflowCompileAttempt),
+            state.CompileAttemptsDropped);
+        state.OverflowCompileAttempt.reset();
+    }
+    TrimCompileDependencies(state.CompileAttempts);
+
+    TUserFacingQuerySnapshot snapshot;
+    snapshot.TraceId = std::move(traceId);
+    snapshot.RootName = state.UserFacingRootName
+        ? state.UserFacingRootName : FallbackUserFacingQueryName(state);
+    snapshot.ObfuscatedQueryText = std::move(state.ObfuscatedQueryText);
+    snapshot.RootEnd = rootEnd;
+    snapshot.StartTime = state.StartTime;
+    snapshot.ProxyRequestStartTime = state.ProxyRequestStartTime;
+    snapshot.ProxyRequestHops = std::move(state.ProxyRequestHops);
+    snapshot.ContinueTime = state.ContinueTime;
+    if (state.UserRequestContext) {
+        snapshot.PoolId = state.UserRequestContext->PoolId;
+    }
+    snapshot.QueryStats = std::move(state.QueryStats);
+    snapshot.CompileAttempts = std::move(state.CompileAttempts);
+    snapshot.CompileAttemptsDropped = state.CompileAttemptsDropped;
+    snapshot.ExecutionDelegated = state.UserFacingExecutionDelegated;
+    snapshot.Success = success;
+    snapshot.StatusCode = statusCode;
+    return new TUserFacingTraceRendererActor(std::move(snapshot));
+}
+
+void FinishRejectedUserFacingSpan(const NPrivateEvents::TEvQueryRequest& request,
+        Ydb::StatusIds::StatusCode status) {
+    NWilson::TTraceId traceId = request.GetUserFacingWilsonTraceId();
+    if (!traceId) {
+        return;
+    }
+
+    const TInstant rejectedAt = TInstant::Now();
+    TDuration proxyDuration;
+    for (const auto& hop : request.Record.GetProxyRequestHops()) {
+        proxyDuration += TDuration::MicroSeconds(hop.GetDurationUs());
+    }
+    const TInstant rootStart = rejectedAt - proxyDuration;
+    TString rootName = NKikimrKqp::EQueryAction_Name(request.GetAction());
+    constexpr TStringBuf prefix = "QUERY_ACTION_";
+    if (rootName.StartsWith(prefix)) {
+        rootName = rootName.substr(prefix.size());
+    }
+
+    TSpanBudget budget(traceId.GetVerbosity());
+    NWilson::TSpan root = NWilson::TSpan::ConstructTerminated(
+        traceId, traceId.Span(traceId.GetVerbosity()), rootStart, rejectedAt,
+        NWilson::NTraceProto::Status::STATUS_CODE_ERROR, rootName,
+        NWilson::MakeUserFacingWilsonUploaderId());
+    if (!root) {
+        return;
+    }
+    root.Attribute("ydb.tracing.layer", TString("user"));
+    root.Attribute("ydb.code.component", TString("KQP"));
+    root.Attribute("db.system.name", TString("ydb"));
+    root.Attribute("db.operation.name", rootName);
+    root.Attribute("db.response.status_code", Ydb::StatusIds::StatusCode_Name(status));
+    root.Attribute("ydb.trace.coverage", TString("rejected_before_query_state"));
+    if (AppData()) {
+        root.Attribute("db.namespace", AppData()->TenantName);
+    }
+    if (const TString queryText = SanitizeUserFacingQueryText(request.GetQuery())) {
+        root.Attribute("db.query.text", queryText);
+    }
+    EmitProxySpans(root.GetTraceId(), request.Record.GetProxyRequestHops(), rejectedAt, budget);
+    EmitMarker(root.GetTraceId(), rejectedAt, "Session", {
+        {"ydb.actor.type", TString("TKqpSessionActor")},
+        {"ydb.rejected", true},
+    }, &budget, TQueryLevels::TopLevel, NWilson::NTraceProto::Status::STATUS_CODE_ERROR);
+    root.EndError(Ydb::StatusIds::StatusCode_Name(status));
 }
 
 } // namespace NKikimr::NKqp

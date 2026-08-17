@@ -711,7 +711,10 @@ public:
             return;
         }
 
-        const TMonotonic proxyRequestStart = TMonotonic::Now();
+        std::optional<TMonotonic> proxyRequestStart;
+        if (ev->Get()->Record.HasUserFacingTraceId()) {
+            proxyRequestStart = TMonotonic::Now();
+        }
 
         // TODO: not the best place for adding database.
         auto addDatabaseEvent = MakeHolder<NScheduler::TEvAddDatabase>(ev->Get()->GetDatabaseId());
@@ -837,7 +840,7 @@ public:
             auto* hop = ev->Get()->Record.AddProxyRequestHops();
             hop->SetNodeId(SelfId().NodeId());
             hop->SetTargetNodeId(targetId.NodeId());
-            hop->SetDurationUs((TMonotonic::Now() - proxyRequestStart).MicroSeconds());
+            hop->SetDurationUs((TMonotonic::Now() - *proxyRequestStart).MicroSeconds());
         }
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }

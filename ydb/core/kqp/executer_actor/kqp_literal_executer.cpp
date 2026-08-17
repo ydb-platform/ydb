@@ -93,7 +93,7 @@ public:
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), 0);
-        if (Request.UserFacingTraceCollectionMode != Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE) {
+        if (Request.DiagnosticsPolicy) {
             ExecutionTrace = std::make_unique<TExecutionTraceSnapshot>();
             ExecutionTrace->ExecuterActorType = "TKqpLiteralExecuter";
             ExecutionTrace->ComputeActorType = "TKqpLiteralExecuter";
@@ -434,6 +434,7 @@ private:
         ExecutionTrace->Status = status;
         ExecutionTrace->Timeline.Execute.End = TInstant::Now();
         Stats->ExportTraceSnapshot(*ExecutionTrace);
+        TrimExecutionTraceSnapshot(*ExecutionTrace);
         ResponseEv->ExecutionTraces.push_back(std::move(*ExecutionTrace));
         ExecutionTrace.reset();
     }

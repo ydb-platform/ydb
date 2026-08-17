@@ -1697,6 +1697,7 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
             if (Y_LIKELY(input.Meta.SourceSettings)) {
                 enableMetering = true;
                 YQL_ENSURE(input.Meta.SourceSettings->HasTable());
+                input.Meta.SourceSettings->SetCollectDiagnostics(GetMeta().CollectShardDiagnostics);
                 bool isTableImmutable = input.Meta.SourceSettings->GetIsTableImmutable();
 
                 if (snapshot.IsValid() && !isTableImmutable) {
@@ -1716,6 +1717,7 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
                     inputDesc.MutableSource()->MutableSettings()->PackFrom(*input.Meta.SourceSettings);
                 }
             } else if (input.Meta.FullTextSourceSettings) {
+                input.Meta.FullTextSourceSettings->SetCollectDiagnostics(GetMeta().CollectShardDiagnostics);
 
                 if (snapshot.IsValid()) {
                     input.Meta.FullTextSourceSettings->MutableSnapshot()->SetStep(snapshot.Step);
@@ -1763,6 +1765,7 @@ void TKqpTasksGraph::FillInputDesc(NYql::NDqProto::TTaskInput& inputDesc, const 
         if (input.Meta.StreamLookupSettings) {
             enableMetering = true;
             YQL_ENSURE(input.Meta.StreamLookupSettings);
+            input.Meta.StreamLookupSettings->SetCollectDiagnostics(GetMeta().CollectShardDiagnostics);
             bool isTableImmutable = input.Meta.StreamLookupSettings->GetIsTableImmutable() &&
                 GetMeta().RequestIsolationLevel == NKqpProto::EIsolationLevel::ISOLATION_LEVEL_READ_STALE;
 

@@ -319,6 +319,7 @@ message TKqpReadRangesSourceSettings {
     optional uint64 QuerySpanId = 27;
 
     optional string PoolId = 28;
+    optional bool CollectDiagnostics = 29 [default = false];
 }
 
 // Takes input rows with a vector column, resolves the leaf cluster ID using the given

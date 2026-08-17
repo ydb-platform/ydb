@@ -56,6 +56,7 @@ struct TEvKqpExecuter {
         TVector<ui32> BatchOperationKeyIds;
 
         std::vector<TExecutionTraceSnapshot> ExecutionTraces;
+        size_t ExecutionTracesDropped = 0;
 
         enum class EExecutionType {
             Data,

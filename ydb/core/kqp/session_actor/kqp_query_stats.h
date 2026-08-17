@@ -21,6 +21,7 @@ struct TKqpQueryStats {
 
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
     std::vector<TExecutionTraceSnapshot> ExecutionTraces;
+    size_t ExecutionTracesDropped = 0;
 
     const TVector<NYql::NDqProto::TDqExecutionStats>& GetExecutions() const;
     ui64 GetWorkerCpuTimeUs() const;

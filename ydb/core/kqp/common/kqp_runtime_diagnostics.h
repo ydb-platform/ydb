@@ -7,6 +7,7 @@
 #include <util/generic/utility.h>
 #include <util/system/types.h>
 
+#include <algorithm>
 #include <unordered_map>
 #include <tuple>
 #include <vector>
@@ -28,66 +29,67 @@ struct TTimeWindow {
 
 class TShardReadDiagnosticsCollector {
 public:
-    void OnStart(ui64 shardId, TInstant now = TInstant::Now()) {
-        auto it = Indexes_.find(shardId);
-        if (it == Indexes_.end()) {
-            if (Reads_.size() >= MaxShardReadDiagnostics) {
-                const auto replacement = FindReplaceable();
-                if (replacement == Reads_.size()) {
-                    ++Dropped_;
-                    return;
-                }
-                Indexes_.erase(Reads_[replacement].GetShardId());
-                Reads_[replacement].Clear();
-                it = Indexes_.emplace(shardId, replacement).first;
-                ++Dropped_;
-            } else {
-                const size_t index = Reads_.size();
-                Reads_.emplace_back();
-                it = Indexes_.emplace(shardId, index).first;
-            }
+    ui64 OnStart(ui64 shardId, TInstant now = TInstant::Now()) {
+        ui64 startTimeMs = now.MilliSeconds();
+        if (const auto it = Indexes_.find(shardId); it != Indexes_.end()) {
+            startTimeMs = Reads_[it->second].GetStartTimeMs();
         }
-        auto& shard = Reads_[it->second];
-        shard.SetShardId(shardId);
-        if (!shard.GetStartTimeMs()) {
-            shard.SetStartTimeMs(now.MilliSeconds());
-        }
+        ActiveStarts_.try_emplace(shardId, startTimeMs);
+        return startTimeMs;
     }
 
     void OnFinish(ui64 shardId, ui64 rows, ui32 retries, ui32 nodeId = 0,
             Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
-            bool finished = true, TInstant now = TInstant::Now()) {
+            bool finished = true, TInstant now = TInstant::Now(), ui64 startTimeMs = 0) {
         auto it = Indexes_.find(shardId);
+        if (!startTimeMs) {
+            if (const auto active = ActiveStarts_.find(shardId); active != ActiveStarts_.end()) {
+                startTimeMs = active->second;
+            }
+        }
+        const bool terminal = finished || status != Ydb::StatusIds::SUCCESS;
+        if (terminal) {
+            ActiveStarts_.erase(shardId);
+        }
         if (it == Indexes_.end()) {
             NKqpProto::TKqpShardReadStats candidate;
             candidate.SetShardId(shardId);
+            candidate.SetStartTimeMs(startTimeMs ? startTimeMs : now.MilliSeconds());
             candidate.SetFinishTimeMs(now.MilliSeconds());
             candidate.SetRows(rows);
             candidate.SetRetries(retries);
             candidate.SetStatus(status);
-            candidate.SetFinished(finished || status != Ydb::StatusIds::SUCCESS);
+            candidate.SetFinished(terminal);
             if (nodeId) {
                 candidate.SetNodeId(nodeId);
             }
-            if (status == Ydb::StatusIds::SUCCESS && retries == 0) {
+            if (Reads_.size() < MaxShardReadDiagnostics) {
+                const size_t index = Reads_.size();
+                Reads_.push_back(std::move(candidate));
+                Indexes_.emplace(shardId, index);
                 return;
             }
             const size_t replacement = FindLessInterestingThan(candidate);
             if (replacement == Reads_.size()) {
+                Dropped_ += terminal;
                 return;
             }
             Indexes_.erase(Reads_[replacement].GetShardId());
             Reads_[replacement] = std::move(candidate);
             Indexes_.emplace(shardId, replacement);
+            ++Dropped_;
             return;
         }
         auto& shard = Reads_[it->second];
+        if (startTimeMs && (!shard.GetStartTimeMs() || startTimeMs < shard.GetStartTimeMs())) {
+            shard.SetStartTimeMs(startTimeMs);
+        }
         shard.SetFinishTimeMs(now.MilliSeconds());
         shard.SetRows(shard.GetRows() + rows);
         shard.SetRetries(Max(shard.GetRetries(), retries));
         // Status is the final outcome; retries preserve transient failures separately.
         shard.SetStatus(status);
-        shard.SetFinished(finished || status != Ydb::StatusIds::SUCCESS);
+        shard.SetFinished(terminal);
         if (nodeId) {
             shard.SetNodeId(nodeId);
         }
@@ -99,12 +101,9 @@ public:
 
     void OnError(Ydb::StatusIds::StatusCode status) {
         const ui64 nowMs = TInstant::Now().MilliSeconds();
-        for (auto& shard : Reads_) {
-            if (!shard.GetFinished()) {
-                shard.SetFinishTimeMs(nowMs);
-                shard.SetStatus(status);
-                shard.SetFinished(true);
-            }
+        std::vector<std::pair<ui64, ui64>> active(ActiveStarts_.begin(), ActiveStarts_.end());
+        for (const auto& [shardId, startTimeMs] : active) {
+            OnFinish(shardId, 0, 0, 0, status, true, TInstant::MilliSeconds(nowMs), startTimeMs);
         }
     }
 
@@ -129,20 +128,6 @@ private:
         return std::tuple(failed, shard.GetRetries() > 0, durationMs);
     }
 
-    size_t FindReplaceable() const {
-        size_t result = Reads_.size();
-        for (size_t i = 0; i < Reads_.size(); ++i) {
-            const auto& shard = Reads_[i];
-            if (!shard.GetFinished() || std::get<0>(Rank(shard)) || shard.GetRetries() > 0) {
-                continue;
-            }
-            if (result == Reads_.size() || Rank(shard) < Rank(Reads_[result])) {
-                result = i;
-            }
-        }
-        return result;
-    }
-
     size_t FindLessInterestingThan(const NKqpProto::TKqpShardReadStats& candidate) const {
         size_t result = Reads_.size();
         for (size_t i = 0; i < Reads_.size(); ++i) {
@@ -158,21 +143,62 @@ private:
 
     std::vector<NKqpProto::TKqpShardReadStats> Reads_;
     std::unordered_map<ui64, size_t> Indexes_;
+    std::unordered_map<ui64, ui64> ActiveStarts_;
     size_t Dropped_ = 0;
 };
 
-struct TShardCommitDiagnostic {
+struct TShardAckDiagnostic {
     ui64 ShardId = 0;
-    TInstant PreparedAt;
-    TInstant CommittedAt;
+    TInstant AcknowledgedAt;
+};
+
+class TShardAckDiagnosticsCollector {
+public:
+    void OnAck(ui64 shardId, TInstant acknowledgedAt = TInstant::Now()) {
+        for (auto& shard : Shards_) {
+            if (shard.ShardId == shardId) {
+                shard.AcknowledgedAt = Max(shard.AcknowledgedAt, acknowledgedAt);
+                return;
+            }
+        }
+
+        TShardAckDiagnostic candidate{shardId, acknowledgedAt};
+        if (Shards_.size() < MaxCommitShardDiagnostics) {
+            Shards_.push_back(candidate);
+            return;
+        }
+
+        ++Dropped_;
+        const auto fastest = std::min_element(Shards_.begin(), Shards_.end(),
+            [](const auto& lhs, const auto& rhs) {
+                return lhs.AcknowledgedAt < rhs.AcknowledgedAt;
+            });
+        if (fastest != Shards_.end() && fastest->AcknowledgedAt < acknowledgedAt) {
+            *fastest = candidate;
+        }
+    }
+
+    const std::vector<TShardAckDiagnostic>& Shards() const {
+        return Shards_;
+    }
+
+    size_t Dropped() const {
+        return Dropped_;
+    }
+
+private:
+    std::vector<TShardAckDiagnostic> Shards_;
+    size_t Dropped_ = 0;
 };
 
 struct TCommitDiagnostics {
     TTimeWindow PrepareShards;
     TTimeWindow Coordinator;
     TTimeWindow ApplyShards;
-    std::vector<TShardCommitDiagnostic> Shards;
-    size_t ShardsTruncated = 0;
+    std::vector<TShardAckDiagnostic> PreparedShards;
+    std::vector<TShardAckDiagnostic> CommittedShards;
+    size_t PreparedShardsTruncated = 0;
+    size_t CommittedShardsTruncated = 0;
 };
 
 } // namespace NKikimr::NKqp

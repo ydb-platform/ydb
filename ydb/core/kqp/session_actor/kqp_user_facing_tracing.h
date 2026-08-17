@@ -4,9 +4,16 @@
 
 #include <util/generic/string.h>
 
+namespace NActors {
+class IActor;
+}
+
 namespace NKikimr::NKqp {
 
 class TKqpQueryState;
+namespace NPrivateEvents {
+struct TEvQueryRequest;
+}
 
 constexpr size_t MaxUserFacingSpansPerQuery = 1000;
 
@@ -56,8 +63,13 @@ TString FallbackUserFacingQueryName(const TKqpQueryState& state);
 
 void InitializeUserFacingQueryText(TKqpQueryState& state);
 
-// Consumes the sampled trace context and renders the finished query.
-void FinishUserFacingSpan(TKqpQueryState& state, bool success, const TString& statusCode);
+// Consumes the sampled context and detaches an immutable snapshot for asynchronous rendering.
+NActors::IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
+    const TString& statusCode);
+
+// Finishes a sampled request rejected before a per-query state can be created.
+void FinishRejectedUserFacingSpan(const NPrivateEvents::TEvQueryRequest& request,
+    Ydb::StatusIds::StatusCode status);
 
 // Derives the root name from the physical query rather than raw SQL text.
 void UpdateUserFacingRootSpanName(TKqpQueryState& state);

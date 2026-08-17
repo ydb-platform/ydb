@@ -873,7 +873,7 @@ public:
     }
 
     void StartRead(TShardState* state) {
-        if (IngressStats.CollectFull()) {
+        if (Settings->GetCollectDiagnostics()) {
             ShardReadDiagnostics.OnStart(state->TabletId);
         }
         TMaybe<ui64> limit;
@@ -1041,7 +1041,7 @@ public:
             return;
         }
 
-        if (IngressStats.CollectFull()) {
+        if (Settings->GetCollectDiagnostics()) {
             ShardReadDiagnostics.OnFinish(Reads[id].Shard->TabletId, record.GetRowCount(),
                 Reads[id].Shard->RetryAttempt,
                 Reads[id].Shard->NodeId ? *Reads[id].Shard->NodeId : 0,
@@ -1595,7 +1595,8 @@ public:
             //tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
 
             // Add lock stats for broken locks from read operations
-            if (!BrokenLocks.empty() || TotalRetries > 0 || !ShardReadDiagnostics.Empty()) {
+            if (!BrokenLocks.empty() || (Settings->GetCollectDiagnostics()
+                    && (TotalRetries > 0 || !ShardReadDiagnostics.Empty()))) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
@@ -1604,7 +1605,9 @@ public:
                     extraStats.MutableLockStats()->SetBrokenAsVictim(
                         extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
                 }
-                ShardReadDiagnostics.Export(extraStats, TotalRetries);
+                if (Settings->GetCollectDiagnostics()) {
+                    ShardReadDiagnostics.Export(extraStats, TotalRetries);
+                }
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }
@@ -1634,7 +1637,7 @@ public:
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
-        if (IngressStats.CollectFull()) {
+        if (Settings->GetCollectDiagnostics()) {
             ShardReadDiagnostics.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
                 ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
         }

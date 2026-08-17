@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
+#include <ydb/core/kqp/common/kqp_execution_trace.h>
 #include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
@@ -167,8 +168,7 @@ public:
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
-        // Collection depth for a sampled trace; response stats still use StatsMode.
-        Ydb::Table::QueryStatsCollection::Mode UserFacingTraceCollectionMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
+        NKikimr::NKqp::TExecutionDiagnosticsPolicy DiagnosticsPolicy;
         TString UserTraceId;
         ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
 

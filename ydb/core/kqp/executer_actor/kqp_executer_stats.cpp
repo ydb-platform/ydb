@@ -28,7 +28,7 @@ TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& tas
     snapshot.TaskId = task.GetTaskId();
     snapshot.NodeId = task.GetNodeId();
     const ui64 startMs = task.GetStartTimeMs() ? task.GetStartTimeMs() : task.GetCreateTimeMs();
-    const ui64 finishMs = task.GetFinishTimeMs();
+    const ui64 finishMs = task.GetFinishTimeMs() ? task.GetFinishTimeMs() : task.GetUpdateTimeMs();
     if (startMs && finishMs >= startMs) {
         snapshot.Window = {
             TInstant::MilliSeconds(startMs),
@@ -1188,7 +1188,7 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
 void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats) {
     NKqpProto::TKqpTaskExtraStats extraStats;
     if (taskStats.GetExtra().UnpackTo(&extraStats)) {
-        if (CollectTraceDiagnostics) {
+        if (CollectBufferLookupDiagnostics) {
             for (const auto& shard : extraStats.GetShardReads()) {
                 if (BufferLookupDiagnostics.Shards.size() >= MaxShardReadDiagnostics) {
                     ++BufferLookupDiagnostics.ShardsTruncated;
@@ -1398,40 +1398,48 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     stageStats.ComputeActors.clear();
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
                 }
-                if (CollectTraceDiagnostics) {
-                    auto task = MakeTaskTraceSnapshot(taskStats);
-                    auto& stage = TraceStages[taskStats.GetStageId()];
-                    stage.StageId = taskStats.GetStageId();
-                    if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
-                        auto nodeIt = std::find_if(stage.TasksByNode.begin(), stage.TasksByNode.end(), [&](const auto& item) {
-                            return item.first == nodeId;
-                        });
-                        if (nodeIt == stage.TasksByNode.end()
-                                && stage.TasksByNode.size() < MaxStageNodeDiagnostics) {
-                            stage.TasksByNode.emplace_back(nodeId, 1);
-                        } else if (nodeIt != stage.TasksByNode.end()) {
-                            ++nodeIt->second;
-                        }
-                        const ui64 durationUs = task.DurationUs();
-                        auto& durations = stage.Durations;
-                        if (durations.Count == 0 || durationUs < durations.MinUs) {
-                            durations.MinUs = durationUs;
-                            stage.FastestTaskNode = nodeId;
-                        }
-                        if (durations.Count == 0 || durationUs >= durations.MaxUs) {
-                            durations.MaxUs = durationUs;
-                            stage.SlowestTaskNode = nodeId;
-                        }
-                        durations.SumUs += durationUs;
-                        ++durations.Count;
+            }
+            if (CollectTraceDiagnostics) {
+                auto task = MakeTaskTraceSnapshot(taskStats);
+                task.Failed = state == NYql::NDqProto::COMPUTE_STATE_FAILURE;
+                auto& stage = TraceStages[taskStats.GetStageId()];
+                stage.StageId = taskStats.GetStageId();
+                if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED || task.Failed) {
+                    auto nodeIt = std::find_if(stage.TasksByNode.begin(), stage.TasksByNode.end(), [&](const auto& item) {
+                        return item.first == nodeId;
+                    });
+                    if (nodeIt == stage.TasksByNode.end()
+                            && stage.TasksByNode.size() < MaxStageNodeDiagnostics) {
+                        stage.TasksByNode.emplace_back(nodeId, 1);
+                    } else if (nodeIt != stage.TasksByNode.end()) {
+                        ++nodeIt->second;
                     }
-                    if (task.Window) {
-                        stage.Window.Start = stage.Window.Start == TInstant::Zero()
-                            ? task.Window.Start : Min(stage.Window.Start, task.Window.Start);
-                        stage.Window.End = Max(stage.Window.End, task.Window.End);
+                    const ui64 durationUs = task.DurationUs();
+                    auto& durations = stage.Durations;
+                    if (durations.Count == 0 || durationUs < durations.MinUs) {
+                        durations.MinUs = durationUs;
+                        stage.FastestTaskNode = nodeId;
                     }
-                    KeepInterestingTask(stage, std::move(task));
+                    if (durations.Count == 0 || durationUs >= durations.MaxUs) {
+                        durations.MaxUs = durationUs;
+                        stage.SlowestTaskNode = nodeId;
+                    }
+                    durations.SumUs += durationUs;
+                    ++durations.Count;
+                    ++stage.Tasks;
+                    stage.FailedTasks += task.Failed;
+                    stage.CpuUs += task.ComputeCpuUs + task.BuildCpuUs;
+                    stage.InputRows += task.InputRows;
+                    stage.OutputRows += task.OutputRows;
+                    stage.WaitUs += task.WaitUs;
+                    stage.SpilledBytes += task.SpilledBytes;
                 }
+                if (task.Window) {
+                    stage.Window.Start = stage.Window.Start == TInstant::Zero()
+                        ? task.Window.Start : Min(stage.Window.Start, task.Window.Start);
+                    stage.Window.End = Max(stage.Window.End, task.Window.End);
+                }
+                KeepInterestingTask(stage, std::move(task));
             }
         }
     }

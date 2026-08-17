@@ -103,19 +103,20 @@ ui64 GetExpectedVersion(const TString&) {
 template<typename TRequest, typename TResponse, typename TResult>
 TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& actorId, TRequest* request,
     typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback,
-    std::shared_ptr<TUserFacingCompileDependencyCollector> collector = {},
-    EUserFacingCompileDependency dependency = EUserFacingCompileDependency::SchemeCache,
+    std::shared_ptr<ICompileDependencyDiagnostics> diagnostics = {},
+    ECompileDependency dependency = ECompileDependency::SchemeCache,
     TString target = {},
-    std::function<EUserFacingCompileStatus(const TResponse&)> extractStatus = {})
+    std::function<ECompileDependencyStatus(const TResponse&)> extractStatus = {})
 {
     auto promise = NewPromise<TResult>();
-    const TInstant start = TInstant::Now();
-    auto tracedCallback = [callback = std::move(callback), collector = std::move(collector), dependency,
-            target = std::move(target), extractStatus = std::move(extractStatus), start]
+    const ui64 diagnosticId = diagnostics
+        ? diagnostics->Begin(dependency, std::move(target), TInstant::Now()) : 0;
+    auto tracedCallback = [callback = std::move(callback), diagnostics = std::move(diagnostics),
+            extractStatus = std::move(extractStatus), diagnosticId]
             (TPromise<TResult> promise, TResponse&& response) mutable {
-        if (collector) {
-            collector->Record(dependency, std::move(target), start, TInstant::Now(),
-                extractStatus ? extractStatus(response) : EUserFacingCompileStatus::Unknown);
+        if (diagnostics) {
+            diagnostics->Finish(diagnosticId, TInstant::Now(),
+                extractStatus ? extractStatus(response) : ECompileDependencyStatus::Unknown);
         }
         callback(std::move(promise), std::move(response));
     };
@@ -1454,17 +1455,17 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 promise.SetValue(ResultFromException<TResult>(e));
             }
         },
-        UserFacingCompileCollector, EUserFacingCompileDependency::SchemeCache, table,
+        CompileDiagnostics, ECompileDependency::SchemeCache, table,
         [](const TResponse& response) {
             if (!response.Request || response.Request->ResultSet.empty()) {
-                return EUserFacingCompileStatus::Error;
+                return ECompileDependencyStatus::Error;
             }
             for (const auto& entry : response.Request->ResultSet) {
                 if (entry.Status != EStatus::Ok) {
-                    return EUserFacingCompileStatus::Error;
+                    return ECompileDependencyStatus::Error;
                 }
             }
-            return EUserFacingCompileStatus::Ok;
+            return ECompileDependencyStatus::Ok;
         }
     );
 
@@ -1477,7 +1478,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     TActorSystem* actorSystem = ActorSystem;
 
-    return future.Apply([actorSystem, database, table, collector = UserFacingCompileCollector](const TFuture<TTableMetadataResult>& f) {
+    return future.Apply([actorSystem, database, table, diagnostics = CompileDiagnostics](const TFuture<TTableMetadataResult>& f) {
         auto result = f.GetValue();
         if (!result.Success()) {
             return MakeFuture(result);
@@ -1516,10 +1517,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 result.Metadata->DataSize = s.BytesSize;
                 result.Metadata->StatsLoaded = response.Success;
                 promise.SetValue(result);
-        }, collector, EUserFacingCompileDependency::StatisticsService, table,
+        }, diagnostics, ECompileDependency::StatisticsService, table,
         [](const NStat::TEvStatistics::TEvGetStatisticsResult& response) {
             return response.Success && !response.StatResponses.empty()
-                ? EUserFacingCompileStatus::Ok : EUserFacingCompileStatus::Error;
+                ? ECompileDependencyStatus::Ok : ECompileDependencyStatus::Error;
         });
     });
 }

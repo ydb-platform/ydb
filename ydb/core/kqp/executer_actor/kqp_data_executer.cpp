@@ -228,8 +228,10 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            event->CollectDiagnostics = ExecutionTrace
-                && Request.UserFacingTraceCollectionMode >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL;
+            event->CollectTimeline = ExecutionTrace
+                && Request.DiagnosticsPolicy.CollectCommitTimeline;
+            event->CollectShards = ExecutionTrace
+                && Request.DiagnosticsPolicy.CollectShardSamples;
             Send<ESendingType::Tail>(
                 BufferActorId,
                 event.release(),
@@ -487,6 +489,9 @@ private:
         auto& msg = *ev->Get();
         if (msg.Stats && Stats) {
             Stats->AddBufferStats(std::move(*msg.Stats));
+        }
+        if (ExecutionTrace) {
+            ExecutionTrace->Commit = std::move(msg.CommitDiagnostics);
         }
         TBase::HandleAbortExecution(msg.StatusCode, msg.Issues, false);
     }

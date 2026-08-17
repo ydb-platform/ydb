@@ -457,6 +457,7 @@ public:
     bool CollectStatsByLongTasks = false;
 
     bool CollectTraceDiagnostics = false;
+    bool CollectBufferLookupDiagnostics = false;
     std::unordered_map<ui32, TStageTraceSnapshot> TraceStages;
     TBufferLookupDiagnostics BufferLookupDiagnostics;
 

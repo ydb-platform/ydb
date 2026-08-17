@@ -14,7 +14,7 @@
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
-#include <ydb/core/kqp/common/compilation/user_facing_trace.h>
+#include <ydb/core/kqp/common/compilation/compile_diagnostics.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -207,13 +207,13 @@ public:
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
     NWilson::TTraceId UserFacingTraceId;
+    bool UserFacingExecutionDelegated = false;
     TString UserFacingRootName;
     TString ObfuscatedQueryText;
-    TInstant CompileWallStart;
-    TInstant CompileWallEnd;
-    Ydb::StatusIds::StatusCode CompileStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
-    std::shared_ptr<const TUserFacingCompileTrace> UserFacingCompileSpans;
-    std::optional<TUserFacingCompileActorSpan> UserFacingCompileActorSpan;
+    std::vector<TCompileAttemptDiagnostic> CompileAttempts;
+    std::optional<size_t> ActiveCompileAttempt;
+    std::optional<TCompileAttemptDiagnostic> OverflowCompileAttempt;
+    size_t CompileAttemptsDropped = 0;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx

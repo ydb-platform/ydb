@@ -83,6 +83,7 @@ public:
         , UseFollowers(settings.GetAllowUseFollowers())
         , IsTableImmutable(settings.GetIsTableImmutable())
         , HasVectorTopK(settings.HasVectorTopK())
+        , CollectDiagnostics(settings.GetCollectDiagnostics())
         , PipeCacheId(UseFollowers ? FollowersPipeCacheId : MainPipeCacheId)
         , LockTxId(settings.HasLockTxId() ? settings.GetLockTxId() : TMaybe<ui64>())
         , NodeLockId(settings.HasLockNodeId() ? settings.GetLockNodeId() : TMaybe<ui32>())
@@ -189,7 +190,8 @@ public:
             tableStats->MutableExtra()->PackFrom(tableExtraStats);
 
             // Add lock stats for broken locks from stream lookup operations
-            if (!BrokenLocks.empty() || TotalRetryAttempts > 0 || !ShardReadDiagnostics.Empty()) {
+            if (!BrokenLocks.empty() || (CollectDiagnostics
+                    && (TotalRetryAttempts > 0 || !ShardReadDiagnostics.Empty()))) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
@@ -198,7 +200,9 @@ public:
                     extraStats.MutableLockStats()->SetBrokenAsVictim(
                         extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
                 }
-                ShardReadDiagnostics.Export(extraStats, TotalRetryAttempts);
+                if (CollectDiagnostics) {
+                    ShardReadDiagnostics.Export(extraStats, TotalRetryAttempts);
+                }
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }
@@ -670,7 +674,7 @@ private:
         auto& read = readIt->second;
         ui64 shardId = read.ShardId;
 
-        if (IngressStats.CollectFull()) {
+        if (CollectDiagnostics) {
             ui32 retryAttempts = 0;
             if (auto it = Reads.ShardsState.find(shardId); it != Reads.ShardsState.end()) {
                 retryAttempts = it->second.RetryAttempts;
@@ -1204,7 +1208,7 @@ private:
     }
 
     void StartTableRead(ui64 shardId, THolder<TEvDataShard::TEvRead> request) {
-        if (IngressStats.CollectFull()) {
+        if (CollectDiagnostics) {
             ShardReadDiagnostics.OnStart(shardId);
         }
         Counters->CreatedIterators->Inc();
@@ -1432,7 +1436,7 @@ private:
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
-        if (IngressStats.CollectFull()) {
+        if (CollectDiagnostics) {
             ShardReadDiagnostics.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
                 ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
         }
@@ -1464,6 +1468,7 @@ private:
     const bool UseFollowers;
     const bool IsTableImmutable;
     const bool HasVectorTopK;
+    const bool CollectDiagnostics;
     const TActorId PipeCacheId;
     const TMaybe<ui64> LockTxId;
     const TMaybe<ui32> NodeLockId;

@@ -21,6 +21,9 @@
 
 #include <util/string/escape.h>
 
+#include <array>
+#include <optional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_COMPILE_SERVICE
 
 LWTRACE_USING(KQP_PROVIDER);
@@ -60,7 +63,9 @@ struct TKqpCompileRequest {
         TMaybe<TQueryAst> queryAst = {},
         std::shared_ptr<NYql::TExprContext> splitCtx = nullptr,
         NYql::TExprNode::TPtr splitExpr = nullptr,
-        bool usePessimisticLocks = false)
+        bool usePessimisticLocks = false,
+        bool collectFullDiagnostics = false,
+        bool collectTraceDiagnostics = false)
         : Sender(sender)
         , Query(std::move(query))
         , Uid(uid)
@@ -80,6 +85,8 @@ struct TKqpCompileRequest {
         , SplitCtx(std::move(splitCtx))
         , SplitExpr(std::move(splitExpr))
         , UsePessimisticLocks(usePessimisticLocks)
+        , CollectFullDiagnostics(collectFullDiagnostics)
+        , CollectTraceDiagnostics(collectTraceDiagnostics)
     {}
 
     TActorId Sender;
@@ -105,6 +112,8 @@ struct TKqpCompileRequest {
     NYql::TExprNode::TPtr SplitExpr;
 
     bool UsePessimisticLocks;
+    bool CollectFullDiagnostics = false;
+    bool CollectTraceDiagnostics = false;
 
     bool FindInCache = true;
 
@@ -163,7 +172,7 @@ public:
                 continue;
             }
 
-            if (!ActiveRequests.contains(request.Query)) {
+            if (!HasActiveRequest(request.Query, request.CollectTraceDiagnostics)) {
                 auto result = std::move(request);
 
                 Counters->ReportCompileQueueWaitTime(now - result.CompileQueueEnqueuedAt);
@@ -182,23 +191,34 @@ public:
         return {};
     }
 
-    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query) {
+    TVector<TKqpCompileRequest> ExtractByQuery(const TKqpQueryId& query,
+            bool collectTraceDiagnostics) {
         auto queryIt = QueryIndex.find(query);
         if (queryIt == QueryIndex.end()) {
             return {};
         }
 
+        TVector<TRequestsIterator> matches;
+        for (const auto& requestIt : queryIt->second) {
+            if (requestIt->CollectTraceDiagnostics == collectTraceDiagnostics) {
+                matches.push_back(requestIt);
+            }
+        }
+
         TVector<TKqpCompileRequest> result;
-        for (auto& requestIt : queryIt->second) {
+        for (const auto& requestIt : matches) {
             Y_ENSURE(requestIt != Queue.end());
             auto request = std::move(*requestIt);
 
+            queryIt->second.erase(requestIt);
             Queue.erase(requestIt);
 
             result.push_back(std::move(request));
         }
 
-        QueryIndex.erase(queryIt);
+        if (queryIt->second.empty()) {
+            QueryIndex.erase(queryIt);
+        }
         return result;
     }
 
@@ -206,31 +226,48 @@ public:
         return Queue.size();
     }
 
-    TKqpCompileRequest FinishActiveRequest(const TKqpQueryId& query) {
+    TKqpCompileRequest FinishActiveRequest(const TKqpQueryId& query,
+            const TActorId& compileActor) {
         auto it = ActiveRequests.find(query);
         Y_ENSURE(it != ActiveRequests.end());
 
-        auto request = std::move(it->second);
-        ActiveRequests.erase(it);
+        auto* slot = it->second[0] && it->second[0]->CompileActor == compileActor
+            ? &it->second[0] : &it->second[1];
+        Y_ENSURE(*slot && (*slot)->CompileActor == compileActor);
+        auto request = std::move(**slot);
+        slot->reset();
+        --ActiveRequestsSize;
+        if (!it->second[0] && !it->second[1]) {
+            ActiveRequests.erase(it);
+        }
 
         return request;
     }
 
     size_t ActiveRequestsCount() const {
-        return ActiveRequests.size();
+        return ActiveRequestsSize;
     }
 
     void AddActiveRequest(TKqpCompileRequest&& request) {
-        auto result = ActiveRequests.emplace(request.Query, std::move(request));
-        Y_ENSURE(result.second);
+        auto& slot = ActiveRequests[request.Query][request.CollectTraceDiagnostics ? 1 : 0];
+        Y_ENSURE(!slot);
+        slot.emplace(std::move(request));
+        ++ActiveRequestsSize;
     }
 
 private:
+    bool HasActiveRequest(const TKqpQueryId& query, bool collectTraceDiagnostics) const {
+        const auto it = ActiveRequests.find(query);
+        return it != ActiveRequests.end()
+            && bool(it->second[collectTraceDiagnostics ? 1 : 0]);
+    }
+
     TIntrusivePtr<TKqpCounters> Counters;
     size_t MaxSize = 0;
     TRequestsList Queue;
     THashMap<TKqpQueryId, TRequestsIteratorSet> QueryIndex;
-    THashMap<TKqpQueryId, TKqpCompileRequest> ActiveRequests;
+    THashMap<TKqpQueryId, std::array<std::optional<TKqpCompileRequest>, 2>> ActiveRequests;
+    size_t ActiveRequestsSize = 0;
 };
 
 class TKqpCompileService : public TActorBootstrapped<TKqpCompileService> {
@@ -501,8 +538,6 @@ private:
 
         Counters->ReportCompileRequestCompile(dbCounters);
 
-        CollectDiagnostics = request.CollectDiagnostics;
-
         LWTRACK(KqpCompileServiceEnqueued,
             ev->Get()->Orbit,
             ev->Get()->Query ? ev->Get()->Query->UserSid : "");
@@ -521,7 +556,9 @@ private:
         TKqpCompileRequest compileRequest(ev->Sender, CreateGuidAsString(), std::move(*request.Query),
             compileSettings, request.UserToken, request.ClientAddress, dbCounters, request.GUCSettings, request.ApplicationName, ev->Cookie, std::move(ev->Get()->IntrestedInResult),
             ev->Get()->UserRequestContext, std::move(ev->Get()->Orbit), std::move(compileServiceSpan),
-            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
+            std::move(ev->Get()->TempTablesState), Nothing(), request.SplitCtx,
+            std::move(request.SplitExpr), request.UsePessimisticLocks,
+            request.CollectDiagnostics, request.CollectTraceDiagnostics);
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
             return CompileByAst(*request.QueryAst, std::move(compileRequest), ctx);
@@ -602,7 +639,9 @@ private:
                 ev->Cookie, std::move(ev->Get()->IntrestedInResult),
                 ev->Get()->UserRequestContext,
                 ev->Get() ? std::move(ev->Get()->Orbit) : NLWTrace::TOrbit(),
-                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(), nullptr, nullptr, request.UsePessimisticLocks);
+                std::move(compileServiceSpan), std::move(ev->Get()->TempTablesState), Nothing(),
+                nullptr, nullptr, request.UsePessimisticLocks, false,
+                request.CollectTraceDiagnostics);
                 compileRequest.FindInCache = false;
 
         if (TableServiceConfig.GetEnableAstCache() && request.QueryAst) {
@@ -648,12 +687,12 @@ private:
         auto compileActorId = ev->Sender;
         auto& compileResult = ev->Get()->CompileResult;
         auto& compileStats = ev->Get()->Stats;
-        const auto userFacingCompileSpans = ev->Get()->UserFacingCompileSpans;
-        const auto userFacingCompileActorSpan = ev->Get()->UserFacingCompileActorSpan;
+        const auto compileDiagnostics = ev->Get()->CompileDiagnostics;
+        const auto compileActorDiagnostic = ev->Get()->CompileActorDiagnostic;
 
         Y_ABORT_UNLESS(compileResult->Query);
 
-        auto compileRequest = RequestsQueue.FinishActiveRequest(*compileResult->Query);
+        auto compileRequest = RequestsQueue.FinishActiveRequest(*compileResult->Query, compileActorId);
         Y_ABORT_UNLESS(compileRequest.CompileActor == compileActorId);
         Y_ABORT_UNLESS(compileRequest.Uid == compileResult->Uid);
 
@@ -665,7 +704,7 @@ private:
         if (compileResult->NeedToSplit) {
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
                 compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan),
-                userFacingCompileSpans, userFacingCompileActorSpan);
+                compileDiagnostics, compileActorDiagnostic);
             ProcessQueue(ctx);
             return;
         }
@@ -686,12 +725,13 @@ private:
                     QueryCache->AttachReplayMessage(compileRequest.Uid, *ev->Get()->ReplayMessage);
                 }
 
-                auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query);
+                auto requests = RequestsQueue.ExtractByQuery(*compileResult->Query,
+                    compileRequest.CollectTraceDiagnostics);
                 for (auto& request : requests) {
                     LWTRACK(KqpCompileServiceGetCompilation, request.Orbit, request.Query.UserSid, compileActorId.ToString());
                     Reply(request.Sender, compileResult, compileStats, ctx,
                         request.Cookie, std::move(request.Orbit), std::move(request.CompileServiceSpan),
-                        userFacingCompileSpans, userFacingCompileActorSpan);
+                        compileDiagnostics, compileActorDiagnostic);
                 }
             } else {
                 if (!hasTempTablesNameClashes) {
@@ -704,7 +744,7 @@ private:
             LWTRACK(KqpCompileServiceGetCompilation, compileRequest.Orbit, compileRequest.Query.UserSid, compileActorId.ToString());
             Reply(compileRequest.Sender, compileResult, compileStats, ctx,
                 compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan),
-                userFacingCompileSpans, userFacingCompileActorSpan);
+                compileDiagnostics, compileActorDiagnostic);
         }
         catch (const std::exception& e) {
             LogException("TEvCompileResponse", ev->Sender, e, ctx);
@@ -845,7 +885,7 @@ private:
         auto& astStatements = ev->Get()->AstStatements;
         YQL_ENSURE(astStatements.size());
         auto& query = ev->Get()->Query;
-        auto compileRequest = RequestsQueue.FinishActiveRequest(query);
+        auto compileRequest = RequestsQueue.FinishActiveRequest(query, ev->Sender);
         if (astStatements.size() > 1) {
             ReplyQueryStatements(compileRequest.Sender, astStatements, query, ctx, compileRequest.Cookie, std::move(compileRequest.Orbit), std::move(compileRequest.CompileServiceSpan));
             return;
@@ -857,7 +897,7 @@ private:
 
     void Handle(TEvKqp::TEvSplitResponse::TPtr& ev, const TActorContext& ctx) {
         auto& query = ev->Get()->Query;
-        auto compileRequest = RequestsQueue.FinishActiveRequest(query);
+        auto compileRequest = RequestsQueue.FinishActiveRequest(query, ev->Sender);
         ctx.Send(compileRequest.Sender, ev->Release(), 0, compileRequest.Cookie);
     }
 
@@ -925,8 +965,10 @@ private:
     void StartCompilation(TKqpCompileRequest&& request, const TActorContext& ctx) {
         auto compileActor = CreateKqpCompileActor(ctx.SelfID, KqpSettings, TableServiceConfig, QueryServiceConfig, ModuleResolverState, Counters,
             request.Uid, request.Query, request.UserToken, request.ClientAddress, FederatedQuerySetup, request.DbCounters, request.GUCSettings, request.ApplicationName, request.UserRequestContext,
-            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action, std::move(request.QueryAst), CollectDiagnostics,
-            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr), request.UsePessimisticLocks);
+            request.CompileServiceSpan.GetTraceId(), request.TempTablesState, request.CompileSettings.Action,
+            std::move(request.QueryAst), request.CollectFullDiagnostics,
+            request.CompileSettings.PerStatementResult, request.SplitCtx, std::move(request.SplitExpr),
+            request.UsePessimisticLocks, request.CollectTraceDiagnostics);
         auto compileActorId = ctx.Register(compileActor, TMailboxType::HTSwap,
             AppData(ctx)->UserPoolId);
 
@@ -945,8 +987,8 @@ private:
     void Reply(const TActorId& sender, const TKqpCompileResult::TConstPtr& compileResult,
         const TKqpStatsCompile& compileStats, const TActorContext& ctx, ui64 cookie,
         NLWTrace::TOrbit orbit, NWilson::TSpan span,
-        std::shared_ptr<const TUserFacingCompileTrace> userFacingCompileSpans = {},
-        std::optional<TUserFacingCompileActorSpan> userFacingCompileActorSpan = {})
+        std::shared_ptr<const TCompileDiagnostics> compileDiagnostics = {},
+        std::optional<TCompileActorDiagnostic> compileActorDiagnostic = {})
     {
         const auto& query = compileResult->Query;
         LWTRACK(KqpCompileServiceReply,
@@ -961,8 +1003,8 @@ private:
 
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(compileResult, std::move(orbit));
         responseEv->Stats = compileStats;
-        responseEv->UserFacingCompileSpans = std::move(userFacingCompileSpans);
-        responseEv->UserFacingCompileActorSpan = userFacingCompileActorSpan;
+        responseEv->CompileDiagnostics = std::move(compileDiagnostics);
+        responseEv->CompileActorDiagnostic = compileActorDiagnostic;
 
         if (span) {
             span.End();
@@ -1051,7 +1093,6 @@ private:
     std::shared_ptr<IQueryReplayBackendFactory> QueryReplayFactory;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
-    bool CollectDiagnostics = false;
 };
 
 

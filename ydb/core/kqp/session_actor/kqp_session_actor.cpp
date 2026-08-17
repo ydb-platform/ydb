@@ -363,6 +363,7 @@ public:
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
+        QueryState->UserFacingExecutionDelegated = true;
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
                 FederatedQuerySetup, ModuleResolverState, Counters, Settings.QueryService, GUCSettings));
@@ -914,17 +915,37 @@ public:
         SendCompileServiceRequest(ev.release());
     }
 
-    // Ignore later script compilations so the window cannot stretch across executions.
-    // Wilson timestamps use wall clock rather than the simulated runtime clock.
     void MarkCompileStart() {
-        if (QueryState && !QueryState->CompileWallStart) {
-            QueryState->CompileWallStart = TInstant::Now();
+        if (!QueryState || !QueryState->UserFacingTraceId || QueryState->ActiveCompileAttempt
+                || QueryState->OverflowCompileAttempt) {
+            return;
         }
+        if (QueryState->CompileAttempts.size() >= MaxCompileAttempts) {
+            QueryState->OverflowCompileAttempt = TCompileAttemptDiagnostic{.Start = TInstant::Now()};
+            return;
+        }
+        QueryState->CompileAttempts.push_back({.Start = TInstant::Now()});
+        QueryState->ActiveCompileAttempt = QueryState->CompileAttempts.size() - 1;
     }
 
-    void MarkCompileEnd() {
-        if (QueryState && QueryState->CompileWallStart && QueryState->QueryStats.Executions.empty()) {
-            QueryState->CompileWallEnd = TInstant::Now();
+    void MarkCompileEnd(TEvKqp::TEvCompileResponse& response) {
+        if (!QueryState || (!QueryState->ActiveCompileAttempt && !QueryState->OverflowCompileAttempt)) {
+            return;
+        }
+        auto& attempt = QueryState->ActiveCompileAttempt
+            ? QueryState->CompileAttempts[*QueryState->ActiveCompileAttempt]
+            : *QueryState->OverflowCompileAttempt;
+        attempt.End = TInstant::Now();
+        attempt.FromCache = response.Stats.FromCache;
+        attempt.Status = response.CompileResult->Status;
+        attempt.Dependencies = std::move(response.CompileDiagnostics);
+        attempt.Actor = response.CompileActorDiagnostic;
+        if (QueryState->OverflowCompileAttempt) {
+            KeepCompileAttempt(QueryState->CompileAttempts,
+                std::move(*QueryState->OverflowCompileAttempt), QueryState->CompileAttemptsDropped);
+            QueryState->OverflowCompileAttempt.reset();
+        } else {
+            QueryState->ActiveCompileAttempt.reset();
         }
     }
 
@@ -987,7 +1008,7 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
-        MarkCompileEnd();
+        MarkCompileEnd(*ev->Get());
 
         // saving compile response and checking that compilation status
         // is success.
@@ -1714,12 +1735,14 @@ public:
 
             request.StatsMode = queryState->GetStatsMode();
             if (queryState->UserFacingTraceId) {
-                // PROFILE adds no data used by the renderer, so sampled traces stop at FULL.
                 const ui8 level = queryState->UserFacingTraceId.GetVerbosity();
                 using TLevels = TComponentTracingLevels::TQueryProcessor;
-                request.UserFacingTraceCollectionMode =
-                      level >= TLevels::Detailed ? Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL
-                     :                              Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC;
+                request.DiagnosticsPolicy.CollectTimeline = true;
+                request.DiagnosticsPolicy.CollectStageAggregates = level >= TLevels::Detailed;
+                request.DiagnosticsPolicy.CollectTaskSamples = level >= TLevels::Detailed;
+                request.DiagnosticsPolicy.CollectShardSamples = level >= TLevels::Diagnostic;
+                request.DiagnosticsPolicy.CollectBufferLookup = level >= TLevels::Detailed;
+                request.DiagnosticsPolicy.CollectCommitTimeline = level >= TLevels::Detailed;
             }
             request.CollectAffectedRows = queryState->GetCollectAffectedRows();
             request.ProgressStatsPeriod = queryState->GetProgressStatsPeriod();
@@ -2800,9 +2823,9 @@ public:
         if (executerResults.HasStats()) {
             QueryState->QueryStats.Executions.emplace_back();
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
-            QueryState->QueryStats.ExecutionTraces.insert(QueryState->QueryStats.ExecutionTraces.end(),
-                std::make_move_iterator(ev->ExecutionTraces.begin()),
-                std::make_move_iterator(ev->ExecutionTraces.end()));
+            AppendExecutionTraceSnapshots(QueryState->QueryStats.ExecutionTraces,
+                QueryState->QueryStats.ExecutionTracesDropped, ev->ExecutionTraces,
+                ev->ExecutionTracesDropped);
         }
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
@@ -3422,6 +3445,8 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
+        FinishRejectedUserFacingSpan(*request->Get(), ydbStatus);
+
         Send(request->Sender, response.release(), 0, proxyRequestId);
     }
 
@@ -3498,7 +3523,6 @@ public:
                 if (QueryState->KqpSessionSpan) {
                     QueryState->KqpSessionSpan.EndOk();
                 }
-                FinishUserFacingSpan(*QueryState, /*success*/ true, Ydb::StatusIds::StatusCode_Name(status));
                 LWTRACK(KqpSessionReplySuccess, QueryState->Orbit, record.GetArena() ? record.GetArena()->SpaceUsed() : 0);
             }
         } else {
@@ -3506,7 +3530,6 @@ public:
                 if (QueryState->KqpSessionSpan) {
                     QueryState->KqpSessionSpan.EndError(response.DebugString());
                 }
-                FinishUserFacingSpan(*QueryState, /*success*/ false, Ydb::StatusIds::StatusCode_Name(status));
                 LWTRACK(KqpSessionReplyError, QueryState->Orbit, TStringBuilder() << status);
             }
         }
@@ -3527,7 +3550,13 @@ public:
 
         KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record, responseByteSize));
 
+        IActor* userFacingRenderer = CreateUserFacingTraceRenderer(*QueryState,
+            status == Ydb::StatusIds::SUCCESS, Ydb::StatusIds::StatusCode_Name(status));
+
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
+        if (userFacingRenderer) {
+            Register(userFacingRenderer);
+        }
         YDB_LOG_DEBUG("Sent query response back to proxy",
             {"marker", "KQPSA"},
             {"logPrefix", LogPrefix()},
@@ -3828,8 +3857,17 @@ public:
             {"isFinal", isFinal},
             {"traceId", TraceId()});
 
-        if (QueryResponse)
+        if (QueryResponse) {
             Reply();
+        } else if (QueryState && QueryState->UserFacingTraceId) {
+            if (QueryState->KqpSessionSpan) {
+                QueryState->KqpSessionSpan.EndError("Request ended without a response");
+            }
+            if (IActor* renderer = CreateUserFacingTraceRenderer(*QueryState, /*success*/ false,
+                    Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::CANCELLED))) {
+                Register(renderer);
+            }
+        }
 
         if (CleanupCtx)
             Counters->ReportSessionActorCleanupLatency(Settings.DbCounters, TInstant::Now() - CleanupCtx->Start);

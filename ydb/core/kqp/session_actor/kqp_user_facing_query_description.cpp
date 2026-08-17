@@ -17,6 +17,19 @@ namespace NKikimr::NKqp {
 
 namespace {
 
+const char* GetTableSinkModeVerb(NKikimrKqp::TKqpTableSinkSettings::EType mode) {
+    switch (mode) {
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_FILL:             return "FILL";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_REPLACE:          return "REPLACE";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT:           return "UPSERT";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPSERT_INCREMENT: return "UPSERT INCREMENT";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_INSERT:           return "INSERT";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE:           return "DELETE";
+        case NKikimrKqp::TKqpTableSinkSettings::MODE_UPDATE:           return "UPDATE";
+        default:                                                       return nullptr;
+    }
+}
+
 TString DescribePhysicalQuery(const NKqpProto::TKqpPhyQuery& query) {
     TString writeVerb;
     TString writeTable;
@@ -147,6 +160,16 @@ TString SanitizeUserFacingQueryText(const TString& text) {
 }
 
 TString FallbackUserFacingQueryName(const TKqpQueryState& state) {
+    switch (state.GetType()) {
+        case NKikimrKqp::QUERY_TYPE_SQL_DDL:
+            return "DDL";
+        case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT:
+        case NKikimrKqp::QUERY_TYPE_SQL_SCRIPT_STREAMING:
+        case NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT:
+            return "EXECUTE SCRIPT";
+        default:
+            break;
+    }
     TString name = NKikimrKqp::EQueryAction_Name(state.GetAction());
     constexpr TStringBuf prefix = "QUERY_ACTION_";
     if (name.StartsWith(prefix)) {

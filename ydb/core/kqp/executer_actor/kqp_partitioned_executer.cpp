@@ -40,6 +40,7 @@ void FillRequestFrom(IKqpGateway::TExecPhysicalRequest& request, const IKqpGatew
     request.MkqlMemoryLimit = from.MkqlMemoryLimit;
     request.PerShardKeysSizeLimitBytes = from.PerShardKeysSizeLimitBytes;
     request.StatsMode = from.StatsMode;
+    request.DiagnosticsPolicy = from.DiagnosticsPolicy;
     request.ProgressStatsPeriod = from.ProgressStatsPeriod;
     request.Snapshot = from.Snapshot;
     request.ResourceManager_ = from.ResourceManager_;
@@ -254,9 +255,9 @@ public:
 
         AbortBuffer(partInfo->BufferId);
         ForgetExecuterAndBuffer(partInfo);
-        ResponseEv->ExecutionTraces.insert(ResponseEv->ExecutionTraces.end(),
-            std::make_move_iterator(ev->Get()->ExecutionTraces.begin()),
-            std::make_move_iterator(ev->Get()->ExecutionTraces.end()));
+        AppendExecutionTraceSnapshots(ResponseEv->ExecutionTraces,
+            ResponseEv->ExecutionTracesDropped, ev->Get()->ExecutionTraces,
+            ev->Get()->ExecutionTracesDropped, Request.DiagnosticsPolicy.MaxExecutions);
 
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
@@ -661,8 +662,7 @@ private:
             .TxProxyMon = RequestCounters->TxProxyMon,
             .Alloc = std::move(alloc),
             .UserCtx = UserCtx,
-            .CollectDiagnostics = Request.UserFacingTraceCollectionMode
-                >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL,
+            .CollectDiagnostics = Request.DiagnosticsPolicy.CollectBufferLookup,
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));

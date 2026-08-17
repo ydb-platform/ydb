@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ddisk_state.h"
+#include "hints.h"
 #include "inflight_info.h"
 #include "range_locker.h"
 
@@ -20,140 +21,6 @@
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TVChunkConfig;
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TReadRangeHint
-{
-    TReadRangeHint(
-        THostMask hostMask,
-        ui64 lsn,
-        TBlockRange64 requestRelativeRange,
-        TBlockRange64 vchunkRange,
-        TRangeLock&& lock);
-
-    TReadRangeHint(TReadRangeHint&& other) noexcept;
-    TReadRangeHint& operator=(TReadRangeHint&& other) noexcept;
-
-    THostMask HostMask;
-    // 0 -> read from DDisk (HostMask is the DDisk hosts to choose from).
-    // >0 -> read from a PBuffer that holds the inflight write at this lsn
-    // (HostMask is the PBuffer hosts that confirmed the write).
-    ui64 Lsn = 0;
-
-    // Range relative to the request.
-    TBlockRange64 RequestRelativeRange;
-
-    // Range relative to the VChunk.
-    TBlockRange64 VChunkRange;
-
-    // Should call Lock.Arm() before reading.
-    TRangeLock Lock;
-
-    [[nodiscard]] TString DebugPrint() const;
-};
-
-struct TReadHint
-{
-    // If the RangeHints is empty, then you need to wait for the WaitReady
-    // feature to be IsReady and repeat the request.
-    TVector<TReadRangeHint> RangeHints;
-    NThreading::TFuture<void> WaitReady;
-
-    [[nodiscard]] TString DebugPrint() const;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TPBufferSegment
-{
-    ui64 Lsn = 0;
-    TBlockRange64 Range;
-
-    static TVector<ui64> MakeLsnVector(
-        std::span<const TPBufferSegment> segments);
-
-    [[nodiscard]] TString DebugPrint(bool brief) const;
-};
-
-struct TFlushHint
-{
-    TVector<TPBufferSegment> Segments;
-
-    [[nodiscard]] TString DebugPrint(bool brief) const;
-};
-
-class TFlushHints
-{
-public:
-    using THints = TMap<THostRoute, TFlushHint>;
-
-    void AddHint(
-        THostIndex source,
-        THostIndex destination,
-        ui64 lsn,
-        TBlockRange64 range);
-
-    [[nodiscard]] bool Empty() const;
-
-    [[nodiscard]] const THints& GetAllHints() const;
-    [[nodiscard]] THints TakeAllHints();
-
-    [[nodiscard]] TString DebugPrint() const;
-
-private:
-    THints Hints;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-struct TEraseSegment
-{
-    ui32 Generation = 0;
-    ui64 Lsn = 0;
-
-    [[nodiscard]] TString DebugPrint(bool brief) const;
-};
-
-using TEraseSegments = TVector<TEraseSegment>;
-
-struct TEraseHint
-{
-    TEraseSegments Segments;
-
-    [[nodiscard]] TString DebugPrint(bool brief) const;
-};
-
-class TEraseHints
-{
-public:
-    using THints = TMap<THostIndex, TEraseHint>;
-
-    void AddHint(THostIndex host, ui64 lsn);
-
-    [[nodiscard]] bool Empty() const;
-
-    [[nodiscard]] const THints& GetAllHints() const;
-    [[nodiscard]] THints TakeAllHints();
-
-    [[nodiscard]] TString DebugPrint() const;
-
-private:
-    THints Hints;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-struct TSyncHint
-{
-    ui64 SyncId = 0;
-    THostIndex Host = InvalidHostIndex;
-    TBlockRange64 Range;
-
-    // ReadyToStart will be triggered at the moment when all
-    // overlapping flush operations with this range are completed.
-    // After that, the range synchronization can begin.
-    NThreading::TFuture<void> ReadyToStart;
-};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -373,11 +240,6 @@ private:
     // PBuffers space usage counters.
     TVector<TPBufferCounters> PBufferCounters;
 };
-
-////////////////////////////////////////////////////////////////////////////////
-
-TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments);
-TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments);
 
 ////////////////////////////////////////////////////////////////////////////////
 

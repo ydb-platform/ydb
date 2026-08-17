@@ -224,14 +224,16 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
-            this->BeginExecutionPhase(EExecutionPhase::Commit);
+            if (Y_UNLIKELY(ExecutionDiagnostics)) {
+                ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::Commit);
+            }
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            event->CollectTimeline = ExecutionTrace
-                && Request.DiagnosticsPolicy.CollectCommitTimeline;
-            event->CollectShards = ExecutionTrace
-                && Request.DiagnosticsPolicy.CollectShardSamples;
+            event->CollectTimeline = ExecutionDiagnostics
+                && Request.DiagnosticsPolicy->CollectCommitTimeline;
+            event->CollectShards = ExecutionDiagnostics
+                && Request.DiagnosticsPolicy->CollectShardSamples;
             Send<ESendingType::Tail>(
                 BufferActorId,
                 event.release(),
@@ -268,7 +270,9 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
-            this->BeginExecutionPhase(EExecutionPhase::Commit);
+            if (Y_UNLIKELY(ExecutionDiagnostics)) {
+                ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::Commit);
+            }
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
             Send<ESendingType::Tail>(
@@ -330,8 +334,8 @@ public:
         if (ev->Get()->Stats && Stats) {
             Stats->AddBufferStats(std::move(*ev->Get()->Stats));
         }
-        if (ExecutionTrace) {
-            ExecutionTrace->Commit = std::move(ev->Get()->CommitDiagnostics);
+        if (Y_UNLIKELY(ExecutionDiagnostics)) {
+            ExecutionDiagnostics->SetCommitDiagnostics(std::move(ev->Get()->CommitDiagnostics));
         }
         ResponseEv->CommitTimestamp = std::move(ev->Get()->CommitTimestamp);
         MakeResponseAndPassAway();
@@ -490,8 +494,8 @@ private:
         if (msg.Stats && Stats) {
             Stats->AddBufferStats(std::move(*msg.Stats));
         }
-        if (ExecutionTrace) {
-            ExecutionTrace->Commit = std::move(msg.CommitDiagnostics);
+        if (Y_UNLIKELY(ExecutionDiagnostics)) {
+            ExecutionDiagnostics->SetCommitDiagnostics(std::move(msg.CommitDiagnostics));
         }
         TBase::HandleAbortExecution(msg.StatusCode, msg.Issues, false);
     }
@@ -985,7 +989,9 @@ private:
         OnEmptyResult();
 
         StartCheckpointCoordinator();
-        this->BeginExecutionPhase(EExecutionPhase::RunTasks);
+        if (Y_UNLIKELY(ExecutionDiagnostics)) {
+            ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::RunTasks);
+        }
         if (!ExecuteTasks()) {
             return;
         }

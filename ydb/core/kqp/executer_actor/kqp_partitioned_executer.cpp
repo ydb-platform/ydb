@@ -257,7 +257,8 @@ public:
         ForgetExecuterAndBuffer(partInfo);
         AppendExecutionTraceSnapshots(ResponseEv->ExecutionTraces,
             ResponseEv->ExecutionTracesDropped, ev->Get()->ExecutionTraces,
-            ev->Get()->ExecutionTracesDropped, Request.DiagnosticsPolicy.MaxExecutions);
+            ev->Get()->ExecutionTracesDropped, Request.DiagnosticsPolicy
+                ? Request.DiagnosticsPolicy->MaxExecutions : 0);
 
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
@@ -662,7 +663,8 @@ private:
             .TxProxyMon = RequestCounters->TxProxyMon,
             .Alloc = std::move(alloc),
             .UserCtx = UserCtx,
-            .CollectDiagnostics = Request.DiagnosticsPolicy.CollectBufferLookup,
+            .CollectDiagnostics = Request.DiagnosticsPolicy
+                && Request.DiagnosticsPolicy->CollectBufferLookup,
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));

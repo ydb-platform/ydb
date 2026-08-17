@@ -168,7 +168,7 @@ public:
 
         NLWTrace::TOrbit Orbit;
         NWilson::TTraceId TraceId;
-        NKikimr::NKqp::TExecutionDiagnosticsPolicy DiagnosticsPolicy;
+        std::optional<NKikimr::NKqp::TExecutionDiagnosticsPolicy> DiagnosticsPolicy;
         TString UserTraceId;
         ui64 QuerySpanId = 0;  // QuerySpanId of the current query being executed
 

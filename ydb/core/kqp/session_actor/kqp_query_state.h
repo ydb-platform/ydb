@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_query_stats.h"
+#include "kqp_user_facing_tracing.h"
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -14,7 +15,6 @@
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/buffer/events.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
-#include <ydb/core/kqp/common/compilation/compile_diagnostics.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/compile_service/kqp_compile_service.h>
@@ -90,14 +90,6 @@ public:
     {
         RequestEv.reset(ev->Release().Release());
 
-        ProxyRequestStartTime = StartTime;
-        const auto& proxyRequestHops = RequestEv->Record.GetProxyRequestHops();
-        ProxyRequestHops.reserve(proxyRequestHops.size());
-        for (const auto& hop : proxyRequestHops) {
-            ProxyRequestHops.push_back(hop);
-            ProxyRequestStartTime -= TDuration::MicroSeconds(hop.GetDurationUs());
-        }
-
         if (!RequestEv->GetYdbParameters().empty()) {
             QueryParameterTypes = std::make_shared<std::map<TString, Ydb::Type>>();
 
@@ -118,7 +110,10 @@ public:
 
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
 
-        UserFacingTraceId = RequestEv->GetUserFacingWilsonTraceId();
+        if (NWilson::TTraceId traceId = RequestEv->GetUserFacingWilsonTraceId()) {
+            UserFacingTrace = std::make_unique<TUserFacingTraceContext>(std::move(traceId),
+                StartTime, RequestEv->Record.GetProxyRequestHops());
+        }
 
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
@@ -189,9 +184,6 @@ public:
     bool IsWarmupCompilation_ = false;
 
     TInstant StartTime;
-    TInstant ProxyRequestStartTime;
-    std::vector<NKikimrKqp::TProxyRequestHop> ProxyRequestHops;
-    TInstant AdmissionStartedAt;
     TInstant ContinueTime;
     NYql::TKikimrQueryDeadlines QueryDeadlines;
     TKqpQueryStats QueryStats;
@@ -207,14 +199,7 @@ public:
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
-    NWilson::TTraceId UserFacingTraceId;
-    bool UserFacingExecutionDelegated = false;
-    TString UserFacingRootName;
-    TString UserFacingOperation;
-    std::vector<TCompileAttemptDiagnostic> CompileAttempts;
-    std::optional<size_t> ActiveCompileAttempt;
-    std::optional<TCompileAttemptDiagnostic> OverflowCompileAttempt;
-    size_t CompileAttemptsDropped = 0;
+    std::unique_ptr<TUserFacingTraceContext> UserFacingTrace;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx

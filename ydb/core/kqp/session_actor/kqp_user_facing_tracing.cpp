@@ -22,6 +22,27 @@
 
 namespace NKikimr::NKqp {
 
+TUserFacingTraceContext::TUserFacingTraceContext(NWilson::TTraceId traceId,
+        TInstant sessionStart,
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TProxyRequestHop>& proxyHops)
+    : TraceId(std::move(traceId))
+    , SessionStart(sessionStart)
+    , ProxyRequestStart(sessionStart)
+    , ProxyHops(proxyHops.begin(), proxyHops.end()) {
+    for (const auto& hop : ProxyHops) {
+        ProxyRequestStart -= TDuration::MicroSeconds(hop.GetDurationUs());
+    }
+
+    const ui8 level = TraceId.GetVerbosity();
+    using TLevels = TComponentTracingLevels::TQueryProcessor;
+    DiagnosticsPolicy.CollectTimeline = true;
+    DiagnosticsPolicy.CollectStageAggregates = level >= TLevels::Detailed;
+    DiagnosticsPolicy.CollectTaskSamples = level >= TLevels::Detailed;
+    DiagnosticsPolicy.CollectShardSamples = level >= TLevels::Diagnostic;
+    DiagnosticsPolicy.CollectBufferLookup = level >= TLevels::Detailed;
+    DiagnosticsPolicy.CollectCommitTimeline = level >= TLevels::Detailed;
+}
+
 TTimeWindow FitUserFacingRemoteWindow(TTimeWindow window, const TTimeWindow& parent) {
     if (window.Start == TInstant::Zero() || window.End < window.Start) {
         return {};
@@ -68,6 +89,8 @@ struct TUserFacingQuerySnapshot {
     TInstant ContinueTime;
     TString PoolId;
     TKqpQueryStats QueryStats;
+    std::vector<TExecutionTraceSnapshot> ExecutionTraces;
+    size_t ExecutionTracesDropped = 0;
     std::vector<TCompileAttemptDiagnostic> CompileAttempts;
     size_t CompileAttemptsDropped = 0;
     bool ExecutionDelegated = false;
@@ -772,7 +795,7 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
             bytesRead += table.GetReadBytes();
         }
     }
-    for (const auto& trace : state.QueryStats.ExecutionTraces) {
+    for (const auto& trace : state.ExecutionTraces) {
         cpuUs += trace.CpuUs;
         for (const auto& stage : trace.Stages) {
             waitUs += stage.WaitUs;
@@ -829,6 +852,9 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
                 {{"ydb.compile.cache_hit", false}}, &budget, TQueryLevels::Basic,
                 ToWilsonStatus(attempt.Status))) {
             compile.Attribute("ydb.actor.type", TString("TKqpCompileService"));
+            if (attempt.Partial) {
+                compile.Attribute("ydb.trace.coverage", TString("joined_in_progress"));
+            }
             if (attempt.Status != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED) {
                 compile.Attribute("ydb.status_code", Ydb::StatusIds::StatusCode_Name(attempt.Status));
             }
@@ -896,12 +922,12 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
             static_cast<i64>(state.CompileAttemptsDropped));
     }
 
-    for (const auto& trace : state.QueryStats.ExecutionTraces) {
+    for (const auto& trace : state.ExecutionTraces) {
         RenderExecution(parentId, trace, budget);
     }
-    if (state.QueryStats.ExecutionTracesDropped > 0) {
+    if (state.ExecutionTracesDropped > 0) {
         userSpan.Attribute("ydb.executions_truncated",
-            static_cast<i64>(state.QueryStats.ExecutionTracesDropped));
+            static_cast<i64>(state.ExecutionTracesDropped));
     }
     if (budget.Dropped() > 0) {
         userSpan.Attribute("ydb.spans_truncated", static_cast<i64>(budget.Dropped()));
@@ -911,24 +937,25 @@ void BuildPhases(NWilson::TSpan& userSpan, const NWilson::TTraceId& parentId,
 } // namespace
 
 void UpdateUserFacingRootSpanName(TKqpQueryState& state) {
-    if (!state.UserFacingTraceId || !state.PreparedQuery) {
+    if (!state.UserFacingTrace || !state.PreparedQuery) {
         return;
     }
+    auto& trace = *state.UserFacingTrace;
     const auto candidate = DescribeUserFacingQuery(state);
     if (!candidate.DisplayName) {
         return;
     }
     if (candidate.DisplayName == "EXECUTE SCRIPT") {
-        state.UserFacingRootName = candidate.DisplayName;
-        state.UserFacingOperation = candidate.Operation;
+        trace.RootName = candidate.DisplayName;
+        trace.Operation = candidate.Operation;
         return;
     }
-    if (!state.UserFacingRootName) {
-        state.UserFacingRootName = candidate.DisplayName;
-        state.UserFacingOperation = candidate.Operation;
-    } else if (state.UserFacingRootName != candidate.DisplayName) {
-        state.UserFacingRootName = "EXECUTE SCRIPT";
-        state.UserFacingOperation = "EXECUTE SCRIPT";
+    if (!trace.RootName) {
+        trace.RootName = candidate.DisplayName;
+        trace.Operation = candidate.Operation;
+    } else if (trace.RootName != candidate.DisplayName) {
+        trace.RootName = "EXECUTE SCRIPT";
+        trace.Operation = "EXECUTE SCRIPT";
     }
 }
 
@@ -1006,46 +1033,47 @@ private:
 
 NActors::IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
         const TString& statusCode) {
-    NWilson::TTraceId traceId = std::move(state.UserFacingTraceId);
-    if (!traceId) {
+    auto context = std::move(state.UserFacingTrace);
+    if (!context) {
         return nullptr;
     }
 
     const TInstant rootEnd = TInstant::Now();
-    if (state.ActiveCompileAttempt) {
-        state.CompileAttempts[*state.ActiveCompileAttempt].End = rootEnd;
-        state.ActiveCompileAttempt.reset();
+    if (context->ActiveCompileAttempt) {
+        context->CompileAttempts[*context->ActiveCompileAttempt].End = rootEnd;
+        context->ActiveCompileAttempt.reset();
     }
-    if (state.OverflowCompileAttempt) {
-        state.OverflowCompileAttempt->End = rootEnd;
-        KeepCompileAttempt(state.CompileAttempts, std::move(*state.OverflowCompileAttempt),
-            state.CompileAttemptsDropped);
-        state.OverflowCompileAttempt.reset();
+    if (context->OverflowCompileAttempt) {
+        context->OverflowCompileAttempt->End = rootEnd;
+        KeepCompileAttempt(context->CompileAttempts, std::move(*context->OverflowCompileAttempt),
+            context->CompileAttemptsDropped);
+        context->OverflowCompileAttempt.reset();
     }
-    TrimCompileDependencies(state.CompileAttempts);
+    TrimCompileDependencies(context->CompileAttempts);
 
     TUserFacingQuerySnapshot snapshot;
-    snapshot.TraceId = std::move(traceId);
-    snapshot.RootName = state.UserFacingRootName
-        ? state.UserFacingRootName : FallbackUserFacingQueryName(state);
-    snapshot.Operation = state.UserFacingOperation
-        ? state.UserFacingOperation : snapshot.RootName;
+    snapshot.TraceId = std::move(context->TraceId);
+    snapshot.RootName = context->RootName
+        ? context->RootName : FallbackUserFacingQueryName(state);
+    snapshot.Operation = context->Operation ? context->Operation : snapshot.RootName;
     if (state.RequestEv && state.RequestEv->GetQuerySize() <= MaxQueryTextForUserFacingTrace) {
         snapshot.QueryText = state.RequestEv->GetQuery();
     }
     snapshot.RootEnd = rootEnd;
-    snapshot.StartTime = state.StartTime;
-    snapshot.ProxyRequestStartTime = state.ProxyRequestStartTime;
-    snapshot.ProxyRequestHops = std::move(state.ProxyRequestHops);
-    snapshot.AdmissionStartedAt = state.AdmissionStartedAt;
+    snapshot.StartTime = context->SessionStart;
+    snapshot.ProxyRequestStartTime = context->ProxyRequestStart;
+    snapshot.ProxyRequestHops = std::move(context->ProxyHops);
+    snapshot.AdmissionStartedAt = context->AdmissionStartedAt;
     snapshot.ContinueTime = state.ContinueTime;
     if (state.UserRequestContext) {
         snapshot.PoolId = state.UserRequestContext->PoolId;
     }
     snapshot.QueryStats = std::move(state.QueryStats);
-    snapshot.CompileAttempts = std::move(state.CompileAttempts);
-    snapshot.CompileAttemptsDropped = state.CompileAttemptsDropped;
-    snapshot.ExecutionDelegated = state.UserFacingExecutionDelegated;
+    snapshot.ExecutionTraces = std::move(context->ExecutionTraces);
+    snapshot.ExecutionTracesDropped = context->ExecutionTracesDropped;
+    snapshot.CompileAttempts = std::move(context->CompileAttempts);
+    snapshot.CompileAttemptsDropped = context->CompileAttemptsDropped;
+    snapshot.ExecutionDelegated = context->ExecutionDelegated;
     snapshot.Success = success;
     snapshot.StatusCode = statusCode;
     return new TUserFacingTraceRendererActor(std::move(snapshot));

@@ -112,21 +112,11 @@ bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     return false;
 }
 
-TExecutionDiagnosticsPolicy MakeExecutionDiagnosticsPolicy(const TKqpQueryState* queryState) {
-    TExecutionDiagnosticsPolicy policy;
-    if (!queryState || !queryState->UserFacingTraceId) {
-        return policy;
+std::optional<TExecutionDiagnosticsPolicy> MakeExecutionDiagnosticsPolicy(const TKqpQueryState* queryState) {
+    if (!queryState || !queryState->UserFacingTrace) {
+        return std::nullopt;
     }
-
-    const ui8 level = queryState->UserFacingTraceId.GetVerbosity();
-    using TLevels = TComponentTracingLevels::TQueryProcessor;
-    policy.CollectTimeline = true;
-    policy.CollectStageAggregates = level >= TLevels::Detailed;
-    policy.CollectTaskSamples = level >= TLevels::Detailed;
-    policy.CollectShardSamples = level >= TLevels::Diagnostic;
-    policy.CollectBufferLookup = level >= TLevels::Detailed;
-    policy.CollectCommitTimeline = level >= TLevels::Detailed;
-    return policy;
+    return queryState->UserFacingTrace->DiagnosticsPolicy;
 }
 
 class TRequestFail : public yexception {
@@ -364,7 +354,9 @@ public:
         Y_VALIDATE(!QueryState->UserRequestContext->PoolConfig,
             "Cannot send to workload manager: PoolConfig is already resolved");
 
-        QueryState->AdmissionStartedAt = TInstant::Now();
+        if (QueryState->UserFacingTrace) {
+            QueryState->UserFacingTrace->AdmissionStartedAt = TInstant::Now();
+        }
         Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvPlaceRequestIntoPool(
             QueryState->QueryId,
             QueryState->UserRequestContext->DatabaseId,
@@ -380,7 +372,9 @@ public:
     }
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
-        QueryState->UserFacingExecutionDelegated = true;
+        if (QueryState->UserFacingTrace) {
+            QueryState->UserFacingTrace->ExecutionDelegated = true;
+        }
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
                 FederatedQuerySetup, ModuleResolverState, Counters, Settings.QueryService, GUCSettings));
@@ -934,49 +928,58 @@ public:
     }
 
     void MarkCompileStart() {
-        if (!QueryState || !QueryState->UserFacingTraceId || QueryState->ActiveCompileAttempt
-                || QueryState->OverflowCompileAttempt) {
+        if (!QueryState || !QueryState->UserFacingTrace) {
             return;
         }
-        if (QueryState->CompileAttempts.size() >= MaxCompileAttempts) {
-            QueryState->OverflowCompileAttempt = TCompileAttemptDiagnostic{.Start = TInstant::Now()};
+        auto& trace = *QueryState->UserFacingTrace;
+        if (trace.ActiveCompileAttempt || trace.OverflowCompileAttempt) {
             return;
         }
-        QueryState->CompileAttempts.push_back({.Start = TInstant::Now()});
-        QueryState->ActiveCompileAttempt = QueryState->CompileAttempts.size() - 1;
+        if (trace.CompileAttempts.size() >= MaxCompileAttempts) {
+            trace.OverflowCompileAttempt = TCompileAttemptDiagnostic{.Start = TInstant::Now()};
+            return;
+        }
+        trace.CompileAttempts.push_back({.Start = TInstant::Now()});
+        trace.ActiveCompileAttempt = trace.CompileAttempts.size() - 1;
     }
 
     void MarkCompileCacheHit() {
-        if (!QueryState || !QueryState->UserFacingTraceId) {
+        if (!QueryState || !QueryState->UserFacingTrace) {
             return;
         }
         const TInstant now = TInstant::Now();
-        KeepCompileAttempt(QueryState->CompileAttempts, {
+        auto& trace = *QueryState->UserFacingTrace;
+        KeepCompileAttempt(trace.CompileAttempts, {
             .Start = now,
             .End = now,
             .FromCache = true,
             .Status = QueryState->CompileResult->Status,
-        }, QueryState->CompileAttemptsDropped);
+        }, trace.CompileAttemptsDropped);
     }
 
     void MarkCompileEnd(TEvKqp::TEvCompileResponse& response) {
-        if (!QueryState || (!QueryState->ActiveCompileAttempt && !QueryState->OverflowCompileAttempt)) {
+        if (!QueryState || !QueryState->UserFacingTrace) {
             return;
         }
-        auto& attempt = QueryState->ActiveCompileAttempt
-            ? QueryState->CompileAttempts[*QueryState->ActiveCompileAttempt]
-            : *QueryState->OverflowCompileAttempt;
+        auto& trace = *QueryState->UserFacingTrace;
+        if (!trace.ActiveCompileAttempt && !trace.OverflowCompileAttempt) {
+            return;
+        }
+        auto& attempt = trace.ActiveCompileAttempt
+            ? trace.CompileAttempts[*trace.ActiveCompileAttempt]
+            : *trace.OverflowCompileAttempt;
         attempt.End = TInstant::Now();
         attempt.FromCache = response.Stats.FromCache;
         attempt.Status = response.CompileResult->Status;
         attempt.Dependencies = std::move(response.CompileDiagnostics);
         attempt.Actor = response.CompileActorDiagnostic;
-        if (QueryState->OverflowCompileAttempt) {
-            KeepCompileAttempt(QueryState->CompileAttempts,
-                std::move(*QueryState->OverflowCompileAttempt), QueryState->CompileAttemptsDropped);
-            QueryState->OverflowCompileAttempt.reset();
+        attempt.Partial = !attempt.FromCache && !attempt.Actor;
+        if (trace.OverflowCompileAttempt) {
+            KeepCompileAttempt(trace.CompileAttempts,
+                std::move(*trace.OverflowCompileAttempt), trace.CompileAttemptsDropped);
+            trace.OverflowCompileAttempt.reset();
         } else {
-            QueryState->ActiveCompileAttempt.reset();
+            trace.ActiveCompileAttempt.reset();
         }
     }
 
@@ -2415,7 +2418,10 @@ public:
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
                 .Alloc = std::move(alloc),
-                .CollectDiagnostics = MakeExecutionDiagnosticsPolicy(QueryState.get()).CollectBufferLookup,
+                .CollectDiagnostics = [&] {
+                    const auto policy = MakeExecutionDiagnosticsPolicy(QueryState.get());
+                    return policy && policy->CollectBufferLookup;
+                }(),
             };
 
             settings.UserCtx = CreateUserContext();
@@ -2845,9 +2851,12 @@ public:
         if (executerResults.HasStats()) {
             QueryState->QueryStats.Executions.emplace_back();
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
-            AppendExecutionTraceSnapshots(QueryState->QueryStats.ExecutionTraces,
-                QueryState->QueryStats.ExecutionTracesDropped, ev->ExecutionTraces,
-                ev->ExecutionTracesDropped);
+            if (QueryState->UserFacingTrace) {
+                auto& trace = *QueryState->UserFacingTrace;
+                AppendExecutionTraceSnapshots(trace.ExecutionTraces,
+                    trace.ExecutionTracesDropped, ev->ExecutionTraces,
+                    ev->ExecutionTracesDropped, trace.DiagnosticsPolicy.MaxExecutions);
+            }
         }
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
@@ -3885,7 +3894,7 @@ public:
 
         if (QueryResponse) {
             Reply();
-        } else if (QueryState && QueryState->UserFacingTraceId) {
+        } else if (QueryState && QueryState->UserFacingTrace) {
             if (QueryState->KqpSessionSpan) {
                 QueryState->KqpSessionSpan.EndError("Request ended without a response");
             }

@@ -110,9 +110,15 @@ TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& act
     std::function<ECompileDependencyStatus(const TResponse&)> extractStatus = {})
 {
     auto promise = NewPromise<TResult>();
-    auto diagnostic = diagnostics
-        ? diagnostics->Begin(dependency, std::move(target))
-        : ICompileDependencyDiagnostics::THandle{};
+    if (!diagnostics) {
+        IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(
+            actorId, request, promise, std::move(callback));
+        actorSystem->Register(requestHandler, TMailboxType::HTSwap,
+            actorSystem->AppData<TAppData>()->UserPoolId);
+        return promise.GetFuture();
+    }
+
+    auto diagnostic = diagnostics->Begin(dependency, std::move(target));
     auto diagnosticFinished = std::make_shared<std::atomic<bool>>(false);
     auto finishDiagnostic = [diagnostics, diagnostic, diagnosticFinished](ECompileDependencyStatus status) mutable {
         if (diagnostics && !diagnosticFinished->exchange(true, std::memory_order_relaxed)) {

@@ -164,18 +164,21 @@ public:
         TasksGraph.GetMeta().CheckDuplicateRows = executerConfig.MutableConfig->EnableRowsDuplicationCheck.load();
         ResponseStatsMode = Request.StatsMode;
         CollectionStatsMode = ResponseStatsMode;
-        if (Request.DiagnosticsPolicy.CollectShardSamples) {
+        if (Request.DiagnosticsPolicy && Request.DiagnosticsPolicy->CollectShardSamples) {
             CollectionStatsMode = Max(CollectionStatsMode,
                 Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
-        } else if (Request.DiagnosticsPolicy.CollectStageAggregates
-                || Request.DiagnosticsPolicy.CollectTaskSamples) {
+        } else if (Request.DiagnosticsPolicy
+                && (Request.DiagnosticsPolicy->CollectStageAggregates
+                    || Request.DiagnosticsPolicy->CollectTaskSamples)) {
             CollectionStatsMode = Max(CollectionStatsMode,
                 Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
         }
         TasksGraph.GetMeta().StatsMode = CollectionStatsMode;
         TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
-        TasksGraph.GetMeta().CollectShardDiagnostics = Request.DiagnosticsPolicy.CollectShardSamples;
-        TasksGraph.GetMeta().CollectTimeline = Request.DiagnosticsPolicy.CollectTimeline;
+        TasksGraph.GetMeta().CollectShardDiagnostics = Request.DiagnosticsPolicy
+            && Request.DiagnosticsPolicy->CollectShardSamples;
+        TasksGraph.GetMeta().CollectTimeline = Request.DiagnosticsPolicy
+            && Request.DiagnosticsPolicy->CollectTimeline;
         for (const auto& regex : executerConfig.TliConfig.GetIgnoredTableRegexes()) {
             TasksGraph.GetMeta().AddIgnoredTliTableRegex(regex);
         }
@@ -188,7 +191,7 @@ public:
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
 
         StartTime = TAppData::TimeProvider->Now();
-        InitializeExecutionTrace();
+        InitializeDiagnosticsCapture();
         if (Request.Timeout) {
             Deadline = StartTime + Request.Timeout;
         }
@@ -236,19 +239,12 @@ protected:
 
         KqpTableResolverId = {};
 
-        if (ExecutionTrace) {
-            ExecutionTrace->Timeline.Phase(EExecutionPhase::ResolveMetadata) = reply.NavigateWindow;
-            ExecutionTrace->Timeline.Phase(EExecutionPhase::ResolvePartitioning) = reply.ResolveKeysWindow;
+        if (Y_UNLIKELY(ExecutionDiagnostics)) {
+            ExecutionDiagnostics->OnTableResolverFinished(reply.NavigateWindow,
+                reply.ResolveKeysWindow, reply.Status);
         }
 
         if (reply.Status != Ydb::StatusIds::SUCCESS) {
-            if (ExecutionTrace) {
-                if (reply.ResolveKeysWindow) {
-                    ExecutionTrace->FailedPhase = EExecutionPhase::ResolvePartitioning;
-                } else if (reply.NavigateWindow) {
-                    ExecutionTrace->FailedPhase = EExecutionPhase::ResolveMetadata;
-                }
-            }
             if (ExecuterStateSpan) {
                 ExecuterStateSpan.EndError(TStringBuilder() << Ydb::StatusIds_StatusCode_Name(reply.Status));
             }
@@ -1906,68 +1902,41 @@ protected:
     }
 
 protected:
-    void InitializeExecutionTrace() {
-        const bool collect = bool(Request.DiagnosticsPolicy);
-        Stats->CollectTraceDiagnostics = Request.DiagnosticsPolicy.CollectStageAggregates
-            || Request.DiagnosticsPolicy.CollectTaskSamples;
-        Stats->CollectBufferLookupDiagnostics = Request.DiagnosticsPolicy.CollectBufferLookup;
-        if (!collect) {
+    void InitializeDiagnosticsCapture() {
+        if (!Request.DiagnosticsPolicy) {
             return;
         }
+        Stats->CollectTraceDiagnostics = Request.DiagnosticsPolicy->CollectStageAggregates
+            || Request.DiagnosticsPolicy->CollectTaskSamples;
+        Stats->CollectBufferLookupDiagnostics = Request.DiagnosticsPolicy->CollectBufferLookup;
 
-        ExecutionTrace = std::make_unique<TExecutionTraceSnapshot>();
         if constexpr (ExecType == EExecType::Data) {
-            ExecutionTrace->ExecuterActorType = "TKqpDataExecuter";
-            ExecutionTrace->ComputeActorType = "TKqpComputeActor";
+            ExecutionDiagnostics = std::make_unique<TExecutionDiagnosticsCapture>(
+                "TKqpDataExecuter", "TKqpComputeActor");
         } else {
-            ExecutionTrace->ExecuterActorType = "TKqpScanExecuter";
-            ExecutionTrace->ComputeActorType = "TKqpScanComputeActor";
+            ExecutionDiagnostics = std::make_unique<TExecutionDiagnosticsCapture>(
+                "TKqpScanExecuter", "TKqpScanComputeActor");
         }
-        ExecutionTrace->Timeline.Execute.Start = TInstant::Now();
     }
 
-    void ExportExecutionTrace() {
-        if (!ExecutionTrace) {
+    void ExportExecutionDiagnostics() {
+        if (!ExecutionDiagnostics) {
             return;
         }
 
-        const TInstant finishAt = TInstant::Now();
-        ExecutionTrace->Status = ResponseEv->Record.GetResponse().GetStatus();
-        if (ExecutionTrace->Status != Ydb::StatusIds::SUCCESS
-                && !ExecutionTrace->FailedPhase
-                && CurrentExecutionPhase != EExecutionPhase::Count) {
-            ExecutionTrace->FailedPhase = CurrentExecutionPhase;
-        }
-        EndExecutionPhase(finishAt);
-        ExecutionTrace->Timeline.Execute.End = finishAt;
-        Stats->ExportTraceSnapshot(*ExecutionTrace);
-        TrimExecutionTraceSnapshot(*ExecutionTrace);
-        ResponseEv->ExecutionTraces.push_back(std::move(*ExecutionTrace));
-        ExecutionTrace.reset();
+        auto snapshot = ExecutionDiagnostics->Finish(ResponseEv->Record.GetResponse().GetStatus());
+        Stats->ExportTraceSnapshot(snapshot);
+        TrimExecutionTraceSnapshot(snapshot);
+        ResponseEv->ExecutionTraces.push_back(std::move(snapshot));
+        ExecutionDiagnostics.reset();
     }
 
     NWilson::TSpan MakePhaseSpan(ui8 devVerbosity, const TString& devName, EExecutionPhase phase,
             NWilson::TFlags flags = NWilson::EFlags::AUTO_END) {
-        BeginExecutionPhase(phase);
+        if (Y_UNLIKELY(ExecutionDiagnostics)) {
+            ExecutionDiagnostics->OnPhaseStarted(phase);
+        }
         return ExecuterSpan.CreateChild(devVerbosity, devName, flags);
-    }
-
-    // Starting a phase closes the previous window; the last one closes at response fill.
-    void BeginExecutionPhase(EExecutionPhase phase) {
-        if (!ExecutionTrace) {
-            return;
-        }
-        const TInstant transitionAt = TInstant::Now();
-        EndExecutionPhase(transitionAt);
-        CurrentExecutionPhase = phase;
-        ExecutionTrace->Timeline.Phase(phase).Start = transitionAt;
-    }
-
-    void EndExecutionPhase(TInstant finishAt) {
-        if (ExecutionTrace && CurrentExecutionPhase != EExecutionPhase::Count) {
-            ExecutionTrace->Timeline.Phase(CurrentExecutionPhase).End = finishAt;
-        }
-        CurrentExecutionPhase = EExecutionPhase::Count;
     }
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const {
@@ -2000,7 +1969,7 @@ protected:
 
             {
                 ui64 cycleCount = GetCycleCountFast();
-                ExportExecutionTrace();
+                ExportExecutionDiagnostics();
                 Stats->ExportExecStats(*response.MutableResult()->MutableStats(), ResponseStatsMode);
 
                 if (CollectFullStats(ResponseStatsMode)) {
@@ -2259,8 +2228,7 @@ protected:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
-    std::unique_ptr<TExecutionTraceSnapshot> ExecutionTrace;
-    EExecutionPhase CurrentExecutionPhase = EExecutionPhase::Count;
+    std::unique_ptr<TExecutionDiagnosticsCapture> ExecutionDiagnostics;
     Ydb::Table::QueryStatsCollection::Mode ResponseStatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     Ydb::Table::QueryStatsCollection::Mode CollectionStatsMode = Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;

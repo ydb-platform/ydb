@@ -249,13 +249,11 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     static constexpr ui64 BitsPerUi64 = sizeof(ui64) * CHAR_BIT;
     static constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * CHAR_BIT;
 
-    // Splits the source chunks into consecutive groups of at most maxRecordsPerChunk records and emits one
-    // index chunk per group, so every produced blob fits the storage limit. The scan applies each chunk to its
-    // own record range (TIndexColumnChunked), so per-range filters are equivalent to the single one. A single
-    // source chunk above maxRecordsPerChunk cannot be split further: it forms one clamped batch (higher FPR).
-    const auto buildBatched = [&](const ui32 maxRecordsPerChunk, const auto& buildChunkData) {
+    // Groups the source chunks into consecutive batches of at most maxRecordsPerChunk records, one index chunk
+    // per batch; the scan applies each chunk to its own record range (TIndexColumnChunked). A single source
+    // chunk above maxRecordsPerChunk cannot be split further: it forms one clamped batch (higher FPR).
+    const auto buildBatched = [&](const auto& chunks, const ui32 maxRecordsPerChunk, const auto& buildChunkData) {
         std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> result;
-        const auto chunks = CollectChunks(reader);
         ui32 chunkIdx = 0;
         for (ui32 pos = 0; pos < chunks.size();) {
             ui32 batchRecords = chunks[pos].second;
@@ -272,9 +270,8 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         return result;
     };
 
-    // The largest power-of-2 filter strictly below the storage blob limit (the blob splitter requires
-    // chunks < MaxBlobSize): filters above it are either split by record subranges or folded down to it
-    // (a smaller bloom filter stays correct, only its FPR grows), so the builder never emits an oversize chunk.
+    // The largest power-of-2 filter strictly below the storage blob limit: filters above it are either split
+    // by record subranges or folded down to it (a smaller bloom filter stays correct, only its FPR grows).
     const ui64 clampBits =
         (chunkSizeLimit && *chunkSizeLimit > 0) ? std::max<ui64>(BitsPerUi64, std::bit_floor(*chunkSizeLimit * CHAR_BIT - 1)) : MaxBitsSize;
 
@@ -297,8 +294,19 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
             return GetBitsStorageConstructor()->SerializeToString(foldedStorage);
         };
 
+        // Hash every source chunk exactly once into its own max-size filter: the full-portion filter is the
+        // bitwise union of the per-chunk filters, so deciding to split does not re-hash the data.
+        const auto chunks = CollectChunks(reader);
+        std::vector<TArrayPower2BitsStorage> chunkStorages;
+        chunkStorages.reserve(chunks.size());
+        for (const auto& chunk : chunks) {
+            auto& storage = chunkStorages.emplace_back(MaxBitsSize);
+            VisitChunkWithBuilder(chunk.first, GetDataExtractor(), ngramSize, builder, storage);
+        }
         TArrayPower2BitsStorage maxStorage(MaxBitsSize);
-        VisitAllChunksWithBuilder(reader, GetDataExtractor(), ngramSize, builder, maxStorage);
+        for (const auto& storage : chunkStorages) {
+            maxStorage |= storage;
+        }
         TString indexData = foldAndSerialize(std::move(maxStorage), MaxBitsSize);
         if (!chunkSizeLimit || indexData.size() <= *chunkSizeLimit) {
             return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
@@ -306,13 +314,14 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
 
         const ui32 partsCount = (indexData.size() + *chunkSizeLimit - 1) / *chunkSizeLimit;
         const ui32 maxRecordsPerChunk = (recordsCount + partsCount - 1) / partsCount;
-        return buildBatched(maxRecordsPerChunk, [&](const auto& chunks, const ui32 begin, const ui32 end, const ui32 /*batchRecords*/) {
-            TArrayPower2BitsStorage batchStorage(MaxBitsSize);
-            for (ui32 i = begin; i < end; ++i) {
-                VisitChunkWithBuilder(chunks[i].first, GetDataExtractor(), ngramSize, builder, batchStorage);
-            }
-            return foldAndSerialize(std::move(batchStorage), clampBits);
-        });
+        return buildBatched(
+            chunks, maxRecordsPerChunk, [&](const auto& /*chunks*/, const ui32 begin, const ui32 end, const ui32 /*batchRecords*/) {
+                TArrayPower2BitsStorage batchStorage(MaxBitsSize);
+                for (ui32 i = begin; i < end; ++i) {
+                    batchStorage |= chunkStorages[i];
+                }
+                return foldAndSerialize(std::move(batchStorage), clampBits);
+            });
     }
 
     const auto calcBitsSize = [&](const ui32 records) {
@@ -334,13 +343,14 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
         while (maxRecordsPerChunk <= recordsCount / 2 && calcBitsSize(maxRecordsPerChunk * 2) <= clampBits) {
             maxRecordsPerChunk *= 2;
         }
-        return buildBatched(maxRecordsPerChunk, [&](const auto& chunks, const ui32 begin, const ui32 end, const ui32 batchRecords) {
-            TArrayPower2BitsStorage batchStorage(std::min<ui64>(calcBitsSize(batchRecords), clampBits));
-            for (ui32 i = begin; i < end; ++i) {
-                VisitChunkWithBuilder(chunks[i].first, GetDataExtractor(), ngramSize, builder, batchStorage);
-            }
-            return GetBitsStorageConstructor()->SerializeToString(batchStorage);
-        });
+        return buildBatched(
+            CollectChunks(reader), maxRecordsPerChunk, [&](const auto& chunks, const ui32 begin, const ui32 end, const ui32 batchRecords) {
+                TArrayPower2BitsStorage batchStorage(std::min<ui64>(calcBitsSize(batchRecords), clampBits));
+                for (ui32 i = begin; i < end; ++i) {
+                    VisitChunkWithBuilder(chunks[i].first, GetDataExtractor(), ngramSize, builder, batchStorage);
+                }
+                return GetBitsStorageConstructor()->SerializeToString(batchStorage);
+            });
     }
 
     TArrayPower2BitsStorage storage(calcBitsSize(recordsCount));

@@ -65,6 +65,15 @@ public:
         return Data[IndexForHash(hash)] & ItemMaskForHash(hash);
     }
 
+    // Bitwise-OR merge: the bloom filter of a union of values is the union of their filters.
+    TArrayPower2BitsStorage& operator|=(const TArrayPower2BitsStorage& other) {
+        Y_ABORT_UNLESS(DataSize == other.DataSize);
+        for (ui32 i = 0; i < DataSize; ++i) {
+            Data[i] |= other.Data[i];
+        }
+        return *this;
+    }
+
     ui32 CountSetBits() const {
         ui32 result = 0;
         for (size_t i = 0; i < DataSize; ++i) {

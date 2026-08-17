@@ -2,7 +2,15 @@
 
 ## COUNT {#count}
 
-Counting the number of rows in the table (if `*` or constant is specified as the argument) or non-empty values in a table column (if the column name is specified as an argument).
+### Signature
+
+```yql
+COUNT(*)->Uint64
+COUNT(T)->Uint64
+COUNT(T?)->Uint64
+```
+
+Counting the number of rows in a row or columnar table (if `*` or constant is specified as the argument) or non-empty values in a table column (if the column name is specified as an argument).
 
 Like other aggregate functions, it can be combined with [GROUP BY](../syntax/select/group-by.md) to get statistics on the parts of the table that correspond to the values in the columns being grouped. {% if select_statement != "SELECT STREAM" %}Use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) to count distinct values.{% endif %}
 
@@ -29,9 +37,18 @@ SELECT COUNT(DISTINCT value) FROM my_table;
 
 ## MIN and MAX {#min-max}
 
+### Signature
+
+```yql
+MIN(T?)->T?
+MIN(T)->T?
+MAX(T?)->T?
+MAX(T)->T?
+```
+
 Minimum or maximum value.
 
-As an argument, you may use an arbitrary computable expression with a numeric result.
+As an argument, you may use an arbitrary computable expression with a result that allows value comparison.
 
 ### Examples
 
@@ -43,9 +60,18 @@ SELECT MIN(value), MAX(value) FROM my_table;
 
 ## SUM {#sum}
 
+### Signature
+
+```yql
+SUM(Unsigned?)->Uint64?
+SUM(Signed?)->Int64?
+SUM(Interval?)->Interval?
+SUM(Decimal(N, M)?)->Decimal(35, M)?
+```
+
 Sum of the numbers.
 
-As an argument, you may use an arbitrary computable expression with a numeric result.
+As an argument, you may use an arbitrary computable expression with a numeric result or type `Interval`.
 
 Integers are automatically expanded to 64 bits to reduce the risk of overflow.
 
@@ -57,9 +83,17 @@ SELECT SUM(value) FROM my_table;
 
 ## AVG {#avg}
 
+### Signature
+
+```yql
+AVG(Double?)->Double?
+AVG(Interval?)->Interval?
+AVG(Decimal(N, M)?)->Decimal(N, M)?
+```
+
 Arithmetic average.
 
-As an argument, you may use an arbitrary computable expression with a numeric result.
+As an argument, you may use an arbitrary computable expression with a numeric result or type `Interval`.
 
 Integer values and time intervals are automatically converted to Double.
 
@@ -72,6 +106,12 @@ SELECT AVG(value) FROM my_table;
 
 
 ## COUNT_IF {#count-if}
+
+### Signature
+
+```yql
+COUNT_IF(Bool?)->Uint64?
+```
 
 Number of rows for which the expression specified as the argument is true (the expression's calculation result is true).
 
@@ -108,6 +148,16 @@ FROM my_table;
 
 ## SUM_IF and AVG_IF {#sum-if}
 
+### Signature
+
+```yql
+SUM_IF(Unsigned?, Bool?)->Uint64?
+SUM_IF(Signed?, Bool?)->Int64?
+SUM_IF(Interval?, Bool?)->Interval?
+
+AVG_IF(Double?, Bool?)->Double?
+```
+
 Sum or arithmetic average, but only for the rows that satisfy the condition passed by the second argument.
 
 Therefore, `SUM_IF(value, condition)` is a slightly shorter notation for `SUM(IF(condition, value))`, same for `AVG`. The argument's data type expansion is similar to the same-name functions without a suffix.
@@ -139,6 +189,13 @@ FROM my_table;
 
 ## SOME {#some}
 
+### Signature
+
+```yql
+SOME(T?)->T?
+SOME(T)->T?
+```
+
 Get the value for an expression specified as an argument, for one of the table rows. Gives no guarantee of which row is used. It's similar to the [any()](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/reference/any/) function in ClickHouse.
 
 Because of no guarantee, `SOME` is computationally cheaper than [MIN / MAX](#min-max) often used in similar situations.
@@ -160,6 +217,14 @@ When the aggregate function `SOME` is called multiple times, it's **not** guaran
 {% endnote %}
 
 ## CountDistinctEstimate, HyperLogLog, and HLL {#countdistinctestimate}
+
+### Signature
+
+```yql
+CountDistinctEstimate(T)->Uint64?
+HyperLogLog(T)->Uint64?
+HLL(T)->Uint64?
+```
 
 Approximating the number of unique values using the [HyperLogLog](https://en.wikipedia.org/wiki/HyperLogLog) algorithm. Logically, it does the same thing as [COUNT(DISTINCT ...)](#count), but runs much faster at the cost of some error.
 
@@ -190,6 +255,15 @@ FROM my_table;
 
 
 ## AGGREGATE_LIST {#agg-list}
+
+### Signature
+
+```yql
+AGGREGATE_LIST(T? [, limit:Uint64])->List<T>
+AGGREGATE_LIST(T [, limit:Uint64])->List<T>
+AGGREGATE_LIST_DISTINCT(T? [, limit:Uint64])->List<T>
+AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
+```
 
 Get all column values as a list. When combined with `DISTINCT,` it returns only distinct values. The optional second parameter sets the maximum number of values to be returned. A zero limit value means unlimited.
 
@@ -233,6 +307,18 @@ Execution is **NOT** lazy, so when you use it, be sure that the list has a reaso
 
 ## MAX_BY and MIN_BY {#max-min-by}
 
+### Signature
+
+```yql
+MAX_BY(T1?, T2)->T1?
+MAX_BY(T1, T2)->T1?
+MAX_BY(T1, T2, limit:Uint64)->List<T1>?
+
+MIN_BY(T1?, T2)->T1?
+MIN_BY(T1, T2)->T1?
+MIN_BY(T1, T2, limit:Uint64)->List<T1>?
+```
+
 Return the value of the first argument for the table row where the second argument is minimum/maximum.
 
 You can optionally specify the third argument N that affects behavior if the table has multiple rows with the same minimum or maximum value:
@@ -244,7 +330,7 @@ When choosing N, we recommend that you don't exceed several hundreds or thousand
 
 If your task needs absolutely all values, and their number is measured in dozens of thousands or more, then instead of those aggregate functions better use `JOIN` on the source table with a subquery doing `GROUP BY + MIN/MAX` on the desired columns of this table.
 
-{% note warning "Attention" %}
+{% note warning %}
 
 If the second argument is always `NULL`, the aggregation result is `NULL`.
 
@@ -276,6 +362,15 @@ FROM my_table;
 
 ## TOP and BOTTOM {#top-bottom}
 
+### Signature
+
+```yql
+TOP(T?, limit:Uint32)->List<T>
+TOP(T, limit:Uint32)->List<T>
+BOTTOM(T?, limit:Uint32)->List<T>
+BOTTOM(T, limit:Uint32)->List<T>
+```
+
 Return a list of the maximum/minimum values of an expression. The first argument is an expression, the second argument limits the number of items.
 
 ### Examples
@@ -301,6 +396,13 @@ FROM my_table;
 
 
 ## TOP_BY and BOTTOM_BY {#top-bottom-by}
+
+### Signature
+
+```yql
+TOP_BY(T1, T2, limit:Uint32)->List<T1>
+BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
+```
 
 Return a list of values of the first argument for the rows containing the maximum/minimum values of the second argument. The third argument limits the number of items in the list.
 
@@ -330,6 +432,13 @@ FROM my_table;
 
 ## TOPFREQ and MODE {#topfreq-mode}
 
+### Signature
+
+```yql
+TOPFREQ(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
+MODE(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
+```
+
 Getting an **approximate** list of the most common values in a column with an estimation of their count. Returns a list of structures with two fields:
 
 * `Value`: the frequently occurring value that was found.
@@ -355,6 +464,22 @@ FROM my_table;
 
 ## STDDEV and VARIANCE {#stddev-variance}
 
+### Signature
+
+```yql
+STDDEV(Double?)->Double?
+STDDEV_POPULATION(Double?)->Double?
+POPULATION_STDDEV(Double?)->Double?
+STDDEV_SAMPLE(Double?)->Double?
+STDDEVSAMP(Double?)->Double?
+
+VARIANCE(Double?)->Double?
+VARIANCE_POPULATION(Double?)->Double?
+POPULATION_VARIANCE(Double?)->Double?
+VARPOP(Double?)->Double?
+VARIANCE_SAMPLE(Double?)->Double?
+```
+
 Standard deviation and variance in a column. Those functions use a [single-pass parallel algorithm](https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm), whose result may differ from the more common methods requiring two passes through the data.
 
 By default, the sample variance and standard deviation are calculated. Several write methods are available:
@@ -378,6 +503,15 @@ FROM my_table;
 
 
 ## CORRELATION and COVARIANCE {#correlation-covariance}
+
+### Signature
+
+```yql
+CORRELATION(Double?, Double?)->Double?
+COVARIANCE(Double?, Double?)->Double?
+COVARIANCE_SAMPLE(Double?, Double?)->Double?
+COVARIANCE_POPULATION(Double?, Double?)->Double?
+```
 
 Correlation and covariance between two columns.
 
@@ -409,24 +543,54 @@ FROM my_table;
 
 ## PERCENTILE and MEDIAN {#percentile-median}
 
-Calculating percentiles using the amortized version of the [TDigest](https://github.com/tdunning/t-digest) algorithm. `MEDIAN`: An alias for `PERCENTILE(N, 0.5)`.
+### Signature
 
-{% note info "Restriction" %}
+```yql
+PERCENTILE(T, Double)->T
+PERCENTILE(T, Tuple<Double, ...>)->Tuple<T, ...>
+PERCENTILE(T, Struct<name1:Double, ...>)->Struct<name1:T, ...>
+PERCENTILE(T, List<Double>)->List<T>
 
-The first argument (N) must be a table column name. If you need to bypass this restriction, use a subquery. The restriction is introduced to simplify calculations, since the implementation merges the calls with the same first argument (N) into a single pass.
+MEDIAN(T, [ Double ])->T
+MEDIAN(T, [ Tuple<Double, ...> ])->Tuple<T, ...>
+MEDIAN(T, [ Struct<name1:Double, ...> ])->Struct<name1:T, ...>
+MEDIAN(T, [ List<Double> ])->List<T>
+```
 
-{% endnote %}
+Calculating percentiles using the amortized version of the [TDigest](https://github.com/tdunning/t-digest) algorithm. `MEDIAN(x)` without the second argument is an alias for `PERCENTILE(x, 0.5)`.
+`MEDIAN` with two arguments is fully equivalent to `PERCENTILE`.
 
+The first argument of `PERCENTILE`/`MEDIAN` accepts an expression of type `T`. Currently supported types for `T` are `Interval` and `Double` (as well as types that allow implicit conversion to them, such as integer types).
+
+As the second argument, you can use either a single `Double` (the percentile value) or several percentile values at once as a `Tuple`/`Struct`/`List`.
+
+Percentile values must be in the range from 0.0 to 1.0 inclusive.
+
+### Examples
 
 ```yql
 SELECT
     MEDIAN(numeric_column),
-    PERCENTILE(numeric_column, 0.99)
+    PERCENTILE(numeric_column, 0.99),
+    PERCENTILE(CAST(string_column as Double), (0.01, 0.5, 0.99)),                   -- calculate three percentiles at once
+    PERCENTILE(numeric_column, AsStruct(0.01 as p01, 0.5 as median, 0.99 as p99)), -- using a struct, percentile values can be given convenient names
+    PERCENTILE(numeric_column, ListFromRange(0.00, 1.05, 0.05)),                   -- calculate multiple percentiles (from 0.0 to 1.0 inclusive with step 0.05)
 FROM my_table;
 ```
 
 
 ## HISTOGRAM {#histogram}
+
+### Signature
+
+```yql
+HISTOGRAM(Double?)->HistogramStruct?
+HISTOGRAM(Double?, weight:Double)->HistogramStruct?
+HISTOGRAM(Double?, intervals:Uint32)->HistogramStruct?
+HISTOGRAM(Double?, weight:Double, intervals:Uint32)->HistogramStruct?
+```
+
+In the signature descriptions, `HistogramStruct` refers to the result of the aggregate function, which is a structure of a specific kind.
 
 Plotting an approximate histogram based on a numeric expression with automatic selection of buckets.
 
@@ -486,11 +650,16 @@ The Distance, Weight, and Ward algorithms differ in the formulas that combine tw
 
 Difference between Adaptive and Block:
 
-> Contrary to adaptive histogram, block histogram doesn't rebuild bins after each point is added. Instead, it accumulates points and if the amount of points overflows specified limits, it shrinks all the points at once to produce a histogram. Indeed, there exist two limits and two shrinkage operations:
->
-> 1. FastGreedyShrink is fast but coarse. It is used to shrink from upper limit to intermediate limit (override FastGreedyShrink to set specific behaviour).
-> 2. SlowShrink is slow, but produces finer histogram. It shrinks from the intermediate limit to the actual number of bins in a manner similar to that in adaptive histogram (set CalcQuality in 34constuctor)
->    While FastGreedyShrink is used most of the time, SlowShrink is mostly used for histogram finalization
+{% note info %}
+
+Contrary to adaptive histogram, block histogram doesn't rebuild bins after the addition of each point. Instead, it accumulates points and in case the amount of points overflows specified limits, it shrinks all the points at once to produce histogram. Indeed, there exist two limits and two shrinkage operations:
+
+1. FastGreedyShrink is fast but coarse. It is used to shrink from upper limit to intermediate limit (override FastGreedyShrink to set specific behaviour).
+2. SlowShrink is slow, but produces finer histogram. It shrinks from the intermediate limit to the actual number of bins in a manner similar to that in adaptive histogram (set CalcQuality in constuctor)
+
+While FastGreedyShrink is used most of the time, SlowShrink is mostly used for histogram finalization
+
+{% endnote %}
 
 {% endif %}
 
@@ -534,6 +703,18 @@ FROM my_table;
 
 Plotting a histogram based on an explicitly specified fixed bucket scale.
 
+### Signature
+
+```yql
+LinearHistogram(Double?)->HistogramStruct?
+LinearHistogram(Double? [, binSize:Double [, min:Double [, max:Double]]])->HistogramStruct?
+
+LogarithmicHistogram(Double?)->HistogramStruct?
+LogarithmicHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->HistogramStruct?
+LogHistogram(Double?)->HistogramStruct?
+LogHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->HistogramStruct?
+```
+
 Arguments:
 
 1. Expression used to plot the histogram. All the following arguments are optional.
@@ -554,6 +735,26 @@ SELECT
 FROM my_table;
 ```
 
+
+## CDF (cumulative distribution function) {#histogramcdf}
+
+The suffix `CDF` can be appended to each type of Histogram function to build a cumulative distribution function. The constructs
+
+```yql
+SELECT
+    Histogram::ToCumulativeDistributionFunction(Histogram::Normalize(<histogram_function>Histogram(numeric_column)))
+FROM my_table;
+```
+
+and
+
+```yql
+SELECT
+    <histogram_function>HistogramCDF(numeric_column)
+FROM my_table;
+```
+
+are fully equivalent.
 
 ## BOOL_AND, BOOL_OR and BOOL_XOR {#bool-and-or-xor}
 
@@ -635,15 +836,22 @@ FROM my_table;
 
 {% if feature_window_functions %}
 
-## SessionStart {#session-start}
+  ## SessionStart {#session-start}
 
 No arguments. It's allowed only if there is [SessionWindow](../syntax/select/group-by.md#session-window) in [GROUP BY](../syntax/select/group-by.md) / [PARTITION BY](../syntax/select/window.md#partition).
 Returns the value of the `SessionWindow` key column. If `SessionWindow` has two arguments, it returns the minimum value of the first argument within the group/section.
 In the case of the expanded version `SessionWindow`, it returns the value of the second element from the tuple returned by `<calculate_lambda>`, for which the first tuple element is `True`.
 
+
 {% endif %}
 
 ## AGGREGATE_BY and MULTI_AGGREGATE_BY {#aggregate-by}
+
+{% if backend_name == "YDB" and oss == true %}
+
+{% include [not_allow_for_olap_note](../../../_includes/not_allow_for_olap_note.md) %}
+
+{% endif %}
 
 Applying an [aggregation factory](basic.md#aggregationfactory) to all values of a column or expression. The `MULTI_AGGREGATE_BY` function requires that the value of a column or expression has a structure, tuple, or list, and applies the factory to each individual element, placing the result in a container of the same format. If different values of a column or expression contain lists of different length, the resulting list will have the smallest of the source lengths.
 
@@ -668,5 +876,3 @@ SELECT
     MULTI_AGGREGATE_BY(nums, AggregationFactory("percentile", 0.9)) as p90
 FROM my_table;
 ```
-
-{% include [not_allow_for_olap_note](../../../_includes/not_allow_for_olap_note.md) %}

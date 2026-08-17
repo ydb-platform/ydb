@@ -21,6 +21,7 @@ The possible names of rights are listed in the table below.
 | `ydb.granular.alter_schema` | `ALTER SCHEMA` | The right to modify access objects (directories, tables, topics), including users' rights to access objects |
 | **Additional flags** |  |  |
 | `ydb.access.grant` | `GRANT` | The right to grant or revoke rights from other users to the extent not exceeding the current scope of the user's rights on the access object |
+| **Rights based on other rights** | | |
 | `ydb.tables.modify` | `MODIFY TABLES` | `ydb.granular.update_row` + `ydb.granular.erase_row` |
 | `ydb.tables.read` | `SELECT TABLES` | Alias for `ydb.granular.select_row` |
 | `ydb.generic.list` | `LIST` | Alias for `ydb.granular.describe_schema` |

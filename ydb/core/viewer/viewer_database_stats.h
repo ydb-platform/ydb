@@ -287,7 +287,11 @@ public:
         if (VSlotsResponse.IsOk() && !StorageGroups.empty() && StorageNodes.empty()) {
             std::unordered_set<TNodeId> storageNodes;
             for (const auto& vslot : VSlotsResponse->Record.GetEntries()) {
-                storageNodes.insert(vslot.GetKey().GetNodeId());
+                const NKikimrSysView::TVSlotInfo& info = vslot.GetInfo();
+                auto itGroup = StorageGroups.find(info.GetGroupId());
+                if (itGroup != StorageGroups.end() && itGroup->second.GetInfo().GetGeneration() == info.GetGroupGeneration()) {
+                    storageNodes.insert(vslot.GetKey().GetNodeId());
+                }
             }
             StorageNodes.assign(storageNodes.begin(), storageNodes.end());
             Result.SetStorageNodes(StorageNodes.size());

@@ -142,16 +142,17 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
     auto& runtime = setup->GetRuntime();
     runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
 
-    // FirstClass: the _id attribute is silently ignored, the Id (if any) is generated
-    // by schemeshard, never taken from the request.
+    // FirstClass: the _id attribute is silently ignored, the Id is the topic's
+    // LocalPathId set by schemeshard, never taken from the request.
     {
         const TString path = "/Root/topic_id_attr_first_class";
         auto request = MakeCreateTopicRequest(path);
-        (*request.mutable_attributes())["_id"] = "external-topic-id";
+        (*request.mutable_attributes())["_id"] = "1234567";
         AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
 
         auto config = DescribeTabletConfig(runtime, path);
-        UNIT_ASSERT_VALUES_UNEQUAL(config.GetId(), "external-topic-id");
+        // The stored Id is the LocalPathId, not the supplied _id value.
+        UNIT_ASSERT_VALUES_UNEQUAL(config.GetId(), 1234567u);
     }
 
     // Flag off: the attribute is ignored as well.
@@ -159,7 +160,7 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
         runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(false);
         const TString path = "/Root/topic_id_attr_flag_off";
         auto request = MakeCreateTopicRequest(path);
-        (*request.mutable_attributes())["_id"] = "external-topic-id";
+        (*request.mutable_attributes())["_id"] = "1234567";
         AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
 
         auto config = DescribeTabletConfig(runtime, path);
@@ -172,16 +173,38 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
     {
         runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
-        const TString path = "/Root/topic_id_attr_federation";
+        const TString path = "/Root/rt3.dc1--test_account--topic_id_attr_federation";
         auto request = MakeCreateTopicRequest(path);
-        (*request.mutable_attributes())["_id"] = "my-federation-topic-uuid";
+        (*request.mutable_attributes())["_id"] = "1234567";
         AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
 
         auto config = DescribeTabletConfig(runtime, path);
-        UNIT_ASSERT_VALUES_EQUAL(config.GetId(), "my-federation-topic-uuid");
+        UNIT_ASSERT_VALUES_EQUAL(config.GetId(), 1234567u);
         UNIT_ASSERT(config.HasIdTxStep());
         UNIT_ASSERT_VALUES_EQUAL(config.GetIdTxStep(), 0u); // sentinel: filled at create
         // Restore FirstClass mode for subsequent sub-cases if any.
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+    }
+
+    // Non-numeric _id must be rejected with BAD_REQUEST when flag is on and federation mode.
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        const TString path = "/Root/rt3.dc1--test_account--topic_bad_id";
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_id"] = "not-a-number";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "not a valid positive integer");
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
+    }
+
+    // _id = "0" must be rejected with BAD_REQUEST when flag is on and federation mode.
+    {
+        runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        const TString path = "/Root/rt3.dc1--test_account--topic_zero_id";
+        auto request = MakeCreateTopicRequest(path);
+        (*request.mutable_attributes())["_id"] = "0";
+        AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "must be greater than 0");
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     }
 }

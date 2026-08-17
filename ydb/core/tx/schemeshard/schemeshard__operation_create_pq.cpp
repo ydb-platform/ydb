@@ -1,7 +1,6 @@
 #include "schemeshard__op_traits.h"
 #include "schemeshard__operation_common.h"
 
-#include <util/generic/guid.h>
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
@@ -166,16 +165,6 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     tabletConfig.ClearPartitionIds();
     tabletConfig.ClearPartitions();
 
-    if (AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()) {
-        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !tabletConfig.HasId()) {
-            tabletConfig.SetId(CreateGuidAsString());
-        }
-        if (tabletConfig.HasId()) {
-            // Sentinel: the id is filled at create, so writers must not use the
-            // name-keyed fallback (a brand-new topic has no legacy rows).
-            tabletConfig.SetIdTxStep(0);
-        }
-    }
 
     if (!CheckPersQueueConfig(tabletConfig, false, &errStr)) {
         status = NKikimrScheme::StatusSchemeError;
@@ -476,6 +465,28 @@ public:
 
         dstPath.MaterializeLeaf(owner);
         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+
+        // Assign topic Id for SourceId→Partition mapping. For FirstClass topics use
+        // the LocalPathId; for federation topics the Id should already be set from
+        // the _id attribute via ProcessTopicAttributes.
+        // Re-serialization follows the same pattern as schemeshard__operation_alter_pq.cpp:347
+        // and schemeshard__operation_common_pq.cpp:830.
+        if (AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()) {
+            bool configChanged = false;
+            if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !config.HasId()) {
+                config.SetId(dstPath.Base()->PathId.LocalPathId);
+                configChanged = true;
+            }
+            if (config.HasId() && !config.HasIdTxStep()) {
+                // Sentinel: the id is filled at create, so writers must not use the
+                // name-keyed fallback (a brand-new topic has no legacy rows).
+                config.SetIdTxStep(0);
+                configChanged = true;
+            }
+            if (configChanged) {
+                Y_PROTOBUF_SUPPRESS_NODISCARD config.SerializeToString(&pqGroup->TabletConfig);
+            }
+        }
 
         context.SS->TabletCounters->Simple()[COUNTER_PQ_GROUP_COUNT].Add(1);
 

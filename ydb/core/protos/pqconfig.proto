@@ -527,8 +527,10 @@ message TPQTabletConfig {
     optional string SqsCloudId = 46 [default = ""];
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
-    // Unique topic Id (UUID) used to key SourceId→Partition mapping instead of the topic name.
-    optional string Id = 49;
+    // Unique topic Id used to key SourceId→Partition mapping instead of the topic name.
+    // For FirstClass topics this is the topic's LocalPathId; for federation topics it is
+    // an opaque uint64 supplied by CM via the _id attribute.
+    optional uint64 Id = 49;
     // Sentinel (0) when Id was filled at topic create time, otherwise the schemeshard transaction step
     // at which Id was stamped during an alter.
     optional uint64 IdTxStep = 50;

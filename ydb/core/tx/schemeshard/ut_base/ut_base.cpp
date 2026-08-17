@@ -8037,8 +8037,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         runtime.GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
         ui64 txId = 100;
 
-        // On create the topic gets a server-generated unique Id with the sentinel
-        // IdTxStep == 0 ("filled at create": no name-keyed fallback for writers).
+        // On create the topic gets a server-generated unique Id (its LocalPathId)
+        // with the sentinel IdTxStep == 0 ("filled at create": no name-keyed fallback
+        // for writers).
         TestCreatePQGroup(runtime, ++txId, "/MyRoot", R"(
             Name: "Topic1"
             TotalGroupCount: 1
@@ -8049,14 +8050,14 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TString topicId;
+        ui64 topicId = 0;
         TestDescribeResult(
             DescribePath(runtime, "/MyRoot/Topic1"), {
                 NLs::PathExist,
                 NLs::Finished, [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
                     UNIT_ASSERT(config.HasId());
-                    UNIT_ASSERT(!config.GetId().empty());
+                    UNIT_ASSERT(config.GetId() != 0);
                     UNIT_ASSERT_VALUES_EQUAL(config.GetIdTxStep(), 0);
                     topicId = config.GetId();
                 }
@@ -8112,7 +8113,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Name: "Topic2"
             PQTabletConfig {
                 PartitionConfig { LifetimeSeconds: 10 }
-                Id: "backfilled-topic-id"
+                Id: 987654321
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -8122,7 +8123,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 NLs::PathExist,
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
-                    UNIT_ASSERT_VALUES_EQUAL(config.GetId(), "backfilled-topic-id");
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId(), 987654321u);
                     UNIT_ASSERT(config.HasIdTxStep());
                     UNIT_ASSERT(config.GetIdTxStep() > 0);
                 }
@@ -8134,7 +8135,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Name: "Topic2"
             PQTabletConfig {
                 PartitionConfig { LifetimeSeconds: 30 }
-                Id: "another-id"
+                Id: 111222333
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -8144,7 +8145,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 NLs::PathExist,
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
-                    UNIT_ASSERT_VALUES_EQUAL(config.GetId(), "backfilled-topic-id");
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId(), 987654321u);
                 }
             }
         );

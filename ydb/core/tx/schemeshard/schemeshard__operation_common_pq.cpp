@@ -819,8 +819,7 @@ void TPropose::PersistState(const TTxState& txState,
     NKikimrPQ::TPQTabletConfig newTabletConfig = pqGroup->AlterData->GetTabletConfig();
 
     // Only an alter can back-fill an Id on a pre-existing topic. A create always stamps the
-    // sentinel IdTxStep = 0 in CreatePersQueueGroup, so never touch it here: stamping a
-    // non-zero step on a create would wrongly enable the name-keyed fallback for writers.
+    // sentinel IdTxStep = 0 in CreatePersQueueGroup, so never touch it here.
     if (txState.TxType == TTxState::TxAlterPQGroup
             && newTabletConfig.HasId() && !newTabletConfig.HasIdTxStep()
             && txState.PlanStep != InvalidStepId) {

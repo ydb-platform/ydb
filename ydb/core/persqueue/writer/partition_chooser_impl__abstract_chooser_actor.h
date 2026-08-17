@@ -42,7 +42,7 @@ public:
                                    const TString& sourceId,
                                    std::optional<ui32> preferedPartition,
                                    NWilson::TTraceId traceId,
-                                   const TString& topicId = {},
+                                   ui64 topicId = 0,
                                    ui64 idTxStep = 0)
         : TBase(NKikimrServices::PQ_PARTITION_CHOOSER)
         , Parent(parentId)

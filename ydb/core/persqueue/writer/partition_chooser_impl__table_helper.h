@@ -23,7 +23,7 @@ constexpr TDuration SourceIdLegacyKeyPeriod = TDuration::Days(15);
 class TTableHelper {
 public:
     TTableHelper(const TString& topicName, const TString& topicHashName,
-                 const TString& topicId = {}, ui64 idTxStep = 0)
+                  ui64 topicId = 0, ui64 idTxStep = 0)
         : TopicName(topicName)
         , TopicHashName(topicHashName)
         , TopicId(topicId)
@@ -46,7 +46,8 @@ public:
 
         const bool mappingByIdEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicSourceIdMappingById();
 
-        TopicKey = (mappingByIdEnabled && TopicId) ? TopicId : TopicName;
+        const TString TopicIdString = TopicId ? ToString(TopicId) : TString{};
+        TopicKey = (mappingByIdEnabled && TopicId) ? TopicIdString : TopicName;
         // The fallback to the legacy name-based key is required only when the Id was
         // back-filled by an alter on a pre-existing topic (IdTxStep != 0, the sentinel 0
         // means the Id was set at create) and only during the transition window.
@@ -55,7 +56,7 @@ public:
 
         try {
             EncodedSourceId = NSourceIdEncoding::EncodeSrcId(
-                        (mappingByIdEnabled && TopicId) ? TopicId : TopicHashName, sourceId, TableGeneration
+                        (mappingByIdEnabled && TopicId) ? TopicIdString : TopicHashName, sourceId, TableGeneration
                 );
             if (LegacyKeySelectEnabled) {
                 FallbackEncodedSourceId = NSourceIdEncoding::EncodeSrcId(
@@ -311,7 +312,7 @@ private:
 
     const TString TopicName;
     const TString TopicHashName;
-    const TString TopicId;
+    const ui64 TopicId;
     const ui64 IdTxStep;
 
     // The key the mapping rows are written with: TopicId when set, TopicName otherwise.

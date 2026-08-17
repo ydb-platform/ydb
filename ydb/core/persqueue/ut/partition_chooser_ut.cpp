@@ -715,7 +715,7 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_BadSourceId_Test) {
     UNIT_ASSERT(r->Error);
 }
 
-static const TString TestTopicId = "12345678-9abc-def0-1234-56789abcdef0";
+static constexpr ui64 TestTopicId = 1234567890;
 
 Y_UNIT_TEST(TPartitionChooserActor_TopicId_NewSourceId_WriteByIdKey_Test) {
     // With a topic Id the mapping row is written with the id key, not the topic name.
@@ -731,7 +731,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NewSourceId_WriteByIdKey_Test) {
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
-    AssertTable(server, "Id_Source_0", 0, 0, TestTopicId);
+    AssertTable(server, "Id_Source_0", 0, 0, ToString(TestTopicId));
     AssertTableEmpty(server, "Id_Source_0"); // no name-keyed row was written
 }
 
@@ -752,7 +752,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NameFallbackInsideWindow_Test) {
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
-    AssertTable(server, "Id_Source_1", 1, 13, TestTopicId); // migrated to the id key
+    AssertTable(server, "Id_Source_1", 1, 13, ToString(TestTopicId)); // migrated to the id key
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenFilledAtCreate_Test) {
@@ -771,7 +771,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenFilledAtCreate_Test
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo.value_or(0), 0); // stale SeqNo not inherited
-    AssertTable(server, "Id_Source_2", r->Result->Get()->PartitionId, 0, TestTopicId);
+    AssertTable(server, "Id_Source_2", r->Result->Get()->PartitionId, 0, ToString(TestTopicId));
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenWindowClosed_Test) {
@@ -790,7 +790,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenWindowClosed_Test) 
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo.value_or(0), 0); // stale SeqNo not inherited
-    AssertTable(server, "Id_Source_3", r->Result->Get()->PartitionId, 0, TestTopicId);
+    AssertTable(server, "Id_Source_3", r->Result->Get()->PartitionId, 0, ToString(TestTopicId));
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_TopicId_IdKeyPreferredOverName_Test) {
@@ -804,13 +804,13 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_IdKeyPreferredOverName_Test) {
     AddPartition(config, 0);
     AddPartition(config, 1);
 
-    WriteToTable(server, "Id_Source_4", 0, 21, TestTopicId); // id-keyed row
+    WriteToTable(server, "Id_Source_4", 0, 21, ToString(TestTopicId)); // id-keyed row
     WriteToTable(server, "Id_Source_4", 1, 13);              // stale name-keyed row
     auto r = ChoosePartition(server, config, "Id_Source_4");
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
-    AssertTable(server, "Id_Source_4", 0, 21, TestTopicId);
+    AssertTable(server, "Id_Source_4", 0, 21, ToString(TestTopicId));
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_TopicId_FlagOff_UsesLegacyNameKey_Test) {
@@ -834,7 +834,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_FlagOff_UsesLegacyNameKey_Test) {
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo.value_or(0), 13);
     // The row is read and written under the name key, not the id key.
     AssertTable(server, "Id_Source_5", 1, 13);
-    AssertTableEmpty(server, "Id_Source_5", TestTopicId); // no id-keyed row was written
+    AssertTableEmpty(server, "Id_Source_5", ToString(TestTopicId)); // no id-keyed row was written
 }
 
 }

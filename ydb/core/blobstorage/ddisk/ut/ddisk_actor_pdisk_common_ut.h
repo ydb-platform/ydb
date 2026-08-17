@@ -1165,6 +1165,9 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
 //   fallback) does not enforce OwnerRound — both modes still get a reply. Then vchunk 1
 //   page 0 writes need a fresh chunk reservation that always goes through PDisk, so this
 //   is guaranteed to zombify and produce no reply in either mode. The test must NOT crash.
+//   Isolation of a fresh owner from zombie uring I/O is not asserted: reserved chunks
+//   may already have been formatted, so PDisk restart can reassign those physical
+//   offsets while the zombie still holds a live ring.
 //
 // Variant restartDDisk == true (warden-style recovery):
 //   After the PDisk restart we also restart DDisk slot 0; the new DDisk instance uses
@@ -1242,6 +1245,11 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     const ui32 disk2Idx = ctx.AddDDiskOnPDisk(0);
     NDDisk::TQueryCredentials creds3 = ConnectTo(ctx, disk2Idx, baseTabletId + 2, 1);
     writeBlock(disk2Idx, creds3, baseTabletId + 2, 0, 0);
+    // Prove the restarted PDisk is usable through a fresh owner before any
+    // zombie-slot I/O. Reserved chunks may already have been formatted
+    // (invariant 3: PDisk is not restarted separately from DDisk), so later
+    // zombie uring writes can land on those same physical offsets.
+    readAndVerify(disk2Idx, creds3, baseTabletId + 2, 0, 0);
 
     if (restartDDisk) {
         // Reconnect tablets 1 and 2 to the new DDisk slot 0 actor (their old credentials
@@ -1286,9 +1294,10 @@ NDDisk::TQueryCredentials ConnectTo(TTestContext& ctx, ui32 diskIdx, ui64 tablet
     ctx.SendTo(0, makeWrite(creds2, baseTabletId + 1, 1, 0).release());
     ctx.ExpectNoReply<NDDisk::TEvWriteResult>();
 
-    // Tablet 3's writes on the new DDisk slot are still readable -- proves the
-    // restarted PDisk is functional and the zombie DDisk slot didn't corrupt it.
-    readAndVerify(disk2Idx, creds3, baseTabletId + 2, 0, 0);
+    // Isolation of the new owner from the zombie slot is not guaranteed: the
+    // zombie still holds a live io_uring on physical offsets that PDisk may
+    // have reassigned after restart. The fresh-owner check above already
+    // proved the restarted PDisk works.
 }
 
 // Write from 2 tablets to multiple VChunks, free all chunks of one tablet, verify the other

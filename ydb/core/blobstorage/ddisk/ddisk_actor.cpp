@@ -117,6 +117,9 @@ namespace {
         , CountersParent(std::move(counters))
         , CountersBase(GetServiceCounters(CountersParent, "ddisks"))
         , IsPersistentBufferActor(isPersistentBufferActor)
+        , MinChunksReserved(isPersistentBufferActor
+            ? MinChunksReservedPersistentBuffer
+            : MinChunksReservedDDisk)
         , SegmentManager(DDiskInstanceGuid)
         , PersistentBufferFormat(std::move(pbFormat))
     {
@@ -277,6 +280,182 @@ namespace {
         }
     }
 
+    bool TDDiskActor::IsBroken() const {
+        return Broken;
+    }
+
+    TString TDDiskActor::GetBrokenReason() const {
+        return BrokenReason ? BrokenReason : TString("DDisk is broken");
+    }
+
+    void TDDiskActor::FailPendingDDiskQuery(std::unique_ptr<IEventHandle> ev) {
+        const TString reason = GetBrokenReason();
+        switch (ev->GetTypeRewrite()) {
+            case TEv::EvWrite:
+                Counters.Interface.Write.Request(0);
+                Counters.Interface.Write.Reply(false);
+                SendReply(*ev, std::make_unique<TEvWriteResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, reason));
+                break;
+            case TEv::EvRead:
+                Counters.Interface.Read.Request(0);
+                Counters.Interface.Read.Reply(false);
+                SendReply(*ev, std::make_unique<TEvReadResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, reason));
+                break;
+            case TEv::EvSync:
+                Counters.Interface.Sync.Request(0);
+                Counters.Interface.Sync.Reply(false);
+                SendReply(*ev, std::make_unique<TEvSyncResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, reason));
+                break;
+            case TEv::EvDeleteTabletChunks:
+                SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, reason));
+                break;
+            default:
+                // Internal source-read results are covered by the SyncsInFlight drain below.
+                break;
+        }
+    }
+
+    void TDDiskActor::FailDirectIoOp(std::unique_ptr<TDirectIoOpBase> op, bool wasRunning) {
+        if (wasRunning) {
+            Counters.DirectIO.RunningCount->Dec();
+        } else {
+            Counters.DirectIO.QueueSize->Dec();
+        }
+        switch (op->GetOperationType()) {
+            case NPDisk::TUringOperationBase::EREAD:
+                Counters.DirectIO.Read.Done(op->GetTotalSize());
+                break;
+            case NPDisk::TUringOperationBase::EWRITE:
+                Counters.DirectIO.Write.Done(op->GetTotalSize());
+                break;
+            default:
+                Y_ABORT("Unknown OperationType");
+        }
+        op->Reply(TActivationContext::ActorSystem(),
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason());
+    }
+
+    void TDDiskActor::EnterBroken(TString reason) {
+        if (Broken) {
+            return;
+        }
+        Broken = true;
+        BrokenReason = reason
+            ? std::move(reason)
+            : TString("DDisk is broken");
+
+        YDB_LOG_ERROR("TDDiskActor entered Broken state",
+            {"marker", "BSDD54"},
+            {"DDiskId", DDiskId},
+            {"errorReason", GetBrokenReason()});
+
+        // Complete actor-owned queued/fallback operations immediately. Submitted io_uring
+        // operations post their result events later; the actor normalizes those to ERROR because
+        // Broken is already set.
+        while (!DirectIoQueue.empty()) {
+            auto op = std::move(DirectIoQueue.front());
+            DirectIoQueue.pop();
+            FailDirectIoOp(std::move(op), false);
+        }
+        while (!WriteCallbacks.empty()) {
+            auto it = WriteCallbacks.begin();
+            auto op = std::move(it->second.Op);
+            WriteCallbacks.erase(it);
+            FailDirectIoOp(std::move(op), true);
+        }
+        while (!ReadCallbacks.empty()) {
+            auto it = ReadCallbacks.begin();
+            auto op = std::move(it->second.Op);
+            ReadCallbacks.erase(it);
+            FailDirectIoOp(std::move(op), true);
+        }
+
+        for (auto& [tabletId, chunks] : ChunkRefs) {
+            for (auto& [vChunkIndex, chunkRef] : chunks) {
+                Y_UNUSED(tabletId, vChunkIndex);
+                while (!chunkRef.PendingEventsForChunk.empty()) {
+                    auto pending = chunkRef.PendingEventsForChunk.front().Release();
+                    chunkRef.PendingEventsForChunk.pop();
+                    FailPendingDDiskQuery(std::unique_ptr<IEventHandle>(pending.Release()));
+                }
+            }
+        }
+
+        // Fail every sync exactly once, remove any segment-manager state, and leave late source
+        // reads/internal writes harmless (their handlers already tolerate an absent sync).
+        std::vector<TSegmentManager::TSegment> removedSegments;
+        while (!SyncsInFlight.empty()) {
+            auto it = SyncsInFlight.begin();
+            auto& sync = it->second;
+            if (sync.FirstRequestId != Max<ui64>()) {
+                for (ui64 i = 0; i < sync.Requests.size(); ++i) {
+                    const ui64 requestId = sync.FirstRequestId + i;
+                    SegmentManager.PopRequest(requestId, &removedSegments);
+                    SyncReadCookiesInFlight.erase(requestId);
+                    auto& request = sync.Requests[i];
+                    if (request.Status == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
+                        request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+                        request.ErrorReason << GetBrokenReason();
+                    }
+                }
+            }
+            sync.ErrorReason << GetBrokenReason();
+            ReplySync(it);
+        }
+        SyncReadCookiesInFlight.clear();
+
+        for (const auto& [tabletId, reply] : TabletChunkDeletionReplies) {
+            Y_UNUSED(tabletId);
+            auto h = std::make_unique<IEventHandle>(reply.ReplyTo, SelfId(),
+                new TEvDeleteTabletChunksResult(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason()),
+                0, reply.Cookie);
+            if (reply.InterconnectSession) {
+                h->Rewrite(TEvInterconnect::EvForward, reply.InterconnectSession);
+            }
+            TActivationContext::Send(h.release());
+        }
+        TabletChunkDeletionReplies.clear();
+
+        for (auto& [key, allocation] : DataChunkAllocationsInFlight) {
+            Y_UNUSED(key);
+            for (auto& parked : allocation.ParkedWriteResults) {
+                parked.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+                parked.ErrorMessage = GetBrokenReason();
+            }
+            FlushParkedAllocationReplies(allocation);
+        }
+
+        DataChunkAllocationsInFlight.clear();
+        ChunkMapIncrementsInFlight.clear();
+        if (IntegrityManager) {
+            Y_UNUSED(IntegrityManager->TakeActions());
+        }
+
+        // DDisk and PersistentBuffer are separate actor instances sharing
+        // this class. Only DDisk talks to PDisk, so PB chunk requests still
+        // arrive here as TChunkForPersistentBuffer. Drop data/integrity work
+        // and keep serving those PB allocations if DDisk is the one that
+        // broke. The PersistentBuffer instance never uses this queue.
+        if (!IsPersistentBufferActor) {
+            decltype(ChunkAllocateQueue) persistentBufferAllocations;
+            while (!ChunkAllocateQueue.empty()) {
+                auto allocation = std::move(ChunkAllocateQueue.front());
+                ChunkAllocateQueue.pop();
+                if (std::holds_alternative<TChunkForPersistentBuffer>(
+                        allocation)) {
+                    persistentBufferAllocations.push(std::move(allocation));
+                }
+            }
+            ChunkAllocateQueue.swap(persistentBufferAllocations);
+            HandleChunkReserved();
+        }
+    }
+
     void TDDiskActor::Handle(TEvents::TEvUndelivered::TPtr ev) {
         auto sourceType = ev->Get()->SourceType;
         if (sourceType == TEv::EvRead || sourceType == TEv::EvReadPersistentBuffer) {
@@ -304,13 +483,17 @@ namespace {
             }
             auto& request = sync.Requests[ev->Cookie - sync.FirstRequestId];
 
+            if (request.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
+                return;
+            }
+
             request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
             request.ErrorReason << "[" << request.Selector.OffsetInBytes << ';'
                 << request.Selector.OffsetInBytes + request.Selector.Size
                 << "] failed to read; reason: read event undelivered";
             sync.ErrorReason << "[request_idx=" << ev->Cookie - sync.FirstRequestId << "] failed to read; ";
             if (--sync.RequestsInFlight == 0) {
-                ReplySync(it);
+                MaybeReplySync(it);
             }
             return;
         }
@@ -344,6 +527,8 @@ namespace {
             hFunc(NPDisk::TEvChunkReserveResult, Handle)
             hFunc(NPDisk::TEvLogResult, Handle)
             hFunc(TEvPrivate::TEvHandleEventForChunk, Handle)
+            hFunc(TEvPrivate::TEvDDiskIoResult, Handle)
+            hFunc(TEvPrivate::TEvIntegrityIoResult, Handle)
             hFunc(NPDisk::TEvCutLog, Handle)
             hFunc(TEvReadPersistentBufferResult, Handle)
             hFunc(NPDisk::TEvChunkWriteRawResult, Handle)

@@ -24,6 +24,14 @@ namespace NKikimr::NDDisk {
         TSyncIt syncIt = SyncsInFlight.end();
         counters.Request(0);
 
+        if (TabletChunkDeletionsInFlight.contains(creds.TabletId)) {
+            counters.Reply(false);
+            SendReply(*ev, std::make_unique<TEvSyncResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
+                "tablet chunk deletion is in flight"));
+            return;
+        }
+
         auto cleanupSyncState = [&] {
             if (syncIt == SyncsInFlight.end()) {
                 return;
@@ -195,7 +203,7 @@ namespace NKikimr::NDDisk {
                     const auto prevStatus = std::exchange(request.Status, NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED);
                     if (prevStatus == NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN) {
                         if (--outdatedSync.RequestsInFlight == 0) {
-                            ReplySync(outdatedIt);
+                            MaybeReplySync(outdatedIt);
                         }
                     }
                 }
@@ -294,17 +302,20 @@ namespace NKikimr::NDDisk {
                 {"status", static_cast<int>(record.GetStatus())},
                 {"errorReason", record.GetErrorReason()});
             if (--sync.RequestsInFlight == 0) {
-                ReplySync(it);
+                MaybeReplySync(it);
             }
             return;
         }
 
         TChunkRef& chunkRef = ChunkRefs[sync.Creds.TabletId][sync.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
-            if (chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx) {
+            // Park first: IssueChunkAllocation may place the extent synchronously from the
+            // reserve and OpenDataChunkWritePath only drains already-queued events.
+            const bool startAllocation = chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx;
+            chunkRef.PendingEventsForChunk.emplace(ev, "WaitChunkAllocation");
+            if (startAllocation) {
                 IssueChunkAllocation(sync.Creds.TabletId, sync.VChunkIndex);
             }
-            chunkRef.PendingEventsForChunk.emplace(ev, "WaitChunkAllocation");
             return;
         }
 
@@ -335,6 +346,24 @@ namespace NKikimr::NDDisk {
             TRope segmentData;
             data.ExtractFront(end - begin, &segmentData);
             cuttedFromData = end;
+
+            // Track the written blocks at submission time. The source read result may carry
+            // per-4KiB-block checksums of the whole requested range; slice out this segment's part.
+            {
+                std::vector<ui64> segmentChecksums;
+                const ui64 selectorOffset = request.Selector.OffsetInBytes;
+                if (record.ChecksumsSize() > 0 &&
+                        static_cast<ui64>(record.ChecksumsSize()) * IntegrityUnitSize == request.Selector.Size &&
+                        selectorOffset % IntegrityUnitSize == 0 &&
+                        begin % IntegrityUnitSize == 0 && end % IntegrityUnitSize == 0) {
+                    const auto& checksums = record.GetChecksums();
+                    const size_t first = (begin - selectorOffset) / IntegrityUnitSize;
+                    const size_t count = (end - begin) / IntegrityUnitSize;
+                    segmentChecksums.assign(checksums.begin() + first, checksums.begin() + first + count);
+                }
+                IntegrityManager->OnBlocksWritten({sync.Creds.TabletId, sync.VChunkIndex},
+                    static_cast<ui32>(begin), static_cast<ui32>(end - begin), segmentChecksums);
+            }
 
             auto diskOffset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, begin);
             std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TInternalSyncWriteOp>();
@@ -380,7 +409,7 @@ namespace NKikimr::NDDisk {
             request.ErrorReason << "[" << begin << ";" << end << ") failed to write; reason: " << ev->Get()->ErrorMessage << "; ";
             sync.ErrorReason << "[request_idx=" << requestId - sync.FirstRequestId << "] failed to write; ";
             if (--sync.RequestsInFlight == 0) {
-                ReplySync(it);
+                MaybeReplySync(it);
             }
             return;
         }
@@ -388,7 +417,7 @@ namespace NKikimr::NDDisk {
         if (--request.SegmentsInFlight == 0) {
             request.Status = NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
             if (--sync.RequestsInFlight == 0) {
-                ReplySync(it);
+                MaybeReplySync(it);
             }
         }
     }
@@ -422,5 +451,17 @@ namespace NKikimr::NDDisk {
         sync.Span.End();
         TActivationContext::Send(h.release());
         SyncsInFlight.erase(it);
+    }
+
+    void TDDiskActor::MaybeReplySync(TSyncIt it) {
+        Y_VERIFY(it != SyncsInFlight.end());
+        const ui64 syncId = it->first;
+        auto& sync = it->second;
+        const auto allocIt = DataChunkAllocationsInFlight.find({sync.Creds.TabletId, sync.VChunkIndex});
+        if (allocIt != DataChunkAllocationsInFlight.end()) {
+            allocIt->second.ParkedSyncIds.push_back(syncId);
+            return;
+        }
+        ReplySync(it);
     }
 }

@@ -261,6 +261,32 @@ void StripPartitionFromNavigateResult(
     }
 }
 
+void StripConsumerFromNavigateResult(
+    TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev,
+    const TString& consumerName,
+    bool onlyWithoutSync)
+{
+    if (!ev || !ev->Get()->Request) {
+        return;
+    }
+    for (auto& entry : ev->Get()->Request->ResultSet) {
+        if (!entry.PQGroupInfo) {
+            continue;
+        }
+        if (onlyWithoutSync && entry.SyncVersion) {
+            continue;
+        }
+        auto copy = MakeIntrusive<NSchemeCache::TSchemeCacheNavigate::TPQGroupInfo>(*entry.PQGroupInfo);
+        auto* consumers = copy->Description.MutablePQTabletConfig()->MutableConsumers();
+        for (int i = consumers->size() - 1; i >= 0; --i) {
+            if (consumers->Get(i).GetName() == consumerName) {
+                consumers->DeleteSubrange(i, 1);
+            }
+        }
+        entry.PQGroupInfo = copy;
+    }
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(SchemaOps_TopicAPI) {
@@ -622,6 +648,75 @@ Y_UNIT_TEST(DescribeUnknownConsumer) {
     AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR);
 }
 
+Y_UNIT_TEST(DescribeConsumerRetriesWithSyncWhenStaleCache) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_consumer_stale_cache";
+    CreateTopic(runtime, path);
+
+    size_t staleNavigates = 0;
+    size_t syncNavigates = 0;
+    auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+        [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+            if (!ev || !ev->Get()->Request) {
+                return;
+            }
+            for (const auto& entry : ev->Get()->Request->ResultSet) {
+                if (!entry.PQGroupInfo) {
+                    continue;
+                }
+                if (entry.SyncVersion) {
+                    ++syncNavigates;
+                } else {
+                    ++staleNavigates;
+                }
+            }
+            StripConsumerFromNavigateResult(ev, /*consumerName=*/"user", /*onlyWithoutSync=*/true);
+        });
+
+    Ydb::Topic::DescribeConsumerRequest request;
+    request.set_path(path);
+    request.set_consumer("user");
+    auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+        runtime, request, CreateDescribeConsumerActor, path);
+
+    UNIT_ASSERT_GT(staleNavigates, 0u);
+    UNIT_ASSERT_GT(syncNavigates, 0u);
+    AssertStatus(result, Ydb::StatusIds::SUCCESS);
+    const auto& describeResult = GetResult<Ydb::Topic::DescribeConsumerResult>(result);
+    UNIT_ASSERT_VALUES_EQUAL(describeResult.consumer().name(), "user");
+}
+
+Y_UNIT_TEST(DescribeConsumerMissingAfterSync) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_describe_consumer_missing_after_sync";
+    CreateTopic(runtime, path);
+
+    size_t syncNavigates = 0;
+    auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+        [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+            if (!ev || !ev->Get()->Request) {
+                return;
+            }
+            for (const auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.PQGroupInfo && entry.SyncVersion) {
+                    ++syncNavigates;
+                }
+            }
+            StripConsumerFromNavigateResult(ev, /*consumerName=*/"user", /*onlyWithoutSync=*/false);
+        });
+
+    Ydb::Topic::DescribeConsumerRequest request;
+    request.set_path(path);
+    request.set_consumer("user");
+    auto result = DoActorRequest<Ydb::Topic::DescribeConsumerRequest, Ydb::Topic::DescribeConsumerResponse>(
+        runtime, request, CreateDescribeConsumerActor, path);
+
+    UNIT_ASSERT_GT(syncNavigates, 0u);
+    AssertStatus(result, Ydb::StatusIds::SCHEME_ERROR, "no consumer 'user' in topic");
+}
+
 Y_UNIT_TEST(DescribeConsumerRetriesOnLocationDeliveryProblem) {
     auto server = CreateSimulatedServer();
     auto& runtime = server->GetRuntime();
@@ -961,6 +1056,66 @@ Y_UNIT_TEST(PartitionsLocationSmokeAndErrors) {
         auto ev = DoPartitionsLocationRequest(runtime, {"/Root/missing_topic", "/Root", "", {}});
         UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SCHEME_ERROR);
     }
+}
+
+Y_UNIT_TEST(PartitionsLocationRetriesWithSyncWhenStaleCache) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_partitions_location_stale_cache";
+    CreateTopic(runtime, path, /*partitions=*/2);
+
+    size_t staleNavigates = 0;
+    size_t syncNavigates = 0;
+    auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+        [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+            if (!ev || !ev->Get()->Request) {
+                return;
+            }
+            for (const auto& entry : ev->Get()->Request->ResultSet) {
+                if (!entry.PQGroupInfo) {
+                    continue;
+                }
+                if (entry.SyncVersion) {
+                    ++syncNavigates;
+                } else {
+                    ++staleNavigates;
+                }
+            }
+            StripPartitionFromNavigateResult(ev, /*partitionId=*/1, /*onlyWithoutSync=*/true);
+        });
+
+    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1}});
+    UNIT_ASSERT_GT(staleNavigates, 0u);
+    UNIT_ASSERT_GT(syncNavigates, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Partitions[0].PartitionId, 1u);
+}
+
+Y_UNIT_TEST(PartitionsLocationMissingAfterSync) {
+    auto server = CreateSimulatedServer();
+    auto& runtime = server->GetRuntime();
+    const TString path = "/Root/topic_partitions_location_missing_after_sync";
+    CreateTopic(runtime, path, /*partitions=*/2);
+
+    size_t syncNavigates = 0;
+    auto observer = runtime.AddObserver<TEvTxProxySchemeCache::TEvNavigateKeySetResult>(
+        [&](TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+            if (!ev || !ev->Get()->Request) {
+                return;
+            }
+            for (const auto& entry : ev->Get()->Request->ResultSet) {
+                if (entry.PQGroupInfo && entry.SyncVersion) {
+                    ++syncNavigates;
+                }
+            }
+            StripPartitionFromNavigateResult(ev, /*partitionId=*/1, /*onlyWithoutSync=*/false);
+        });
+
+    auto ev = DoPartitionsLocationRequest(runtime, {path, "/Root", "", {1}});
+    UNIT_ASSERT_GT(syncNavigates, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(ev->Status, Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT(ev->Issues.ToString().Contains("No partition 1 in topic"));
 }
 
 Y_UNIT_TEST(PartitionsLocationRetriesOnDeliveryProblem) {

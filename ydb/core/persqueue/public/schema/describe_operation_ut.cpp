@@ -111,7 +111,8 @@ struct TTestDescribeStrategyOptions {
     bool WithReadSessions = false;
     bool WithStatus = false;
     TString ConsumerName;
-    ui32 FailValidateTimes = 0;
+    // Unset: fail on every ValidateSchema call while ValidateError is set.
+    std::optional<ui32> FailValidateTimes;
     ui32* ValidateCalls = nullptr;
 };
 
@@ -133,8 +134,8 @@ public:
             ++*Options.ValidateCalls;
         }
         if (Options.ValidateError) {
-            const bool shouldFail = Options.FailValidateTimes == 0
-                || (Options.ValidateCalls && *Options.ValidateCalls <= Options.FailValidateTimes);
+            const bool shouldFail = !Options.FailValidateTimes
+                || (Options.ValidateCalls && *Options.ValidateCalls <= *Options.FailValidateTimes);
             if (shouldFail) {
                 return {.Error = Options.ValidateError};
             }

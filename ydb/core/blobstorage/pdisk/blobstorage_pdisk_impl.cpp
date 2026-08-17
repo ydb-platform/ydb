@@ -84,6 +84,9 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     StaticGroupChunkReservePerMille = TControlWrapper(NPDisk::StaticGroupChunkReservePerMille, 0, 1000);
     StaticGroupChunkReservePerMilleCached = StaticGroupChunkReservePerMille;
     ForcedPDiskSpaceColor = TControlWrapper(0, 0, 60);
+    // Enabled by default; can be disabled via ICB (no restart required) to
+    // fall back to the legacy PDisk-only overestimation metric computation.
+    UseDeviceOverestimationRatioMerged = TControlWrapper(1, 0, 1);
 
     if (Cfg->SectorMap) {
         auto diskModeParams = Cfg->SectorMap->GetDiskModeParams();
@@ -1724,7 +1727,9 @@ void TPDisk::WhiteboardReport(TWhiteboardReport &whiteboardReport) {
         *Mon.NumActiveSlots = numActiveSlots;
         *Mon.SlotSizeInUnits = Cfg->SlotSizeInUnits;
         *Mon.ExpectedSlotCount = ExpectedSlotCount;
-        if (ExpectedSlotCount) {
+        if (ExpectedSlotSize) {
+            *Mon.SlotSizeBytes = ExpectedSlotSize;
+        } else if (ExpectedSlotCount) {
             *Mon.SlotSizeBytes = ui64(Keeper.GetUserChunkPoolSize() / ExpectedSlotCount) * ui64(Format.ChunkSize);
         }
 
@@ -3122,6 +3127,8 @@ bool TPDisk::Initialize() {
             TControlBoard::RegisterSharedControl(UseNoopSchedulerSSD, icb->PDiskControls.UseNoopSchedulerSSD);
             REGISTER_LOCAL_CONTROL(ChunkBaseLimitPerMille);
             TControlBoard::RegisterSharedControl(SemiStrictSpaceIsolation, icb->PDiskControls.SemiStrictSpaceIsolation);
+            TControlBoard::RegisterSharedControl(UseDeviceOverestimationRatioMerged,
+                    icb->PDiskControls.UseDeviceOverestimationRatioMerged);
             TControlBoard::RegisterSharedControl(StaticGroupChunkReservePerMille,
                     icb->PDiskControls.StaticGroupChunkReservePerMille);
             if (Cfg->FeatureFlags.GetEnablePDiskSpaceColorOverride()) {

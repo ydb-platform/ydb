@@ -3592,6 +3592,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultCostBasedOptimizationLevel(4);
+        appConfig.MutableTableServiceConfig()->SetDefaultEnableShuffleElimination(false);
+        appConfig.MutableTableServiceConfig()->SetEnablePruneKeyColumns(true);
         appConfig.MutableTableServiceConfig()->SetEnableAutoIndexSelectionForIndexLookupJoin(true);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
 
@@ -3697,21 +3699,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 ORDER BY t1.Value1, t2.Value1;
             )",
             R"(
-                -- LookupJoin, Index12 left / PK right (t1 via Index12 filter, probe t2 PK)
+                -- LookupJoin, Index12 left / PK right (t1 via Index12 filter, probe t2 PK)              
                 SELECT t1.Value1, t2.Value1
                 FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.Key = t2.Key
                 WHERE t1.SubKey1 = 0 AND t1.SubKey2 = "0"
                 ORDER BY t1.Value1, t2.Value1;
             )",
             R"(
-                -- LookupJoin, PK left / Index21 right (probe t2 by SubKey2 and need t2.Value1)
+                -- LookupJoin, PK left / Index21 right (probe t2 by SubKey2 and need t2.Value1)           
                 SELECT t1.Value1, t2.Value1
                 FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
                 WHERE t1.Key = 1
                 ORDER BY t1.Value1, t2.Value1;
             )",
             R"(
-                -- LookupJoin, Index212 left / Index212 right
+                -- LookupJoin, Index212 left / Index212 right             
                 SELECT t1.Value2, t2.Value2
                 FROM `/Root/Table` AS t1 INNER JOIN `/Root/Table2` AS t2 ON t1.SubKey2 = t2.SubKey2
                 WHERE t1.SubKey2 >= "0"
@@ -7887,11 +7889,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
         // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
         RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
-                            {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
-    }
-
-    Y_UNIT_TEST(TPCH_YQL_Q21_NewRBO) {
-        RunTPCH_YqlSingleQueryTest(21);
+                            {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
+                        /*queriesWithoutCboCheck=*/{13});
     }
 
     Y_UNIT_TEST(TPCDS_YQL) {

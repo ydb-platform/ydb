@@ -129,5 +129,71 @@ Y_UNIT_TEST_SUITE(TDeviceOverestimationAggregatorTest) {
     }
 }
 
+// Tests for the UseDeviceOverestimationRatioMerged option's core decision
+// logic: SelectPublishedOverestimationResult() picks which of the legacy
+// (PDisk-only) or merged (cross-source) computed results gets published via
+// the user-facing DeviceOverestimationRatio/DeviceNonperformanceMs sensors.
+// This is the pure, unit-testable piece of the ICB-controlled option
+// described in blobstorage_pdisk_blockdevice_async.cpp's TSharedCallback::Exec.
+Y_UNIT_TEST_SUITE(TSelectPublishedOverestimationResultTest) {
+
+    Y_UNIT_TEST(WhenEnabledPublishesMergedResult) {
+        TOverestimationRatioResult legacy;
+        legacy.OverestimationRatio = 111;
+        legacy.NonperformanceMs = 11;
+
+        TOverestimationRatioResult merged;
+        merged.OverestimationRatio = 222;
+        merged.NonperformanceMs = 22;
+
+        const auto& selected = SelectPublishedOverestimationResult(/*useMerged*/ true, legacy, merged);
+        UNIT_ASSERT_VALUES_EQUAL(selected.OverestimationRatio, merged.OverestimationRatio);
+        UNIT_ASSERT_VALUES_EQUAL(selected.NonperformanceMs, merged.NonperformanceMs);
+    }
+
+    Y_UNIT_TEST(WhenDisabledPublishesLegacyResult) {
+        TOverestimationRatioResult legacy;
+        legacy.OverestimationRatio = 111;
+        legacy.NonperformanceMs = 11;
+
+        TOverestimationRatioResult merged;
+        merged.OverestimationRatio = 222;
+        merged.NonperformanceMs = 22;
+
+        const auto& selected = SelectPublishedOverestimationResult(/*useMerged*/ false, legacy, merged);
+        UNIT_ASSERT_VALUES_EQUAL(selected.OverestimationRatio, legacy.OverestimationRatio);
+        UNIT_ASSERT_VALUES_EQUAL(selected.NonperformanceMs, legacy.NonperformanceMs);
+    }
+
+    // Simulates the option being toggled at runtime (as it would be via the
+    // ICB console command, without a cluster restart): flipping the flag
+    // must immediately flip which result is selected, with no memory of the
+    // previous choice.
+    Y_UNIT_TEST(TogglingFlagSwitchesSelectionImmediately) {
+        TOverestimationRatioResult legacy;
+        legacy.OverestimationRatio = 500;
+        legacy.NonperformanceMs = 5;
+
+        TOverestimationRatioResult merged;
+        merged.OverestimationRatio = 900;
+        merged.NonperformanceMs = 9;
+
+        bool useMerged = true;
+        UNIT_ASSERT_VALUES_EQUAL(
+            SelectPublishedOverestimationResult(useMerged, legacy, merged).OverestimationRatio,
+            merged.OverestimationRatio);
+
+        useMerged = false;
+        UNIT_ASSERT_VALUES_EQUAL(
+            SelectPublishedOverestimationResult(useMerged, legacy, merged).OverestimationRatio,
+            legacy.OverestimationRatio);
+
+        useMerged = true;
+        UNIT_ASSERT_VALUES_EQUAL(
+            SelectPublishedOverestimationResult(useMerged, legacy, merged).OverestimationRatio,
+            merged.OverestimationRatio);
+    }
+}
+
 } // namespace NPDisk
 } // namespace NKikimr

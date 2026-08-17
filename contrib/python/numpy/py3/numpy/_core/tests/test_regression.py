@@ -14,7 +14,8 @@ from numpy.testing import (
         assert_, assert_equal, IS_PYPY, assert_almost_equal,
         assert_array_equal, assert_array_almost_equal, assert_raises,
         assert_raises_regex, assert_warns, suppress_warnings,
-        _assert_valid_refcount, HAS_REFCOUNT, IS_PYSTON, IS_WASM
+        _assert_valid_refcount, HAS_REFCOUNT, IS_PYSTON, IS_WASM,
+        IS_64BIT,
         )
 from numpy.testing._private.utils import _no_tracing, requires_memory
 from numpy._utils import asbytes, asunicode
@@ -290,7 +291,7 @@ class TestRegression:
         x = np.rec.array([(1, 1.1, '1.0'),
                          (2, 2.2, '2.0')], dtype=descr)
         x[0].tolist()
-        [i for i in x[0]]
+        list(x[0])
 
     def test_unicode_string_comparison(self):
         # Ticket #190
@@ -1028,7 +1029,7 @@ class TestRegression:
     def test_mem_fromiter_invalid_dtype_string(self):
         x = [1, 2, 3]
         assert_raises(ValueError,
-                              np.fromiter, [xi for xi in x], dtype='S')
+                              np.fromiter, list(x), dtype='S')
 
     def test_reduce_big_object_array(self):
         # Ticket #713
@@ -2179,7 +2180,7 @@ class TestRegression:
             __array_priority__ = 1002
 
             def __array__(self, *args, **kwargs):
-                raise Exception()
+                raise Exception
 
         rhs = Foo()
         lhs = np.array(1)
@@ -2266,7 +2267,7 @@ class TestRegression:
     def test_reshape_size_overflow(self):
         # gh-7455
         a = np.ones(20)[::2]
-        if np.dtype(np.intp).itemsize == 8:
+        if IS_64BIT:
             # 64 bit. The following are the prime factors of 2**63 + 5,
             # plus a leading 2, so when multiplied together as int64,
             # the result overflows to a total size of 10.
@@ -2313,10 +2314,13 @@ class TestRegression:
 
             try:
                 hash(val)
-            except TypeError as e:
-                assert_equal(t.__hash__, None)
+            except TypeError:
+                assert_(t.__hash__ is None)
+            except ValueError:
+                assert_(t is np.timedelta64)
+                assert_(t.__hash__ is not None)
             else:
-                assert_(t.__hash__ != None)
+                assert_(t.__hash__ is not None)
 
     def test_scalar_copy(self):
         scalar_types = set(np._core.sctypeDict.values())
@@ -2645,3 +2649,16 @@ class TestRegression:
             data = np.broadcast_to(vals, (128, 128, 128))
             data = data.transpose(0, 2, 1).copy()
             np.unique(data)
+
+    def test_sort_overlap(self):
+        # gh-27273
+        size = 100
+        inp = np.linspace(0, size, num=size, dtype=np.intc)
+        out = np.sort(inp)
+        assert_equal(inp, out)
+
+    def test_searchsorted_structured(self):
+        # gh-28190
+        x = np.array([(0, 1.)], dtype=[('time', '<i8'), ('value', '<f8')])
+        y = np.array((0, 0.), dtype=[('time', '<i8'), ('value', '<f8')])
+        x.searchsorted(y)

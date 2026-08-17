@@ -625,8 +625,10 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
         }
 
         if (node->IsCallable("WithWorld")) {
-            remaps[node.Get()] = node->HeadPtr();
-            VisitExpr(node->HeadPtr(), visitor);
+            const auto head = node->HeadPtr();
+            VisitExpr(head, visitor);
+            const auto it = remaps.find(head.Get());
+            remaps[node.Get()] = it == remaps.end() ? head : it->second;
             return false;
         }
 

@@ -54,8 +54,8 @@ def get_ydb_config(request, enable_fq_connector=None):
     )  # TODO YQ-5431
     enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
-        "enable_dq_source_stream_lookup_join_shuffle_mode", False
-    )  # TODO YQ-5453
+        "enable_dq_source_stream_lookup_join_shuffle_mode", True
+    )
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -83,6 +83,13 @@ def get_ydb_config(request, enable_fq_connector=None):
     if not enable_kqp_constraints_transformer:
         disabled_feature_flags.append("enable_kqp_constraints_transformer")
 
+    if os.environ.get("USE_ACCESS_SERVICE_V2", "true") == "true":
+        extra_feature_flags.add("enable_access_service_v2_interface")
+    else:
+        disabled_feature_flags.append("enable_access_service_v2_interface")
+
+    iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
+
     config = KikimrConfigGenerator(
         erasure=Erasure.MIRROR_3_DC,
         pq_client_service_types=["yandex-query"],
@@ -100,10 +107,13 @@ def get_ydb_config(request, enable_fq_connector=None):
             "enable_compile_cache_warmup": False,
             "enable_channel_memory_tracking": False,  # Remove after fix https://github.com/ydb-platform/ydb/issues/46891
             "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
+            "query_limits": {
+                "result_rows_limit": 20,
+            },
         },
         replication_config={
             "iam_service_control": {
-                "endpoint": os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666"),
+                "endpoint": iam_emulator_endpoint,
                 "service_id": "ydb",
                 "microservice_id": "data-plane",
                 "resource_type": "resource-manager.cloud",
@@ -132,6 +142,8 @@ def get_ydb_config(request, enable_fq_connector=None):
         "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
         "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
     }
+    config.yaml_config["auth_config"]["access_service_endpoint"] = iam_emulator_endpoint
+    config.yaml_config["auth_config"]["use_access_service_tls"] = False
     return config
 
 

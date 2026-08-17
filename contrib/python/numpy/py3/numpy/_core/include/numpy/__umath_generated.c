@@ -10,6 +10,7 @@
 #include "matmul.h"
 #include "clip.h"
 #include "dtypemeta.h"
+#include "dispatching.h"
 #include "_umath_doc_generated.h"
 
 static PyUFuncGenericFunction _arg_functions[] = {CFLOAT__arg, CDOUBLE__arg, CLONGDOUBLE__arg};
@@ -204,6 +205,9 @@ static const char logical_xor_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_
 static PyUFuncGenericFunction matmul_functions[] = {BOOL_matmul, BYTE_matmul, UBYTE_matmul, SHORT_matmul, USHORT_matmul, INT_matmul, UINT_matmul, LONG_matmul, ULONG_matmul, LONGLONG_matmul, ULONGLONG_matmul, HALF_matmul, FLOAT_matmul, DOUBLE_matmul, LONGDOUBLE_matmul, CFLOAT_matmul, CDOUBLE_matmul, CLONGDOUBLE_matmul, OBJECT_matmul};
 static void * matmul_data[] = {(void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL};
 static const char matmul_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, NPY_BYTE, NPY_UBYTE, NPY_UBYTE, NPY_UBYTE, NPY_SHORT, NPY_SHORT, NPY_SHORT, NPY_USHORT, NPY_USHORT, NPY_USHORT, NPY_INT, NPY_INT, NPY_INT, NPY_UINT, NPY_UINT, NPY_UINT, NPY_LONG, NPY_LONG, NPY_LONG, NPY_ULONG, NPY_ULONG, NPY_ULONG, NPY_LONGLONG, NPY_LONGLONG, NPY_LONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_HALF, NPY_HALF, NPY_HALF, NPY_FLOAT, NPY_FLOAT, NPY_FLOAT, NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_OBJECT, NPY_OBJECT, NPY_OBJECT};
+static PyUFuncGenericFunction matvec_functions[] = {BOOL_matvec, BYTE_matvec, UBYTE_matvec, SHORT_matvec, USHORT_matvec, INT_matvec, UINT_matvec, LONG_matvec, ULONG_matvec, LONGLONG_matvec, ULONGLONG_matvec, HALF_matvec, FLOAT_matvec, DOUBLE_matvec, LONGDOUBLE_matvec, CFLOAT_matvec, CDOUBLE_matvec, CLONGDOUBLE_matvec, OBJECT_matvec};
+static void * matvec_data[] = {(void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL};
+static const char matvec_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, NPY_BYTE, NPY_UBYTE, NPY_UBYTE, NPY_UBYTE, NPY_SHORT, NPY_SHORT, NPY_SHORT, NPY_USHORT, NPY_USHORT, NPY_USHORT, NPY_INT, NPY_INT, NPY_INT, NPY_UINT, NPY_UINT, NPY_UINT, NPY_LONG, NPY_LONG, NPY_LONG, NPY_ULONG, NPY_ULONG, NPY_ULONG, NPY_LONGLONG, NPY_LONGLONG, NPY_LONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_HALF, NPY_HALF, NPY_HALF, NPY_FLOAT, NPY_FLOAT, NPY_FLOAT, NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_OBJECT, NPY_OBJECT, NPY_OBJECT};
 static PyUFuncGenericFunction maximum_functions[] = {BOOL_logical_or, BYTE_maximum, UBYTE_maximum, SHORT_maximum, USHORT_maximum, INT_maximum, UINT_maximum, LONG_maximum, ULONG_maximum, LONGLONG_maximum, ULONGLONG_maximum, HALF_maximum, FLOAT_maximum, DOUBLE_maximum, LONGDOUBLE_maximum, CFLOAT_maximum, CDOUBLE_maximum, CLONGDOUBLE_maximum, TIMEDELTA_maximum, DATETIME_maximum, NULL};
 static void * maximum_data[] = {(void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL};
 static const char maximum_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, NPY_BYTE, NPY_UBYTE, NPY_UBYTE, NPY_UBYTE, NPY_SHORT, NPY_SHORT, NPY_SHORT, NPY_USHORT, NPY_USHORT, NPY_USHORT, NPY_INT, NPY_INT, NPY_INT, NPY_UINT, NPY_UINT, NPY_UINT, NPY_LONG, NPY_LONG, NPY_LONG, NPY_ULONG, NPY_ULONG, NPY_ULONG, NPY_LONGLONG, NPY_LONGLONG, NPY_LONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_HALF, NPY_HALF, NPY_HALF, NPY_FLOAT, NPY_FLOAT, NPY_FLOAT, NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_TIMEDELTA, NPY_TIMEDELTA, NPY_TIMEDELTA, NPY_DATETIME, NPY_DATETIME, NPY_DATETIME, NPY_OBJECT, NPY_OBJECT, NPY_OBJECT};
@@ -285,10 +289,9 @@ static const char trunc_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, 
 static PyUFuncGenericFunction vecdot_functions[] = {BOOL_vecdot, BYTE_vecdot, UBYTE_vecdot, SHORT_vecdot, USHORT_vecdot, INT_vecdot, UINT_vecdot, LONG_vecdot, ULONG_vecdot, LONGLONG_vecdot, ULONGLONG_vecdot, HALF_vecdot, FLOAT_vecdot, DOUBLE_vecdot, LONGDOUBLE_vecdot, CFLOAT_vecdot, CDOUBLE_vecdot, CLONGDOUBLE_vecdot, OBJECT_vecdot};
 static void * vecdot_data[] = {(void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL};
 static const char vecdot_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, NPY_BYTE, NPY_UBYTE, NPY_UBYTE, NPY_UBYTE, NPY_SHORT, NPY_SHORT, NPY_SHORT, NPY_USHORT, NPY_USHORT, NPY_USHORT, NPY_INT, NPY_INT, NPY_INT, NPY_UINT, NPY_UINT, NPY_UINT, NPY_LONG, NPY_LONG, NPY_LONG, NPY_ULONG, NPY_ULONG, NPY_ULONG, NPY_LONGLONG, NPY_LONGLONG, NPY_LONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_HALF, NPY_HALF, NPY_HALF, NPY_FLOAT, NPY_FLOAT, NPY_FLOAT, NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_OBJECT, NPY_OBJECT, NPY_OBJECT};
-/* Returns a borrowed ref of the second value in the matching info tuple */
-PyObject *
-get_info_no_cast(PyUFuncObject *ufunc, PyArray_DTypeMeta *op_dtype,
-                 int ndtypes);
+static PyUFuncGenericFunction vecmat_functions[] = {BOOL_vecmat, BYTE_vecmat, UBYTE_vecmat, SHORT_vecmat, USHORT_vecmat, INT_vecmat, UINT_vecmat, LONG_vecmat, ULONG_vecmat, LONGLONG_vecmat, ULONGLONG_vecmat, HALF_vecmat, FLOAT_vecmat, DOUBLE_vecmat, LONGDOUBLE_vecmat, CFLOAT_vecmat, CDOUBLE_vecmat, CLONGDOUBLE_vecmat, OBJECT_vecmat};
+static void * vecmat_data[] = {(void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL, (void *)NULL};
+static const char vecmat_signatures[] = {NPY_BOOL, NPY_BOOL, NPY_BOOL, NPY_BYTE, NPY_BYTE, NPY_BYTE, NPY_UBYTE, NPY_UBYTE, NPY_UBYTE, NPY_SHORT, NPY_SHORT, NPY_SHORT, NPY_USHORT, NPY_USHORT, NPY_USHORT, NPY_INT, NPY_INT, NPY_INT, NPY_UINT, NPY_UINT, NPY_UINT, NPY_LONG, NPY_LONG, NPY_LONG, NPY_ULONG, NPY_ULONG, NPY_ULONG, NPY_LONGLONG, NPY_LONGLONG, NPY_LONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_ULONGLONG, NPY_HALF, NPY_HALF, NPY_HALF, NPY_FLOAT, NPY_FLOAT, NPY_FLOAT, NPY_DOUBLE, NPY_DOUBLE, NPY_DOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_LONGDOUBLE, NPY_CFLOAT, NPY_CFLOAT, NPY_CFLOAT, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_CLONGDOUBLE, NPY_OBJECT, NPY_OBJECT, NPY_OBJECT};
 
 static int
 InitOperators(PyObject *dictionary) {
@@ -5474,6 +5477,25 @@ InitOperators(PyObject *dictionary) {
     ((PyUFuncObject *)f)->type_resolver = &PyUFunc_SimpleUniformOperationTypeResolver;
     PyDict_SetItemString(dictionary, "matmul", f);
     Py_DECREF(f);
+    identity = NULL;
+    if (0 && identity == NULL) {
+        return -1;
+    }
+    f = PyUFunc_FromFuncAndDataAndSignatureAndIdentity(
+        matvec_functions, matvec_data, matvec_signatures, 19,
+        2, 1, PyUFunc_None, "matvec",
+        DOC_NUMPY__CORE_UMATH_MATVEC, 0, "(m,n),(n)->(m)", identity
+    );
+    if (0) {
+        Py_DECREF(identity);
+    }
+    if (f == NULL) {
+        return -1;
+    }
+    
+    ((PyUFuncObject *)f)->type_resolver = &PyUFunc_SimpleUniformOperationTypeResolver;
+    PyDict_SetItemString(dictionary, "matvec", f);
+    Py_DECREF(f);
     identity = (Py_INCREF(Py_None), Py_None);
     if (1 && identity == NULL) {
         return -1;
@@ -7529,6 +7551,25 @@ InitOperators(PyObject *dictionary) {
     
     ((PyUFuncObject *)f)->type_resolver = &PyUFunc_SimpleUniformOperationTypeResolver;
     PyDict_SetItemString(dictionary, "vecdot", f);
+    Py_DECREF(f);
+    identity = NULL;
+    if (0 && identity == NULL) {
+        return -1;
+    }
+    f = PyUFunc_FromFuncAndDataAndSignatureAndIdentity(
+        vecmat_functions, vecmat_data, vecmat_signatures, 19,
+        2, 1, PyUFunc_None, "vecmat",
+        DOC_NUMPY__CORE_UMATH_VECMAT, 0, "(n),(n,m)->(m)", identity
+    );
+    if (0) {
+        Py_DECREF(identity);
+    }
+    if (f == NULL) {
+        return -1;
+    }
+    
+    ((PyUFuncObject *)f)->type_resolver = &PyUFunc_SimpleUniformOperationTypeResolver;
+    PyDict_SetItemString(dictionary, "vecmat", f);
     Py_DECREF(f);
 
     return 0;

@@ -111,6 +111,9 @@ struct TTestDescribeStrategyOptions {
     bool WithReadSessions = false;
     bool WithStatus = false;
     TString ConsumerName;
+    // Unset: fail on every ValidateSchema call while ValidateError is set.
+    std::optional<ui32> FailValidateTimes;
+    ui32* ValidateCalls = nullptr;
 };
 
 class TTestDescribeStrategy: public IDescribeStrategy {
@@ -127,8 +130,15 @@ public:
     }
 
     TDescribeSchemaResult ValidateSchema(const NDescriber::TTopicInfo&) override {
+        if (Options.ValidateCalls) {
+            ++*Options.ValidateCalls;
+        }
         if (Options.ValidateError) {
-            return {.Error = Options.ValidateError};
+            const bool shouldFail = !Options.FailValidateTimes
+                || (Options.ValidateCalls && *Options.ValidateCalls <= *Options.FailValidateTimes);
+            if (shouldFail) {
+                return {.Error = Options.ValidateError};
+            }
         }
         return {.ConsumerName = Options.ConsumerName};
     }
@@ -321,6 +331,54 @@ Y_UNIT_TEST(MissingTopic) {
 
     UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SCHEME_ERROR);
     UNIT_ASSERT(!response->ErrorMessage.empty());
+}
+
+Y_UNIT_TEST(RetriesWithSyncOnStaleSchemaValidation) {
+    auto setup = CreateSetup("DescribeOpRetrySync");
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_op_retry_sync";
+    CreateTopic(runtime, path);
+
+    ui32 validateCalls = 0;
+    auto response = RunDescribeOperation(
+        runtime,
+        MakeSettings(path),
+        std::make_unique<TTestDescribeStrategy>(TTestDescribeStrategyOptions{
+            .ValidateError = TDescribeSchemaError{
+                .Status = Ydb::StatusIds::BAD_REQUEST,
+                .Message = "missing in stale cache",
+                .RetryWithSync = true,
+            },
+            .FailValidateTimes = 1,
+            .ValidateCalls = &validateCalls,
+        }));
+
+    UNIT_ASSERT_VALUES_EQUAL(validateCalls, 2u);
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::SUCCESS);
+    UNIT_ASSERT(response->UsedSyncVersion);
+}
+
+Y_UNIT_TEST(DoesNotRetryValidateErrorWithoutRetryWithSync) {
+    auto setup = CreateSetup("DescribeOpNoRetrySync");
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_describe_op_no_retry_sync";
+    CreateTopic(runtime, path);
+
+    ui32 validateCalls = 0;
+    auto response = RunDescribeOperation(
+        runtime,
+        MakeSettings(path),
+        std::make_unique<TTestDescribeStrategy>(TTestDescribeStrategyOptions{
+            .ValidateError = TDescribeSchemaError{
+                .Status = Ydb::StatusIds::BAD_REQUEST,
+                .Message = "hard validation error",
+            },
+            .ValidateCalls = &validateCalls,
+        }));
+
+    UNIT_ASSERT_VALUES_EQUAL(validateCalls, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(response->Status, Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT_STRING_CONTAINS(response->ErrorMessage, "hard validation error");
 }
 
 Y_UNIT_TEST(StrategyValidateError) {

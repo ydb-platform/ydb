@@ -95,7 +95,7 @@ struct TFeatureFlagExtractor : public NKqp::IFeatureFlagExtractor {
 
 class TClassifiersCheckResult {
 public:
-    // Mutator interface required by NYql::NCommon::ResultFromIssues/ResultFromError used in TActorRequestHandler error paths
+    // Interface required by NYql::NCommon::ResultFromIssues/ResultFromError
     void SetStatus(NYql::EYqlIssueCode status) {
         Status = status;
     }
@@ -121,16 +121,10 @@ private:
     NYql::TIssues Issues;
 };
 
-// Restrict semantics for DROP RESOURCE POOL: reject the drop while some classifier references the pool (YQ-5514)
 TAsyncStatus CheckPoolNotReferencedByClassifiers(const TString& poolId, ui32 nodeId, const TResourcePoolManager::TExternalModificationContext& context) {
     // The default pool is recreated on demand, so a dangling classifier reference to it is not possible
     if (poolId == NResourcePool::DEFAULT_POOL_ID || !NMetadata::NProvider::TServiceOperator::IsEnabled()) {
         return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
-    }
-
-    auto* actorSystem = context.GetActorSystem();
-    if (!actorSystem) {
-        return NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Fail(NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR, "Internal error. Object operation needs an actor system. Please contact internal support"));
     }
 
     using TRequest = NMetadata::NProvider::TEvAskSnapshot;
@@ -138,7 +132,7 @@ TAsyncStatus CheckPoolNotReferencedByClassifiers(const TString& poolId, ui32 nod
     auto event = std::make_unique<TRequest>(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>());
 
     auto promise = NThreading::NewPromise<TClassifiersCheckResult>();
-    actorSystem->Register(new NKqp::TActorRequestHandler<TRequest, TResponse, TClassifiersCheckResult>(
+    context.GetActorSystem()->Register(new NKqp::TActorRequestHandler<TRequest, TResponse, TClassifiersCheckResult>(
         NMetadata::NProvider::MakeServiceId(nodeId), event.release(), promise,
         [databaseId = context.GetDatabaseId(), poolId](NThreading::TPromise<TClassifiersCheckResult> promise, TResponse&& response) {
             TVector<TString> referencingClassifiers;

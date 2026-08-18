@@ -1184,7 +1184,6 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
 
         WaitForFail(ydb, settings, poolId);
 
-        // Pool is referenced by the classifier, so drop must be rejected
         ydb->ExecuteSchemeQuery(TStringBuilder() << R"(
             DROP RESOURCE POOL )" << poolId << R"(;
         )", NYdb::EStatus::PRECONDITION_FAILED, TStringBuilder() << "referenced by resource pool classifiers: " << classifierId);
@@ -1295,8 +1294,8 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersDdl) {
         return count;
     }
 
-    // Helper: drop a pool through tx proxy directly, bypassing the DDL check that forbids
-    // dropping a pool referenced by classifiers — simulates a pool dropped before YQ-5514.
+    // Drops through tx proxy directly, bypassing the DDL check that forbids dropping a referenced
+    // pool — reproduces the dangling state left by clusters from before YQ-5514.
     void DropResourcePoolBypassingClassifierCheck(TIntrusivePtr<IYdbSetup> ydb, const TString& poolId) {
         auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
         request->Record.SetDatabaseName(CanonizePath(ydb->GetSettings().DomainName_));

@@ -4,9 +4,11 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/msgbus.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/library/actors/core/actor.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -158,6 +160,15 @@ struct TConsumerEnv {
     }
 };
 
+void PrepareMlpTablet(TTestContext& tc, ui32 partitions = 1) {
+    TVector<TConsumerPreparationParameters> users = {{
+        .Name = kConsumer,
+        .Type = NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP,
+        .KeepMessageOrder = true,
+    }};
+    PQTabletPrepare({.partitions = partitions, .AddDefaultConsumer = false}, users, *tc.Runtime, tc.TabletId, tc.Edge);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TMLPConsumerChildSyncTests) {
@@ -216,5 +227,53 @@ Y_UNIT_TEST(DeliveryProblemRetriesBlacklistByCookie) {
 }
 
 } // Y_UNIT_TEST_SUITE(TMLPConsumerChildSyncTests)
+
+Y_UNIT_TEST_SUITE(TMLPTabletQueueTests) {
+
+Y_UNIT_TEST(MlpRequestsWaitForConfigThenDeliver) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+    PrepareMlpTablet(tc);
+
+    bool holdKv = false;
+    TVector<THolder<IEventHandle>> heldKv;
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (holdKv && ev->GetTypeRewrite() == TEvKeyValue::TEvResponse::EventType) {
+            heldKv.emplace_back(ev.Release());
+            return TTestActorRuntime::EEventAction::DROP;
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    holdKv = true;
+    RebootTablet(*tc.Runtime, tc.TabletId, tc.Edge);
+
+    ForwardToTablet(*tc.Runtime, tc.TabletId, tc.Edge, new TEvPQ::TEvGetMLPConsumerStateRequest(
+        "topic", kConsumer, 0));
+    tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+
+    auto earlyError = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(TDuration::MilliSeconds(200));
+    UNIT_ASSERT_C(!earlyError, "MLP requests must wait for config instead of Partition not found");
+
+    holdKv = false;
+    for (auto& ev : heldKv) {
+        tc.Runtime->Send(ev.Release());
+    }
+
+    auto response = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvGetMLPConsumerStateResponse>(TDuration::Seconds(15));
+    UNIT_ASSERT(response);
+    UNIT_ASSERT_VALUES_EQUAL(response->Config.GetName(), kConsumer);
+
+    ForwardToTablet(*tc.Runtime, tc.TabletId, tc.Edge, new TEvPQ::TEvGetMLPConsumerStateRequest(
+        "topic", kConsumer, 99));
+    auto unknown = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(TDuration::Seconds(10));
+    UNIT_ASSERT(unknown);
+    UNIT_ASSERT_VALUES_EQUAL(unknown->GetPartitionId(), 99u);
+    UNIT_ASSERT(TString(unknown->Record.GetErrorMessage()).Contains("not found"));
+}
+
+} // Y_UNIT_TEST_SUITE(TMLPTabletQueueTests)
 
 } // namespace NKikimr::NPQ::NMLP

@@ -128,6 +128,10 @@ void PQTabletPrepare(const TTabletPreparationParameters& parameters,
                     readQuota->SetSpeedInMessagesPerSecond(u.ReadSpeedInMessagesPerSecond.value_or(0));
                     readQuota->SetBurstSizeInMessages(u.ReadSpeedInMessagesPerSecond.value_or(0));
                 }
+                if (u.Type.has_value()) {
+                    consumer->SetType(*u.Type);
+                }
+                consumer->SetKeepMessageOrder(u.KeepMessageOrder);
             }
 
             runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());

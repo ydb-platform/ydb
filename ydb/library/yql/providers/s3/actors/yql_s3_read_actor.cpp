@@ -429,12 +429,7 @@ public:
         if (Work) {
             const auto poolId = Work->GetPoolId();
             LOG_CORO_D("S3 Download: poolId=" << poolId);
-            LOG_CORO_D("S3 GetOrCreate: poolId=" << Work->GetPoolId());
-            context = MakeIntrusive<TDefaultHttpRequestContext>(
-                poolId,
-                [w = std::weak_ptr(Work)](TDuration elapsed) {
-                    if (auto work = w.lock()) work->RecordUsage(elapsed);
-                });
+            context = MakeIntrusive<TDefaultHttpRequestContext>(poolId);
         }
         DownloadStart(RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(context));
 
@@ -569,11 +564,7 @@ public:
         IHttpRequestContext::TPtr context;
         if (Work) {
             LOG_CORO_D("S3 GetOrCreate: poolId=" << Work->GetPoolId());
-            context = MakeIntrusive<TDefaultHttpRequestContext>(
-                Work->GetPoolId(),
-                [w = std::weak_ptr(Work)](TDuration elapsed) {
-                    if (auto work = w.lock()) work->RecordUsage(elapsed);
-                });
+            context = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetPoolId());
         }
         RetryStuff->Gateway->Download(RetryStuff->Url, RetryStuff->Headers,
                             range.Offset,
@@ -1065,11 +1056,7 @@ public:
         if (!RetryStuff->IsCancelled() && RetryStuff->NextRetryDelay && RetryStuff->SizeLimit > 0ULL) {
             IHttpRequestContext::TPtr retryContext;
             if (Work) {
-                retryContext = MakeIntrusive<TDefaultHttpRequestContext>(
-                    Work->GetPoolId(),
-                    [w = std::weak_ptr(Work)](TDuration elapsed) {
-                        if (auto work = w.lock()) work->RecordUsage(elapsed);
-                    });
+                retryContext = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetPoolId());
             }
             GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
             InputBuffer.clear();

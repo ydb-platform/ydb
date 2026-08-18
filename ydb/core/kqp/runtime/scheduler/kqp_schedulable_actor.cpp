@@ -31,12 +31,6 @@ void TSchedulableActorBase::RegisterForResume(const NActors::TActorId& actorId) 
     }
 }
 
-void TSchedulableActorBase::IncreaseBurstUsage(const TDuration& burstUsage) {
-    if (SchedulableTask) {
-        SchedulableTask->IncreaseBurstUsage(burstUsage, TSchedulableTask::CPU_DEFAULT);
-    }
-}
-
 bool TSchedulableActorBase::StartExecution(TMonotonic now) {
     Y_ASSERT(SchedulableTask);
     Y_ASSERT(!Executed);

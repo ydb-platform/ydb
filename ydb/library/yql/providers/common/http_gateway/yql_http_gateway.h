@@ -23,23 +23,17 @@ struct IHttpRequestContext : public TThrRefBase {
 
     virtual ~IHttpRequestContext() = default;
     virtual TString GetPoolId() const = 0;
-    virtual void OnRequestFinished(TDuration elapsed) = 0;
 };
 
 class TDefaultHttpRequestContext final : public IHttpRequestContext {
 public:
-    TDefaultHttpRequestContext(TString poolId, std::function<void(TDuration)> onFinished = {})
-        : PoolId(std::move(poolId))
-        , OnFinished(std::move(onFinished)) {}
+    explicit TDefaultHttpRequestContext(TString poolId)
+        : PoolId(std::move(poolId)) {}
 
     TString GetPoolId() const override { return PoolId; }
-    void OnRequestFinished(TDuration elapsed) override {
-        if (OnFinished) OnFinished(elapsed);
-    }
 
 private:
     const TString PoolId;
-    const std::function<void(TDuration)> OnFinished;
 };
 
 class IHTTPGateway {

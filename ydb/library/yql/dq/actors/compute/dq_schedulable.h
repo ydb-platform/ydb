@@ -32,8 +32,6 @@ struct IDqSchedulableWork {
     // TEvWakeup from the scheduler.
     virtual void RegisterForResume(const NActors::TActorId& actorId) = 0;
 
-    virtual void RecordUsage(TDuration elapsed) = 0;
-
     virtual TString GetPoolId() const = 0;
 };
 

@@ -31,10 +31,6 @@ public:
         TSchedulableActorBase::RegisterForResume(actorId);
     }
 
-    void RecordUsage(TDuration elapsed) override {
-        TSchedulableActorBase::IncreaseBurstUsage(elapsed);
-    }
-
     TString GetPoolId() const override {
         return PoolId;
     }

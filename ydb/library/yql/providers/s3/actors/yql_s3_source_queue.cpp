@@ -199,11 +199,7 @@ public:
         , AllowLocalFiles(allowLocalFiles) {
         if (schedulerContext) {
             if (auto work = schedulerContext->CreateSchedulableWork()) {
-                HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(
-                    work->GetPoolId(),
-                    [w = std::weak_ptr(work)](TDuration elapsed) {
-                        if (auto locked = w.lock()) locked->RecordUsage(elapsed);
-                    });
+                HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(work->GetPoolId());
                 Work = std::move(work);
             }
         }

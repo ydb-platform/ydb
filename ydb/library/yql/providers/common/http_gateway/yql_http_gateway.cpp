@@ -276,20 +276,12 @@ public:
 
     void SetContext(IHttpRequestContext::TPtr context) {
         Context = std::move(context);
-        RequestTimer.Reset();
     }
 
     TString GetPoolId() const {
         return Context ? Context->GetPoolId() : TString{IHTTPGateway::DefaultPoolId};
     }
 
-    void NotifyRequestFinished() {
-        if (Context) {
-            const auto elapsed = TDuration::Seconds(RequestTimer.Passed());
-            YQL_LOG(DEBUG) << "HTTPGateway RequestFinished pool=" << Context->GetPoolId() << " elapsed=" << elapsed;
-            Context->OnRequestFinished(elapsed);
-        }
-    }
 protected:
     void SkipTo(size_t offset) const {
         if (offset || Offset || SizeLimit) {
@@ -339,7 +331,6 @@ private:
     std::vector<char> ErrorBuffer;
     TDNSGateway<>::TDNSConstCurlListPtr DnsCache;
     IHttpRequestContext::TPtr Context;
-    THPTimer RequestTimer;
 public:
     TString Url;
     const TString Data;
@@ -911,7 +902,6 @@ private:
             }
         }
         if (easy) {
-            easy->NotifyRequestFinished();
             easy->Done(result, httpResponseCode);
         }
     }
@@ -933,7 +923,6 @@ private:
         const TIssue error(curl_multi_strerror(result));
         while (!works.empty()) {
             curl_multi_remove_handle(Handle.get(), works.top()->GetHandle());
-            works.top()->NotifyRequestFinished();
             works.top()->Fail(CURLE_OK, error);
             works.pop();
         }

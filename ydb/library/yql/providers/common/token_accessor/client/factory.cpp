@@ -2,6 +2,7 @@
 #include "bearer_credentials_provider.h"
 #include "token_accessor_client_factory.h"
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
@@ -101,8 +102,15 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
         TString serviceAccountId;
         TString resourceId;
         parser.GetIamAuth(serviceAccountId, resourceId);
-        iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory();
+
+        NYdb::TIamHost vmMetadataParams;
+        if (NKikimr::AppData()->AuthConfig.HasLocalMetadataService()) {
+            vmMetadataParams.Host = NKikimr::AppData()->AuthConfig.GetLocalMetadataService().GetHost();
+            vmMetadataParams.Port = NKikimr::AppData()->AuthConfig.GetLocalMetadataService().GetPort();
+        }
+        iamParams.SystemServiceAccountCredentials = NYdb::CreateIamCredentialsProviderFactory(vmMetadataParams);
         iamParams.Endpoint = serviceControl.GetEndpoint();
+        iamParams.EnableSsl = serviceControl.GetEnableSsl();
         iamParams.ServiceId = serviceControl.GetServiceId();
         iamParams.MicroserviceId = serviceControl.GetMicroserviceId();
         iamParams.ResourceType = serviceControl.GetResourceType();

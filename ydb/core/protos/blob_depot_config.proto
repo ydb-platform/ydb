@@ -50,12 +50,15 @@ message TS3BackendSettings {
         TSyncMode SyncMode = 3;
     }
 
-    // When set, the actual S3 endpoint is fetched periodically from this URL
-    // (HTTP GET to http://<BalancerHost>/, body is plain-text hostname).
-    // Existing Settings.Endpoint is used only as a fallback before the first
-    // balancer reply. S3 requests get re-routed through a per-node, per-tablet
-    // router actor managed by Node Warden.
+    // When set, the actual S3 endpoint is fetched from this URL
+    // (HTTP GET to http://<BalancerHost>/, body is plain-text hostname)
+    // on every incoming S3 request (at most one balancer query in flight)
+    // and when the inner wrapper returns HTTP 5xx.
+    // Settings.Endpoint is used as the S3 endpoint behind the balancer proxy.
+    // S3 requests get re-routed through a per-node, per-tablet router actor
+    // managed by Node Warden.
     optional string BalancerHost = 4;
+    // Deprecated: refresh is request-driven, these intervals are ignored.
     optional uint32 BalancerRefreshSecMin = 5 [default = 10];
     optional uint32 BalancerRefreshSecMax = 6 [default = 15];
     // ProxyPort when balancer returns a hostname without an explicit port.

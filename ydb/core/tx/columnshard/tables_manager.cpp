@@ -62,8 +62,8 @@ std::optional<std::set<NColumnShard::TSchemeShardLocalPathId>> TTablesManager::R
 
 std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
     const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const bool withTabletPathId) const {
-    if (const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId)) {
-        return { *internalPathId };
+    if (const auto& internalPathId = GenerationIndex.ResolveLive(schemeShardLocalPathId)) {
+        return internalPathId;
     } else {
         YDB_LOG_WARN("",
             {"method", "resolve_internal_path_id"},
@@ -79,45 +79,24 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
 std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdForSnapshot(
     const NColumnShard::TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& readSnapshot,
     const bool withTabletPathId) const {
-    const auto* generations = SchemeShardLocalToInternalAll.FindPtr(schemeShardLocalPathId);
-    if (!generations) {
-        return ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
-    }
-    std::optional<TInternalPathId> best;
-    std::optional<NOlap::TSnapshot> bestDrop;
-    std::optional<TInternalPathId> live;
-    for (const auto& internalPathId : *generations) {
-        const auto* table = Tables.FindPtr(internalPathId);
-        if (!table) {
-            continue;
-        }
-        // Path-local membership: after Move the InternalPathId lives under the new SS path id only.
-        // A stale SchemeShardLocalToInternalAll entry for the old id must not resurrect it.
-        if (!table->HasSchemeShardLocalPathId(schemeShardLocalPathId)) {
-            continue;
-        }
-        const auto dropVersion = table->GetPathDropVersionOptional(schemeShardLocalPathId);
-        if (!dropVersion) {
-            live = internalPathId;
-            continue;
-        }
-        if (*dropVersion <= readSnapshot) {
-            // This generation was dropped at or before the read snapshot, so it is no longer visible:
-            // the drop version is exclusive, matching TTableInfo::CanBeUsedAt (`snapshot < dropVersion`).
-            // A read exactly AT the drop/truncate snapshot must observe the post-drop state, i.e. the
-            // freshly-allocated (empty) generation rather than the dropped one.
-            continue;
-        }
-        if (!bestDrop || *dropVersion < *bestDrop) {
-            bestDrop = dropVersion;
-            best = internalPathId;
-        }
-    }
-    if (best) {
-        return best;
-    }
-    if (live) {
-        return live;
+    // Delegate to TGenerationIndex::ResolveForSnapshot, providing table-dependent callbacks.
+    auto result = GenerationIndex.ResolveForSnapshot(
+        schemeShardLocalPathId,
+        readSnapshot,
+        // isMember: table must still know about this SS path (prevents stale All entries after Move).
+        [this](TInternalPathId internalPathId, TSchemeShardLocalPathId ss) {
+            const auto* table = Tables.FindPtr(internalPathId);
+            return table && table->HasSchemeShardLocalPathId(ss);
+        },
+        // getDropVersion: path-local drop version from TTableInfo.
+        [this](TInternalPathId internalPathId, TSchemeShardLocalPathId ss) {
+            const auto* table = Tables.FindPtr(internalPathId);
+            AFL_VERIFY(table);
+            return table->GetPathDropVersionOptional(ss);
+        });
+
+    if (result) {
+        return result;
     }
     return ResolveInternalPathIdOptional(schemeShardLocalPathId, withTabletPathId);
 }
@@ -208,18 +187,18 @@ void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo
     // Always update the live mapping for non-dropped tables. For a dropped table,
     // preserve the existing mapping only if it already points to the same InternalPathId
     // (i.e., this is a merge, not a new generation replacing the old one).
-    const auto [mapIt, inserted] = SchemeShardLocalToInternal.emplace(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId);
-    if (!inserted) {
+    const auto currentLive = GenerationIndex.ResolveLive(unifiedPathId.SchemeShardLocalPathId);
+    if (currentLive) {
         if (!it->second.IsDropped()) {
-            mapIt->second = unifiedPathId.InternalPathId;
-        } else if (mapIt->second != unifiedPathId.InternalPathId) {
+            // Live mapping will be updated below by SetLive().
+        } else if (*currentLive != unifiedPathId.InternalPathId) {
             // A dropped generation still holds the mapping. This means the old generation
             // has not been finalized yet. Do NOT overwrite — the live mapping should only
             // change when the new generation is explicitly registered (e.g., after TruncateTable
             // clears the fence via TruncatingLocalToInternal.erase).
         }
     }
-    SchemeShardLocalToInternalAll[unifiedPathId.SchemeShardLocalPathId].insert(unifiedPathId.InternalPathId);
+    GenerationIndex.SetLive(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId, it->second.IsDropped());
 }
 
 bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* info) {
@@ -455,7 +434,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
 THashMap<TSchemeShardLocalPathId, TInternalPathId> TTablesManager::ResolveInternalPathIds(
     const TSchemeShardLocalPathId from, const TSchemeShardLocalPathId to) const {
     THashMap<TSchemeShardLocalPathId, TInternalPathId> result;
-    for (const auto& [schemeShardLocalPathId, internalPathId] : SchemeShardLocalToInternal) {
+    for (const auto& [schemeShardLocalPathId, internalPathId] : GenerationIndex.GetLive()) {
         if ((from <= schemeShardLocalPathId) && (schemeShardLocalPathId <= to)) {
             result.emplace(schemeShardLocalPathId, internalPathId);
         }
@@ -571,13 +550,8 @@ void TTablesManager::DropTable(
         }
         Schema::EraseTableInfoV1(db, pathId, schemeShardLocalPathId);
         table->Remove(schemeShardLocalPathId);
-        AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
-        if (auto itAll = SchemeShardLocalToInternalAll.find(schemeShardLocalPathId); itAll != SchemeShardLocalToInternalAll.end()) {
-            itAll->second.erase(pathId);
-            if (itAll->second.empty()) {
-                SchemeShardLocalToInternalAll.erase(itAll);
-            }
-        }
+        GenerationIndex.ForgetLive(schemeShardLocalPathId);
+        GenerationIndex.ForgetGeneration(schemeShardLocalPathId, pathId);
         NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, TUnifiedPathId::BuildValid(pathId, schemeShardLocalPathId));
     } else {
         Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
@@ -588,7 +562,7 @@ TInternalPathId TTablesManager::TruncateTable(const TSchemeShardLocalPathId sche
     const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     DropTable(schemeShardLocalPathId, oldPathId, version, db);
 
-    // NOTE: Between DropTable() and RegisterTable() below, SchemeShardLocalToInternal is empty
+    // NOTE: Between DropTable() and RegisterTable() below, GenerationIndex.Live is empty
     // for this path. A write that resolves the path in this window will fail with "unknown table"
     // and must retry. This is acceptable — the fence from TruncateTablePropose blocks new writes,
     // and any write that resolved the InternalPathId before the fence will be retried by the client.
@@ -613,11 +587,11 @@ void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId schemeSh
     const auto& internalPathId = ResolveInternalPathId(schemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
 
-    // Lazy-populate SchemeShardLocalToInternalAll for tables created before this change deployed.
-    // After restart, InitFromDB → AddTableInfo already populates the map. But during rolling deploy
+    // Lazy-populate GenerationIndex.All for tables created before this change deployed.
+    // After restart, InitFromDB → AddTableInfo already populates the index. But during rolling deploy
     // (before restart), existing tables lack entries. Ensure the current live generation is tracked
     // so that ResolveInternalPathIdForSnapshot can correctly handle time-travel reads after truncate.
-    SchemeShardLocalToInternalAll[schemeShardLocalPathId].insert(*internalPathId);
+    GenerationIndex.AddToHistory(schemeShardLocalPathId, *internalPathId);
 
     // Use conditional insert: if already fenced (e.g., re-propose), keep the existing entry.
     // This avoids AFL_VERIFY crash on double-propose while still catching logic errors via logging.
@@ -628,7 +602,7 @@ void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId schemeSh
         // Already fenced — nothing more to do.
         return;
     }
-    AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
+    GenerationIndex.ForgetLive(schemeShardLocalPathId);
 }
 
 std::optional<TInternalPathId> TTablesManager::GetTruncatingInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const {
@@ -713,7 +687,7 @@ void TTablesManager::AddSchemaVersion(
 std::unique_ptr<NTabletFlatExecutor::ITransaction> TTablesManager::CreateAddShardingInfoTx(TColumnShard& owner,
     const TSchemeShardLocalPathId schemeShardLocalPathId, const ui64 versionId,
     const NSharding::TGranuleShardingLogicContainer& tabletShardingLogic) const {
-    const auto* internalPathId = SchemeShardLocalToInternal.FindPtr(schemeShardLocalPathId);
+    const auto& internalPathId = GenerationIndex.ResolveLive(schemeShardLocalPathId);
     AFL_VERIFY(internalPathId)("scheme_shard_local_path_id", schemeShardLocalPathId);
     return std::make_unique<TTxAddShardingInfo>(owner, tabletShardingLogic, *internalPathId, versionId);
 }
@@ -806,17 +780,9 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
     AFL_VERIFY(!GetPrimaryIndexSafe().HasDataInPathId(pathId));
     AFL_VERIFY(MutablePrimaryIndex().ErasePathId(pathId));
     for (const auto& unifiedPathId : itTable->second.GetPathIds()) {
-        auto it = SchemeShardLocalToInternal.find(unifiedPathId.GetSchemeShardLocalPathId());
-        if (it != SchemeShardLocalToInternal.end() && it->second == pathId) {
-            SchemeShardLocalToInternal.erase(it);
-        }
-        auto itAll = SchemeShardLocalToInternalAll.find(unifiedPathId.GetSchemeShardLocalPathId());
-        if (itAll != SchemeShardLocalToInternalAll.end()) {
-            itAll->second.erase(pathId);
-            if (itAll->second.empty()) {
-                SchemeShardLocalToInternalAll.erase(itAll);
-            }
-        }
+        const auto ss = unifiedPathId.GetSchemeShardLocalPathId();
+        GenerationIndex.ForgetLiveIfMatches(ss, pathId);
+        GenerationIndex.ForgetGeneration(ss, pathId);
     }
     // Clean up TTL history for the dropped path so Ttl and TtlProtos do not accumulate
     // entries for generations that are no longer accessible.
@@ -836,7 +802,7 @@ void TTablesManager::MoveTablePropose(const TSchemeShardLocalPathId srcSchemeSha
     const auto& internalPathId = ResolveInternalPathId(srcSchemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
     AFL_VERIFY(RenamingLocalToInternal.emplace(srcSchemeShardLocalPathId, *internalPathId).second)("src_internal_path_id", internalPathId);
-    AFL_VERIFY(SchemeShardLocalToInternal.erase(srcSchemeShardLocalPathId));
+    GenerationIndex.ForgetLive(srcSchemeShardLocalPathId);
 }
 
 void TTablesManager::CopyTablePropose(const TSchemeShardLocalPathId srcSchemeShardLocalPathId) {
@@ -885,14 +851,11 @@ void TTablesManager::MoveTableProgress(
     AFL_VERIFY(table);
     table->RenameTableSchemeShardLocalPathId(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
     AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
-    AFL_VERIFY(SchemeShardLocalToInternal.emplace(newSchemeShardLocalPathId, internalPathId).second);
-    if (auto itAll = SchemeShardLocalToInternalAll.find(oldSchemeShardLocalPathId); itAll != SchemeShardLocalToInternalAll.end()) {
-        // Move the whole generation history (including prior truncate generations) under the new SS path id,
-        // and rename each historical table's SS path so HasSchemeShardLocalPathId / path-local drop versions
-        // keep working for time-travel reads after MOVE.
-        auto generations = std::move(itAll->second);
-        SchemeShardLocalToInternalAll.erase(itAll);
-        for (const auto& genPathId : generations) {
+    GenerationIndex.Rename(oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
+    // Rename each historical table's SS path so HasSchemeShardLocalPathId / path-local drop versions
+    // keep working for time-travel reads after MOVE.
+    if (const auto* generations = GenerationIndex.Generations(newSchemeShardLocalPathId)) {
+        for (const auto& genPathId : *generations) {
             if (genPathId != internalPathId) {
                 if (auto* genTable = Tables.FindPtr(genPathId)) {
                     if (genTable->HasSchemeShardLocalPathId(oldSchemeShardLocalPathId)) {
@@ -900,10 +863,7 @@ void TTablesManager::MoveTableProgress(
                     }
                 }
             }
-            SchemeShardLocalToInternalAll[newSchemeShardLocalPathId].insert(genPathId);
         }
-    } else {
-        SchemeShardLocalToInternalAll[newSchemeShardLocalPathId].insert(internalPathId);
     }
     if (internalPathId == TabletPathId->InternalPathId) {
         TabletPathId->SchemeShardLocalPathId = newSchemeShardLocalPathId;
@@ -933,11 +893,11 @@ void TTablesManager::CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapsh
     if (const auto existingInternalPathId = ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
         AFL_VERIFY(*existingInternalPathId == internalPathId);
     } else {
-        AFL_VERIFY(SchemeShardLocalToInternal.emplace(dstSchemeShardLocalPathId, internalPathId).second);
+        GenerationIndex.SetLive(dstSchemeShardLocalPathId, internalPathId, /*isDropped=*/false);
         NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(
             TabletId, TUnifiedPathId::BuildValid(internalPathId, dstSchemeShardLocalPathId));
     }
-    SchemeShardLocalToInternalAll[dstSchemeShardLocalPathId].insert(internalPathId);
+    GenerationIndex.AddToHistory(dstSchemeShardLocalPathId, internalPathId);
 }
 
 std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean() const {

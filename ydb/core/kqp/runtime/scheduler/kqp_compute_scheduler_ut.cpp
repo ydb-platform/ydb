@@ -805,6 +805,76 @@ Y_UNIT_TEST_SUITE(KqpComputeScheduler) {
         UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.Weight = 0}), yexception);
     }
 
+    Y_UNIT_TEST(PoolGuaranteeAgainstLimit) {
+        /*
+            Scenario:
+            - Setting a guarantee greater than the limit of the same pool is prohibited
+            - An update that sets only the guarantee is validated against the limit configured before
+            - Lowering the limit below the already configured guarantee is prohibited as well
+        */
+        constexpr ui64 kCpuLimit = 10;
+        constexpr ui64 kPoolLimit = 4;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kCpuLimit});
+
+        const TString poolId = "pool1";
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuLimit = kPoolLimit, .CpuGuarantee = kPoolLimit + 1}), yexception);
+
+        // The rejected configuration should not be applied even partially
+        scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuLimit = kPoolLimit, .CpuGuarantee = kPoolLimit});
+
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuGuarantee = kPoolLimit + 1}), yexception);
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, poolId, {.CpuLimit = kPoolLimit - 1}), yexception);
+    }
+
+    Y_UNIT_TEST(PoolGuaranteesAgainstDatabaseGuarantee) {
+        /*
+            Scenario:
+            - Databases are not validated against the root, so their guarantees may exceed the total limit
+            - The sum of the pools' guarantees is not allowed to exceed the guarantee of their database
+            - An updated pool doesn't reserve its guarantee twice
+            - Lowering the database's guarantee below the sum of the pools' ones is prohibited
+            - A pool cannot be guaranteed anything until its database is
+        */
+        constexpr ui64 kCpuLimit = 10;
+        constexpr ui64 kDatabaseGuarantee = 6;
+
+        auto counters = MakeIntrusive<TKqpCounters>(MakeIntrusive<NMonitoring::TDynamicCounters>());
+        const TOptions options{
+            .DelayParams = kDefaultDelayParams,
+        };
+        TComputeScheduler scheduler(counters, options);
+        scheduler.SetTotalCpuLimit(kCpuLimit);
+
+        // A database may be guaranteed more than the whole node has - the capacity may be lost later
+        scheduler.AddOrUpdateDatabase("db-oversubscribed", {.CpuGuarantee = kCpuLimit + 1});
+
+        const TString databaseId = "db1";
+        scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kDatabaseGuarantee});
+
+        scheduler.AddOrUpdatePool(databaseId, "pool1", {.CpuGuarantee = 4});
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 3}), yexception);
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 2});
+        scheduler.AddOrUpdatePool(databaseId, "pool2", {.CpuGuarantee = 2});
+
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kDatabaseGuarantee - 1}), yexception);
+        scheduler.AddOrUpdateDatabase(databaseId, {.CpuGuarantee = kDatabaseGuarantee});
+
+        // A pool of a database without a guarantee may not be guaranteed anything - but still works
+        const TString unguaranteedDatabaseId = "db2";
+        scheduler.AddOrUpdateDatabase(unguaranteedDatabaseId, {});
+        UNIT_ASSERT_EXCEPTION(scheduler.AddOrUpdatePool(unguaranteedDatabaseId, "pool1", {.CpuGuarantee = 1}), yexception);
+        scheduler.AddOrUpdatePool(unguaranteedDatabaseId, "pool1", {});
+    }
+
     Y_UNIT_TEST_TWIN(AddUpdateQueries, DefaultFairShareMode) {
         /*
             Scenario:

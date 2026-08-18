@@ -131,8 +131,23 @@ void TKqpComputeActor::DoBootstrap() {
     if (Meta) {
         YQL_ENSURE(ComputeCtx.GetTableScans().empty());
 
-        ComputeCtx.AddTableScan(0, *Meta, GetStatsMode(), &TaskRunner->GetTypeEnv());
+        ComputeCtx.AddTableScan(0, *Meta, GetStatsMode(), &TaskRunner->GetTypeEnv(),
+            THashSet<TString>(
+                GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns().begin(),
+                GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns().end()));
         ScanData = &ComputeCtx.GetTableScan(0);
+
+        if (GetTask().GetProgram().GetSettings().WasmUdfStringColumnsSize() > 0) {
+            TStringBuilder columns;
+            for (const auto& name : GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns()) {
+                if (!columns.empty()) {
+                    columns << ",";
+                }
+                columns << name;
+            }
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_COMPUTE, "Applied WasmUdfStringColumns for scan",
+                {"columns", columns});
+        }
 
         columns.reserve(Meta->ColumnsSize());
         for (const auto& column : ScanData->GetColumns()) {

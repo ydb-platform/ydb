@@ -676,14 +676,16 @@ protected:
             }
 
             Terminated = true;
+            // Before PassAway: it destroys the actor, and DoTerminateImpl tears down
+            // the task runner, whose MKQL values may reference resources owned by
+            // derived actor members (e.g. a WASM query compartment).
+            DoTerminateImpl();
             this->PassAway();
         } catch (const std::exception&) {
             // Try to guarantee actor destruction to prevent recursive exception throwing - assume that basic PassAway doesn't throw.
             NActors::IActor::PassAway();
             throw;
         }
-
-        DoTerminateImpl();
     }
 
     void Terminate(bool success, const TString& message) {

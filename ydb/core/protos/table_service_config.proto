@@ -568,4 +568,9 @@ message TTableServiceConfig {
     optional bool EnablePruneKeyColumns = 144 [default = true];
 
     optional bool UseBlockHashJoinForCross = 145 [default = false, (InvalidateCompileCache) = true];
+
+    // Materialize string columns feeding wasm UDF args straight into the query
+    // compartment's linear memory (one copy instead of host string + copy per call).
+    // Turn off to measure or to fall back to the plain host string path.
+    optional bool EnableWasmUdfResidentStringColumns = 146 [default = true, (InvalidateCompileCache) = true];
 };

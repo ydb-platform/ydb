@@ -126,6 +126,7 @@ public:
 
     NCommon::TConfSetting<NKqpProto::EIsolationLevel, Static> DefaultTxMode;
     NCommon::TConfSetting<bool, Static> UseKqpTasksGraphV2;
+    NCommon::TConfSetting<bool, Static> EnableWasmUdfResidentStringColumns;
 
     /* Internal CBO constants for tuning */
     NCommon::TConfSetting<ui32, Static> OptCBOConstsMaxDepth;
@@ -258,6 +259,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetUseBlockHashJoin() const;
     bool GetUseBlockHashJoinForCross() const;
     bool GetUseKqpTasksGraphV2() const;
+    bool GetEnableWasmUdfResidentStringColumns() const;
     bool IsAutoIndexSelectionDisabled() const;
     bool IsAutoIndexSelectionForIndexLookupJoinEnabled() const;
 };

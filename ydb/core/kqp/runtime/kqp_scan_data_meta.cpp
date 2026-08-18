@@ -4,6 +4,7 @@
 #include <ydb/core/protos/data_events.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+#include <ydb/services/udf_store/wasm/prefer_wasm_stats.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -48,6 +49,7 @@ TScanDataColumnsMeta::TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransac
     for (const auto& column : meta.GetColumns()) {
         TKqpComputeContextBase::TColumn c;
         c.Tag = column.GetId();
+        c.Name = column.GetName();
         auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(column.GetType(),
             column.HasTypeInfo() ? &column.GetTypeInfo() : nullptr);
         c.Type = typeInfoMod.TypeInfo;
@@ -68,6 +70,7 @@ TScanDataColumnsMeta::TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransac
         for (const auto& resColumn : meta.GetResultColumns()) {
             TKqpComputeContextBase::TColumn c;
             c.Tag = resColumn.GetId();
+            c.Name = resColumn.GetName();
             auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(resColumn.GetType(),
                 resColumn.HasTypeInfo() ? &resColumn.GetTypeInfo() : nullptr);
             c.Type = typeInfoMod.TypeInfo;
@@ -86,6 +89,25 @@ TScanDataColumnsMeta::TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransac
         InitPgTypesForColumns(SystemColumns, *typeEnv);
         InitPgTypesForColumns(ResultColumns, *typeEnv);
     }
+}
+
+void TScanDataColumnsMeta::ApplyWasmUdfStringColumns(const THashSet<TString>& wasmUdfStringColumns) {
+    if (wasmUdfStringColumns.empty()) {
+        return;
+    }
+    ui64 marked = 0;
+    for (auto& column : ResultColumns) {
+        if (!column.Name.empty() && wasmUdfStringColumns.contains(column.Name)) {
+            column.PreferWasm = true;
+            ++marked;
+        }
+    }
+    for (auto& column : Columns) {
+        if (!column.Name.empty() && wasmUdfStringColumns.contains(column.Name)) {
+            column.PreferWasm = true;
+        }
+    }
+    NUdfStore::NWasm::TPreferWasmStats::Instance().OnColumnsMarked(marked);
 }
 
 }

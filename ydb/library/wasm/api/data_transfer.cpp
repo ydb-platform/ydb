@@ -62,6 +62,89 @@ uintptr_t TCopyGuard::GetCopiedOffset() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TGuestBuffer::TGuestBuffer(
+    IWebAssemblyCompartment* compartment,
+    uintptr_t offset,
+    size_t size,
+    char* hostData)
+    : Compartment_(compartment)
+    , Offset_(offset)
+    , Size_(size)
+    , HostData_(hostData)
+{ }
+
+TGuestBuffer TGuestBuffer::Allocate(IWebAssemblyCompartment* compartment, size_t size)
+{
+    if (!compartment) {
+        ythrow yexception() << "TGuestBuffer::Allocate: compartment is null";
+    }
+    if (size == 0) {
+        return TGuestBuffer(compartment, 0, 0, nullptr);
+    }
+
+    const uintptr_t offset = compartment->AllocateBytes(size);
+    if (offset == 0) {
+        ythrow yexception() << "TGuestBuffer::Allocate: wasm malloc returned null for " << size << " bytes";
+    }
+    auto* hostData = static_cast<char*>(compartment->GetHostPointer(offset, size));
+    return TGuestBuffer(compartment, offset, size, hostData);
+}
+
+Y_WEAK TGuestBuffer::~TGuestBuffer()
+{
+    if (Compartment_ != nullptr && Offset_ != 0) {
+        try {
+            Compartment_->FreeBytes(Offset_);
+        } catch (...) {
+            // FreeBytes may throw; never throw from dtor.
+        }
+    }
+}
+
+TGuestBuffer::TGuestBuffer(TGuestBuffer&& other) noexcept
+{
+    std::swap(Compartment_, other.Compartment_);
+    std::swap(Offset_, other.Offset_);
+    std::swap(Size_, other.Size_);
+    std::swap(HostData_, other.HostData_);
+}
+
+TGuestBuffer& TGuestBuffer::operator=(TGuestBuffer&& other) noexcept
+{
+    std::swap(Compartment_, other.Compartment_);
+    std::swap(Offset_, other.Offset_);
+    std::swap(Size_, other.Size_);
+    std::swap(HostData_, other.HostData_);
+    return *this;
+}
+
+uintptr_t TGuestBuffer::Offset() const
+{
+    return Offset_;
+}
+
+size_t TGuestBuffer::Size() const
+{
+    return Size_;
+}
+
+char* TGuestBuffer::HostData() const
+{
+    return HostData_;
+}
+
+uintptr_t TGuestBuffer::Release() noexcept
+{
+    const uintptr_t offset = Offset_;
+    Compartment_ = nullptr;
+    Offset_ = 0;
+    Size_ = 0;
+    HostData_ = nullptr;
+    return offset;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <>
 TCopyGuard CopyIntoCompartment(TStringBuf data, IWebAssemblyCompartment* compartment)
 {

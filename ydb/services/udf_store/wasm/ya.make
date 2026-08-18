@@ -9,11 +9,13 @@ SRCS(
     manifest.cpp
     compile.cpp
     module_catalog.cpp
+    prefer_wasm_stats.cpp
     registry_helpers.cpp
     single_module_loader.cpp
     system_libraries.cpp
     udf_configured_callable.cpp
     udf_function.cpp
+    wasm_string.cpp
 )
 
 ADDINCL(
@@ -40,5 +42,6 @@ END()
 
 RECURSE(
     abi
+    benchmark
     object_framework
 )

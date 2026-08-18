@@ -181,9 +181,11 @@ Y_UNIT_TEST(ResidentValueOutlivesQueryScope) {
     {
         auto handle = MakeQueryCompartment(generation);
         weakHandle = handle;
+        // What TQueryCompartmentScope does on acquire.
+        TWasmAllocationRegistry::Instance().RetainOwner(generation, handle);
         TCurrentQueryCompartmentGuard queryGuard(handle.get());
         value = TUnboxedValue(TWasmStringValue::MakePreferWasm(TStringRef(blob.data(), blob.size())));
-        // What TQueryCompartmentScope does when the actor goes away.
+        // ... and what it does when the actor goes away.
         TWasmAllocationRegistry::Instance().ReleaseOwner(generation);
     }
 

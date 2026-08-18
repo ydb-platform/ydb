@@ -19,13 +19,13 @@ class TWasmStringValue {
 public:
     //! Allocate |data| in |compartment| and return a String UnboxedValue.
     //! Soft OOM / null compartment: throws.
-    //! |owner| is registered as the keep-alive for |generation|: the value can
-    //! outlive the query scope, and its refcount header lives in linear memory.
+    //! The value may outlive the query scope (its refcount header lives in linear
+    //! memory), so the compartment is kept alive by the keep-alive that
+    //! TQueryCompartmentScope registers for |generation|.
     static NYql::NUdf::TUnboxedValuePod Make(
         NYql::NUdf::TStringRef data,
         NYdb::NWasm::IWebAssemblyCompartment* compartment,
-        ui64 generation,
-        std::shared_ptr<void> owner = nullptr);
+        ui64 generation);
 
     //! Like Make, but uses the current query compartment; falls back to a host
     //! TStringValue when no query compartment is active or the string fits in the

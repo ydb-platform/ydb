@@ -68,6 +68,8 @@ public:
         const auto loaded = FilterLoadedWasmUdfModules(modules);
         if (!loaded.empty()) {
             Handle_ = GetWasmCompartmentManager().Acquire(loaded);
+            NYdb::NWasm::TWasmAllocationRegistry::Instance().RetainOwner(
+                Handle_->Generation, Handle_);
         }
     }
 

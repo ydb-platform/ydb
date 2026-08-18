@@ -241,26 +241,30 @@ Shared context: один модуль линкует `object_framework`, пер�
 
 | Операция | Стоимость |
 |---|---|
-| Гостевой вызов `malloc` + `free` через экспорты wasm | ~233 цикла на пару |
+| Гостевой вызов `malloc` + `free` через экспорты wasm | ~225 циклов на пару |
 | Поиск экспорта по имени | ~70 циклов |
-| Host-строка (`MakeString`, 4 KB) | ~170 циклов |
-| Копия 4 KB в linear memory | ~326 циклов |
-| `MakePreferWasm` (4 KB: гостевой malloc + копия + регистрация) | ~950 циклов |
+| Host-строка (`MakeString`, 4 KB) | ~112 циклов |
+| Копия 4 KB в linear memory | ~320 циклов |
+| `MakePreferWasm` (4 KB: гостевой malloc + копия + регистрация + освобождение) | ~478 циклов |
 | Переиспользование резидентных байт в аргументе | ~38 циклов |
 
 Полная стоимость значения (материализация плюс вызовы UDF), host против resident:
 
 | Размер / вызовов | Host | Resident |
 |---|---|---|
-| 4 KB × 1 | 874 | 1004 |
-| 16 KB × 1 | 1158 | 1218 |
-| 32 KB × 1 | 3842 | 2497 |
-| 64 KB × 1 | 7196 | 3989 |
-| 256 KB × 1 | 25.3K | 13.5K |
-| 4 KB × 2 | 1193 | 1121 |
-| 64 KB × 4 | 17.8K | 4282 |
+| 64 B × 1 | 389 | 486 |
+| 4 KB × 1 | 528 | 550 |
+| 8 KB × 1 | 599 | 709 |
+| 16 KB × 1 | 865 | 852 |
+| 32 KB × 1 | 3668 | 2084 |
+| 64 KB × 1 | 6644 | 3673 |
+| 256 KB × 1 | 25.0K | 13.4K |
+| 4 KB × 2 | 930 | 597 |
+| 64 KB × 4 | 17.4K | 4545 |
 
-При одном вызове UDF на значение точка безубыточности лежит между 16 и 32 KB: ниже неё лишняя работа `MakePreferWasm` (регистрация в `TWasmAllocationRegistry` под локом) дороже сэкономленной копии, выше — resident выигрывает в 1.8–1.9 раза. При двух вызовах resident впереди уже на 4 KB, при четырёх на 64 KB — в 4 раза.
+При одном вызове UDF на значение до 16 KB два пути равны в пределах шума (лишняя работа `MakePreferWasm` — регистрация в `TWasmAllocationRegistry` под локом — примерно равна сэкономленной копии), с 32 KB resident выигрывает в 1.8 раза. При двух вызовах resident впереди уже на 4 KB (1.6 раза), при четырёх на 64 KB — почти в 4 раза.
+
+Цена материализации сильно зависела от диагностики реестра: `Register`/`TryFree` собирали `TStringBuilder` с сообщением на каждое значение, даже когда `YDB_WASM_STRING_DEBUG` выключен, и это стоило ~1000 циклов на строку (`MakePreferWasm` 4 KB: 1557 против 478 после того, как сообщения стали строиться лениво). Вторая часть — keep-alive: ссылку на handle берёт `TQueryCompartmentScope` один раз через `RetainOwner`, а не `Register` на каждое значение, поэтому на горячем пути не остаётся ни атомиков на `shared_ptr`, ни вставки/удаления узла в карте generation.
 
 **Цена host→guest вызова.** Изначально пара `malloc`/`free` стоила 126K циклов, и это перекрывало любую экономию на копиях. Причина не в WAVM: страховка от переполнения стека (`CheckStackDepth` → `CheckFreeStackSpace`) запрашивала границы стека на входе в каждую гостевую функцию, а `TCurrentThreadLimits` вызывает `pthread_getattr_np`, который на главном потоке парсит `/proc/self/maps` (strace показывал ровно два `openat` на итерацию). Границы фиксированы на всё время жизни потока, поэтому теперь они кэшируются в `thread_local` (`engine/compartment.cpp`), и пара `malloc`/`free` стоит 233 цикла вместо 126K. Сам запрос границ: 49K циклов на главном потоке против 393 на pthread (`Part_StackBoundsQuery_*`) — то есть на actor-потоках сервера, где реально исполняются UDF, экономия составляет ~390 циклов на гостевой вызов (вызов подешевел примерно в 4 раза), а не 19 мкс.
 
@@ -281,7 +285,7 @@ ROWS=1024 BLOB_SIZE=65536 RUNS=15 SKIP_SEED=1 \
 Опасность в том, что у резидентной строки в linear memory лежит и сам refcount-заголовок: если compartment уничтожить раньше значения, `TStringValue::TData::UnRef` читает `Refs_` из размапленной памяти и нода падает по SIGSEGV. Так и падал `COUNT(DISTINCT ParseBlob::blob_head(blob))` при `PreferWasm = true`: `TKqpComputeActor::Terminate` звал `DoTerminateImpl()` (снос task runner и графа, где `DISTINCT`-состояние держит значения) **после** `PassAway()`, то есть уже после деструктора актора вместе с его `TQueryCompartmentScope`. Исправление двойное:
 
 - `dq_compute_actor_impl.h`: `DoTerminateImpl()` вызывается до `PassAway()` — граф сносится, пока актор и его scope живы;
-- shared-владение: `TWasmAllocationRegistry::Register` принимает keep-alive `shared_ptr` на handle и держит его, пока у generation есть живые аллокации. `~TQueryCompartmentScope` вызывает `ReleaseOwner(Generation)`: если значений уже нет — compartment уничтожается сразу, если есть — generation помечается `OwnerReleased`, `FreeBytes` для оставшихся значений пропускается (возвращать байты гостевому аллокатору перед сносом памяти незачем), а последний `TryFree` роняет keep-alive и compartment. Keep-alive всегда отпускается **вне** локов реестра: деструктор handle сам заходит в `ForgetGeneration`, и под локом это давало дедлок.
+- shared-владение: `TWasmAllocationRegistry::RetainOwner` получает keep-alive `shared_ptr` на handle от `TQueryCompartmentScope` (один раз на acquire, а не на значение) и держит его, пока у generation есть живые аллокации. `~TQueryCompartmentScope` вызывает `ReleaseOwner(Generation)`: если значений уже нет — compartment уничтожается сразу, если есть — generation помечается `OwnerReleased`, `FreeBytes` для оставшихся значений пропускается (возвращать байты гостевому аллокатору перед сносом памяти незачем), а последний `TryFree` роняет keep-alive и compartment. Keep-alive всегда отпускается **вне** локов реестра: деструктор handle сам заходит в `ForgetGeneration`, и под локом это давало дедлок.
 
 Итог: любое значение может пережить свой scope, и порядок сноса больше не важен для корректности. Регрессии закрыты тестами `TPreferWasmStringTest::ResidentValueOutlivesQueryScope` и `AllocationRegistryOwnerOutlivesLiveAllocations`.
 

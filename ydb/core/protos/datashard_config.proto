@@ -31,6 +31,7 @@ message TDataShardConfig {
     optional uint32 IncrementalRestoreScanBatchMaxRows = 33 [default = 10000];
     // Shared memory limit for all DataShard HNSW caches in this process.
     // Bytes; 0 disables the cache.
+    // Process-wide HNSW cache budget in bytes. Zero disables the cache.
     optional uint64 VectorIndexHnswCacheMaxSize = 34 [default = 0];
     optional uint64 InMemoryStateMigrationTimeoutMs = 24 [default = 1000];
     optional uint32 StatsReportIntervalSeconds = 25 [default = 10];

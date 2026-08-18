@@ -314,10 +314,12 @@ struct TShortTableInfo {
     TMap<NTable::TTag, TShortColumnInfo> Columns;
 };
 
-// Scans the full local table partition for (primary key, vector column) pairs
-// and builds an in-memory HNSW index from them. Returns nullptr (and sets
-// hasPageFault) if the scan needs to page-fault and retry; the caller should
-// then bail out of the current transaction without marking the build as done.
+// Scans the full local table partition for (primary key, vector column) pairs.
+// Keep reservation and page-fault handling in sync with
+// ScanPostingTableVectors() in hnsw_index_build_unit.cpp.
+// Returns an empty vector (and sets hasPageFault) if the scan needs to
+// page-fault and retry; the caller then leaves the current transaction without
+// marking the build as done.
 std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
     TTransactionContext& txc,
     const TShortTableInfo& tableInfo,
@@ -325,9 +327,11 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
     const Ydb::Table::VectorIndexSettings& settings,
     TDataShard& dataShard,
     std::shared_ptr<void>& memoryReservation,
+    ui64& reservedBytes,
     bool& hasPageFault)
 {
     hasPageFault = false;
+    reservedBytes = 0;
     std::vector<NTable::TTag> columns{vectorColumn};
     for (ui32 keyColumn : tableInfo.KeyColumnIds) {
         if (keyColumn != vectorColumn) {
@@ -349,6 +353,7 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
     if (!memoryReservation) {
         return {};
     }
+    reservedBytes = estimatedBytes;
 
     std::vector<std::pair<TString, TString>> result;
     result.reserve(precharge.ItemsPrecharged);
@@ -384,6 +389,7 @@ std::vector<std::pair<TString, TString>> ScanVectorColumnForHnsw(
         };
         memoryReservation = std::make_shared<TCombinedReservation>(
             TCombinedReservation{std::move(memoryReservation), std::move(keyReservation)});
+        reservedBytes += keyBytes;
     }
     return result;
 }
@@ -1205,15 +1211,14 @@ private:
     // over-fetch until Limit unique neighbors have been found.
     THnswSearchResult SearchHnswDistinct(const TTableRange& range) const {
         const auto& topK = *State.VectorTopK;
-        if (topK.HnswIndex->HasChanges()) {
-            // The overlay may contain changes from an uncommitted or aborted
-            // transaction. Return every candidate and let MVCC Select plus
-            // AddRow validate/rank the currently visible rows.
-            return topK.HnswIndex->Search(topK.Target, topK.HnswIndex->Size());
-        }
-        size_t requested = topK.Limit;
+        // Each overlay entry may be invisible at this read's MVCC version.
+        // Bounded over-fetch compensates for all such entries without turning
+        // a single mutation into a full-graph search.
+        const size_t maxCandidates = topK.HnswIndex->Size() + topK.HnswIndex->ChangeCount();
+        size_t requested = Min(maxCandidates, static_cast<size_t>(topK.Limit));
+        requested += Min(topK.HnswIndex->ChangeCount(), maxCandidates - requested);
         if (!topK.DistinctColumns.empty()) {
-            requested = Min(topK.HnswIndex->Size(), Max<size_t>(requested * 2, 32));
+            requested = Min(maxCandidates, Max<size_t>(requested * 2, 32));
         }
 
         while (true) {
@@ -1230,10 +1235,10 @@ private:
             }
 
             if (topK.DistinctColumns.empty()) {
-                if (inRange.Results.size() >= topK.Limit || requested == topK.HnswIndex->Size()) {
+                if (inRange.Results.size() >= topK.Limit || requested == maxCandidates) {
                     return inRange;
                 }
-                requested = Min(topK.HnswIndex->Size(), requested * 2);
+                requested = Min(maxCandidates, requested * 2);
                 continue;
             }
 
@@ -1251,7 +1256,7 @@ private:
             if (!keysOnly) {
                 // This is not expected for vector-index plans. Search all rows
                 // so MaterializeHnswResults can safely deduplicate by values.
-                return topK.HnswIndex->Search(topK.Target, topK.HnswIndex->Size());
+                return topK.HnswIndex->Search(topK.Target, maxCandidates);
             }
 
             THnswSearchResult unique;
@@ -1269,16 +1274,15 @@ private:
                     }
                 }
             }
-            if (requested == topK.HnswIndex->Size()) {
+            if (requested == maxCandidates) {
                 return unique;
             }
-            requested = Min(topK.HnswIndex->Size(), requested * 2);
+            requested = Min(maxCandidates, requested * 2);
         }
     }
 
     EReadStatus MaterializeHnswResults(
         const THnswSearchResult& results,
-        const TTableRange& range,
         TTransactionContext& txc)
     {
         auto& topK = *State.VectorTopK;
@@ -1286,12 +1290,7 @@ private:
         TVector<TSerializedCellVec> keys;
         keys.reserve(results.Results.size());
         for (const auto& [serializedKey, _] : results.Results) {
-            TSerializedCellVec key(serializedKey);
-            if (ComparePointAndRange(
-                    key.GetCells(), range,
-                    TableInfo.KeyColumnTypes, TableInfo.KeyColumnTypes) == 0) {
-                keys.emplace_back(std::move(key));
-            }
+            keys.emplace_back(serializedKey);
         }
 
         bool ready = true;
@@ -1347,9 +1346,13 @@ private:
         const TTableRange& tableRange,
         TTransactionContext& txc)
     {
-        if (State.VectorTopK && State.VectorTopK->HnswIndex) {
+        // NMSLIB bounds graph traversal by efSearch even when k is the full
+        // index size, so post-filtering candidates cannot correctly serve a
+        // restricted prefix/range. Use the ordinary range iterator instead.
+        if (State.IsHeadRead && State.VectorTopK && State.VectorTopK->HnswIndex
+                && tableRange.IsFullRange(TableInfo.KeyColumnTypes.size())) {
             auto results = SearchHnswDistinct(tableRange);
-            return MaterializeHnswResults(results, tableRange, txc);
+            return MaterializeHnswResults(results, txc);
         }
 
         auto keyAccessSampler = Self->GetKeyAccessSampler();
@@ -2644,41 +2647,50 @@ public:
             // absent (pre-deployment index or tablet restart), scan once and
             // construct it asynchronously; this read continues by brute force.
             const ui32 localTid = TableInfo.LocalTid;
-            if (auto cached = Self->GetHnswIndex(localTid)) {
-                Self->RegisterHnswCacheLookup(localTid, true);
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
-                    Self->TabletID() << " HNSW: cache hit for localTid=" << localTid
-                    << " size=" << cached->Size());
-                topState->HnswIndex = std::move(cached);
-            } else {
-                Self->RegisterHnswCacheLookup(localTid, false);
+            const ui32 vectorColumnTag = record.GetColumns(topK.GetColumn());
+            // A head-built graph cannot provide candidates that existed only
+            // at an older MVCC version. Snapshot reads therefore stay on the
+            // exact table iterator path.
+            if (state.IsHeadRead) {
+                if (auto cached = Self->GetHnswIndex(localTid, vectorColumnTag,
+                        topK.GetSettings())) {
+                    Self->RegisterHnswCacheLookup(localTid, true);
+                    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD,
+                        Self->TabletID() << " HNSW: cache hit for localTid=" << localTid
+                        << " size=" << cached->Size());
+                    topState->HnswIndex = std::move(cached);
+                } else {
+                    Self->RegisterHnswCacheLookup(localTid, false);
+                }
             }
             if (!topState->HnswIndex
+                    && state.IsHeadRead
                     && Self->GetHnswCacheMemoryLimit() != 0
                     && topK.GetSettings().vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT
-                    && !Self->IsHnswIndexBuilding(localTid)) {
+                    && Self->TryStartHnswIndexBuild(localTid, vectorColumnTag,
+                        topK.GetSettings())) {
                 // Compatibility/restart path: eager construction only runs at
                 // index finalization, so an index created before deployment or
                 // lost on tablet restart must be reconstructed on demand.
-                Self->SetHnswIndexBuilding(localTid, true);
                 bool pageFault = false;
+                ui64 reservedBytes = 0;
                 std::shared_ptr<void> memoryReservation;
                 auto vectors = ScanVectorColumnForHnsw(
-                    txc, TableInfo, record.GetColumns(topK.GetColumn()), topK.GetSettings(),
-                    *Self, memoryReservation, pageFault);
+                    txc, TableInfo, vectorColumnTag, topK.GetSettings(),
+                    *Self, memoryReservation, reservedBytes, pageFault);
                 if (pageFault) {
                     Self->RegisterHnswScanPageFault(localTid);
                 } else if (!memoryReservation) {
                     Self->DisableHnswIndexBuild(localTid);
                 } else if (vectors.empty()
-                        || vectors.size() < topK.GetSettings().hnsw_min_rows()) {
+                        || vectors.size() < GetHnswMinRows(topK.GetSettings())) {
                     Self->DisableHnswIndexBuild(localTid);
                 } else {
                     const ui64 rowCount = vectors.size();
                     auto* actor = CreateHnswIndexBuildActor(ctx.SelfID, localTid,
-                        record.GetColumns(topK.GetColumn()), rowCount,
+                        vectorColumnTag, rowCount,
                         topK.GetSettings(), std::move(vectors),
-                        std::move(memoryReservation));
+                        std::move(memoryReservation), reservedBytes);
                     const TActorId actorId = ctx.Register(
                         actor, TMailboxType::HTSwap, AppData(ctx)->BatchPoolId);
                     Self->Actors.insert(actorId);

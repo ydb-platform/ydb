@@ -20,6 +20,8 @@
 #include <util/generic/yexception.h>
 #include <util/string/builder.h>
 
+#include <tuple>
+
 namespace NKikimr::NDataShard {
 
 namespace {
@@ -35,6 +37,7 @@ constexpr unsigned BuildThreadsPerIndex = 1;
 constexpr ui32 DefaultHnswConnectivity = 16;
 constexpr ui32 DefaultHnswConstructionCandidates = 200;
 constexpr ui32 DefaultHnswSearchCandidates = 15;
+constexpr ui64 DefaultHnswMinRows = 10000;
 
 std::unique_ptr<similarity::Space<float>> CreateSpace(VectorIndexSettings::Metric metric, TString& error) {
     switch (metric) {
@@ -91,6 +94,33 @@ struct TFloatVectorView {
 
 } // namespace
 
+ui64 GetHnswMinRows(const VectorIndexSettings& settings) {
+    return settings.has_hnsw_min_rows() ? settings.hnsw_min_rows() : DefaultHnswMinRows;
+}
+
+bool AreHnswIndexSettingsCompatible(
+        const VectorIndexSettings& cached,
+        const VectorIndexSettings& requested) {
+    const auto connectivity = [](const auto& settings) {
+        return settings.has_hnsw_connectivity()
+            ? settings.hnsw_connectivity() : DefaultHnswConnectivity;
+    };
+    const auto constructionCandidates = [](const auto& settings) {
+        return settings.has_hnsw_construction_candidates()
+            ? settings.hnsw_construction_candidates() : DefaultHnswConstructionCandidates;
+    };
+    const auto searchCandidates = [](const auto& settings) {
+        return settings.has_hnsw_search_candidates()
+            ? settings.hnsw_search_candidates() : DefaultHnswSearchCandidates;
+    };
+    return cached.metric() == requested.metric()
+        && cached.vector_type() == requested.vector_type()
+        && cached.vector_dimension() == requested.vector_dimension()
+        && connectivity(cached) == connectivity(requested)
+        && constructionCandidates(cached) == constructionCandidates(requested)
+        && searchCandidates(cached) == searchCandidates(requested);
+}
+
 class THnswIndex::TImpl {
 public:
     TImpl(std::unique_ptr<similarity::Space<float>> space, size_t dimension)
@@ -131,6 +161,12 @@ public:
             "indexThreadQty=" + std::to_string(BuildThreadsPerIndex),
         });
         Index->CreateIndex(buildParams);
+        for (size_t i = 0; i < Objects.size(); ++i) {
+            if (Objects[i]->id() != static_cast<similarity::IdType>(i)) {
+                Index.reset();
+                return false;
+            }
+        }
         Index->SetQueryTimeParams(similarity::AnyParams({
             "efSearch=" + std::to_string(settings.has_hnsw_search_candidates()
                 ? settings.hnsw_search_candidates() : DefaultHnswSearchCandidates)}));
@@ -151,7 +187,7 @@ public:
         std::unique_ptr<const similarity::Object> queryObj(
             new similarity::Object(-1, -1, Dimension * sizeof(float), view.Data));
 
-        const size_t graphK = DeltaVectors.empty() && ErasedKeys.empty() ? k : Keys.size();
+        const size_t graphK = Min(k, Keys.size());
         similarity::KNNQuery<float> query(*Space, queryObj.get(), static_cast<unsigned>(graphK));
         Index->Search(&query, -1);
 
@@ -181,12 +217,21 @@ public:
                 continue;
             }
             similarity::Object deltaObj(-1, -1, Dimension * sizeof(float), deltaView.Data);
-            merged[key] = query.DistanceObjLeft(&deltaObj);
+            const float deltaDistance = query.DistanceObjLeft(&deltaObj);
+            auto [it, inserted] = merged.emplace(key, deltaDistance);
+            if (!inserted) {
+                // Preserve the better of the graph and overlay distances. A
+                // concurrent reader may see either MVCC version; materialize
+                // re-ranks the visible row from the table.
+                it->second = Min(it->second, deltaDistance);
+            }
         }
 
         result.Results.assign(merged.begin(), merged.end());
-        SortBy(result.Results, [](const auto& item) { return item.second; });
-        if (DeltaVectors.empty() && ErasedKeys.empty() && result.Results.size() > k) {
+        Sort(result.Results, [](const auto& lhs, const auto& rhs) {
+            return std::tie(lhs.second, lhs.first) < std::tie(rhs.second, rhs.first);
+        });
+        if (result.Results.size() > k) {
             result.Results.resize(k);
         }
         return result;
@@ -245,6 +290,10 @@ public:
 
     bool HasChanges() const {
         return !DeltaVectors.empty() || !ErasedKeys.empty();
+    }
+
+    size_t ChangeCount() const {
+        return DeltaVectors.size() + ErasedKeys.size();
     }
 
 private:
@@ -391,6 +440,10 @@ bool THnswIndex::HasDelta(TStringBuf key) const {
 
 bool THnswIndex::HasChanges() const {
     return Impl->HasChanges();
+}
+
+size_t THnswIndex::ChangeCount() const {
+    return Impl->ChangeCount();
 }
 
 size_t THnswIndex::Size() const {

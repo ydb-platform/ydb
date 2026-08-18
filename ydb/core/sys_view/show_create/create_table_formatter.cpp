@@ -695,7 +695,8 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
         const auto& vectorSettings = kMeansTreeSettings->settings();
         if (vectorSettings.has_hnsw_min_rows()) {
-            Stream << del << "hnsw_min_rows=" << vectorSettings.hnsw_min_rows();
+            Stream << del << "hnsw_min_rows="
+                << (vectorSettings.has_hnsw_min_rows() ? vectorSettings.hnsw_min_rows() : 10000);
             del = ", ";
         }
         if (vectorSettings.has_hnsw_connectivity()) {

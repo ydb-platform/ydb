@@ -2974,10 +2974,18 @@ void TVectorIndexSettings::SerializeTo(Ydb::Table::VectorIndexSettings& settings
     settings.set_metric(convertMetric());
     settings.set_vector_type(convertVectorType());
     settings.set_vector_dimension(VectorDimension);
-    settings.set_hnsw_min_rows(HnswMinRows);
-    settings.set_hnsw_connectivity(HnswConnectivity);
-    settings.set_hnsw_construction_candidates(HnswConstructionCandidates);
-    settings.set_hnsw_search_candidates(HnswSearchCandidates);
+    if (HnswMinRows != 10000) {
+        settings.set_hnsw_min_rows(HnswMinRows);
+    }
+    if (HnswConnectivity != 16) {
+        settings.set_hnsw_connectivity(HnswConnectivity);
+    }
+    if (HnswConstructionCandidates != 200) {
+        settings.set_hnsw_construction_candidates(HnswConstructionCandidates);
+    }
+    if (HnswSearchCandidates != 15) {
+        settings.set_hnsw_search_candidates(HnswSearchCandidates);
+    }
 }
 
 void TVectorIndexSettings::Out(IOutputStream& o) const {

@@ -167,39 +167,6 @@ class TDataShard
     : public TActor<TDataShard>
     , public NTabletFlatExecutor::TTabletExecutedFlat
 {
-    class THnswCacheMemoryTracker {
-    public:
-        void SetLimit(ui64 limit) noexcept {
-            Limit.store(limit, std::memory_order_relaxed);
-        }
-
-        ui64 GetLimit() const noexcept {
-            return Limit.load(std::memory_order_relaxed);
-        }
-
-        bool TryAcquire(ui64 bytes) noexcept {
-            ui64 used = Used.load(std::memory_order_relaxed);
-            while (true) {
-                const ui64 limit = Limit.load(std::memory_order_relaxed);
-                if (!limit || used > limit || bytes > limit - used) {
-                    return false;
-                }
-                if (Used.compare_exchange_weak(used, used + bytes,
-                        std::memory_order_acq_rel, std::memory_order_relaxed)) {
-                    return true;
-                }
-            }
-        }
-
-        void Release(ui64 bytes) noexcept {
-            Used.fetch_sub(bytes, std::memory_order_acq_rel);
-        }
-
-    private:
-        std::atomic<ui64> Limit = 0;
-        std::atomic<ui64> Used = 0;
-    };
-
     class TTxStopGuard;
     class TTxGetShardState;
     class TTxInit;
@@ -460,6 +427,7 @@ class TDataShard
             ui32 LocalTid = 0;
             ui32 VectorColumnTag = 0;
             ui64 RowCountAtBuild = 0;
+            Ydb::Table::VectorIndexSettings Settings;
             std::shared_ptr<NDataShard::THnswIndex> Index;
             std::shared_ptr<void> MemoryReservation;
             TString Error;
@@ -1846,9 +1814,12 @@ public:
 
     // Returns the cached HNSW index for the given local table id, or nullptr.
     // A missing index is reconstructed asynchronously by the read path.
-    std::shared_ptr<NDataShard::THnswIndex> GetHnswIndex(ui32 localTid) const {
+    std::shared_ptr<NDataShard::THnswIndex> GetHnswIndex(ui32 localTid, ui32 vectorColumnTag,
+            const Ydb::Table::VectorIndexSettings& settings) const {
         auto it = HnswIndexCache.find(localTid);
-        if (it != HnswIndexCache.end() && it->second.Index) {
+        if (it != HnswIndexCache.end() && it->second.Index
+                && it->second.VectorColumnTag == vectorColumnTag
+                && NDataShard::AreHnswIndexSettingsCompatible(it->second.Settings, settings)) {
             return it->second.Index;
         }
         return nullptr;
@@ -1863,10 +1834,27 @@ public:
         }
     }
 
-    bool IsHnswIndexBuilding(ui32 localTid) const {
-        auto it = HnswIndexCache.find(localTid);
-        return it != HnswIndexCache.end()
-            && (it->second.Building || TInstant::Now() < it->second.NextScanAttemptAt);
+    bool TryStartHnswIndexBuild(ui32 localTid, ui32 vectorColumnTag,
+            const Ydb::Table::VectorIndexSettings& settings) {
+        auto& entry = HnswIndexCache[localTid];
+        if (entry.Building) {
+            return false;
+        }
+        const bool compatible = entry.VectorColumnTag == vectorColumnTag
+            && NDataShard::AreHnswIndexSettingsCompatible(entry.Settings, settings);
+        if (!compatible) {
+            entry.Index.reset();
+            entry.RowCountAtBuild = 0;
+            entry.DeltaReservations.clear();
+            entry.NextScanAttemptAt = TInstant::Zero();
+            entry.VectorColumnTag = vectorColumnTag;
+            entry.Settings = settings;
+        } else if (TInstant::Now() < entry.NextScanAttemptAt) {
+            return false;
+        }
+        entry.Building = true;
+        entry.BuildObsolete = false;
+        return true;
     }
 
     void SetHnswIndexBuilding(ui32 localTid, bool building) {
@@ -1887,6 +1875,7 @@ public:
             entry.Index.reset();
             entry.RowCountAtBuild = 0;
             entry.VectorColumnTag = 0;
+            entry.Settings.Clear();
             entry.DeltaReservations.clear();
             entry.NextScanAttemptAt = TInstant::Zero();
             entry.BuildObsolete = entry.Building;
@@ -1906,33 +1895,31 @@ public:
     }
 
     ui64 GetHnswCacheMemoryLimit() const {
-        return VectorIndexHnswCacheMemoryTracker->GetLimit();
+        return VectorIndexHnswCacheMemoryTracker.GetLimit();
     }
 
     std::shared_ptr<void> TryReserveHnswCacheMemory(ui64 bytes) {
-        auto memoryTracker = VectorIndexHnswCacheMemoryTracker;
-        if (!memoryTracker->TryAcquire(bytes)) {
+        if (!VectorIndexHnswCacheMemoryTracker.TryAcquire(bytes)) {
             return nullptr;
         }
 
         struct TReservation {
-            std::shared_ptr<THnswCacheMemoryTracker> MemoryTracker;
             ui64 Size = 0;
 
             ~TReservation() {
-                MemoryTracker->Release(Size);
+                TDataShard::VectorIndexHnswCacheMemoryTracker.Release(Size);
             }
         };
 
         auto reservation = std::make_shared<TReservation>();
-        reservation->MemoryTracker = std::move(memoryTracker);
         reservation->Size = bytes;
         return reservation;
     }
 
     void SetHnswIndex(ui32 localTid, std::shared_ptr<NDataShard::THnswIndex> index,
             std::shared_ptr<void> memoryReservation, ui64 rowCountAtBuild = 0,
-            ui32 vectorColumnTag = 0) {
+            ui32 vectorColumnTag = 0,
+            const Ydb::Table::VectorIndexSettings& settings = {}) {
         auto& entry = HnswIndexCache[localTid];
         // Active reads may still own the old index and keep its reservation.
         entry.Index.reset();
@@ -1951,6 +1938,7 @@ public:
         entry.Index = std::move(index);
         entry.RowCountAtBuild = rowCountAtBuild;
         entry.VectorColumnTag = vectorColumnTag;
+        entry.Settings = settings;
         entry.DeltaReservations.clear();
         entry.Building = false;
         entry.BuildObsolete = false;
@@ -3134,6 +3122,7 @@ private:
         std::shared_ptr<NDataShard::THnswIndex> Index;
         ui64 RowCountAtBuild = 0;
         ui32 VectorColumnTag = 0;
+        Ydb::Table::VectorIndexSettings Settings;
         THashMap<TString, std::shared_ptr<void>> DeltaReservations;
         bool Building = false;
         bool BuildObsolete = false;
@@ -3143,8 +3132,7 @@ private:
     };
     THashMap<ui32, THnswIndexCacheEntry> HnswIndexCache;  // LocalTid -> cache entry
     TIntrusivePtr<TEvTabletCounters::TInFlightCookie> HnswCounterEventsInFlight;
-    inline static std::shared_ptr<THnswCacheMemoryTracker> VectorIndexHnswCacheMemoryTracker =
-        std::make_shared<THnswCacheMemoryTracker>();
+    inline static THnswCacheMemoryTracker VectorIndexHnswCacheMemoryTracker;
     TTransQueue TransQueue;
     TOutReadSets OutReadSets;
     TPipeline Pipeline;

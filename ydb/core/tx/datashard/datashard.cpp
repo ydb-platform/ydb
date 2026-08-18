@@ -393,7 +393,7 @@ void TDataShard::OnActivateExecutor(const TActorContext& ctx) {
     LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, "TDataShard::OnActivateExecutor: tablet " << TabletID() << " actor " << ctx.SelfID);
 
     InitControls();
-    VectorIndexHnswCacheMemoryTracker->SetLimit(
+    VectorIndexHnswCacheMemoryTracker.SetLimit(
         AppData(ctx)->DataShardConfig.GetVectorIndexHnswCacheMaxSize());
 
     // OnActivateExecutor might be called multiple times for a follower

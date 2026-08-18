@@ -3739,7 +3739,9 @@ Y_UNIT_TEST(SelectWithFulltextMatchPrefixed) {
 }
 
 Y_UNIT_TEST(CreatePrefixedFulltextIndexDisabled) {
-    auto kikimr = Kikimr(); // EnableFulltextIndexPrefix is off
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndexPrefix(false);
+    auto kikimr = Kikimr(std::move(featureFlags));
     auto db = kikimr.GetQueryClient();
 
     TString query = R"sql(

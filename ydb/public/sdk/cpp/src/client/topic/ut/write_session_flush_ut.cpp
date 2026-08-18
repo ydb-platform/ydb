@@ -39,10 +39,18 @@ Y_UNIT_TEST_SUITE(WriteSessionFlush) {
 
         auto firstFlush = session->Flush();
         auto secondFlush = session->Flush();
+        auto reentrantFlushPromise = NThreading::NewPromise<bool>();
+        auto reentrantFlush = reentrantFlushPromise.GetFuture();
+        firstFlush.Subscribe([session, reentrantFlushPromise](const NThreading::TFuture<bool>& result) mutable {
+            reentrantFlushPromise.TrySetValue(result.GetValue() && session->Flush().GetValueSync());
+        });
+
         UNIT_ASSERT_C(firstFlush.Wait(TDuration::Seconds(30)), "first flush timed out");
         UNIT_ASSERT_C(secondFlush.Wait(TDuration::Seconds(30)), "second flush timed out");
+        UNIT_ASSERT_C(reentrantFlush.Wait(TDuration::Seconds(30)), "reentrant flush timed out");
         UNIT_ASSERT(firstFlush.GetValue());
         UNIT_ASSERT(secondFlush.GetValue());
+        UNIT_ASSERT(reentrantFlush.GetValue());
         UNIT_ASSERT(session->Close(TDuration::Zero()));
     }
 }

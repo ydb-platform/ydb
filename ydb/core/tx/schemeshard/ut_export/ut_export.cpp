@@ -1606,12 +1606,13 @@ partitioning_settings {
 )");
     }
 
-    Y_UNIT_TEST(ShouldRejectExportOfTableWithGeneratedColumn) {
+    Y_UNIT_TEST(ShouldCarryCreateTableQueryForGeneratedColumn) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
         Runtime().GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
 
-        const TVector<TString> tables = { R"(
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "a"   Type: "Int32"  }
@@ -1623,14 +1624,30 @@ partitioning_settings {
                 ExprText: "a + b"
                 Stored: true
                 DependencyColumnNames: ["a", "b"]
-                Context: ""
+                Context: "PRAGMA classic_division = '0';"
               }
             }
             KeyColumnNames: ["key"]
-        )" };
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
 
-        Run(Runtime(), Env(), tables,
-            Sprintf(R"(
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> block(Runtime(), [](auto& ev) {
+            NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+            UNIT_ASSERT(schemeTx.ParseFromString(ev.Get()->Get()->GetTxBody()));
+            if (!schemeTx.HasBackup()) {
+                return false;
+            }
+
+            const auto& backup = schemeTx.GetBackup();
+            UNIT_ASSERT(backup.HasCreateTableQuery());
+            UNIT_ASSERT_STRING_CONTAINS(backup.GetCreateTableQuery(),
+                "GENERATED ALWAYS AS (a + b) STORED");
+            UNIT_ASSERT_STRING_CONTAINS(backup.GetCreateTableQuery(),
+                "PRAGMA classic_division = '0';");
+            return true;
+        });
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -1639,9 +1656,10 @@ partitioning_settings {
                 destination_prefix: ""
               }
             }
-        )",
-                S3Port()),
-            Ydb::StatusIds::CANCELLED);
+        )", S3Port()));
+
+        Runtime().WaitFor("backup task is sent to datashards", [&]{ return block.size() >= 1; });
+        block.Stop();
     }
 
     Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {

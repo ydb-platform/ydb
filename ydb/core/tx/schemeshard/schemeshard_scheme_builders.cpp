@@ -3,6 +3,7 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/sys_view/show_create/formatters/create_table_formatter.h>
 #include <ydb/core/ydb_convert/external_data_source_description.h>
 #include <ydb/core/ydb_convert/external_table_description.h>
 #include <ydb/core/ydb_convert/replication_description.h>
@@ -24,6 +25,53 @@
 #include <util/string/builder.h>
 
 namespace NKikimr::NSchemeShard {
+
+bool BuildCreateTableQuery(
+    const TString& tablePath,
+    const NKikimrSchemeOp::TPathDescription& pathDescription,
+    TString& query,
+    TString& error)
+{
+    query.clear();
+    error.clear();
+
+    if (!pathDescription.HasTable()) {
+        return true;
+    }
+
+    auto description = pathDescription.GetTable();
+    bool hasGeneratedColumns = false;
+    for (const auto& column : description.GetColumns()) {
+        if (column.HasDefaultFromExpression()) {
+            hasGeneratedColumns = true;
+            break;
+        }
+    }
+
+    if (!hasGeneratedColumns) {
+        return true;
+    }
+
+    if (description.SequencesSize() != 0) {
+        error = "Cannot export a table with both generated and sequence columns";
+        return false;
+    }
+
+    description.ClearCdcStreams();
+    for (auto& index : *description.MutableTableIndexes()) {
+        index.ClearIndexImplTableDescriptions();
+    }
+
+    NSysView::TCreateTableFormatter formatter;
+    auto result = formatter.Format(tablePath, tablePath, description, false, {}, {});
+    if (!result.IsSuccess()) {
+        error = result.GetError();
+        return false;
+    }
+
+    query = result.ExtractOut();
+    return true;
+}
 
 bool BuildViewScheme(
     const NKikimrScheme::TEvDescribeSchemeResult& describeResult,

@@ -1556,6 +1556,7 @@ message TBackupTask {
     }
 
     optional TEncryptionSettings EncryptionSettings = 19;
+    optional string CreateTableQuery = 21;
 }
 
 message TRestoreTask {

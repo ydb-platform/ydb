@@ -139,6 +139,7 @@ private:
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config);
 
 public:
+    static NKikimrConfig::TCompositeConveyorConfig BuildDefaultProto();
     static TConfig BuildDefault();
 
     static TConclusion<TConfig> BuildFromProto(const NKikimrConfig::TCompositeConveyorConfig& protoConfig) {

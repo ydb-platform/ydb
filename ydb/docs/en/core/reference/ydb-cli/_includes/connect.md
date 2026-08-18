@@ -67,7 +67,12 @@ If all the steps described at the beginning of this article are completed, but t
 
 If the authentication mode was determined, but the required additional parameters could not be determined, the command will be aborted with a message describing the problem:
 
-- `(No such file or directory) util/system/file.cpp:857: can't open "<filepath>" with mode RdOnly|Seq (0x00000028)` -- failed to open the file `<filepath>` for reading, specified in one of the parameters where the file name with path is passed.
+```text
+(No such file or directory) util/system/file.cpp:857:
+can't open "<filepath>" with mode RdOnly|Seq (0x00000028)
+```
+
+— failed to open the file `<filepath>` for reading, specified in one of the parameters where the file name with path is passed.
 
 ## Authentication check {#whoami}
 

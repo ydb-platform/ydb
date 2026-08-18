@@ -1,7 +1,7 @@
 #include "tablet_counters_aggregator.h"
 #include "tablet_counters_app.h"
 #include "labeled_counters_merger.h"
-#include "labeled_db_counters.h"
+#include "detailed_metrics/node_database_metrics_aggregator.h"
 #include "detailed_metrics/ydb_metrics_mapper.h"
 #include "private/aggregated_counters.h"
 #include "private/aggregated_tablet_counters.h"
@@ -17,6 +17,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/counters.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/service/db_counters.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
@@ -44,6 +45,8 @@
 namespace NKikimr {
 
 const ui32 WAKEUP_TIMEOUT_SECONDS = 4;
+
+constexpr TDuration DATABASE_PATH_RESOLVE_TIMEOUT = TDuration::Seconds(10);
 
 TStringBuf GetHistogramAggregateSimpleName(TStringBuf name) {
     TStringBuf buffer(name);
@@ -94,6 +97,32 @@ public:
     {
         if (!IsFollower) {
             YdbCounters = MakeIntrusive<TYdbTabletCounters>(GetServiceCounters(counters, "ydb"), Counters);
+        }
+    }
+
+    void ResolveDatabasePath(NSchemeCache::TSchemeCacheNavigate* navigate, const TActorContext& ctx) {
+        for (const auto& entry : navigate->ResultSet) {
+            const auto pathId = entry.TableId.PathId;
+
+            auto it = DetailedMetricsByPathId.find(pathId);
+            if (it == DetailedMetricsByPathId.end()) {
+                continue;
+            }
+
+            auto& db = it->second;
+
+            // Let the next round of the counters request the path again
+            db.DatabasePathRequestedAt = TInstant::Zero();
+
+            if (entry.Status != NSchemeCache::TSchemeCacheNavigate::EStatus::Ok) {
+                YDB_LOG_WARN_CTX(ctx, "Failed to resolve the database path of the detailed metrics",
+                    {"pathId", pathId.ToString()},
+                    {"status", static_cast<ui32>(entry.Status)});
+                continue;
+            }
+
+            db.DatabasePath = CanonizePath(entry.Path);
+            CreateDetailedMetricsAggregator(db, ctx);
         }
     }
 
@@ -888,6 +917,56 @@ private:
     }
 
 private:
+    ////////////////////////////////////////////
+    // Detailed metrics
+
+    struct TDetailedMetricsForDb {
+        TString DatabasePath;
+
+        TInstant DatabasePathRequestedAt;
+
+        TNodeDatabaseMetricsAggregatorPtr Aggregator;
+
+        THashMap<ui64, THashMap<ui32, TDetailedMetricsTableInfo>> TabletContributions;
+    };
+
+    void RequestDatabasePath(TPathId tenantPathId, TDetailedMetricsForDb& db, const TActorContext& ctx) {
+        const TInstant now = ctx.Now();
+        if (db.DatabasePathRequestedAt && db.DatabasePathRequestedAt + DATABASE_PATH_RESOLVE_TIMEOUT > now) {
+            return;
+        }
+        db.DatabasePathRequestedAt = now;
+
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto request = MakeHolder<TNavigate>();
+
+        if (const auto& domain = AppData(ctx)->DomainsInfo->Domain) {
+            request->DatabaseName = domain->Name;
+        }
+
+        request->ResultSet.push_back({});
+
+        auto& entry = request->ResultSet.back();
+        entry.TableId.PathId = tenantPathId;
+        entry.Operation = TNavigate::EOp::OpPath;
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+        entry.RedirectRequired = false;
+
+        ctx.Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request));
+    }
+
+    void CreateDetailedMetricsAggregator(TDetailedMetricsForDb& db, const TActorContext& ctx) {
+        db.Aggregator = CreateNodeDatabaseMetricsAggregator(
+            DetailedMetricsGroup,
+            db.DatabasePath,
+            IsFollower
+        );
+
+        YDB_LOG_INFO_CTX(ctx, "Created the detailed metrics aggregator of the database",
+            {"databasePath", db.DatabasePath});
+    }
+
+private:
     ::NMonitoring::TDynamicCounterPtr Counters;
     TTabletCountersForTabletTypePtr AllTypes;
     bool IsFollower = false;
@@ -906,6 +985,10 @@ private:
     TLabeledCountersByDbPath LabeledDbCounters;
     TLabeledCountersByTabletTypeAndGroup LabeledCountersByTabletTypeAndGroup;
     TQuietTabletCounters QuietTabletCounters;
+
+    ::NMonitoring::TDynamicCounterPtr DetailedMetricsGroup;
+
+    THashMap<TPathId, TDetailedMetricsForDb> DetailedMetricsByPathId;
 };
 
 
@@ -949,6 +1032,7 @@ private:
     void HandleWakeup(const TActorContext &ctx);
     void HandleWork(TEvTabletCounters::TEvRemoveDatabase::TPtr& ev);
     void HandleWork(TEvTabletCounters::TEvTabletSetTableInfo::TPtr& ev);
+    void HandleWork(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
 
     TString RenderSearch(const TStringBuf relPath, const TString& name) const;
 
@@ -1008,6 +1092,12 @@ TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletAddCounte
     Y_UNUSED(ctx);
     TEvTabletCounters::TEvTabletAddCounters* msg = ev->Get();
     TabletMon->Apply(msg->TabletID, msg->TabletType, msg->TenantPathId, msg->ExecutorCounters.Get(), msg->AppCounters.Get(), ctx);
+}
+
+////////////////////////////////////////////
+void
+TTabletCountersAggregatorActor::HandleWork(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev, const TActorContext &ctx) {
+    TabletMon->ResolveDatabasePath(ev->Get()->Request.Get(), ctx);
 }
 
 ////////////////////////////////////////////
@@ -1312,6 +1402,7 @@ STFUNC(TTabletCountersAggregatorActor::StateWork) {
         HFunc(TEvTabletCounters::TEvTabletAddLabeledCounters, HandleWork);
         HFunc(TEvTabletCounters::TEvTabletLabeledCountersRequest, HandleWork);
         HFunc(TEvTabletCounters::TEvTabletLabeledCountersResponse, HandleWork); //from cluster aggregator, for http requests
+        HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleWork);
         hFunc(TEvTabletCounters::TEvRemoveDatabase, HandleWork);
         hFunc(TEvTabletCounters::TEvTabletSetTableInfo, HandleWork);
         HFunc(NMon::TEvHttpInfo, HandleWork);

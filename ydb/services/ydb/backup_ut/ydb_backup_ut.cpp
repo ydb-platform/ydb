@@ -364,6 +364,10 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool 
                     expected.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::SIMILARITY_INNER_PRODUCT);
                     expected.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
                     expected.mutable_settings()->set_vector_dimension(768);
+                    expected.mutable_settings()->set_hnsw_min_rows(10000);
+                    expected.mutable_settings()->set_hnsw_connectivity(16);
+                    expected.mutable_settings()->set_hnsw_construction_candidates(200);
+                    expected.mutable_settings()->set_hnsw_search_candidates(15);
                     expected.set_levels(2);
                     expected.set_clusters(80);
                     expected.set_overlap_clusters(3);

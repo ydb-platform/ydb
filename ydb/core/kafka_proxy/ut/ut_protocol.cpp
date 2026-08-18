@@ -7,6 +7,7 @@
 #include "test_server.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/kafka_proxy/actors/kafka_api_versions_actor.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -3378,6 +3379,36 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         auto metadataResponse = newClient.Metadata({});
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->ClusterId, "ydb-cluster");
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers.size(), 1);
+    }
+
+    Y_UNIT_TEST(GetApiVersionsUnsupportedVersionUsesKip511Fallback) {
+        auto unsupported = GetApiVersions(5);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNSUPPORTED_VERSION));
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys[0].ApiKey, static_cast<TKafkaInt16>(API_VERSIONS));
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys[0].MinVersion, 0);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys[0].MaxVersion, AdvertisedApiVersionsMax);
+
+        auto supported = GetApiVersions(2);
+        UNIT_ASSERT_VALUES_EQUAL(supported->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(supported->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
+    }
+
+    Y_UNIT_TEST(ApiVersionsUnsupportedVersionKeepsConnection) {
+        TInsecureTestServer testServer;
+        TKafkaTestClient client(testServer.Port);
+
+        auto msg = client.ApiVersionsAtVersion(5);
+
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNSUPPORTED_VERSION));
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys[0].ApiKey, static_cast<TKafkaInt16>(API_VERSIONS));
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys[0].MinVersion, 0);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys[0].MaxVersion, AdvertisedApiVersionsMax);
+
+        auto retry = client.ApiVersions();
+        UNIT_ASSERT_VALUES_EQUAL(retry->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(retry->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
     }
 
     Y_UNIT_TEST(MetadataInServerlessScenario) {

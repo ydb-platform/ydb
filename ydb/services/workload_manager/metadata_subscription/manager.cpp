@@ -95,6 +95,7 @@ struct TFeatureFlagExtractor : public NKqp::IFeatureFlagExtractor {
 
 class TClassifiersCheckResult {
 public:
+    // Mutator interface required by NYql::NCommon::ResultFromIssues/ResultFromError used in TActorRequestHandler error paths
     void SetStatus(NYql::EYqlIssueCode status) {
         Status = status;
     }
@@ -107,7 +108,15 @@ public:
         Issues.AddIssues(std::move(issues));
     }
 
-public:
+    // ResultFromError leaves Status untouched, so non-empty issues mean failure even with SUCCESS status
+    TYqlConclusionStatus ToConclusion() const {
+        if (Status == NYql::TIssuesIds::SUCCESS && Issues.Empty()) {
+            return TYqlConclusionStatus::Success();
+        }
+        return TYqlConclusionStatus::Fail(Status != NYql::TIssuesIds::SUCCESS ? Status : NYql::TIssuesIds::DEFAULT_ERROR, Issues.ToString());
+    }
+
+private:
     NYql::EYqlIssueCode Status = NYql::TIssuesIds::SUCCESS;
     NYql::TIssues Issues;
 };
@@ -154,11 +163,7 @@ TAsyncStatus CheckPoolNotReferencedByClassifiers(const TString& poolId, ui32 nod
     ));
 
     return promise.GetFuture().Apply([](const NThreading::TFuture<TClassifiersCheckResult>& f) {
-        const auto& result = f.GetValue();
-        if (result.Status == NYql::TIssuesIds::SUCCESS) {
-            return TYqlConclusionStatus::Success();
-        }
-        return TYqlConclusionStatus::Fail(result.Status, result.Issues.ToString());
+        return f.GetValue().ToConclusion();
     });
 }
 
@@ -299,13 +304,13 @@ TAsyncStatus TResourcePoolManager::ExecutePrepared(const NKqpProto::TKqpSchemeOp
 
 TAsyncStatus TResourcePoolManager::ExecuteSchemeRequest(const NKikimrSchemeOp::TModifyScheme& schemeTx, const TExternalModificationContext& context, ui32 nodeId, NKqpProto::TKqpSchemeOperation::OperationCase operationCase) const {
     TAsyncStatus validationFuture = NThreading::MakeFuture<TYqlConclusionStatus>(TYqlConclusionStatus::Success());
-    if (operationCase != NKqpProto::TKqpSchemeOperation::kDropResourcePool) {
-        validationFuture = NKqp::ChainFeatures(validationFuture, [context, nodeId] {
-            return CheckFeatureFlag(nodeId, MakeIntrusive<TFeatureFlagExtractor>(), context);
-        });
-    } else {
+    if (operationCase == NKqpProto::TKqpSchemeOperation::kDropResourcePool) {
         validationFuture = NKqp::ChainFeatures(validationFuture, [poolId = schemeTx.GetDrop().GetName(), nodeId, context] {
             return CheckPoolNotReferencedByClassifiers(poolId, nodeId, context);
+        });
+    } else {
+        validationFuture = NKqp::ChainFeatures(validationFuture, [context, nodeId] {
+            return CheckFeatureFlag(nodeId, MakeIntrusive<TFeatureFlagExtractor>(), context);
         });
     }
     return NKqp::ChainFeatures(validationFuture, [schemeTx, context] {

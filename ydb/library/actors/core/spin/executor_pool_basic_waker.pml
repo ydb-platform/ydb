@@ -69,9 +69,9 @@ proctype Worker(byte id) {
         if
         :: atomic {
             reductions > 0 ->
-            reductions--;
-            state[id] = BLOCKING
+            reductions--
         };
+        state[id] = BLOCKING;
         request_waker()
 
         /* Reduction has priority over taking the next activation. */

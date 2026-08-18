@@ -329,8 +329,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::BuildIndex
         ui32 size = filterSizeBytes * CHAR_BIT;
         if ((size & (size - 1)) == 0) {
             ui32 recordsCountBase = resolvedRecordsCount;
-            // TODO: the guard compares bits against MaxFilterSizeBytes (bytes) — pre-existing behaviour kept
-            // as-is to keep this PR strictly flag-gated.
+            // TODO: the guard compares bits against MaxFilterSizeBytes (bytes), and the non-power-of-2 branch
+            // below can overflow ui32 before bit_ceil — both pre-existing, kept as-is to keep this PR strictly
+            // flag-gated; fix together (widen size to ui64) in the follow-up.
             while (recordsCountBase < records && size * 2 <= TConstants::MaxFilterSizeBytes) {
                 size <<= 1;
                 recordsCountBase *= 2;

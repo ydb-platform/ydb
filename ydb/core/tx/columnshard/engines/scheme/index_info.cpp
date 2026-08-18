@@ -536,7 +536,12 @@ void TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IP
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     if (indexStorageId != IStoragesManager::LocalMetadataStorageId &&
         NYDBTest::TControllers::GetColumnShardController()->GetEnableLargeIndexes()) {
-        chunkSizeLimit = operators->GetOperatorVerified(indexStorageId)->GetBlobSplitSettings().GetMaxBlobSize();
+        const i64 maxBlobSize = operators->GetOperatorVerified(indexStorageId)->GetBlobSplitSettings().GetMaxBlobSize();
+        // Guard the i64 -> ui64 conversion: a non-positive limit (broken configuration) must not turn into a
+        // huge budget that disables splitting.
+        if (maxBlobSize > 0) {
+            chunkSizeLimit = static_cast<ui64>(maxBlobSize);
+        }
     }
     TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =
         index->BuildIndexOptional(originalData, recordsCount, *this, chunkSizeLimit);

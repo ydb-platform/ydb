@@ -71,9 +71,9 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> BuildIndexChunksBatche
     const ui32 indexId, const TChunks& chunks, const ui32 maxRecordsPerChunk, const TBuildChunkData& buildChunkData) {
     std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> result;
     ui32 chunkIdx = 0;
-    for (ui32 pos = 0; pos < chunks.size();) {
+    for (size_t pos = 0; pos < chunks.size();) {
         ui32 batchRecords = chunks[pos].second;
-        ui32 end = pos + 1;
+        size_t end = pos + 1;
         while (end < chunks.size() && batchRecords + chunks[end].second <= maxRecordsPerChunk) {
             batchRecords += chunks[end].second;
             ++end;

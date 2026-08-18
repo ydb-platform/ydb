@@ -809,9 +809,10 @@ private:
         }
 
         while (!Delayed.empty() && Delayed.top().first <= TInstant::Now()) {
-            auto& q = AwaitPerPool[Delayed.top().second->GetPoolId()];
-            q.emplace(std::move(Delayed.top().second));
+            const auto poolId = Delayed.top().second->GetPoolId();
+            AwaitPerPool[poolId].emplace(std::move(Delayed.top().second));
             Delayed.pop();
+            SyncPoolAwaitCounter(poolId);
         }
 
         // Round-robin across pools respecting per-pool cap.
@@ -838,6 +839,8 @@ private:
                 q.pop();
                 ++AllocatedPerPool[poolId];
                 curl_multi_add_handle(Handle.get(), handle);
+                SyncPoolAllocatedCounter(poolId);
+                SyncPoolAwaitCounter(poolId);
                 progress = true;
             }
         }
@@ -918,6 +921,9 @@ private:
             AllocatedSize = 0ULL;
             Allocated.clear();
             AllocatedPerPool.clear();
+            for (auto& [poolId, counters] : PoolCounters) {
+                counters.PerPoolAllocated->Set(0);
+            }
         }
 
         const TIssue error(curl_multi_strerror(result));
@@ -936,6 +942,7 @@ private:
         const auto poolId = easy->GetPoolId();
         const std::unique_lock lock(SyncRef());
         AwaitPerPool[poolId].emplace(std::move(easy));
+        SyncPoolAwaitCounter(poolId);
         Wakeup(0U);
     }
 
@@ -947,6 +954,7 @@ private:
         const auto poolId = easy->GetPoolId();
         const std::unique_lock lock(SyncRef());
         AwaitPerPool[poolId].emplace(std::move(easy));
+        SyncPoolAwaitCounter(poolId);
         Wakeup(0U);
     }
 
@@ -971,6 +979,7 @@ private:
         const auto poolId = easy->GetPoolId();
         const std::unique_lock lock(SyncRef());
         AwaitPerPool[poolId].emplace(std::move(easy));
+        SyncPoolAwaitCounter(poolId);
         Wakeup(sizeLimit);
     }
 
@@ -996,8 +1005,10 @@ private:
                 ++AllocatedPerPool[poolId];
                 Streams.emplace_back(weak);
                 Allocated.emplace(stream->GetHandle(), std::move(stream));
+                SyncPoolAllocatedCounter(poolId);
             } else {
                 StreamAwaitPerPool[poolId].emplace(std::move(stream));
+                SyncPoolAwaitCounter(poolId);
             }
             Wakeup(0ULL);
         }
@@ -1022,6 +1033,11 @@ private:
         const std::unique_lock lock(SyncRef());
         PoolCaps = std::move(caps);
         PoolCaps.emplace(DefaultPoolId, MaxHandlers);
+        for (const auto& [poolId, cap] : PoolCaps) {
+            if (!poolId.empty()) {
+                GetPoolCounters(poolId).PerPoolCap->Set(cap);
+            }
+        }
     }
 
     void OnRetry(TEasyCurlBuffer::TPtr easy) {
@@ -1029,6 +1045,7 @@ private:
         const size_t sizeLimit = easy->GetSizeLimit();
         const std::unique_lock lock(SyncRef());
         AwaitPerPool[poolId].emplace(std::move(easy));
+        SyncPoolAwaitCounter(poolId);
         Wakeup(sizeLimit);
     }
 
@@ -1045,6 +1062,38 @@ private:
 
     size_t GetPoolCap(const TString& poolId) const {
         return PoolCaps.Value(poolId, PoolCaps.Value(DefaultPoolId, MaxHandlers));
+    }
+
+    TPoolCounters& GetPoolCounters(const TString& poolId) {
+        auto [it, inserted] = PoolCounters.try_emplace(poolId);
+        if (inserted) {
+            auto sub = Counters->GetSubgroup("pool", poolId);
+            it->second.PerPoolCap = sub->GetCounter("PerPoolCap");
+            it->second.PerPoolAllocated = sub->GetCounter("PerPoolAllocated");
+            it->second.PerPoolAwait = sub->GetCounter("PerPoolAwait");
+        }
+        return it->second;
+    }
+
+    void SyncPoolAllocatedCounter(const TString& poolId) {
+        if (poolId.empty()) {
+            return;
+        }
+        GetPoolCounters(poolId).PerPoolAllocated->Set(AllocatedPerPool[poolId]);
+    }
+
+    void SyncPoolAwaitCounter(const TString& poolId) {
+        if (poolId.empty()) {
+            return;
+        }
+        size_t depth = 0;
+        if (auto it = AwaitPerPool.find(poolId); it != AwaitPerPool.end()) {
+            depth += it->second.size();
+        }
+        if (auto it = StreamAwaitPerPool.find(poolId); it != StreamAwaitPerPool.end()) {
+            depth += it->second.size();
+        }
+        GetPoolCounters(poolId).PerPoolAwait->Set(depth);
     }
 
     void ReleasePoolSlot(const TString& poolId) {
@@ -1065,6 +1114,8 @@ private:
                 Allocated.emplace(pendingHandle, std::move(pending));
             }
         }
+        SyncPoolAllocatedCounter(poolId);
+        SyncPoolAwaitCounter(poolId);
         Wakeup(0ULL);
     }
 
@@ -1085,6 +1136,13 @@ private:
 
     THashMap<TString, size_t> PoolCaps;
     THashMap<TString, size_t> AllocatedPerPool;
+
+    struct TPoolCounters {
+        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolCap;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolAllocated;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolAwait;
+    };
+    THashMap<TString, TPoolCounters> PoolCounters;
 
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;
     std::priority_queue<std::pair<TInstant, TEasyCurlBuffer::TPtr>> Delayed;

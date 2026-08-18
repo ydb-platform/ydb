@@ -478,7 +478,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     NKikimrSchemeOp::TModifyScheme indexBuildProto;
     buildInfo.SerializeToProto(ss, indexBuildProto.MutableInitiateIndexBuild());
     const auto& indexDesc = indexBuildProto.GetInitiateIndexBuild().GetIndex();
-    const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+    THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+    const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
+    Y_ENSURE(!indexColumns.KeyColumns.empty());
+    indexDataColumns.insert(indexColumns.KeyColumns.back());
 
     auto addCreateTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
         InheritDetailedMetricsSettings(tableInfo, implTableDesc);

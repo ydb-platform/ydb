@@ -107,6 +107,56 @@ Y_UNIT_TEST(UpdateThenSelect_ReadCommitted) {
     tester.Execute();
 }
 
+// After deleting a row, a point lookup in the same transaction must return nothing.
+class TDeleteThenSelect : public TTableDataModificationTester {
+    TTxSettings TxSettings_;
+public:
+    TDeleteThenSelect(TTxSettings txSettings)
+        : TxSettings_(txSettings)
+    {
+        SetFillTables(false);
+    }
+protected:
+    void DoExecute() override {
+        auto client = Kikimr->GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO KV2 (Key, Value) VALUES (1u, "original");
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"(
+            DELETE FROM KV2 WHERE Key = 1u;
+        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            SELECT Value FROM KV2 WHERE Key = 1u;
+        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+};
+
+Y_UNIT_TEST_TWIN(DeleteThenSelect_Serializable, IsOlap) {
+    TDeleteThenSelect tester(TTxSettings::SerializableRW());
+    tester.SetIsOlap(IsOlap);
+    tester.Execute();
+}
+
+Y_UNIT_TEST_TWIN(DeleteThenSelect_Snapshot, IsOlap) {
+    TDeleteThenSelect tester(TTxSettings::SnapshotRW());
+    tester.SetIsOlap(IsOlap);
+    tester.Execute();
+}
+
+Y_UNIT_TEST(DeleteThenSelect_ReadCommitted) {
+    TDeleteThenSelect tester(TTxSettings::ReadCommittedRW());
+    tester.Execute();
+}
+
 } // Y_UNIT_TEST_SUITE
 
 } // namespace NKqp

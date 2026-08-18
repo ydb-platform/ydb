@@ -75,32 +75,38 @@ proctype Worker(byte id) {
             reductions > 0 ->
             reductions--
         };
-        state[id] = BLOCKING;
-        request_waker()
+            state[id] = BLOCKING;
+            request_waker();
+
+            /* WaitForWaker parks while the state is BLOCKING or SLEEP. Once
+             * the waker releases this worker, continue with the queue rather
+             * than attempting to claim another reduction. */
+            state[id] != BLOCKING && state[id] != SLEEP
 
         /* Reduction has priority over looking in the activation queue. Once
          * the worker observes no reduction, the waker may publish one before
          * the worker completes Pop, SetWork and the credit decrement. */
-        :: reductions == 0 ->
-            if
-            :: atomic {
-                queued_activations > 0 ->
-                queued_activations--;
-                queue_epoch = !queue_epoch
-            };
-                state[id] = WORK;
-                atomic {
-                    assert(activation_credits > 0);
-                    activation_credits--
-                }
-            :: queued_activations == 0 && activation_credits > 0 ->
-                /* A producer published a credit but has not pushed yet, or
-                 * another worker popped the corresponding activation. */
-                skip
-            :: activation_credits == 0 ->
-                state[id] = SPIN;
-                request_waker()
-            fi
+        :: reductions == 0 -> skip
+        fi;
+
+        if
+        :: atomic {
+            queued_activations > 0 ->
+            queued_activations--;
+            queue_epoch = !queue_epoch
+        };
+            state[id] = WORK;
+            atomic {
+                assert(activation_credits > 0);
+                activation_credits--
+            }
+        :: queued_activations == 0 && activation_credits > 0 ->
+            /* A producer published a credit but has not pushed yet, or
+             * another worker popped the corresponding activation. */
+            skip
+        :: activation_credits == 0 ->
+            state[id] = SPIN;
+            request_waker()
         fi
 
     /* BLOCKING and SLEEP are parked; only the waker changes them. */

@@ -377,7 +377,6 @@ namespace NActors {
                 if (Threads[workerId].WaitForWaker(0, &StopFlag, &ActivationCredits)) {
                     return nullptr;
                 }
-                continue;
             }
 
             {

@@ -4,7 +4,7 @@
  *
  * Deliberately modeled:
  *  - SuggestedThreadCount updates by the controller;
- *  - ThreadCount and CheckToSleepWorkers updates owned by the waker;
+ *  - ThreadCount and reduction-token updates owned by the waker;
  *  - workers preferring a reduction request over taking an activation;
  *  - independent infinite producers keeping the queue bounded by MAX_QUEUE;
  *  - None -> Blocking -> Sleep and immediate parking;
@@ -28,7 +28,7 @@
 #define BLOCKING 4
 
 byte state[N];
-bool worker_enabled[N];
+bool active_mask[N];
 bool in_sleeping_stack[N];
 bool counted_sleeping[N];
 
@@ -65,13 +65,13 @@ inline check_safety() {
 
 proctype Worker(byte id) {
     do
-    :: worker_enabled[id] && state[id] == WORK ->
+    :: state[id] == WORK ->
         atomic {
             state[id] = NONE;
             work_epoch = !work_epoch
         }
 
-    :: worker_enabled[id] && state[id] == NONE ->
+    :: state[id] == NONE ->
         if
         :: atomic {
             reductions > 0 ->
@@ -146,165 +146,238 @@ proctype Controller() {
 proctype Waker() {
     byte desired;
     byte i;
-    byte searching;
-    byte budget;
+    byte delta;
+    byte converted;
+    byte remaining_reductions;
+    byte previous_reductions;
+    byte taken_tokens_to_sleep;
+    byte taken_tokens_to_wakeup;
+    byte previous_sleeping_count;
+    byte activations;
+    bool found;
 
     do
     :: waker_pending ->
-        /* Matches clearing WakerPending before loading ThreadCount. */
+        /* SleepingCount is temporarily owned by the waker. Producers which
+         * publish during this window deliberately observe zero. */
+        atomic {
+            previous_sleeping_count = sleeping_count;
+            sleeping_count = 0
+        };
+
         waker_pending = false;
         desired = suggested_thread_count;
 
-        /* Unclaimed tokens belong to an older reconciliation pass. A worker
-         * which claimed one is represented explicitly by BLOCKING. */
-        reductions = 0;
+        /* Exchange the published reduction tokens. The difference from the
+         * previous publication was claimed by workers which are either
+         * BLOCKING already or are between the claim and that state change. */
+        atomic {
+            remaining_reductions = reductions;
+            reductions = 0
+        };
+        assert(previous_reductions >= remaining_reductions);
+        taken_tokens_to_sleep = (taken_tokens_to_sleep
+            + previous_reductions) - remaining_reductions;
+        previous_reductions = 0;
 
-        /* Resolve workers which have already claimed a reduction token. */
+        /* thread_count is the target accepted by the previous waker pass,
+         * while active_count is the physical ActiveWorkers size. Claimed and
+         * unclaimed reduction tokens account for their temporary difference. */
+        if
+        :: desired > thread_count ->
+            delta = desired - thread_count;
+
+            if
+            :: taken_tokens_to_sleep < delta -> converted = taken_tokens_to_sleep
+            :: else -> converted = delta
+            fi;
+            taken_tokens_to_sleep = taken_tokens_to_sleep - converted;
+            taken_tokens_to_wakeup = taken_tokens_to_wakeup + converted;
+            delta = delta - converted;
+
+            if
+            :: remaining_reductions < delta -> converted = remaining_reductions
+            :: else -> converted = delta
+            fi;
+            remaining_reductions = remaining_reductions - converted;
+            delta = delta - converted;
+
+            /* Any growth left after cancelling reductions must reactivate a
+             * concrete inactive sleeper. Reactivation does not unpark it. */
+            i = 0;
+            do
+            :: i < N && delta > 0 ->
+                if
+                :: !active_mask[i] && in_sleeping_stack[i] && state[i] == SLEEP ->
+                    atomic {
+                        active_mask[i] = true;
+                        active_count++;
+                        counted_sleeping[i] = true;
+                        previous_sleeping_count++;
+                        delta--
+                    }
+                :: else -> skip
+                fi;
+                i++
+            :: else -> break
+            od;
+            assert(delta == 0)
+
+        :: desired < thread_count ->
+            delta = thread_count - desired;
+            if
+            :: taken_tokens_to_wakeup < delta -> converted = taken_tokens_to_wakeup
+            :: else -> converted = delta
+            fi;
+            taken_tokens_to_wakeup = taken_tokens_to_wakeup - converted;
+            taken_tokens_to_sleep = taken_tokens_to_sleep + converted;
+            delta = delta - converted;
+            remaining_reductions = remaining_reductions + delta
+
+        :: else -> skip
+        fi;
+        thread_count = desired;
+
+        activations = activation_credits;
+
+        /* Resolve every active worker once. activations is a local budget: a
+         * NONE worker, or a worker which leaves SPIN by itself, consumes one
+         * unit without reserving the corresponding queue item. */
         i = 0;
         do
         :: i < N ->
             if
-            :: worker_enabled[i] && state[i] == BLOCKING ->
-                atomic {
+            :: active_mask[i] && state[i] == NONE ->
+                if
+                :: activations > 0 -> activations--
+                :: else -> skip
+                fi
+
+            :: active_mask[i] && state[i] == SPIN ->
+                if
+                :: activations > 0 ->
+                    atomic {
+                        if
+                        :: state[i] == SPIN -> state[i] = NONE
+                        :: else ->
+                            assert(state[i] == NONE || state[i] == WORK)
+                        fi
+                    };
+                    activations--
+
+                :: activations == 0 ->
+                    atomic {
+                        if
+                        :: state[i] == SPIN ->
+                            state[i] = SLEEP;
+                            in_sleeping_stack[i] = true;
+                            counted_sleeping[i] = true;
+                            previous_sleeping_count++
+                        :: else ->
+                            assert(state[i] == NONE || state[i] == WORK)
+                        fi
+                    }
+                fi
+
+            :: active_mask[i] && state[i] == BLOCKING ->
+                if
+                :: taken_tokens_to_wakeup > 0 ->
                     if
-                    :: active_count > desired ->
+                    :: activations > 0 ->
+                        atomic {
+                            state[i] = NONE;
+                            taken_tokens_to_wakeup--
+                        };
+                        activations--
+                    :: activations == 0 ->
+                        atomic {
+                            state[i] = SLEEP;
+                            in_sleeping_stack[i] = true;
+                            counted_sleeping[i] = true;
+                            previous_sleeping_count++;
+                            taken_tokens_to_wakeup--
+                        }
+                    fi
+
+                :: taken_tokens_to_wakeup == 0 ->
+                    assert(taken_tokens_to_sleep > 0);
+                    atomic {
                         state[i] = SLEEP;
                         in_sleeping_stack[i] = true;
-                        worker_enabled[i] = false;
-                        active_count--
-                    :: else -> state[i] = NONE
-                    fi
-                }
+                        counted_sleeping[i] = false;
+                        active_mask[i] = false;
+                        active_count--;
+                        taken_tokens_to_sleep--
+                    }
+                fi
+
             :: else -> skip
             fi;
             i++
         :: else -> break
         od;
 
-        /* Retire additional already idle workers. No reduction token is
-         * needed: only the waker mutates its local active set. */
+        /* Only the waker mutates SLEEP. Waking therefore needs no CAS, but it
+         * must update stack membership, the local count and activation budget
+         * together with the state transition. */
         i = 0;
         do
-        :: i < N && active_count > desired ->
+        :: activations > 0 && previous_sleeping_count > 0 ->
+            found = false;
+            i = 0;
+            do
+            :: i < N && !found ->
+                if
+                :: active_mask[i] && in_sleeping_stack[i] && state[i] == SLEEP ->
+                    atomic {
+                        state[i] = NONE;
+                        in_sleeping_stack[i] = false;
+                        counted_sleeping[i] = false;
+                        previous_sleeping_count--;
+                        activations--;
+                        found = true
+                    }
+                :: else -> skip
+                fi;
+                i++
+            :: else -> break
+            od;
             if
-            :: worker_enabled[i] && state[i] == SLEEP ->
-                counted_sleeping[i] = false;
-                sleeping_count--;
-                worker_enabled[i] = false;
-                active_count--
-            :: worker_enabled[i] && state[i] == SPIN ->
-                state[i] = SLEEP;
-                in_sleeping_stack[i] = true;
-                worker_enabled[i] = false;
-                active_count--
-            :: else -> skip
-            fi;
-            i++
-        :: else -> break
-        od;
-
-        /* Publish requests only for workers which could not be retired by the
-         * waker because they are currently in Work or None. */
-        atomic {
-            if
-            :: active_count > desired -> reductions = active_count - desired
-            :: else -> reductions = 0
+            :: found -> skip
+            :: else -> break
             fi
+        :: else -> break
+        od;
+
+        /* Publish both the remaining reductions and the baseline used to
+         * detect claims on the next pass. The baseline is waker-local. */
+        assert(active_count == thread_count
+            + remaining_reductions + taken_tokens_to_sleep);
+        atomic {
+            reductions = remaining_reductions;
+            previous_reductions = remaining_reductions
         };
+        sleeping_count = previous_sleeping_count;
 
-        /* Re-enable disabled sleeping workers after a count increase. */
-        i = 0;
-        do
-        :: i < N && active_count < desired ->
-            if
-            :: !worker_enabled[i] && in_sleeping_stack[i] ->
-                worker_enabled[i] = true;
-                active_count++;
-                counted_sleeping[i] = true;
-                sleeping_count++
-            :: else -> skip
-            fi;
-            i++
-        :: else -> break
-        od;
-
-        thread_count = active_count;
-
-        searching = 0;
-        i = 0;
-        do
-        :: i < N ->
-            if
-            :: worker_enabled[i] && state[i] == NONE -> searching++
-            :: else -> skip
-            fi;
-            i++
-        :: else -> break
-        od;
-        if
-        :: activation_credits > searching -> budget = activation_credits - searching
-        :: else -> budget = 0
-        fi;
-
-        /* Resolve ordinary spinners using the current activation budget. */
-        i = 0;
-        do
-        :: i < N ->
-            if
-            :: worker_enabled[i] && state[i] == SPIN && budget > 0 ->
-                state[i] = NONE;
-                budget--
-            :: worker_enabled[i] && state[i] == SPIN && budget == 0 ->
-                state[i] = SLEEP;
-                in_sleeping_stack[i] = true;
-                counted_sleeping[i] = true;
-                sleeping_count++
-            :: else -> skip
-            fi;
-            i++
-        :: else -> break
-        od;
-
-        /* Reload credits after publishing sleepers, then wake as many active
-         * sleepers as are needed for the remaining work. */
-        searching = 0;
-        i = 0;
-        do
-        :: i < N ->
-            if
-            :: worker_enabled[i] && state[i] == NONE -> searching++
-            :: else -> skip
-            fi;
-            i++
-        :: else -> break
-        od;
-        if
-        :: activation_credits > searching -> budget = activation_credits - searching
-        :: else -> budget = 0
-        fi;
-
-        i = 0;
-        do
-        :: i < N ->
-            if
-            :: worker_enabled[i] && state[i] == SLEEP && budget > 0 ->
-                state[i] = NONE;
-                in_sleeping_stack[i] = false;
-                counted_sleeping[i] = false;
-                sleeping_count--;
-                budget--
-            :: else -> skip
-            fi;
-            i++
-        :: else -> break
-        od;
+        /* Deliberately omitted for now so Spin can expose the missed-wakeup
+         * race this reload is intended to close:
+         *
+         * previous_activations = activations; // before scanning workers
+         * if (activation_credits > previous_activations)
+         *     request_waker();
+         */
 
         check_safety();
         i = 0;
         do
         :: i < N ->
-            assert(!counted_sleeping[i] || (worker_enabled[i] && state[i] == SLEEP));
-            assert(worker_enabled[i] || state[i] == SLEEP);
+            assert(!counted_sleeping[i]
+                || (active_mask[i] && state[i] == SLEEP));
+            assert(active_mask[i] || state[i] == SLEEP);
+            if
+            :: !active_mask[i] -> assert(in_sleeping_stack[i])
+            :: else -> skip
+            fi;
             i++
         :: else -> break
         od
@@ -328,7 +401,7 @@ init {
         do
         :: i < N ->
             state[i] = WORK;
-            worker_enabled[i] = true;
+            active_mask[i] = true;
             run Worker(i);
             i++
         :: else -> break

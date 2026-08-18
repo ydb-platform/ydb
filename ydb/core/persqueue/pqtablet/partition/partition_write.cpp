@@ -402,6 +402,8 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 }
             }
 
+            TMaybe<TRowVersion> scCommittedForDecision;
+
             if (!already && partNo + 1 == totalParts) {
                 if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
                     PQ_ENSURE(!writeResponse.Msg.HeartbeatVersion);
@@ -412,8 +414,11 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                     SourceIdStorage.RegisterSourceId(s, it->second.Updated(
                         seqNo, offset, CurrentTimestamp, THeartbeat{*hbVersion, writeResponse.Msg.Data}, producerEpoch));
                 } else if (const auto& scVersion = writeResponse.Msg.SchemaChangeVersion) {
-                    const auto committed = Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
-                    if (*scVersion > committed) {
+                    // Snapshot committed before RegisterSourceId: that call can advance
+                    // GetCommittedSchemaChangeVersion() (e.g. last source to reach quorum),
+                    // which must not flip the SeqNo-bump vs defer decision mid-way.
+                    scCommittedForDecision = Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
+                    if (*scVersion > *scCommittedForDecision) {
                         // Persist LastSchemaChange without bumping SeqNo until the write is actually ACKed.
                         SourceIdStorage.RegisterSourceId(s, it->second.Updated(
                             TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data}));
@@ -432,7 +437,9 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             const auto& scVersion = writeResponse.Msg.SchemaChangeVersion;
             if (scVersion) {
-                const auto committed = Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
+                const auto committed = scCommittedForDecision
+                    ? *scCommittedForDecision
+                    : Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
                 if (*scVersion > committed) {
                     PendingSchemaChangeResponses.emplace_back(std::move(response));
                     Responses.pop_front();

@@ -2245,6 +2245,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 << "Too big heartbeat message, must be at most " << mSize << ", but got " << cmd.GetHeartbeat().GetData().size());
             return;
         } else if (cmd.GetSchemaChange().GetData().size() > mSize) {
+            Y_DEBUG_ABORT("This should never happen");
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder()
                 << "Too big schema change message, must be at most " << mSize << ", but got " << cmd.GetSchemaChange().GetData().size());
             return;

@@ -171,6 +171,9 @@ void TPartitionSourceManager::TSourceManager::Update(THeartbeat&& heartbeat) {
 }
 
 void TPartitionSourceManager::TSourceManager::Update(TSchemaChangeInfo&& schemaChange) {
+    // Unlike heartbeats (emitter-only until AnswerCurrentWrites), schema changes also
+    // persist LastSchemaChange via SourceIdWriter so crash recovery can advance
+    // GetCommittedSchemaChangeVersion() without waiting for a re-ACK.
     auto copySchemaChange = schemaChange;
     Batch.SchemaChangeEmitter.Process(SourceId, std::move(copySchemaChange));
     if (InMemory != MemoryStorage().end()) {

@@ -195,15 +195,17 @@ class TStreamCreator: public TActorBootstrapped<TStreamCreator> {
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                YDB_LOG_WARN("Error of resolving topic Retry",
-                    {"buildStreamPath", BuildStreamPath()},
-                    {"ev", ev->Get()->ToString()});
+                YDB_LOG_WARN("Error of resolving topic",
+                    {"streamPath", BuildStreamPath()},
+                    {"ev", ev->Get()->ToString()},
+                    {"outcome", "retry"});
                 return Schedule(RetryDelay, new TEvents::TEvWakeup);
             }
 
-            YDB_LOG_ERROR("Error of resolving topic Stop",
-                {"buildStreamPath", BuildStreamPath()},
-                {"ev", ev->Get()->ToString()});
+            YDB_LOG_ERROR("Error of resolving topic",
+                {"streamPath", BuildStreamPath()},
+                {"ev", ev->Get()->ToString()},
+                {"outcome", "stop"});
             NYdb::NIssue::TIssues issues = result.GetIssues();
             return Reply(NYdb::TStatus(result.GetStatus(), std::move(issues)));
         }

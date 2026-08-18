@@ -875,7 +875,8 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
 
     auto replication = GetSingle();
     if (!replication) {
-        YDB_LOG_ERROR_CTX(ctx, "Cannot assign tx id: ambiguous replication instance");
+        YDB_LOG_ERROR_CTX(ctx, "Cannot assign tx id"
+            {"reason", "ambiguous replication instance"});
         return;
     }
 
@@ -884,7 +885,8 @@ void TController::Handle(TEvService::TEvGetTxId::TPtr& ev, const TActorContext& 
     case NKikimrReplication::TConsistencySettings::kGlobal:
         break;
     default:
-        YDB_LOG_ERROR_CTX(ctx, "Cannot assign tx id: consistency level is not global");
+        YDB_LOG_ERROR_CTX(ctx, "Cannot assign tx id"
+            {"reason", "consistency level is not global"});
         return;
     }
 

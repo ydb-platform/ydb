@@ -942,8 +942,6 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
             WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello-" + ToString(i)));
         }
-        auto flush = WriteSession->Flush();
-
         auto fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(fdsMock.ComposeOkResultAvailableDatabases());
 
@@ -997,6 +995,7 @@ Y_UNIT_TEST_SUITE(BasicUsage) {
             auto* readyToAcceptEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event);
             WriteSession->Write(std::move(readyToAcceptEvent->ContinuationToken), NTopic::TWriteMessage("hello-" + ToString(i)));
         }
+        auto flush = WriteSession->Flush();
 
         auto fdsRequest = fdsMock.WaitNextPendingRequest();
         fdsRequest.Result.SetValue(fdsMock.ComposeUnavailableResult());

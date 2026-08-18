@@ -148,6 +148,8 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
                 << "  MaxStaticNodeId: " << MaxStaticId << Endl
                 << "  MaxDynamicNodeId: " << MaxDynamicId << Endl
                 << "  EpochDuration: " << Committed.EpochDuration << Endl
+                << "  LeaseDuration: " << Committed.LeaseDuration << Endl
+                << "  EnableNodeBrokerLongLease: " << (EnableLongLease ? "true" : "false") << Endl
                 << "  StableNodeNamePrefix: " << Committed.StableNodeNamePrefix << Endl
                 << "  BannedIds:";
             for (auto &pr : Committed.BannedIds)
@@ -229,6 +231,7 @@ void TNodeBroker::TState::ClearState()
     Nodes.clear();
     ExpiredNodes.clear();
     RemovedNodes.clear();
+    DeadNodesCount = 0;
     Hosts.clear();
 
     RecomputeFreeIds();
@@ -289,6 +292,9 @@ void TNodeBroker::TState::AddNode(const TNodeInfo &info)
             }
             Hosts.emplace(std::make_tuple(info.Host, info.Address, info.Port), info.NodeId);
             Nodes.emplace(info.NodeId, info);
+            if (info.Liveness == ENodeLiveness::Dead) {
+                ++DeadNodesCount;
+            }
             break;
         case ENodeState::Expired:
             LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -321,6 +327,9 @@ void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
     node.ExpireV2 = Epoch.NextEnd + LeaseDuration;
 
     node.AliveUntil = Epoch.NextEnd;
+    if (node.Liveness == ENodeLiveness::Dead) {
+        --DeadNodesCount;
+    }
     node.Liveness = ENodeLiveness::Alive;
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -338,6 +347,9 @@ void TNodeBroker::TState::FixNodeId(TNodeInfo &node)
     node.ExpireV2 = TInstant::Max();
 
     node.AliveUntil = TInstant::Max();
+    if (node.Liveness == ENodeLiveness::Dead) {
+        --DeadNodesCount;
+    }
     node.Liveness = ENodeLiveness::Alive;
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
@@ -495,7 +507,7 @@ void TNodeBroker::FillNodeInfo(const TNodeInfo &node,
     info.SetAddress(node.Address);
     info.SetExpire(node.Expire.GetValue());
     info.SetExpireV2(node.ExpireV2.GetValue());
-    info.SetLiveness(static_cast<ui32>(node.Liveness));
+    info.SetLiveness(static_cast<NKikimrNodeBroker::ELiveness>(node.Liveness));
     node.Location.Serialize(info.MutableLocation(), false);
     FillNodeName(node.SlotIndex, info);
 }
@@ -511,18 +523,15 @@ void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
 
 void TNodeBroker::TState::ComputeNextEpochDiff(TStateDiff &diff)
 {
-    if (Self->EnableLongLease) {
-        for (auto &pr : Nodes) {
-            if (pr.second.AliveUntil <= Epoch.End && pr.second.Liveness == ENodeLiveness::Alive) {
-                diff.NodesToMakeDead.push_back(pr.first);
-            }
-        }
-    }
-
     for (auto &pr : Nodes) {
         auto expire = Self->EnableLongLease ? pr.second.ExpireV2 : pr.second.Expire;
-        if (expire <= Epoch.End)
+        if (expire <= Epoch.End) {
             diff.NodesToExpire.push_back(pr.first);
+        } else if (Self->EnableLongLease
+                   && pr.second.AliveUntil <= Epoch.End
+                   && pr.second.Liveness == ENodeLiveness::Alive) {
+            diff.NodesToMakeDead.push_back(pr.first);
+        }
     }
 
     for (auto &pr : ExpiredNodes)
@@ -547,6 +556,9 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
                     LogPrefix() << " Node " << it->second.IdString() << " has expired");
 
         Hosts.erase(std::make_tuple(it->second.Host, it->second.Address, it->second.Port));
+        if (it->second.Liveness == ENodeLiveness::Dead) {
+            --DeadNodesCount;
+        }
         it->second.State = ENodeState::Expired;
         it->second.Version = diff.NewEpoch.Version;
         ExpiredNodes.emplace(id, std::move(it->second));
@@ -560,6 +572,9 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                     LogPrefix() << " Node " << it->second.IdString() << " is marked as dead");
 
+        if (it->second.Liveness != ENodeLiveness::Dead) {
+            ++DeadNodesCount;
+        }
         it->second.Liveness = ENodeLiveness::Dead;
         it->second.Version = diff.NewEpoch.Version;
     }
@@ -826,6 +841,7 @@ void TNodeBroker::UpdateCommittedStateCounters() {
     TabletCounters->Simple()[COUNTER_ACTIVE_NODES].Set(Committed.Nodes.size());
     TabletCounters->Simple()[COUNTER_EXPIRED_NODES].Set(Committed.ExpiredNodes.size());
     TabletCounters->Simple()[COUNTER_REMOVED_NODES].Set(Committed.RemovedNodes.size());
+    TabletCounters->Simple()[COUNTER_DEAD_NODES].Set(Committed.DeadNodesCount);
     TabletCounters->Simple()[COUNTER_EPOCH_VERSION].Set(Committed.Epoch.Version);
 }
 
@@ -1825,13 +1841,15 @@ TNodeBroker::TNodeInfo::TNodeInfo(ui32 nodeId, ENodeState state, ui64 version, c
                                  TNodeLocation(schema.GetLocation()))
     , Lease(schema.GetLease())
     , Expire(TInstant::MicroSeconds(schema.GetExpire()))
-    , ExpireV2(TInstant::MicroSeconds(schema.GetExpireV2()))
+    , ExpireV2(Max(TInstant::MicroSeconds(schema.GetExpire()),
+                   TInstant::MicroSeconds(schema.GetExpireV2())))
     , AuthorizedByCertificate(schema.GetAuthorizedByCertificate())
     , SlotIndex(schema.GetSlotIndex())
     , ServicedSubDomain(schema.GetServicedSubDomain())
     , State(state)
     , Version(version)
-    , AliveUntil(TInstant::MicroSeconds(schema.GetAliveUntil()))
+    , AliveUntil(Max(TInstant::MicroSeconds(schema.GetExpire()),
+                     TInstant::MicroSeconds(schema.GetAliveUntil())))
     , Liveness(static_cast<ENodeLiveness>(schema.GetLiveness()))
 {}
 
@@ -1905,7 +1923,7 @@ TNodeInfoSchema TNodeBroker::TNodeInfo::SerializeToSchema() const {
     serialized.SetExpire(Expire.MicroSeconds());
     serialized.SetExpireV2(ExpireV2.MicroSeconds());
     serialized.SetAliveUntil(AliveUntil.MicroSeconds());
-    serialized.SetLiveness(static_cast<ui32>(Liveness));
+    serialized.SetLiveness(static_cast<NKikimrNodeBroker::ELiveness>(Liveness));
     Location.Serialize(serialized.MutableLocation(), false);
     serialized.MutableServicedSubDomain()->CopyFrom(ServicedSubDomain);
     if (SlotIndex.has_value()) {

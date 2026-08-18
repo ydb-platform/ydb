@@ -91,7 +91,7 @@ proctype Worker(byte id) {
             };
                 state[id] = WORK;
                 atomic {
-                    activation_credits > 0 ->
+                    assert(activation_credits > 0);
                     activation_credits--
                 }
             :: queued_activations == 0 && activation_credits > 0 ->

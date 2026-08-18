@@ -342,8 +342,8 @@ protected:
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
-    // Returns real database nodes only when the database (or the shared database for serverless)
-    // endpoints lookup has succeeded, otherwise it returns 0 - a sentinel for the current node.
+    // Returns real database nodes only when the database endpoints lookup has succeeded,
+    // otherwise it returns 0 - a sentinel for the current node.
     std::vector<TNodeId> GetDatabaseNodes();
     bool IsDatabaseRequest() const;
     bool AreDatabaseNodesKnown() const;
@@ -353,7 +353,7 @@ protected:
     TString GetUserSID() const;
 
     // Denies the request unless every given node belongs to the requested database. If the database
-    // nodes are unknown, the request is denied too. Returns true if the response has been already sent.
+    // nodes are unknown, the request is denied too. Returns true if "Access Denied" response has been already sent.
     bool DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds);
 
     void InitConfig(const TCgiParameters& params);

@@ -46,23 +46,16 @@ public:
         return nodeIds;
     }
 
-    // Strict database-only users are allowed to ask the nodes of their database only.
-    // Must be called after NeedToRedirect(), otherwise the database nodes are not resolved yet.
-    // Returns true if the response has been already sent.
-    bool DenyRequestIfNodeIdsAreOutOfDatabase() {
-        if (!TBase::IsStrictDatabaseOnlyRequest()) {
-            return false;
-        }
-        return TBase::DenyRequestIfNodesAreOutOfDatabase(GetNodeIdsFromParams());
-    }
-
     void Bootstrap() override {
         if (TBase::NeedToRedirect()) {
             return;
         }
-        if (DenyRequestIfNodeIdsAreOutOfDatabase()) {
-            return;
+        if (TBase::IsStrictDatabaseOnlyRequest()) {
+            if (TBase::DenyRequestIfNodesAreOutOfDatabase(GetNodeIdsFromParams())) {
+                return;
+            }
         }
+
         std::vector<TNodeId> nodeIds = GetNodeIdsFromParams();
         if (!nodeIds.empty()) {
             if (TBase::RequestSettings.FilterNodeIds.empty()) {

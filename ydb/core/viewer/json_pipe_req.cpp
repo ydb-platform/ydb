@@ -1048,8 +1048,8 @@ bool TViewerPipeClient::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNode
     if (nodeIds.empty()) {
         return false;
     }
-    // We can't validate the scope of the requested nodes without the database node list, and this
-    // is an access check, so an unresolved database denies the request instead of letting it through.
+    // We can't validate the scope of the requested nodes without the database node list,
+    // so an unresolved database denies the request.
     const bool databaseNodesKnown = AreDatabaseNodesKnown();
     std::unordered_set<TNodeId> databaseNodes;
     if (databaseNodesKnown) {
@@ -1063,7 +1063,6 @@ bool TViewerPipeClient::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNode
                 {"user", GetUserSID()},
                 {"database", Database},
                 {"outOfDatabaseNode", nodeId},
-                {"databaseNodeCount", databaseNodes.size()},
                 {"databaseNodesKnown", databaseNodesKnown});
             ReplyAndPassAway(
                 GETHTTPACCESSDENIED("text/plain", "Some requested nodes are outside the specified database"),

@@ -406,6 +406,94 @@ void DumpCounters(const TString& title, NMonitoring::TDynamicCounterPtr rootGrou
          << NormalizeJson(NMonitoring::ToJson(*rootGroup)) << Endl;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Pack() helpers (step 08)
+
+/**
+ * Pack a single instance's own tables into a fresh field, the way the SysView
+ * Service would pack one role's stream for one message.
+ */
+NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> PackOnce(
+    const TNodeDatabaseMetricsAggregatorPtr& aggregator,
+    ui64 generation
+) {
+    NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> out;
+    aggregator->Pack(out, generation);
+    return out;
+}
+
+/**
+ * @return The packed entry of the table at the given (unstripped) path, or
+ *         nullptr if this instance packed nothing for it
+ */
+const NKikimrSysView::TDetailedTableCounters* FindPackedTable(
+    const NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& tables,
+    const TString& tablePath = TABLE_PATH
+) {
+    for (const auto& table : tables) {
+        if (table.GetTablePath() == tablePath) {
+            return &table;
+        }
+    }
+    return nullptr;
+}
+
+/**
+ * @return The packed leaf of the given (tabletId, followerId), or nullptr if
+ *         this entry carries none
+ */
+const NKikimrSysView::TDetailedTableCounters::TLeaf* FindPackedLeaf(
+    const NKikimrSysView::TDetailedTableCounters& table,
+    ui64 tabletId,
+    ui32 followerId
+) {
+    for (const auto& leaf : table.GetLeaves()) {
+        if (leaf.GetTabletId() == tabletId && leaf.GetFollowerId() == followerId) {
+            return &leaf;
+        }
+    }
+    return nullptr;
+}
+
+/**
+ * @return The Simple value at the given low level counter index (Simple/GAUGE
+ *         counters are always packed absolute, see S2)
+ */
+ui64 GetPackedSimple(const NKikimrSysView::TDbCounters& counters, ui32 index) {
+    UNIT_ASSERT_C(index < counters.SimpleSize(), "no Simple[" << index << "]");
+    return counters.GetSimple(index);
+}
+
+/**
+ * @return Whether the diff carries an index/value pair for the given Cumulative
+ *         counter index (CalculateCountersDiff omits unchanged, i.e. zero delta,
+ *         indices)
+ */
+bool HasPackedCumulativeIndex(const NKikimrSysView::TDbCounters& counters, ui32 index) {
+    const auto& cumulative = counters.GetCumulative();
+    for (int i = 0; i + 1 < cumulative.size(); i += 2) {
+        if (static_cast<ui32>(cumulative.Get(i)) == index) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * @return The delta value packed for the given Cumulative counter index, or 0
+ *         if the index carries no pair (an unchanged counter since the last
+ *         confirmed generation)
+ */
+ui64 GetPackedCumulativeDelta(const NKikimrSysView::TDbCounters& counters, ui32 index) {
+    const auto& cumulative = counters.GetCumulative();
+    for (int i = 0; i + 1 < cumulative.size(); i += 2) {
+        if (static_cast<ui32>(cumulative.Get(i)) == index) {
+            return cumulative.Get(i + 1);
+        }
+    }
+    return 0;
+}
+
 /**
  * The private "ydb_detailed_raw" group with the two aggregators of a node built off it,
  * the way the two Tablet Counters Aggregator actors do: ONE shared root, no role label,
@@ -2506,5 +2594,242 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         }
 
         UNIT_ASSERT(reader.Join() > 0);
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////
+    // Pack() (step 08)
+
+    /**
+     * Verify Pack()'s encoding at the TABLE level: Simple is absolute stateful
+     * (restated in full on every pack, including a drop to 0 — the gauge->zero
+     * staleness bug S2 rules out by construction), Cumulative is the delta since
+     * the previous PACKED generation (not since the previous report).
+     */
+    Y_UNIT_TEST(PackTableLevelCarriesAbsoluteSimpleAndDeltaCumulative) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader(1000, 0);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 100);
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packed1 = PackOnce(aggregator, 1);
+        auto* table1 = FindPackedTable(packed1);
+        UNIT_ASSERT(table1);
+        UNIT_ASSERT(table1->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(table1->LeavesSize(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(table1->GetOwnerId(), TABLE_ID.OwnerId);
+        UNIT_ASSERT_VALUES_EQUAL(table1->GetPathId(), TABLE_ID.LocalPathId);
+        UNIT_ASSERT_VALUES_EQUAL(table1->GetTablePath(), TABLE_PATH);
+        UNIT_ASSERT_VALUES_EQUAL(table1->GetLevel(), TDetailedMetricsSettings::MetricsLevelTable);
+
+        const auto& executor1 = table1->GetTableCounters().GetExecutorCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedSimple(executor1, DB_UNIQUE_ROWS_TOTAL), 10);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(executor1, CONSUMED_CPU), 100);
+
+        // The gauge changes and the cumulative counter grows further
+        now += TDuration::Seconds(5);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 25).AddCumulative(CONSUMED_CPU, 40);
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packed2 = PackOnce(aggregator, 2);
+        auto* table2 = FindPackedTable(packed2);
+        UNIT_ASSERT(table2);
+
+        const auto& executor2 = table2->GetTableCounters().GetExecutorCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedSimple(executor2, DB_UNIQUE_ROWS_TOTAL), 25);
+        // Only the increment since the previous PACKED generation, not the running total
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(executor2, CONSUMED_CPU), 40);
+
+        // The gauge drops to 0: it must still be restated, not omitted
+        now += TDuration::Seconds(5);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 0);
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packed3 = PackOnce(aggregator, 3);
+        auto* table3 = FindPackedTable(packed3);
+        UNIT_ASSERT(table3);
+
+        const auto& executor3 = table3->GetTableCounters().GetExecutorCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedSimple(executor3, DB_UNIQUE_ROWS_TOTAL), 0);
+        // No cumulative activity since the previous pack: no index/value pair at all
+        UNIT_ASSERT(!HasPackedCumulativeIndex(executor3, CONSUMED_CPU));
+    }
+
+    /**
+     * Verify Pack()'s encoding at the PARTITION level: one TLeaf per
+     * (tablet_id, follower_id), Simple absolute per leaf, Cumulative delta per
+     * leaf; a pack with no tablet activity since the previous one emits no
+     * Cumulative delta pairs but still restates Simple. Also pins that a
+     * PARTITION entry never carries TableCounters and a TABLE entry never
+     * carries Leaves.
+     */
+    Y_UNIT_TEST(PackPartitionLevelEmitsOneLeafPerTabletFollower) {
+        TRoleTrees trees;
+
+        const TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader(1000, 0);
+        TFakeTablet follower1(1000, 1);
+        TFakeTablet follower2(2000, 1);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 3).AddCumulative(CONSUMED_CPU, 30);
+        follower1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 9).AddCumulative(CONSUMED_CPU, 90);
+        follower2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 5).AddCumulative(CONSUMED_CPU, 50);
+
+        leader.Report(trees.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        follower1.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelPartition, now);
+        follower2.Report(trees.Followers, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+        auto leaderPacked = PackOnce(trees.Leaders, 1);
+        auto* leaderTable = FindPackedTable(leaderPacked);
+        UNIT_ASSERT(leaderTable);
+        UNIT_ASSERT(!leaderTable->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(leaderTable->LeavesSize(), 1);
+
+        auto* leaderLeaf = FindPackedLeaf(*leaderTable, 1000, 0);
+        UNIT_ASSERT(leaderLeaf);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedSimple(leaderLeaf->GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL), 3);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedCumulativeDelta(leaderLeaf->GetCounters().GetExecutorCounters(), CONSUMED_CPU), 30);
+
+        auto followerPacked = PackOnce(trees.Followers, 1);
+        auto* followerTable = FindPackedTable(followerPacked);
+        UNIT_ASSERT(followerTable);
+        UNIT_ASSERT(!followerTable->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(followerTable->LeavesSize(), 2);
+
+        auto* leaf1 = FindPackedLeaf(*followerTable, 1000, 1);
+        UNIT_ASSERT(leaf1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedSimple(leaf1->GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL), 9);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedCumulativeDelta(leaf1->GetCounters().GetExecutorCounters(), CONSUMED_CPU), 90);
+
+        auto* leaf2 = FindPackedLeaf(*followerTable, 2000, 1);
+        UNIT_ASSERT(leaf2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedSimple(leaf2->GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL), 5);
+
+        // A second pack, no tablet activity in between: the delta is empty, but the
+        // absolute Simple value is restated
+        auto followerPacked2 = PackOnce(trees.Followers, 2);
+        auto* followerTable2 = FindPackedTable(followerPacked2);
+        UNIT_ASSERT(followerTable2);
+
+        auto* leaf1Again = FindPackedLeaf(*followerTable2, 1000, 1);
+        UNIT_ASSERT(leaf1Again);
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedSimple(leaf1Again->GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL), 9);
+        UNIT_ASSERT(!HasPackedCumulativeIndex(leaf1Again->GetCounters().GetExecutorCounters(), CONSUMED_CPU));
+    }
+
+    /**
+     * Verify that a standalone follower-role instance packs exactly the same
+     * TDetailedTableCounters shape a standalone leader-role instance does for
+     * an equivalent PARTITION level report: nothing in the payload carries the
+     * role, because Pack() does not name it (the caller — step 12 — is the one
+     * who knows which role's aggregator it packed).
+     */
+    Y_UNIT_TEST(PackFollowerInstanceProducesTheSameShapeAsLeader) {
+        const TInstant now = TInstant::Seconds(100);
+
+        NMonitoring::TDynamicCounterPtr leaderRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto leaderAggregator = CreateNodeDatabaseMetricsAggregator(
+            leaderRoot,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        TFakeTablet leader(1000, 0);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 11);
+        leader.Report(leaderAggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+        auto leaderPacked = PackOnce(leaderAggregator, 1);
+        auto* leaderTable = FindPackedTable(leaderPacked);
+        UNIT_ASSERT(leaderTable);
+
+        NMonitoring::TDynamicCounterPtr followerRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto followerAggregator = CreateNodeDatabaseMetricsAggregator(
+            followerRoot,
+            DATABASE_PATH,
+            true /* isFollowerRole */
+        );
+
+        TFakeTablet follower(2000, 3);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 11);
+        follower.Report(followerAggregator, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+        auto followerPacked = PackOnce(followerAggregator, 1);
+        auto* followerTable = FindPackedTable(followerPacked);
+        UNIT_ASSERT(followerTable);
+
+        // The very same shape: no TableCounters, exactly one leaf, the very same level
+        UNIT_ASSERT_VALUES_EQUAL(leaderTable->HasTableCounters(), followerTable->HasTableCounters());
+        UNIT_ASSERT_VALUES_EQUAL(leaderTable->LeavesSize(), followerTable->LeavesSize());
+        UNIT_ASSERT_VALUES_EQUAL(leaderTable->GetLevel(), followerTable->GetLevel());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetPackedSimple(leaderTable->GetLeaves(0).GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL),
+            GetPackedSimple(followerTable->GetLeaves(0).GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL)
+        );
+    }
+
+    /**
+     * Verify the retry contract: two Pack() calls for the SAME generation produce
+     * a byte-identical payload and do not move the delta baseline, even if new
+     * reports arrived between the two calls (the SysView Service only advances
+     * the generation once the processor confirms the previous one, so a retry
+     * before confirmation must not leak the in-between state). The NEXT
+     * generation's delta is then measured from what generation 1 confirmed, not
+     * from what arrived during the retry window.
+     */
+    Y_UNIT_TEST(PackRetryOfTheSameGenerationIsByteIdenticalAndDoesNotAdvanceTheBaseline) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        TInstant now = TInstant::Seconds(100);
+
+        TFakeTablet leader(1000, 0);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 10).AddCumulative(CONSUMED_CPU, 100);
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packedA = PackOnce(aggregator, 1);
+
+        // A new report queues up in between, but a retry of generation 1 must not see it
+        now += TDuration::Seconds(5);
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999).AddCumulative(CONSUMED_CPU, 999);
+        leader.Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+
+        auto packedB = PackOnce(aggregator, 1);
+
+        TString serializedA;
+        TString serializedB;
+        UNIT_ASSERT(FindPackedTable(packedA)->SerializeToString(&serializedA));
+        UNIT_ASSERT(FindPackedTable(packedB)->SerializeToString(&serializedB));
+        UNIT_ASSERT_VALUES_EQUAL(serializedA, serializedB);
+
+        // Generation 2 finally observes the in-between state, and its delta is measured
+        // from what generation 1 confirmed (10 / +100), not from the retry's payload
+        auto packedC = PackOnce(aggregator, 2);
+        auto* tableC = FindPackedTable(packedC);
+        UNIT_ASSERT(tableC);
+
+        const auto& executorC = tableC->GetTableCounters().GetExecutorCounters();
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedSimple(executorC, DB_UNIQUE_ROWS_TOTAL), 999);
+        UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(executorC, CONSUMED_CPU), 999);
     }
 }

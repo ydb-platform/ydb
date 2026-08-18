@@ -72,8 +72,7 @@ public:
                     if (gen < key.FromGeneration) {
                         continue;
                     }
-                    const auto it = NextGenMap.find(key);
-                    if (it != NextGenMap.end() && gen < it->second) {
+                    if (const auto* nextGen = NextGenMap.FindPtr(key); nextGen && gen < *nextGen) {
                         disprovedKeys.emplace(key);
                     }
                 }

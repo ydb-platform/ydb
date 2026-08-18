@@ -3933,6 +3933,10 @@
             "Status": "StatusSuccess"
         }
     },
+    "test.test_viewer_groups_with_invalid_database": {
+        "status_code": 403,
+        "text": "<html><body><h1>403 Forbidden</h1><p><main>: Error: Unknown database\n</p></body></html>"
+    },
     "test.test_viewer_healthcheck": {
         "/Root": {
             "location": {

@@ -21,6 +21,18 @@ namespace NKikimr::NMiniKQL {
 
 namespace {
 
+TString WrapDecimalComparationName(
+    NUdf::TStringRef name, const TDataDecimalType& type1, const TDataDecimalType& type2) {
+    TStringBuilder result;
+    result << TStringBuf(name.Data(), name.Size());
+    const i8 scaleDifference = static_cast<i8>(type2.GetParams().second) -
+                               static_cast<i8>(type1.GetParams().second);
+    if (scaleDifference != 0) {
+        result << '_' << static_cast<i16>(scaleDifference);
+    }
+    return result;
+}
+
 struct TDataFunctionFlags {
     enum {
         HasBooleanResult = 0x01,
@@ -3233,7 +3245,7 @@ TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, 
     const auto lId = leftType->GetSchemeType();
     const auto rId = rightType->GetSchemeType();
 
-    if (lId == NUdf::TDataType<NUdf::TDecimal>::Id && rId == NUdf::TDataType<NUdf::TDecimal>::Id) {
+    if (lId == NUdf::TDataType<NUdf::TDecimal>::Id && rId == NUdf::TDataType<NUdf::TDecimal>::Id && RuntimeVersion < 84U) {
         const auto& lDec = static_cast<TDataDecimalType*>(leftType)->GetParams();
         const auto& rDec = static_cast<TDataDecimalType*>(rightType)->GetParams();
         if (lDec.second < rDec.second) {
@@ -3261,10 +3273,18 @@ TRuntimeNode TProgramBuilder::DataCompare(const std::string_view& callableName, 
                           scale);
     }
 
-    const std::array<TRuntimeNode, 2> args = {{data1, data2}};
     const auto boolType = NewDataType(NUdf::TDataType<bool>::Id);
     const auto resultType = isOptionalLeft || isOptionalRight ? NewOptionalType(boolType) : boolType;
-    return Invoke(callableName, resultType, args);
+    TString comparisonName(callableName);
+    if (leftType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        rightType->GetSchemeType() == NUdf::TDataType<NUdf::TDecimal>::Id &&
+        RuntimeVersion >= 84U) {
+        comparisonName = WrapDecimalComparationName(
+            NUdf::TStringRef(callableName.data(), callableName.size()),
+            *static_cast<const TDataDecimalType*>(leftType),
+            *static_cast<const TDataDecimalType*>(rightType));
+    }
+    return InvokeBinary(comparisonName, resultType, data1, data2);
 }
 
 TRuntimeNode TProgramBuilder::BuildRangeLogical(const std::string_view& callableName, const TArrayRef<const TRuntimeNode>& lists) {

@@ -3492,6 +3492,34 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_datetime-date_tz_scale_/sql.yql"
         }
     ],
+    "test_sql2yql.test[decimal_compare-both_optional]": [
+        {
+            "checksum": "19260d15d74ee546004f2201221fd23c",
+            "size": 5226,
+            "uri": "https://{canondata_backend}/1917492/0a664153f7f41e6aae4f75b2001f85e0000978bd/resource.tar.gz#test_sql2yql.test_decimal_compare-both_optional_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[decimal_compare-incompatible_fail]": [
+        {
+            "checksum": "0930312a34f965a8f6fda50adea50b17",
+            "size": 1149,
+            "uri": "https://{canondata_backend}/1942415/ea50f20c9fb5294eea22574020a6044b6d13b75f/resource.tar.gz#test_sql2yql.test_decimal_compare-incompatible_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[decimal_compare-non_optional]": [
+        {
+            "checksum": "9422dae771a483ca45ea01a2df99921e",
+            "size": 7100,
+            "uri": "https://{canondata_backend}/1942278/091f3033a76a7dd48badfe9af2580eda36465372/resource.tar.gz#test_sql2yql.test_decimal_compare-non_optional_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[decimal_compare-one_optional]": [
+        {
+            "checksum": "499eaaef4340830d72aa28f533af5e20",
+            "size": 4662,
+            "uri": "https://{canondata_backend}/1942415/ea50f20c9fb5294eea22574020a6044b6d13b75f/resource.tar.gz#test_sql2yql.test_decimal_compare-one_optional_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[distinct-distinct_star_inmem]": [
         {
             "checksum": "51c36139e9780da3355e15be501fedaf",
@@ -15414,6 +15442,26 @@
     "test_sql_format.test[datetime-date_tz_scale]": [
         {
             "uri": "file://test_sql_format.test_datetime-date_tz_scale_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[decimal_compare-both_optional]": [
+        {
+            "uri": "file://test_sql_format.test_decimal_compare-both_optional_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[decimal_compare-incompatible_fail]": [
+        {
+            "uri": "file://test_sql_format.test_decimal_compare-incompatible_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[decimal_compare-non_optional]": [
+        {
+            "uri": "file://test_sql_format.test_decimal_compare-non_optional_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[decimal_compare-one_optional]": [
+        {
+            "uri": "file://test_sql_format.test_decimal_compare-one_optional_/formatted.sql"
         }
     ],
     "test_sql_format.test[distinct-distinct_star_inmem]": [

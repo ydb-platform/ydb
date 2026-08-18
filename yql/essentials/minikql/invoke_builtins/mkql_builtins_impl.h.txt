@@ -3,6 +3,7 @@
 #include "mkql_builtins_impl_common.h"
 #include <mkql_builtins.h>
 #include "mkql_builtins_codegen.h"
+
 #include <arrow/array/array_base.h>
 #include <arrow/array/util.h>
 
@@ -1980,26 +1981,12 @@ void AddDateComparisonKernels(TKernelFamilyBase& owner) {
     AddBinaryPredicateKernelPoly<NUdf::TDataType<NUdf::TInterval64>, NUdf::TDataType<NUdf::TInterval64>, TPred>(owner);
 }
 
-class TDecimalKernel : public TKernel {
-public:
-    struct TKernelState : arrow::compute::KernelState {
-        ui8 Precision;
-    };
-
-    TDecimalKernel(const TKernelFamily& family, const std::vector<NUdf::TDataTypeId>& argTypes,
-        NUdf::TDataTypeId returnType, TStatelessArrayKernelExec exec,
-        TKernel::ENullMode nullMode);
-
-    const arrow::compute::ScalarKernel& GetArrowKernel() const final;
-    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(const TVector<TType*>& argTypes, TType* resultType) const final;
-    bool IsPolymorphic() const final;
-
-private:
-    TStatelessArrayKernelExec Exec_;
+struct TDecimalKernelState : arrow::compute::KernelState {
+    ui8 Precision;
 };
 
 template<template<ui8> class TFuncInstance>
-struct TDecimalKernelExecs
+class TDecimalKernelExecs
 {
     using TInput1 = NYql::NDecimal::TInt128;
     using TInput2 = NYql::NDecimal::TInt128;
@@ -2034,31 +2021,26 @@ struct TDecimalKernelExecs
         return std::array<ExecFunc, sizeof...(Is)>{ExecImpl<Is+1>...};
     }
 
+public:
     static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        ui8 precision = static_cast<TDecimalKernel::TKernelState*>(kernelCtx->state())->Precision;
+        ui8 precision = static_cast<TDecimalKernelState*>(kernelCtx->state())->Precision;
         Y_DEBUG_ABORT_UNLESS(precision >= 1&& precision <= 35);
 
         static constexpr auto JumpTable = GenerateTable(std::make_index_sequence<35>{});
         return JumpTable[precision-1](kernelCtx, batch, res);
     }
+
+    static TStatelessArrayKernelExec GetExec(
+        ui8 leftPrecision, ui8 leftScale, ui8 rightPrecision, ui8 rightScale) {
+        MKQL_ENSURE(
+            leftPrecision == rightPrecision && leftScale == rightScale,
+            "Require same precision/scale");
+        return &Exec;
+    }
 };
 
-
-template<template<ui8> class TFunc>
-void AddBinaryDecimalKernels(TKernelFamilyBase& owner) {
-    auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
-    auto type2 = type1;
-    auto returnType = type1;
-    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
-
-    using Execs = TDecimalKernelExecs<TFunc>;
-    auto kernel = std::make_unique<TDecimalKernel>(owner, argTypes, returnType, &Execs::Exec, TKernel::ENullMode::Default);
-    owner.Adopt(argTypes, returnType, std::move(kernel));
-}
-
-template<class TFuncInstance>
-struct TDecimalComparisonKernelExecs
-{
+template <template <i8> class TFuncInstance>
+class TDecimalComparisonKernelExecs {
     using TInput1 = NYql::NDecimal::TInt128;
     using TInput2 = NYql::NDecimal::TInt128;
     using TOutput = bool;
@@ -2069,11 +2051,15 @@ struct TDecimalComparisonKernelExecs
         return result;
     }
 
-    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx, const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
-        auto scalarScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarScalarCoreOpt;
-        auto scalarArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ScalarArrayCoreOpt;
-        auto arrayScalarFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayScalarCoreOpt;
-        auto arrayArrayFunc = &TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFuncInstance>::ArrayArrayCoreOpt;
+    template <i8 ScaleFactor>
+    static arrow::Status Exec(arrow::compute::KernelContext* kernelCtx,
+        const arrow::compute::ExecBatch& batch, arrow::Datum* res) {
+        using TFunc = TFuncInstance<ScaleFactor>;
+        using TExecs = TBinaryKernelOptExecsImpl<TInput1, TInput2, TOutput, TFunc>;
+        auto scalarScalarFunc = &TExecs::ScalarScalarCoreOpt;
+        auto scalarArrayFunc = &TExecs::ScalarArrayCoreOpt;
+        auto arrayScalarFunc = &TExecs::ArrayScalarCoreOpt;
+        auto arrayArrayFunc = &TExecs::ArrayArrayCoreOpt;
 
         return ExecDecimalBinaryOptImpl(kernelCtx, batch, res,
             &GetPrimitiveDataType<TOutput>, &ScalarGetter,
@@ -2083,9 +2069,66 @@ struct TDecimalComparisonKernelExecs
             arrayScalarFunc,
             arrayArrayFunc);
     }
+
+    template <size_t... Indices>
+    static constexpr auto MakeExecs(std::index_sequence<Indices...>) {
+        return std::array<TStatelessArrayKernelExec, sizeof...(Indices)>{
+            &Exec<static_cast<i8>(
+                static_cast<i16>(Indices) - NYql::NDecimal::MaxPrecision)>...};
+    }
+
+public:
+    static TStatelessArrayKernelExec GetExec(
+        ui8, ui8 leftScale, ui8, ui8 rightScale) {
+        const i8 scaleDifference = static_cast<i8>(rightScale) -
+            static_cast<i8>(leftScale);
+        return Execs[scaleDifference + NYql::NDecimal::MaxPrecision];
+    }
+
+private:
+    inline static constexpr auto Execs = MakeExecs(
+        std::make_index_sequence<2U * NYql::NDecimal::MaxPrecision + 1U>{});
 };
 
-template<class TFunc>
+class TDecimalKernel final : public TKernel {
+public:
+    using TExecFactory = TStatelessArrayKernelExec (*)(ui8, ui8, ui8, ui8);
+
+    TDecimalKernel(const TKernelFamily& family,
+        const std::vector<NUdf::TDataTypeId>& argTypes, NUdf::TDataTypeId returnType,
+        TKernel::ENullMode nullMode, TExecFactory execFactory);
+
+    const arrow::compute::ScalarKernel& GetArrowKernel() const final;
+
+    std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(
+        const TVector<TType*>& argTypes, TType* resultType) const final;
+
+    bool IsPolymorphic() const final;
+
+private:
+    static TDataType* GetDataType(TType* blockType, bool& isOptional);
+
+    static std::shared_ptr<arrow::compute::ScalarKernel> MakeArrowKernel(
+        TDataDecimalType* leftType, TDataType* resultType,
+        TStatelessArrayKernelExec exec);
+
+    const TExecFactory ExecFactory_;
+};
+
+template<template<ui8> class TFunc>
+void AddBinaryDecimalKernels(TKernelFamilyBase& owner) {
+    auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
+    auto type2 = type1;
+    auto returnType = type1;
+    std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
+
+    using Execs = TDecimalKernelExecs<TFunc>;
+    auto kernel = std::make_unique<TDecimalKernel>(
+        owner, argTypes, returnType, TKernel::ENullMode::Default, &Execs::GetExec);
+    owner.Adopt(argTypes, returnType, std::move(kernel));
+}
+
+template <template <i8> class TFunc>
 void AddDecimalComparisonKernels(TKernelFamilyBase& owner) {
     auto type1 = NUdf::GetDataTypeInfo(NUdf::EDataSlot::Decimal).TypeId;
     auto type2 = type1;
@@ -2093,7 +2136,8 @@ void AddDecimalComparisonKernels(TKernelFamilyBase& owner) {
     std::vector<NUdf::TDataTypeId> argTypes({ type1, type2 });
 
     using Execs = TDecimalComparisonKernelExecs<TFunc>;
-    auto kernel = std::make_unique<TDecimalKernel>(owner, argTypes, returnType, &Execs::Exec, TKernel::ENullMode::Default);
+    auto kernel = std::make_unique<TDecimalKernel>(
+        owner, argTypes, returnType, TKernel::ENullMode::Default, &Execs::GetExec);
     owner.Adopt(argTypes, returnType, std::move(kernel));
 }
 

@@ -1,7 +1,5 @@
 #include "query_interval.h"
 
-#include <ydb/core/sys_view/common/query_metrics_retention.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr::NSysView {
@@ -101,37 +99,6 @@ Y_UNIT_TEST_SUITE(TQueryIntervalTest) {
         UNIT_ASSERT_VALUES_EQUAL(response.QueryTextsSize(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response.GetQueryTexts(0).GetHash(), 2);
         UNIT_ASSERT_VALUES_EQUAL(response.GetQueryTexts(0).GetText(), "two");
-    }
-
-    Y_UNIT_TEST(HourMetricsRetentionEvictsWholeOldestClosedBuckets) {
-        const TMap<ui64, ui64> bucketBytes = {
-            {100, 40},
-            {200, 30},
-            {300, 50},
-        };
-
-        auto plan = PlanQueryMetricsRetention(
-            bucketBytes, /* activeHourEnd */ 300, /* byteLimit */ 80);
-
-        UNIT_ASSERT_VALUES_EQUAL(plan.RetainedBytes, 80);
-        UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict[0], 100);
-        UNIT_ASSERT_VALUES_EQUAL(plan.EvictBeforeHourEnd, 200);
-    }
-
-    Y_UNIT_TEST(HourMetricsRetentionNeverEvictsActiveBucket) {
-        const TMap<ui64, ui64> bucketBytes = {
-            {100, 10},
-            {200, 100},
-        };
-
-        auto plan = PlanQueryMetricsRetention(
-            bucketBytes, /* activeHourEnd */ 200, /* byteLimit */ 50);
-
-        UNIT_ASSERT_VALUES_EQUAL(plan.RetainedBytes, 100);
-        UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict.size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict[0], 100);
-        UNIT_ASSERT_VALUES_EQUAL(plan.EvictBeforeHourEnd, 200);
     }
 
     Y_UNIT_TEST(HourIntervalChangesOnlyAfterExactBoundary) {

@@ -1,4 +1,5 @@
 #include <ydb/core/sys_view/processor/query_metrics_retention_db.h>
+#include <ydb/core/sys_view/processor/query_metrics_retention.h>
 #include <ydb/core/tablet_flat/test/libs/table/test_dummy.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -55,6 +56,37 @@ void WriteCutoff(NIceDb::TNiceDb& db, ui64 cutoff) {
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(TQueryMetricsRetentionDbTest) {
+    Y_UNIT_TEST(EvictsWholeOldestClosedBuckets) {
+        const TMap<ui64, ui64> bucketBytes = {
+            {100, 40},
+            {200, 30},
+            {300, 50},
+        };
+
+        auto plan = PlanQueryMetricsRetention(
+            bucketBytes, /* activeHourEnd */ 300, /* byteLimit */ 80);
+
+        UNIT_ASSERT_VALUES_EQUAL(plan.RetainedBytes, 80);
+        UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict[0], 100);
+        UNIT_ASSERT_VALUES_EQUAL(plan.EvictBeforeHourEnd, 200);
+    }
+
+    Y_UNIT_TEST(NeverEvictsActiveBucket) {
+        const TMap<ui64, ui64> bucketBytes = {
+            {100, 10},
+            {200, 100},
+        };
+
+        auto plan = PlanQueryMetricsRetention(
+            bucketBytes, /* activeHourEnd */ 200, /* byteLimit */ 50);
+
+        UNIT_ASSERT_VALUES_EQUAL(plan.RetainedBytes, 100);
+        UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(plan.BucketsToEvict[0], 100);
+        UNIT_ASSERT_VALUES_EQUAL(plan.EvictBeforeHourEnd, 200);
+    }
+
     Y_UNIT_TEST(LoadsNewestWholeBucketsWithinByteLimitAfterReboot) {
         TQueryMetricsTestDb testDb;
         testDb.Transaction([](NIceDb::TNiceDb& db) {

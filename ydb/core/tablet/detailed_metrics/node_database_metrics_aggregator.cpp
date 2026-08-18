@@ -1,5 +1,6 @@
 #include "node_database_metrics_aggregator.h"
 
+#include "detailed_counters_diff.h"
 #include "detailed_metrics_counter_set.h"
 
 #include <ydb/core/tablet/private/aggregated_tablet_counters.h>
@@ -155,6 +156,44 @@ public:
         }
     }
 
+    /**
+     * Fill out with this bucket's contribution for the given generation: Simple
+     * absolute stateful, Cumulative/HIST delta since the previous call for the
+     * SAME generation (see TNodeDatabaseMetricsAggregator::Pack's doc comment
+     * for the full contract).
+     *
+     * @note A generation this bucket has not packed before (including the very
+     *       first call ever) snapshots the bucket's current aggregate state
+     *       into Current, moving what used to be Current into Confirmed — the
+     *       delta baseline. A retry of an already-packed generation reuses
+     *       both without touching either, which is what makes the retry
+     *       byte-identical: RecalcAll()/ToProto() do not run again, so Current
+     *       cannot drift even if AddCounters() has queued up new contributions
+     *       for the NEXT generation in the meantime.
+     */
+    void Pack(NKikimrSysView::TDbTabletCounters& out, ui64 generation) {
+        if (!HasPacked || generation != LastPackedGeneration) {
+            Confirmed.Swap(&Current);
+
+            RecalcAll();
+
+            Current.Clear();
+            Current.SetType(TabletType);
+            if (ExecutorCounters.IsInitialized) {
+                ExecutorCounters.ToProto(*Current.MutableExecutorCounters(), *Current.MutableMaxExecutorCounters());
+            }
+            if (AppCounters.IsInitialized) {
+                AppCounters.ToProto(*Current.MutableAppCounters(), *Current.MutableMaxAppCounters());
+            }
+
+            LastPackedGeneration = generation;
+            HasPacked = true;
+        }
+
+        out.Clear();
+        CalculateCountersDiff(&out, Current, Confirmed);
+    }
+
 private:
     TTabletTypes::EType TabletType;
 
@@ -167,6 +206,18 @@ private:
 
     THashMap<TTabletKey, ui64> SourceIds;
     ui64 NextSourceId = 0;
+
+    /**
+     * The pack baseline (step 08): Current is this bucket's absolute snapshot
+     * as of LastPackedGeneration, Confirmed is the snapshot Current replaced,
+     * used as the Cumulative/HIST diff baseline. Both start empty, which is
+     * exactly what an unstarted diff baseline should be: the very first Pack()
+     * reports every non-zero Cumulative/HIST value as its own full delta.
+     */
+    NKikimrSysView::TDbTabletCounters Current;
+    NKikimrSysView::TDbTabletCounters Confirmed;
+    ui64 LastPackedGeneration = 0;
+    bool HasPacked = false;
 };
 
 /**
@@ -346,6 +397,39 @@ public:
             }
             for (auto& [_, leaf] : entry.Leaves) {
                 leaf->RecalcAll();
+            }
+        }
+    }
+
+    void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out, ui64 generation) override {
+        // Same lock as AddCounters/ForgetTablet: this is the writer<->reader axis
+        // A2's note says step 07 must reuse (SharedTreeLock()/DetailedMetricsLock()),
+        // guarding both the walk over Tables/Leaves below and every bucket's own
+        // RecalcAll()/ToProto() republish window.
+        TGuard<TMutex> guard(DetailedMetricsLock());
+
+        for (auto& [relativePath, entry] : Tables) {
+            if (!entry.TableBucket && entry.Leaves.empty()) {
+                // Nothing this instance holds for the table (for example, a table
+                // level table whose only tablets belong to the other role)
+                continue;
+            }
+
+            auto* tableCounters = out.Add();
+            tableCounters->SetOwnerId(entry.Info.TableId.OwnerId);
+            tableCounters->SetPathId(entry.Info.TableId.LocalPathId);
+            tableCounters->SetTablePath(entry.Info.TablePath);
+            tableCounters->SetLevel(entry.Info.MetricsLevel);
+
+            if (entry.TableBucket) {
+                entry.TableBucket->Pack(*tableCounters->MutableTableCounters(), generation);
+            }
+
+            for (auto& [tablet, leaf] : entry.Leaves) {
+                auto* leafOut = tableCounters->AddLeaves();
+                leafOut->SetTabletId(tablet.first);
+                leafOut->SetFollowerId(tablet.second);
+                leaf->Pack(*leafOut->MutableCounters(), generation);
             }
         }
     }

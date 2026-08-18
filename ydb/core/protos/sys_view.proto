@@ -3,6 +3,7 @@ package NKikimrSysView;
 option java_package = "ru.yandex.kikimr.proto";
 
 import "ydb/core/protos/labeled_counters.proto";
+import "ydb/core/protos/table_metrics_settings.proto";
 import "ydb/core/protos/tablet.proto";
 
 message TPartitionStatsKey {
@@ -564,6 +565,38 @@ message TDbTabletCounters {
     optional TDbCounters AppCounters = 3;
     optional TDbCounters MaxExecutorCounters = 4;
     optional TDbCounters MaxAppCounters = 5;
+}
+
+// Detailed metrics (step 06+) for a single user table, as reported by one node.
+// Reuses TDbTabletCounters verbatim as the value container: a bucket (the table
+// level collapse, or a single partition leaf) has two categories (Executor/App)
+// and a sum/max pair each, which is exactly the shape TAggregatedTabletCounters::
+// ToProto()/FromProto() already reads and writes. The Type field lets the
+// receiving side Initialize() the very same aggregate layout the node used.
+message TDetailedTableCounters {
+    // A single partition leaf: a (tablet, follower) pair reporting its own
+    // counters verbatim (no on-node rollup at this granularity, see S1').
+    message TLeaf {
+        optional uint64 TabletId = 1;
+        optional uint32 FollowerId = 2;
+        optional TDbTabletCounters Counters = 3;
+    }
+
+    // TPathId, split into its two scalar fields the same way TPartitionStatsKey
+    // does above.
+    optional uint64 OwnerId = 1;
+    optional uint64 PathId = 2;
+
+    optional string TablePath = 3;
+    optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel Level = 4;
+
+    // Set iff Level == MetricsLevelTable: the table level collapse bucket
+    // (leader-sourced only, S1'').
+    optional TDbTabletCounters TableCounters = 5;
+
+    // Set iff Level == MetricsLevelPartition: one leaf per (tablet, follower)
+    // this node hosts, passthrough, no on-node rollup.
+    repeated TLeaf Leaves = 6;
 }
 
 message TDbGRpcCounters {

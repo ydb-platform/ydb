@@ -2,8 +2,7 @@
 
 ### Functionality
 
-* Added support for creating unique indexes on existing tables. This feature is enabled by setting the `enable_add_unique_index` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
-* Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
+* None:Added support for encrypted exports to S3, allowing secure storage of exported data. This feature is enabled by setting the `enable_encrypted_export` feature flag in the cluster configuration. ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 15186:Increased [the query text limit size](../dev/system-views#query-metrics) in system views from 4 KB to 10 KB. [#15186](https://github.com/ydb-platform/ydb/pull/15186) ([spuchin](https://github.com/spuchin))
 * 15693:Added a health check configuration that administrators can customize: the number of node restarts, tablets, the time difference between database dynodes,
 and timeout (by default, the maximum response time from healthcheck). Documentation is under construction. [#15693](https://github.com/ydb-platform/ydb/pull/15693) ([Andrei Rykov](https://github.com/StekPerepolnen))
@@ -72,6 +71,18 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20303:Add `--iam-token-file` argument to ydb-dstool. [#20303](https://github.com/ydb-platform/ydb/pull/20303) ([kruall](https://github.com/kruall))
 * 22511:Added the ICB control to change ReadRequestsInFlightLimit via changing dynconfig. [#22511](https://github.com/ydb-platform/ydb/pull/22511) ([kruall](https://github.com/kruall))
 * 21997:Enabled the new compute scheduler based on the HDRF model. [#21997](https://github.com/ydb-platform/ydb/pull/21997) ([Ivan](https://github.com/abyss7))
+* 35562:YQ-4849 supported precomputes in streaming queries: Supported precomputes in streaming queries, for example:
+
+```sql
+$r = SELECT Value FROM table;
+
+INSERT INTO pq_source.output_topic
+SELECT
+    Unwrap(Data || "-" || $r)
+FROM pq_source.input_topic
+```
+
+`$r` - is precompute [#35562](https://github.com/ydb-platform/ydb/pull/35562) ([YDBot](https://github.com/ydbot))
 
 ### Bug fixes
 
@@ -132,6 +143,20 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 20670:Resolved the issue with DDL errors for external sources and added more information to the `ALTER TABLE ... RENAME TO` error. [#20670](https://github.com/ydb-platform/ydb/pull/20670) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 20519:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20520) that caused VDisk to freeze in infinite local recovery mode when a ChunkRead request failed. This change will allow loader actor to terminate properly on PDisk errors, and LocalRecovery to get notified about this error and to finish with proper status. [#20519](https://github.com/ydb-platform/ydb/pull/20519) ([Sergey Belyakov](https://github.com/serbel324))
 * 22298:Fixed an [issue](https://github.com/ydb-platform/ydb/issues/20812) where attach streams remained active after session shutdown, causing unexpected BadSession errors. [#22298](https://github.com/ydb-platform/ydb/pull/22298) ([Kirill Kurdyukov](https://github.com/KirillKurdyukov))
+* 35703:YQ-5161 fixed race with PQ / Solomon gateway: Fault fixes:
+
+* Fixed race with PQ gateway [cause of UB / UAF / faults]
+* Fixed race with Solomon gateway [cause of UB / UAF / faults]
+* Fixed missing `break` in streaming query creation status handler [cause fault with VERIFY when PassAway called twice]
+* Fixed race on multi node kqprun initialization if enabled viewer and storage [UB / fault in tests]
+* Fixed race in metadata service registration (singleton modification) [UB / fault in tests]
+
+Other fixes:
+
+* Added retries for script execution creation
+* Added retries for scheme shard tablet pipe creation in streaming queries
+* Added retries for scheme shard tablet pipe destruction in streaming queries [#35703](https://github.com/ydb-platform/ydb/pull/35703) ([YDBot](https://github.com/ydbot))
+* 35576:YQ-5157 fixed failing after unsuccessful lease update: Fixed streaming query failing after unsuccessful lease update [#35576](https://github.com/ydb-platform/ydb/pull/35576) ([YDBot](https://github.com/ydbot))
 
 ### YDB UI
 
@@ -157,3 +182,4 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 19687:Extracted the password verification logic into a dedicated actor, separating it from `TSchemeShard` local transactions for improved performance. [#19687](https://github.com/ydb-platform/ydb/pull/19687) ([Yury Kiselev](https://github.com/yurikiselev))
 * 20428:Improved parallel execution of queries to column-oriented tables. [#20428](https://github.com/ydb-platform/ydb/pull/20428) ([Oleg Doronin](https://github.com/dorooleg))
 * 21705:Introduced a new priority system for PDisks, addressing performance slowdowns caused by shared queue usage for realtime and compaction writes. [#21705](https://github.com/ydb-platform/ydb/pull/21705) ([Vlad Kuznetsov](https://github.com/va-kuznecov))
+

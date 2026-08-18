@@ -79,7 +79,7 @@ public:
                                 unrequestedInterval.Subtract(disk.DiskParts[partIdx].Requested);
                                 if (!unrequestedInterval.IsEmpty()) {
 
-                                    AddGetRequest(logCtx, groupDiskRequests, info, state.Id, partIdx, disk,
+                                    AddGetRequest(logCtx, groupDiskRequests, state.Id, partIdx, disk,
                                             unrequestedInterval, "BPG45");
                                 }
                             }

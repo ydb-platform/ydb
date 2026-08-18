@@ -3,7 +3,6 @@
 
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_partlayout.h>
-#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 
 namespace NKikimr {
 
@@ -257,19 +256,9 @@ std::optional<EStrategyOutcome> TStrategyBase::ProcessPessimistic(const TBlobSto
 }
 
 void TStrategyBase::AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests,
-        const TBlobStorageGroupInfo& info, TLogoBlobID &fullId, ui32 partIdx, TBlobState::TDisk &disk,
+        TLogoBlobID &fullId, ui32 partIdx, TBlobState::TDisk &disk,
         TIntervalSet<i32> &intervalSet, const char *logMarker) {
     TLogoBlobID id(fullId, partIdx + 1);
-    if (LogoBlobCrcModeHasXxh3WholePartChecksum(fullId)) {
-        const i32 partSize = static_cast<i32>(info.Type.PartSize(id));
-        const i32 partUserSize = static_cast<i32>(info.Type.PartUserSize(fullId.BlobSize()));
-        for (const auto [begin, end] : intervalSet) {
-            if (begin == 0 && end == partUserSize) {
-                intervalSet.Add(partUserSize, partSize);
-                break;
-            }
-        }
-    }
     DSP_LOG_DEBUG_SX(logCtx, logMarker, "AddGet disk# " << disk.OrderNumber
             << " Id# " << id.ToString()
             << " Intervals# " << intervalSet.ToString());

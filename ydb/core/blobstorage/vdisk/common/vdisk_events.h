@@ -601,13 +601,6 @@ namespace NKikimr {
             StorePayload(std::move(buffer));
         }
 
-        TEvVPut(const TLogoBlobID &logoBlobId, TRope buffer, const TVDiskID &vdisk,
-                const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
-                NKikimrBlobStorage::EPutHandleClass cls, bool,
-                TWriteSource writeSource = UnknownWriteSource())
-            : TEvVPut(logoBlobId, std::move(buffer), vdisk, ignoreBlock, cookie, deadline, cls, writeSource)
-        {}
-
         void InitWithoutBuffer(const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const bool ignoreBlock,
                 const ui64 *cookie, TInstant deadline, NKikimrBlobStorage::EPutHandleClass cls,
                 TWriteSource writeSource = UnknownWriteSource())
@@ -906,11 +899,6 @@ namespace NKikimr {
         }
 
         void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie,
-                std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId, bool) {
-            AddVPut(logoBlobId, buffer, cookie, extraBlockChecks, std::move(traceId));
-        }
-
-        void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie,
                 std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId,
                 TWriteSource writeSource) {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
@@ -934,12 +922,6 @@ namespace NKikimr {
             if (writeSource != TWriteSource::Unknown) {
                 item->SetWriteSourceOp(WriteSourceToProto(writeSource));
             }
-        }
-
-        void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie,
-                std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId,
-                TWriteSource writeSource, bool) {
-            AddVPut(logoBlobId, buffer, cookie, extraBlockChecks, std::move(traceId), writeSource);
         }
 
         bool Validate(TString& errorReason) {

@@ -245,7 +245,6 @@ namespace NKikimr {
                             const ui64 *IngrPtr;
                             const bool Keep;
                             const bool DoNotKeep;
-                            TErasureType::ECrcMode CrcMode;
                             bool IsFullPartRead;
                             bool ValidateChecksum;
                             bool Success = true;
@@ -263,7 +262,8 @@ namespace NKikimr {
                                 this->operator()(std::move(dataCopy));
                             }
                             void operator()(TRope&& data) {
-                                if (ValidateChecksum && IsFullPartRead && !CheckCrcAtTheEnd(CrcMode, data)) {
+                                if (ValidateChecksum && IsFullPartRead && !CheckCrcAtTheEnd(
+                                        static_cast<TErasureType::ECrcMode>(Id.CrcMode()), data)) {
                                     Result->AddResult(NKikimrProto::CORRUPTED, Id, Shift, static_cast<ui32>(Size), CookiePtr,
                                         IngrPtr, Keep, DoNotKeep);
                                     Success = false;
@@ -278,7 +278,7 @@ namespace NKikimr {
                         const ui32 responseSize = static_cast<ui32>(query->Size ? query->Size : partSize - query->Shift);
                         const bool isFullPartRead = query->Shift == 0 && responseSize == partSize;
                         TProcessor processor{Result, it->Id, query->Shift, query->Size, cookiePtr, pingr, keep,
-                            doNotKeep, static_cast<TErasureType::ECrcMode>(it->Id.CrcMode()), isFullPartRead,
+                            doNotKeep, isFullPartRead,
                             LogoBlobCrcModeHasXxh3WholePartChecksum(it->Id)
                                 && static_cast<bool>(QueryCtx->HullCtx->VCfg->EnableChecksumReadValidationOnVDisk)};
                         rit.GetData(processor);

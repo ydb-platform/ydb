@@ -239,6 +239,21 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Optional()
       .Min(0);
     })
+    .Int64("user_executor", [](auto& userExecutor){
+      userExecutor
+      .Optional()
+      .Min(0);
+    })
+    .Int64("io_executor", [](auto& ioExecutor){
+      ioExecutor
+      .Optional()
+      .Min(0);
+    })
+    .Int64("batch_executor", [](auto& batchExecutor){
+      batchExecutor
+      .Optional()
+      .Min(0);
+    })
     .Array("service_executor", [](auto& serviceExecutor){
       serviceExecutor
       .Optional()

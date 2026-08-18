@@ -609,10 +609,6 @@ namespace NActors {
         return CpuManager->GetExecutorPool(poolId)->GetMaxThreadCount();
     }
 
-    std::optional<TCpuMask> TActorSystem::GetExecutorPoolAffinity(ui32 poolId) const {
-        return CpuManager->GetExecutorPoolAffinity(poolId);
-    }
-
     TVector<IExecutorPool*> TActorSystem::GetBasicExecutorPools() const {
         return CpuManager->GetBasicExecutorPools();
     }

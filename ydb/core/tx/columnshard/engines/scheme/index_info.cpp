@@ -450,6 +450,37 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified
     return GetColumnFeaturesVerified(columnId).GetDefaultValue().GetValue();
 }
 
+<<<<<<< HEAD
+=======
+NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>> chunks, const ui32 indexId,
+    const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier, TSecondaryData& result) const {
+    if (chunks.empty()) {
+        return TConclusionStatus::Success();
+    }
+    ui32 checkRecordsCount = 0;
+    for (auto&& chunk : chunks) {
+        checkRecordsCount += chunk->GetRecordsCountVerified();
+    }
+    AFL_VERIFY(checkRecordsCount == recordsCount)("index_id", indexId)("sum", checkRecordsCount)("portion", recordsCount);
+    const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
+    auto opStorage = operators->GetOperatorVerified(indexStorageId);
+    const i64 maxBlobSize = opStorage->GetBlobSplitSettings().GetMaxBlobSize();
+    for (auto&& chunk : chunks) {
+        if ((i64)chunk->GetPackedSize() > maxBlobSize) {
+            return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
+                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" + ::ToString(maxBlobSize) + ")");
+        }
+    }
+    if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
+        AFL_VERIFY(chunks.size() == 1);
+        AFL_VERIFY(result.MutableSecondaryInplaceData().emplace(indexId, chunks.front()).second);
+    } else {
+        AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(chunks)).second);
+    }
+    return TConclusionStatus::Success();
+}
+
+>>>>>>> 479679dad5b (fix value holder (#50268))
 NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
     const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier,
     TSecondaryData& result) const {

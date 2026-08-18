@@ -32,12 +32,14 @@ namespace NWriter {
             const auto none = NTable::NPage::ECache::None;
             const auto regular = NTable::NPage::ECacheMode::Regular;
 
+            bool V2OnlyMode = conf.WriteBTreeIndexV2 && !conf.BTreeIndexV2KeepV1Shadow;
             Blocks.resize(Groups.size() + 1);
             for (size_t group : xrange(Groups.size())) {
-                Blocks[group].Reset(
-                    new TBlocks(this, Groups[group].Channel, Groups[group].Cache, Groups[group].CacheMode, Groups[group].MaxBlobSize, conf.StickyFlatIndex));
+                Blocks[group].Reset(new TBlocks(this, Groups[group].Channel, Groups[group].Cache,
+                                                Groups[group].CacheMode, Groups[group].MaxBlobSize,
+                                                conf.StickyFlatIndex, false, V2OnlyMode));
             }
-            // Outer Blob Collection
+            // Outer Blob Collection is still page-index addressing in V2
             Blocks[Groups.size()].Reset(new TBlocks(this, conf.OuterChannel, none, regular, Groups[0].MaxBlobSize, conf.StickyFlatIndex, true));
 
             Growth = new NTable::TScreen::TCook;
@@ -63,7 +65,7 @@ namespace NWriter {
         }
 
     private:
-        TPageOffset Write(TSharedData page, EPage type, ui32 group) override
+        TPageLocation Write(TSharedData page, EPage type, ui32 group) override
         {
             return Blocks.at(group)->Write(std::move(page), type);
         }
@@ -71,7 +73,7 @@ namespace NWriter {
         TPageId WriteOuter(TSharedData page) override
         {
             Blocks.back()->Write(std::move(page), EPage::Opaque);
-            return Blocks.back()->GetWrittenPageId(Groups.size());
+            return Blocks.back()->GetLastWrittenPageId(Groups.size());
         }
 
         void WriteInplace(TPageId page, TArrayRef<const char> body) override
@@ -79,9 +81,9 @@ namespace NWriter {
             Blocks[0]->WriteInplace(page, body);
         }
 
-        ui32 GetWrittenPageId(ui32 group) const noexcept override
+        ui32 GetLastWrittenPageId(ui32 group) const noexcept override
         {
-            return Blocks[group]->GetWrittenPageId(group);
+            return Blocks[group]->GetLastWrittenPageId(group);
         }
 
         NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override

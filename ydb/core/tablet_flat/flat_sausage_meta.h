@@ -41,6 +41,10 @@ namespace NPageCollection {
         ui64 GetPageSize(ui32 pageId) const;
         TStringBuf GetPageInplaceData(ui32 pageId) const;
 
+        /* Number of data/btree pages absorbed into EPage::Skip entries.
+           Recovered from the Crc32 field of each skip entry. */
+        ui32 SkippedPages() const noexcept { return SkippedPages_; };
+
         TBorder Bounds(const NTable::NPage::TPageLocation& location) const;
         TPageLocation GetLocation(ui32 pageId) const;
 
@@ -54,6 +58,7 @@ namespace NPageCollection {
         const TExtra *Extra = nullptr;
         const char *InboundData = nullptr;
         TVector<ui64> Steps;    /* Pages boundaries vector  */
+        ui32 SkippedPages_ = 0;
     };
 
 }

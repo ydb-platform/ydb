@@ -98,6 +98,12 @@ public:
         return PageCollections[groupId.Index]->PageCollection->GetLocation(pageId);
     }
 
+    const NPageCollection::IPageCollection* GetPageCollection(ui32 room) const override
+    {
+        Y_ENSURE(room < PageCollections.size());
+        return PageCollections[room]->PageCollection.Get();
+    }
+
     ui8 GetGroupChannel(NPage::TGroupId groupId) const override
     {
         Y_ENSURE(groupId.Index < PageCollections.size());
@@ -145,10 +151,18 @@ public:
         Y_ENSURE(room < PageCollections.size());
 
         auto& pageCollection = *PageCollections[room]->PageCollection;
-        auto total = pageCollection.Total();
-
-        TVector<TPageLocation> pages(Reserve(total));
+        auto meta =
+            room < IndexPages.BTreeGroups.size() ? &IndexPages.GetBTree(NTable::NPage::TGroupId(room)) : nullptr;
+        bool skipV1 = meta && meta->HasRootV2();
+        auto total = pageCollection.MetaPages();
+        TVector<TPageLocation> pages(Reserve(skipV1 ? 8 : total));
         for (ui32 i = 0; i < total; ++i) {
+            auto type = pageCollection.Page(i).Type;
+            if (type == ui32(EPage::Skip) ||
+                (skipV1 && (type == ui32(EPage::BTreeIndex) || type == ui32(EPage::BTreeIndexV2) ||
+                               type == ui32(EPage::DataPage)))) {
+                continue;
+            }
             pages.push_back(pageCollection.GetLocation(i));
         }
 

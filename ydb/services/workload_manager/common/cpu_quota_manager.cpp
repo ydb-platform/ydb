@@ -18,6 +18,7 @@ void TCpuQuotaManager::TCounters::Register() {
     InstantLoadPercentage = SubComponent->GetCounter("InstantLoadPercentage", false);
     AverageLoadPercentage = SubComponent->GetCounter("AverageLoadPercentage", false);
     QuotedLoadPercentage = SubComponent->GetCounter("QuotedLoadPercentage", false);
+    PendingQuotaPercentage = SubComponent->GetCounter("PendingQuotaPercentage", false);
 }
 
 void TCpuQuotaManager::TCounters::RegisterCommonMetrics(TCommonMetrics& metrics) const {
@@ -52,6 +53,12 @@ void TCpuQuotaManager::UpdateSettings(const TSettings& settings) {
     if (Settings.DefaultQueryLoad <= 0.0) {
         Settings.DefaultQueryLoad = previous.DefaultQueryLoad;
     }
+
+    // While reservations were in charge the legacy counter kept drifting up unused, so it has
+    // to be reseeded, otherwise switching back would stall admission until the drift decays
+    if (previous.EnableLoadReservations && !Settings.EnableLoadReservations) {
+        QuotedLoad = InstantLoad;
+    }
 }
 
 TInstant TCpuQuotaManager::GetNow() const {
@@ -67,7 +74,26 @@ double TCpuQuotaManager::GetAverageLoad() const {
 }
 
 double TCpuQuotaManager::GetQuotedLoad() const {
-    return QuotedLoad;
+    return Settings.EnableLoadReservations ? InstantLoad + PendingQuota : QuotedLoad;
+}
+
+void TCpuQuotaManager::PopPendingQuota() {
+    PendingQuota -= PendingQuotas.front().Quota;
+    PendingQuotas.pop_front();
+    if (PendingQuotas.empty()) {
+        PendingQuota = 0.0;
+    }
+}
+
+void TCpuQuotaManager::ExpirePendingQuota(TInstant now) {
+    while (!PendingQuotas.empty() && PendingQuotas.front().ExpireAt <= now) {
+        PopPendingQuota();
+    }
+}
+
+void TCpuQuotaManager::UpdateQuotaCounters() {
+    Counters.QuotedLoadPercentage->Set(static_cast<ui64>(GetQuotedLoad() * 100));
+    Counters.PendingQuotaPercentage->Set(static_cast<ui64>(PendingQuota * 100));
 }
 
 TDuration TCpuQuotaManager::GetMonitoringRequestDelay() const {
@@ -103,6 +129,8 @@ void TCpuQuotaManager::UpdateCpuLoad(double instantLoad, ui64 cpuNumber, bool su
     }
 
     InstantLoad = instantLoad;
+    ExpirePendingQuota(now);
+
     // exponential moving average
     if (!Ready || delta >= Settings.AverageLoadInterval) {
         AverageLoad = InstantLoad;
@@ -116,20 +144,22 @@ void TCpuQuotaManager::UpdateCpuLoad(double instantLoad, ui64 cpuNumber, bool su
     Counters.CpuLoadRequest.Ok->Inc();
     Counters.InstantLoadPercentage->Set(static_cast<ui64>(InstantLoad * 100));
     Counters.AverageLoadPercentage->Set(static_cast<ui64>(AverageLoad * 100));
-    Counters.QuotedLoadPercentage->Set(static_cast<ui64>(GetQuotedLoad() * 100));
+    UpdateQuotaCounters();
 }
 
 bool TCpuQuotaManager::CheckLoadIsOutdated() {
     if (GetNow() - LastCpuLoad > Settings.AverageLoadInterval) {
         Ready = false;
         QuotedLoad = 0.0;
-        Counters.QuotedLoadPercentage->Set(0);
+        UpdateQuotaCounters();
     }
     return Ready;
 }
 
 bool TCpuQuotaManager::HasCpuQuota(double maxClusterLoad) {
-    LastRequestCpuQuota = GetNow();
+    const auto now = GetNow();
+    LastRequestCpuQuota = now;
+    ExpirePendingQuota(now);
     return maxClusterLoad == 0.0 || ((Ready || !Settings.Strict) && GetQuotedLoad() < maxClusterLoad);
 }
 
@@ -148,28 +178,31 @@ TCpuQuotaManager::TCpuQuotaResponse TCpuQuotaManager::RequestCpuQuota(double quo
     }
 
     QuotedLoad += quota;
-    Counters.QuotedLoadPercentage->Set(static_cast<ui64>(GetQuotedLoad() * 100));
+    PendingQuotas.push_back({GetNow() + Settings.LoadVisibilityDelay, quota});
+    PendingQuota += quota;
+    UpdateQuotaCounters();
     return TCpuQuotaResponse(GetQuotedLoad() * 100);
 }
 
 void TCpuQuotaManager::AdjustCpuQuota(double quota, TDuration duration, double cpuSecondsConsumed) {
-    if (!CpuNumber) {
-        return;
+    ExpirePendingQuota(GetNow());
+
+    // The query is over, so its whole reservation is returned. Reservations are all worth the
+    // same, so releasing the soonest expiring one is releasing this query's own.
+    if (duration < Settings.LoadVisibilityDelay && !PendingQuotas.empty()) {
+        PopPendingQuota();
     }
 
-    if (duration && duration < Settings.AverageLoadInterval / 2 && quota <= 1.0) {
-        quota = quota ? quota : Settings.DefaultQueryLoad;
-        auto load = (cpuSecondsConsumed * 1000.0 / duration.MilliSeconds()) / CpuNumber;
-        if (quota > load) {
-            auto adjustment = (quota - load) / 2;
-            if (QuotedLoad > adjustment) {
-                QuotedLoad -= adjustment;
-            } else {
-                QuotedLoad = 0.0;
-            }
-            Counters.QuotedLoadPercentage->Set(static_cast<ui64>(GetQuotedLoad() * 100));
+    if (CpuNumber && duration && duration < Settings.AverageLoadInterval / 2 && quota <= 1.0) {
+        const double queryQuota = quota ? quota : Settings.DefaultQueryLoad;
+        const double load = (cpuSecondsConsumed * 1000.0 / duration.MilliSeconds()) / CpuNumber;
+        if (queryQuota > load) {
+            const double adjustment = (queryQuota - load) / 2;
+            QuotedLoad = (QuotedLoad > adjustment) ? QuotedLoad - adjustment : 0.0;
         }
     }
+
+    UpdateQuotaCounters();
 }
 
 }  // namespace NKikimr::NWorkloadManager

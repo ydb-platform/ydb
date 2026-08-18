@@ -6,6 +6,8 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
+#include <deque>
+
 
 namespace NKikimr::NWorkloadManager {
 
@@ -21,6 +23,7 @@ class TCpuQuotaManager {
         ::NMonitoring::TDynamicCounters::TCounterPtr InstantLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr AverageLoadPercentage;
         ::NMonitoring::TDynamicCounters::TCounterPtr QuotedLoadPercentage;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PendingQuotaPercentage;
 
         explicit TCounters(const ::NMonitoring::TDynamicCounterPtr& subComponent);
 
@@ -73,6 +76,17 @@ protected:
     virtual TInstant GetNow() const;
 
 private:
+    // Quota reserved for a query that was admitted but whose load is not yet visible
+    // in the measured cluster load
+    struct TPendingQuota {
+        TInstant ExpireAt;
+        double Quota;
+    };
+
+    void PopPendingQuota();
+    void ExpirePendingQuota(TInstant now);
+    void UpdateQuotaCounters();
+
     TCounters Counters;
     TSettings Settings;
     ui64 CpuNumber = 0;
@@ -85,6 +99,9 @@ private:
     double AverageLoad = 0.0;
     double QuotedLoad = 0.0;
     bool Ready = false;
+
+    std::deque<TPendingQuota> PendingQuotas;
+    double PendingQuota = 0.0;
 };
 
 }  // namespace NKikimr::NWorkloadManager

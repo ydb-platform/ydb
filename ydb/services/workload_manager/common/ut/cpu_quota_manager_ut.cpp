@@ -105,6 +105,80 @@ Y_UNIT_TEST_SUITE(CpuQuotaManager) {
         UNIT_ASSERT(manager.TryStartQuery());
         UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD + settings.DefaultQueryLoad, 1e-9);
     }
+
+    Y_UNIT_TEST(ReservationReleasedOnFinish) {
+        TCpuQuotaManager::TSettings settings;
+        settings.EnableLoadReservations = true;
+        TTestCpuQuotaManager manager(settings);
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT(manager.TryStartQuery());
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD + settings.DefaultQueryLoad, 1e-9);
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.FinishQuery(TDuration::Seconds(1));
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD, 1e-9);
+    }
+
+    Y_UNIT_TEST(ReservationExpiresForLongQuery) {
+        TCpuQuotaManager::TSettings settings;
+        settings.EnableLoadReservations = true;
+        TTestCpuQuotaManager manager(settings);
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT(manager.TryStartQuery());
+
+        // A query longer than the visibility delay is already accounted for by the measurement,
+        // its reservation is dropped by expiration rather than by the finish event
+        manager.FinishQuery(TDuration::Seconds(30));
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD + settings.DefaultQueryLoad, 1e-9);
+
+        manager.Advance(settings.LoadVisibilityDelay);
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD, 1e-9);
+    }
+
+    // YQ-5528: with reservations the quoted load stays tied to the measured one instead of
+    // drifting away, so a steady stream of long queries does not strangle admission
+    Y_UNIT_TEST(QuotedLoadFollowsMeasuredLoad) {
+        TCpuQuotaManager::TSettings settings;
+        settings.EnableLoadReservations = true;
+        TTestCpuQuotaManager manager(settings);
+
+        for (int i = 0; i < 60; ++i) {
+            manager.Advance(TDuration::Seconds(1));
+            manager.MeasureLoad(BACKGROUND_LOAD);
+            if (manager.TryStartQuery()) {
+                manager.FinishQuery(TDuration::Seconds(30));
+            }
+            UNIT_ASSERT_LE(manager.GetQuotedLoad(), MAX_CLUSTER_LOAD + settings.DefaultQueryLoad);
+        }
+
+        manager.Advance(settings.LoadVisibilityDelay);
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD, 1e-9);
+    }
+
+    Y_UNIT_TEST(SwitchingOffReservationsDoesNotStallAdmission) {
+        TCpuQuotaManager::TSettings settings;
+        settings.EnableLoadReservations = true;
+        TTestCpuQuotaManager manager(settings);
+
+        for (int i = 0; i < 60; ++i) {
+            manager.Advance(TDuration::Seconds(1));
+            manager.MeasureLoad(BACKGROUND_LOAD);
+            if (manager.TryStartQuery()) {
+                manager.FinishQuery(TDuration::Seconds(30));
+            }
+        }
+
+        settings.EnableLoadReservations = false;
+        manager.UpdateSettings(settings);
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD, 1e-9);
+        UNIT_ASSERT(manager.TryStartQuery());
+    }
 }
 
 }  // namespace NKikimr::NWorkloadManager

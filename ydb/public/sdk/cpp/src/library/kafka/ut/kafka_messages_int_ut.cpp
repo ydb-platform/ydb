@@ -484,6 +484,30 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
             yexception,
             "had invalid length");
     }
+
+    Y_UNIT_TEST(ReadableCheckEofDoesNotOverflow) {
+        TBuffer buf("x", 1);
+        TKafkaReadable readable(buf);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(readable.take(Max<size_t>()), yexception, "unexpected end of stream");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(readable.skip(Max<size_t>()), yexception, "unexpected end of stream");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(readable.Bytes(Max<size_t>()), yexception, "unexpected end of stream");
+
+        char unused = 0;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(readable.read(&unused, Max<size_t>()), yexception, "unexpected end of stream");
+        UNIT_ASSERT_VALUES_EQUAL(readable.take(0), 'x');
+        UNIT_ASSERT_EXCEPTION_CONTAINS(readable.take(1), yexception, "unexpected end of stream");
+    }
+
+    Y_UNIT_TEST(ReadableLeftIsZeroOnEmptyBuffer) {
+        TBuffer buf;
+        TKafkaReadable readable(buf);
+
+        UNIT_ASSERT_VALUES_EQUAL(readable.left(), 0u);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(readable.take(0), yexception, "unexpected end of stream");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(readable.skip(1), yexception, "unexpected end of stream");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(readable.Bytes(1), yexception, "unexpected end of stream");
+    }
 }
 
 } // namespace

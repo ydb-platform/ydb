@@ -142,19 +142,16 @@ proctype Waker() {
     byte previous_reductions;
     byte taken_tokens_to_sleep;
     byte taken_tokens_to_wakeup;
-    byte previous_sleeping_count;
+    byte eligible_sleepers;
     byte activations;
     byte sleep_workers;
     bool found;
 
     do
     :: waker_pending ->
-        /* SleepingCount is temporarily owned by the waker. Producers which
-         * publish during this window deliberately observe zero. */
-        atomic {
-            previous_sleeping_count = sleeping_count;
-            sleeping_count = 0
-        };
+        /* SleepingCount is withdrawn while the waker recomputes it. Producers
+         * which publish during this window deliberately observe zero. */
+        sleeping_count = 0;
 
         waker_pending = false;
         desired = suggested_thread_count;
@@ -176,6 +173,11 @@ proctype Waker() {
          * the number of workers outside Sleep, and sleep_workers is the total
          * number of workers in Sleep. */
         atomic {
+            assert((thread_count + remaining_reductions)
+                + taken_tokens_to_sleep >= awake_workers);
+            eligible_sleepers = ((thread_count + remaining_reductions)
+                + taken_tokens_to_sleep) - awake_workers;
+
             if
             :: desired > thread_count ->
                 delta = desired - thread_count;
@@ -197,8 +199,6 @@ proctype Waker() {
 
                 /* Growth makes existing sleepers eligible for wakeup without
                  * assigning that eligibility to concrete worker identities. */
-                assert(sleep_workers >= previous_sleeping_count + delta);
-                previous_sleeping_count = previous_sleeping_count + delta;
                 delta = 0
 
             :: desired < thread_count ->
@@ -214,10 +214,9 @@ proctype Waker() {
                 /* Retire already sleeping slots before asking an awake worker
                  * to claim a new reduction token. */
                 if
-                :: previous_sleeping_count < delta -> converted = previous_sleeping_count
+                :: eligible_sleepers < delta -> converted = eligible_sleepers
                 :: else -> converted = delta
                 fi;
-                previous_sleeping_count = previous_sleeping_count - converted;
                 delta = delta - converted;
                 remaining_reductions = remaining_reductions + delta;
                 delta = 0
@@ -225,7 +224,12 @@ proctype Waker() {
             :: else -> skip
             fi;
             thread_count = desired;
-            converted = 0
+            assert((thread_count + remaining_reductions)
+                + taken_tokens_to_sleep >= awake_workers);
+            assert(((thread_count + remaining_reductions)
+                + taken_tokens_to_sleep) - awake_workers <= sleep_workers);
+            converted = 0;
+            eligible_sleepers = 0
         };
 
         activations = activation_credits;
@@ -261,7 +265,6 @@ proctype Waker() {
                         :: state[i] == SPIN ->
                             state[i] = SLEEP;
                             awake_workers--;
-                            previous_sleeping_count++;
                             sleep_workers++
                         :: else ->
                             assert(state[i] == NONE || state[i] == WORK)
@@ -283,7 +286,6 @@ proctype Waker() {
                         atomic {
                             state[i] = SLEEP;
                             awake_workers--;
-                            previous_sleeping_count++;
                             sleep_workers++;
                             taken_tokens_to_wakeup--
                         }
@@ -309,7 +311,8 @@ proctype Waker() {
          * eligible sleeping slot because worker identities are symmetric. */
         i = 0;
         do
-        :: activations > 0 && previous_sleeping_count > 0 ->
+        :: activations > 0 && ((thread_count + remaining_reductions)
+                + taken_tokens_to_sleep) > awake_workers ->
             found = false;
             i = 0;
             do
@@ -319,7 +322,6 @@ proctype Waker() {
                     atomic {
                         state[i] = NONE;
                         awake_workers++;
-                        previous_sleeping_count--;
                         sleep_workers--;
                         activations--;
                         found = true
@@ -338,13 +340,19 @@ proctype Waker() {
 
         /* Publish both the remaining reductions and the baseline used to
          * detect claims on the next pass. The baseline is waker-local. */
-        assert(awake_workers + previous_sleeping_count == thread_count
-            + remaining_reductions + taken_tokens_to_sleep);
+        assert((thread_count + remaining_reductions)
+            + taken_tokens_to_sleep >= awake_workers);
+        eligible_sleepers = ((thread_count + remaining_reductions)
+            + taken_tokens_to_sleep) - awake_workers;
+        assert(eligible_sleepers <= sleep_workers);
         atomic {
             reductions = remaining_reductions;
             previous_reductions = remaining_reductions
         };
-        sleeping_count = previous_sleeping_count;
+        atomic {
+            sleeping_count = eligible_sleepers;
+            eligible_sleepers = 0
+        };
 
         /* Deliberately omitted for now so Spin can expose the missed-wakeup
          * race this reload is intended to close:
@@ -356,7 +364,6 @@ proctype Waker() {
 
         check_safety();
         atomic {
-            assert(previous_sleeping_count <= sleep_workers);
             assert(awake_workers == N - sleep_workers)
         }
     od

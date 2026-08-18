@@ -73,7 +73,7 @@ byte waker_passes = 0;
 byte waker_i = 0;
 byte waker_budget = 0;
 byte waker_final = NONE;
-byte waker_desired = N;
+byte waker_desired = 0;
 byte waker_delta = 0;
 byte waker_converted = 0;
 bool waker_found = false;
@@ -95,6 +95,17 @@ inline check_local_safety() {
         assert(cancelled_claimed_reductions <= claimed_reductions);
         assert(activation_credits <= MAX_QUEUE);
         assert(queued_activations <= activation_credits);
+        if
+        :: waker_passes == 0 ->
+            assert(waker_i == 0);
+            assert(waker_budget == 0);
+            assert(waker_final == NONE);
+            assert(waker_desired == 0);
+            assert(waker_delta == 0);
+            assert(waker_converted == 0);
+            assert(!waker_found)
+        :: else -> skip
+        fi;
         if
         :: waker_worker_id < N ->
             assert(state[waker_worker_id] == WAKER ||
@@ -273,7 +284,11 @@ proctype Worker(byte id) {
             fi
         :: else -> break
         od;
-        assert(done)
+        atomic {
+            assert(done);
+            owner = 0;
+            done = false
+        }
 
     :: state[id] == WAKER && waker_worker_id == id ->
         atomic {
@@ -522,6 +537,13 @@ proctype Worker(byte id) {
 
         atomic {
             assert(waker_passes == 1);
+            waker_i = 0;
+            waker_budget = 0;
+            waker_final = NONE;
+            waker_desired = 0;
+            waker_delta = 0;
+            waker_converted = 0;
+            waker_found = false;
             waker_passes = 0
         };
 
@@ -635,7 +657,13 @@ proctype Producer() {
         fi;
 
         check_local_safety();
-        round++
+        atomic {
+            owner = 0;
+            i = 0;
+            notify = false;
+            done = false;
+            round++
+        }
     :: else -> break
     od
 }
@@ -680,7 +708,12 @@ proctype Controller() {
          * one. This makes a lost resize request observable independently of
          * later controller updates. */
         thread_count == suggested_thread_count;
-        round++
+        atomic {
+            owner = 0;
+            i = 0;
+            notified = false;
+            round++
+        }
     :: else -> break
     od
 }

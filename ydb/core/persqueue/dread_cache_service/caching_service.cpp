@@ -8,6 +8,7 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/persqueue_utils.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -32,6 +33,11 @@ i32 GetDataChunkCodec(const NKikimrPQClient::TDataChunk& proto) {
 #define PQ_CPROXY_LOG_E(message) LOG_ERROR_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
 #define PQ_CPROXY_LOG_A(message) LOG_ALERT_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << message);
 
+void SetKafkaBatchBaseOffsetIfNeeded(NKikimrPQClient::TDataChunk& proto, ui64 offset) {
+    if (GetDataChunkCodec(proto) == Ydb::Topic::CODEC_KAFKA_BATCH) {
+        NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), offset);
+    }
+}
 
 class TPQDirectReadCacheService : public TActorBootstrapped<TPQDirectReadCacheService> {
 public:
@@ -475,6 +481,7 @@ private:
             if (!proto.has_codec()) {
                 proto.set_codec(NPersQueueCommon::RAW);
             }
+            SetKafkaBatchBaseOffsetIfNeeded(proto, r.GetOffset());
 
             TString sourceId;
             if (!r.GetSourceId().empty()) {

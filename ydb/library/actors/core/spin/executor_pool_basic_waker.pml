@@ -162,6 +162,7 @@ proctype Waker() {
     byte taken_tokens_to_sleep;
     byte taken_tokens_to_wakeup;
     byte eligible_sleepers;
+    byte previous_activations;
     byte activations;
     byte sleep_workers;
     bool found;
@@ -181,9 +182,15 @@ proctype Waker() {
         atomic {
             remaining_reductions = reductions;
             reductions = 0;
+            assert(remaining_reductions <= N);
+            assert(previous_reductions <= N);
+            assert(taken_tokens_to_sleep <= N);
+            assert(taken_tokens_to_wakeup <= N);
             assert(previous_reductions >= remaining_reductions);
+            assert(taken_tokens_to_sleep + previous_reductions <= N);
             taken_tokens_to_sleep = (taken_tokens_to_sleep
                 + previous_reductions) - remaining_reductions;
+            assert(taken_tokens_to_sleep <= N);
             previous_reductions = 0
         };
 
@@ -206,6 +213,7 @@ proctype Waker() {
                 :: else -> converted = delta
                 fi;
                 taken_tokens_to_sleep = taken_tokens_to_sleep - converted;
+                assert(taken_tokens_to_wakeup + converted <= N);
                 taken_tokens_to_wakeup = taken_tokens_to_wakeup + converted;
                 delta = delta - converted;
 
@@ -227,6 +235,7 @@ proctype Waker() {
                 :: else -> converted = delta
                 fi;
                 taken_tokens_to_wakeup = taken_tokens_to_wakeup - converted;
+                assert(taken_tokens_to_sleep + converted <= N);
                 taken_tokens_to_sleep = taken_tokens_to_sleep + converted;
                 delta = delta - converted;
 
@@ -237,6 +246,7 @@ proctype Waker() {
                 :: else -> converted = delta
                 fi;
                 delta = delta - converted;
+                assert(remaining_reductions + delta <= N);
                 remaining_reductions = remaining_reductions + delta;
                 delta = 0
 
@@ -247,11 +257,17 @@ proctype Waker() {
                 + taken_tokens_to_sleep >= awake_workers);
             assert(((thread_count + remaining_reductions)
                 + taken_tokens_to_sleep) - awake_workers <= sleep_workers);
+            assert(taken_tokens_to_sleep <= N);
+            assert(taken_tokens_to_wakeup <= N);
+            assert(remaining_reductions <= N);
+            assert(sleep_workers <= N);
+            assert(awake_workers <= N);
             converted = 0;
             eligible_sleepers = 0
         };
 
-        activations = activation_credits;
+        previous_activations = activation_credits;
+        activations = previous_activations;
 
         /* Resolve every active worker once. activations is a local budget: a
          * NONE worker, or a worker which leaves SPIN by itself, consumes one
@@ -282,6 +298,8 @@ proctype Waker() {
                     atomic {
                         if
                         :: state[i] == SPIN ->
+                            assert(awake_workers > 0);
+                            assert(sleep_workers < N);
                             state[i] = SLEEP;
                             awake_workers--;
                             sleep_workers++
@@ -303,6 +321,8 @@ proctype Waker() {
                         activations--
                     :: activations == 0 ->
                         atomic {
+                            assert(awake_workers > 0);
+                            assert(sleep_workers < N);
                             state[i] = SLEEP;
                             awake_workers--;
                             sleep_workers++;
@@ -313,6 +333,8 @@ proctype Waker() {
                 :: taken_tokens_to_wakeup == 0 ->
                     assert(taken_tokens_to_sleep > 0);
                     atomic {
+                        assert(awake_workers > 0);
+                        assert(sleep_workers < N);
                         state[i] = SLEEP;
                         awake_workers--;
                         sleep_workers++;
@@ -339,6 +361,8 @@ proctype Waker() {
                 :: i < N && !found ->
                     if
                     :: state[i] == SLEEP ->
+                        assert(awake_workers < N);
+                        assert(sleep_workers > 0);
                         state[i] = NONE;
                         awake_workers++;
                         sleep_workers--;
@@ -370,13 +394,10 @@ proctype Waker() {
             eligible_sleepers = 0
         };
 
-        /* Deliberately omitted for now so Spin can expose the missed-wakeup
-         * race this reload is intended to close:
-         *
-         * previous_activations = activations; // before scanning workers
-         * if (activation_credits > previous_activations)
-         *     request_waker();
-         */
+        if
+        :: activation_credits > previous_activations -> request_waker()
+        :: else -> skip
+        fi;
 
         check_safety();
         atomic {

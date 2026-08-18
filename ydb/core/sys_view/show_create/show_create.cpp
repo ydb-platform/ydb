@@ -1,7 +1,7 @@
-#include "create_external_data_source_formatter.h"
-#include "create_external_table_formatter.h"
-#include "create_table_formatter.h"
-#include "create_view_formatter.h"
+#include "formatters/create_external_data_source_formatter.h"
+#include "formatters/create_external_table_formatter.h"
+#include "formatters/create_table_formatter.h"
+#include "formatters/create_view_formatter.h"
 #include "show_create.h"
 
 #include <ydb/core/base/tablet_pipe.h>

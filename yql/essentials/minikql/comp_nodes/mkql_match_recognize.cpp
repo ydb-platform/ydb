@@ -159,11 +159,11 @@ public:
         bool validPartitionHandler = in.Read<bool>();
         if (validPartitionHandler) {
             NUdf::TUnboxedValue key = PartitionKeyPacker_.Unpack(CurPartitionPackedKey_, SerializerContext_.Ctx.HolderFactory);
-            PartitionHandler_.reset(new TStreamingMatchRecognize(
+            PartitionHandler_ = std::make_unique<TStreamingMatchRecognize>(
                 std::move(key),
                 Parameters_,
                 RowsFormatterState_,
-                RowPatternConfiguration_));
+                RowPatternConfiguration_);
             PartitionHandler_->Load(in);
         }
         bool validDelayedRow = in.Read<bool>();
@@ -227,11 +227,11 @@ public:
             InputRowArg_->SetValue(ctx, NUdf::TUnboxedValue(temp));
             auto partitionKey = PartitionKey_->GetValue(ctx);
             CurPartitionPackedKey_ = PartitionKeyPacker_.Pack(partitionKey);
-            PartitionHandler_.reset(new TStreamingMatchRecognize(
+            PartitionHandler_ = std::make_unique<TStreamingMatchRecognize>(
                 std::move(partitionKey),
                 Parameters_,
                 RowsFormatterState_,
-                RowPatternConfiguration_));
+                RowPatternConfiguration_);
             PartitionHandler_->ProcessInputRow(std::move(temp), ctx);
         }
         if (Terminating_) {

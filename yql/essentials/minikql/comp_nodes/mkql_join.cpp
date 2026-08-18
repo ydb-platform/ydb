@@ -92,7 +92,7 @@ public:
             return false;
         }
 
-        FileState_.reset(new TFileState);
+        FileState_ = std::make_unique<TFileState>();
         OpenWrite();
         for (ui32 i = 0; i < Count_; ++i) {
             Write(std::move(InMemory(i)));
@@ -277,7 +277,7 @@ private:
 
     void OpenWrite() {
         Logger_->Log(LogComponent_, NUdf::ELogLevel::Info, TStringBuilder() << "Spill started at " << Count_ << " items to " << FileState_->File.GetName());
-        FileState_->Output.reset(new TFixedBufferFileOutput(FileState_->File.GetName()));
+        FileState_->Output = std::make_unique<TFixedBufferFileOutput>(FileState_->File.GetName());
         FileState_->Output->SetFlushPropagateMode(false);
         FileState_->Output->SetFinishPropagateMode(false);
     }
@@ -294,7 +294,7 @@ private:
 
     void OpenRead() {
         FileState_->Input.reset();
-        FileState_->Input.reset(new TFileInput(FileState_->File.GetName()));
+        FileState_->Input = std::make_unique<TFileInput>(FileState_->File.GetName());
     }
 
     NUdf::TUnboxedValue Read(TComputationContext& ctx) {
@@ -1515,7 +1515,7 @@ public:
             return false;
         }
 
-        FileState_.reset(new TFileState);
+        FileState_ = std::make_unique<TFileState>();
         OpenWrite();
         for (ui32 i = 0; i < Count_; ++i) {
             Write(std::move(InMemory(i)));
@@ -1652,7 +1652,7 @@ private:
 
     void OpenWrite() {
         Logger_->Log(LogComponent_, NUdf::ELogLevel::Info, TStringBuilder() << "Spill started at " << Count_ << " items to " << FileState_->File.GetName());
-        FileState_->Output.reset(new TFixedBufferFileOutput(FileState_->File.GetName()));
+        FileState_->Output = std::make_unique<TFixedBufferFileOutput>(FileState_->File.GetName());
         FileState_->Output->SetFlushPropagateMode(false);
         FileState_->Output->SetFinishPropagateMode(false);
     }
@@ -1669,7 +1669,7 @@ private:
 
     void OpenRead() {
         FileState_->Input.reset();
-        FileState_->Input.reset(new TFileInput(FileState_->File.GetName()));
+        FileState_->Input = std::make_unique<TFileInput>(FileState_->File.GetName());
     }
 
     NUdf::TUnboxedValue Read() {

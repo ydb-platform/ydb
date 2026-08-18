@@ -290,8 +290,23 @@ void TChangeSender::SendPreparedRecords(ui64 partitionId) {
     sender.Ready = false;
     ReadySenders--;
 
-    sender.Pending.reserve(sender.Prepared.size());
-    for (const auto& record : sender.Prepared) {
+    TVector<IChangeRecord::TPtr> toSend;
+    TVector<IChangeRecord::TPtr> rest;
+    bool seenBroadcast = false;
+    for (auto& record : sender.Prepared) {
+        if (seenBroadcast) {
+            rest.push_back(std::move(record));
+            continue;
+        }
+        if (record->IsBroadcast()) {
+            seenBroadcast = true;
+        }
+        toSend.push_back(std::move(record));
+    }
+    sender.Prepared = std::move(rest);
+
+    sender.Pending.reserve(toSend.size());
+    for (const auto& record : toSend) {
         if (!record->IsBroadcast()) {
             sender.Pending.emplace_back(record->GetOrder(), record->GetBody().size());
             MemUsage -= record->GetBody().size();
@@ -301,7 +316,7 @@ void TChangeSender::SendPreparedRecords(ui64 partitionId) {
     }
 
     Y_ABORT_UNLESS(sender.ActorId);
-    ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::exchange(sender.Prepared, {})));
+    ActorOps->Send(sender.ActorId, new TEvChangeExchange::TEvRecords(std::move(toSend)));
 }
 
 void TChangeSender::OnGone(ui64 partitionId) {

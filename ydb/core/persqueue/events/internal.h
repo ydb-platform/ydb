@@ -301,6 +301,8 @@ struct TEvPQ {
             bool IgnoreQuotaDeadline;
             // If specified, Data will contain heartbeat's data
             std::optional<TRowVersion> HeartbeatVersion;
+            // If specified, Data will contain schema change's data
+            std::optional<TRowVersion> SchemaChangeVersion;
 
             // For Kafka deduplication:
             bool EnableKafkaDeduplication = false;

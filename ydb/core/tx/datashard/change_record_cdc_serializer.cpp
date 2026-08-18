@@ -41,7 +41,11 @@ class TBaseSerializer: public IChangeRecordSerializer {
     void SerializeSchemaChange(TCmdWrite& cmd, const TChangeRecord& record) {
         auto data = MakeDataChunk();
         FillDataChunk(data, record);
-        cmd.SetData(data.SerializeAsString());
+
+        auto& schemaChange = *cmd.MutableSchemaChange();
+        schemaChange.SetStep(record.GetStep());
+        schemaChange.SetTxId(record.GetTxId());
+        schemaChange.SetData(data.SerializeAsString());
     }
 
     void SerializeHeartbeat(TCmdWrite& cmd, const TChangeRecord& record) {

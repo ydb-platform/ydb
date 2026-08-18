@@ -63,7 +63,8 @@ TPartitionSourceManager::TModificationBatch::TModificationBatch(TPartitionSource
     : Manager(manager)
     , Node(Manager.GetPartitionNode())
     , SourceIdWriter(format)
-    , HeartbeatEmitter(Manager.Partition.SourceIdStorage) {
+    , HeartbeatEmitter(Manager.Partition.SourceIdStorage)
+    , SchemaChangeEmitter(Manager.Partition.SourceIdStorage) {
 }
 
 TPartitionSourceManager::TModificationBatch::~TModificationBatch() {
@@ -71,6 +72,10 @@ TPartitionSourceManager::TModificationBatch::~TModificationBatch() {
 
 TMaybe<THeartbeat> TPartitionSourceManager::TModificationBatch::CanEmitHeartbeat() const {
     return HeartbeatEmitter.CanEmit();
+}
+
+TMaybe<TSchemaChangeInfo> TPartitionSourceManager::TModificationBatch::CanEmitSchemaChange() const {
+    return SchemaChangeEmitter.CanEmit();
 }
 
 TPartitionSourceManager::TSourceManager TPartitionSourceManager::TModificationBatch::GetSource(const TString& id) {
@@ -163,6 +168,15 @@ void TPartitionSourceManager::TSourceManager::Update(ui64 seqNo, ui64 offset, TI
 
 void TPartitionSourceManager::TSourceManager::Update(THeartbeat&& heartbeat) {
     Batch.HeartbeatEmitter.Process(SourceId, std::move(heartbeat));
+}
+
+void TPartitionSourceManager::TSourceManager::Update(TSchemaChangeInfo&& schemaChange) {
+    Batch.SchemaChangeEmitter.Process(SourceId, TSchemaChangeInfo(schemaChange));
+    if (InMemory != MemoryStorage().end()) {
+        Batch.SourceIdWriter.RegisterSourceId(SourceId, InMemory->second.Updated(std::move(schemaChange)));
+    } else if (InWriter != WriteStorage().end()) {
+        Batch.SourceIdWriter.RegisterSourceId(SourceId, InWriter->second.Updated(std::move(schemaChange)));
+    }
 }
 
 

@@ -309,6 +309,47 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
         {"responsesSize", Responses.size()});
     const auto now = ctx.Now();
 
+    const auto committedSchemaChange = Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
+    for (auto it = PendingSchemaChangeResponses.begin(); it != PendingSchemaChangeResponses.end(); ) {
+        auto& pending = *it;
+        if (!pending.IsWrite()) {
+            ++it;
+            continue;
+        }
+        const auto& writeResponse = pending.GetWrite();
+        const auto& scVersion = writeResponse.Msg.SchemaChangeVersion;
+        if (!scVersion || *scVersion > committedSchemaChange) {
+            ++it;
+            continue;
+        }
+
+        const TDuration queueTime = pending.QueueTime;
+        const TDuration writeTime = now - pending.WriteTimeBaseline;
+        const TString& s = writeResponse.Msg.SourceId;
+        const ui64 seqNo = writeResponse.Msg.SeqNo;
+        const ui16 partNo = writeResponse.Msg.PartNo;
+        const ui16 totalParts = writeResponse.Msg.TotalParts;
+        const TMaybe<i16>& producerEpoch = writeResponse.Msg.ProducerEpoch;
+
+        auto sit = SourceIdStorage.GetInMemorySourceIds().find(s);
+        ui64 maxSeqNo = sit != SourceIdStorage.GetInMemorySourceIds().end() ? sit->second.SeqNo : 0;
+        ui64 maxOffset = sit != SourceIdStorage.GetInMemorySourceIds().end() ? sit->second.Offset : 0;
+
+        if (sit != SourceIdStorage.GetInMemorySourceIds().end() && partNo + 1 == totalParts) {
+            SourceIdStorage.RegisterSourceId(s, sit->second.Updated(
+                seqNo, maxOffset, CurrentTimestamp,
+                TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data}, producerEpoch));
+        }
+
+        ui64 replyOffset = CalculateReplyOffset(false, writeResponse.Msg.EnableKafkaDeduplication, maxOffset, maxOffset, maxSeqNo, seqNo);
+        ReplyWrite(
+            ctx, writeResponse.Cookie, s, seqNo, partNo, totalParts,
+            replyOffset, CurrentTimestamp, false, maxSeqNo,
+            PartitionQuotaWaitTimeForCurrentBlob, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime, pending.Span
+        );
+        it = PendingSchemaChangeResponses.erase(it);
+    }
+
     ui64 offset = BlobEncoder.EndOffset;
     while (!Responses.empty()) {
         auto& response = Responses.front();
@@ -361,17 +402,41 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             if (!already && partNo + 1 == totalParts) {
                 if (it == SourceIdStorage.GetInMemorySourceIds().end()) {
                     PQ_ENSURE(!writeResponse.Msg.HeartbeatVersion);
+                    PQ_ENSURE(!writeResponse.Msg.SchemaChangeVersion);
                     TabletCounters.Cumulative()[COUNTER_PQ_SID_CREATED].Increment(1);
                     SourceIdStorage.RegisterSourceId(s, seqNo, offset, CurrentTimestamp, producerEpoch);
                 } else if (const auto& hbVersion = writeResponse.Msg.HeartbeatVersion) {
                     SourceIdStorage.RegisterSourceId(s, it->second.Updated(
                         seqNo, offset, CurrentTimestamp, THeartbeat{*hbVersion, writeResponse.Msg.Data}, producerEpoch));
+                } else if (const auto& scVersion = writeResponse.Msg.SchemaChangeVersion) {
+                    // Persist LastSchemaChange without bumping SeqNo until the write is actually ACKed.
+                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(
+                        TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data}));
                 } else {
                     SourceIdStorage.RegisterSourceId(s, it->second.Updated(
                         seqNo, offset, CurrentTimestamp, producerEpoch));
                 }
 
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_OK].Increment(1);
+            }
+
+            const auto& scVersion = writeResponse.Msg.SchemaChangeVersion;
+            if (scVersion) {
+                const auto committed = Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
+                if (*scVersion > committed) {
+                    PendingSchemaChangeResponses.emplace_back(std::move(response));
+                    Responses.pop_front();
+                    continue;
+                }
+
+                if (!already && partNo + 1 == totalParts) {
+                    it = SourceIdStorage.GetInMemorySourceIds().find(s);
+                    if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
+                        SourceIdStorage.RegisterSourceId(s, it->second.Updated(
+                            seqNo, offset, CurrentTimestamp,
+                            TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data}, producerEpoch));
+                    }
+                }
             }
 
             ui64 replyOffset = CalculateReplyOffset(already, writeResponse.Msg.EnableKafkaDeduplication, maxOffset, offset, maxSeqNo, seqNo);
@@ -395,7 +460,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             if (PartitionWriteQuotaWaitCounter && !writeResponse.Internal) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
-            if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion) {
+            if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion && !writeResponse.Msg.SchemaChangeVersion) {
                 offset += writeResponse.Msg.LogicalMessageCount;
             }
         } else if (response.IsOwnership()) {
@@ -1397,6 +1462,34 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         return true;
     }
 
+    if (const auto& scVersion = p.Msg.SchemaChangeVersion) {
+        if (!sourceId.SeqNo()) {
+            CancelOneWriteOnWrite(ctx,
+                                    TStringBuilder() << "Cannot apply schema change on unknown sourceId: " << EscapeC(p.Msg.SourceId),
+                                    p,
+                                    NPersQueue::NErrorCode::BAD_REQUEST);
+            return false;
+        }
+        if (!sourceId.Explicit()) {
+            CancelOneWriteOnWrite(ctx,
+                                    TStringBuilder() << "Cannot apply schema change on implicit sourceId: " << EscapeC(p.Msg.SourceId),
+                                    p,
+                                    NPersQueue::NErrorCode::BAD_REQUEST);
+            return false;
+        }
+
+        YDB_LOG_DEBUG("Topic partition process schema change sourceId version",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"topicName", TopicName()},
+            {"partition", Partition},
+            {"sourceId", EscapeC(p.Msg.SourceId)},
+            {"scVersion", *scVersion});
+
+        sourceId.Update(TSchemaChangeInfo{*scVersion, p.Msg.Data});
+
+        return true;
+    }
+
     if (poffset < curOffset) { //too small offset
         CancelOneWriteOnWrite(ctx,
                                 TStringBuilder() << "write message sourceId: " << EscapeC(p.Msg.SourceId) <<
@@ -1934,6 +2027,41 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
             ExecRequest(hbMsg, *Parameters, PersistRequest.Get());
 
             LastEmittedHeartbeat = heartbeat->Version;
+        }
+    }
+
+    if (const auto schemaChange = SourceIdBatch->CanEmitSchemaChange()) {
+        const auto committed = Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
+        if (schemaChange->Version > committed) {
+            YDB_LOG_INFO("Topic partition emit schema change",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"topicName", TopicName()},
+                {"partition", Partition},
+                {"version", schemaChange->Version});
+
+            auto scMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
+                .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletId)),
+                .SeqNo = 0, // we don't use SeqNo because we disable deduplication
+                .PartNo = 0,
+                .TotalParts = 1,
+                .TotalSize = static_cast<ui32>(schemaChange->Data.size()),
+                .CreateTimestamp = CurrentTimestamp.MilliSeconds(),
+                .ReceiveTimestamp = CurrentTimestamp.MilliSeconds(),
+                .DisableDeduplication = true,
+                .WriteTimestamp = CurrentTimestamp.MilliSeconds(),
+                .Data = schemaChange->Data,
+                .UncompressedSize = 0,
+                .PartitionKey = {},
+                .ExplicitHashKey = {},
+                .External = false,
+                .IgnoreQuotaDeadline = true,
+                .HeartbeatVersion = std::nullopt,
+            }, std::nullopt};
+
+            WriteInflightSize += schemaChange->Data.size();
+            ExecRequest(scMsg, *Parameters, PersistRequest.Get());
+
+            LastEmittedSchemaChange = schemaChange->Version;
         }
     }
 

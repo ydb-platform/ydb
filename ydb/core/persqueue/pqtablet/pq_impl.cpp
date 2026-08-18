@@ -2084,7 +2084,11 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "no SeqNo";
         } else if (cmd.HasData() && cmd.HasHeartbeat()) {
             errorStr = "Data and Heartbeat are mutually exclusive";
-        } else if (cmd.GetData().empty() && cmd.GetHeartbeat().GetData().empty()) {
+        } else if (cmd.HasData() && cmd.HasSchemaChange()) {
+            errorStr = "Data and SchemaChange are mutually exclusive";
+        } else if (cmd.HasHeartbeat() && cmd.HasSchemaChange()) {
+            errorStr = "Heartbeat and SchemaChange are mutually exclusive";
+        } else if (cmd.GetData().empty() && cmd.GetHeartbeat().GetData().empty() && cmd.GetSchemaChange().GetData().empty()) {
             errorStr = "empty Data";
         } else if ((!cmd.HasSourceId() || cmd.GetSourceId().empty()) && !req.GetIsDirectWrite() && !cmd.GetDisableDeduplication()) {
             errorStr = "empty SourceId";
@@ -2114,6 +2118,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "Too big Heartbeat";
         } else if (cmd.HasHeartbeat() && cmd.HasTotalParts() && cmd.GetTotalParts() != 1) {
             errorStr = "Heartbeat must be a single-part message";
+        } else if (cmd.HasSchemaChange() && cmd.HasTotalParts() && cmd.GetTotalParts() != 1) {
+            errorStr = "SchemaChange must be a single-part message";
         } else if (cmd.GetData().size() > pqConfig.GetMaxMessageSizeBytes()) {
             errorStr = TStringBuilder() << "Too big message. Max message size is " << pqConfig.GetMaxMessageSizeBytes()
                 << " bytes, but got " << cmd.GetData().size() << " bytes";
@@ -2162,6 +2168,11 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             heartbeatVersion.emplace(cmd.GetHeartbeat().GetStep(), cmd.GetHeartbeat().GetTxId());
         }
 
+        std::optional<TRowVersion> schemaChangeVersion;
+        if (cmd.HasSchemaChange()) {
+            schemaChangeVersion.emplace(cmd.GetSchemaChange().GetStep(), cmd.GetSchemaChange().GetTxId());
+        }
+
         if (cmd.GetData().size() > mSize) {
             if (cmd.HasPartNo()) {
                 ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -2205,6 +2216,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                     .External = cmd.GetExternalOperation(),
                     .IgnoreQuotaDeadline = cmd.GetIgnoreQuotaDeadline(),
                     .HeartbeatVersion = heartbeatVersion,
+                    .SchemaChangeVersion = schemaChangeVersion,
                     .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                     .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
                     .MessageDeduplicationId = deduplicationId,
@@ -2229,10 +2241,16 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder()
                 << "Too big heartbeat message, must be at most " << mSize << ", but got " << cmd.GetHeartbeat().GetData().size());
             return;
+        } else if (cmd.GetSchemaChange().GetData().size() > mSize) {
+            ReplyError(ctx, responseCookie, NPersQueue::NErrorCode::BAD_REQUEST, TStringBuilder()
+                << "Too big schema change message, must be at most " << mSize << ", but got " << cmd.GetSchemaChange().GetData().size());
+            return;
         } else {
             ui32 totalSize = cmd.GetData().size();
             if (cmd.HasHeartbeat()) {
                 totalSize = cmd.GetHeartbeat().GetData().size();
+            } else if (cmd.HasSchemaChange()) {
+                totalSize = cmd.GetSchemaChange().GetData().size();
             }
             if (cmd.HasTotalSize()) {
                 totalSize = cmd.GetTotalSize();
@@ -2240,7 +2258,9 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
 
             const auto& data = cmd.HasHeartbeat()
                 ? cmd.GetHeartbeat().GetData()
-                : cmd.GetData();
+                : cmd.HasSchemaChange()
+                    ? cmd.GetSchemaChange().GetData()
+                    : cmd.GetData();
 
             msgs.push_back({
                 .SourceId = cmd.GetSourceId(),
@@ -2260,6 +2280,7 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
                 .External = cmd.GetExternalOperation(),
                 .IgnoreQuotaDeadline = cmd.GetIgnoreQuotaDeadline(),
                 .HeartbeatVersion = heartbeatVersion,
+                .SchemaChangeVersion = schemaChangeVersion,
                 .EnableKafkaDeduplication = cmd.GetEnableKafkaDeduplication(),
                 .ProducerEpoch = (cmd.HasProducerEpoch() ? TMaybe<i32>(cmd.GetProducerEpoch()) : Nothing()),
                 .MessageDeduplicationId = std::move(deduplicationId),

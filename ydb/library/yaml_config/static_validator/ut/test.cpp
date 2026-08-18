@@ -346,6 +346,57 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         }
         UNIT_ASSERT(!validator.Validate(makeConfig(30, "IO")).Ok());
     }
+
+    Y_UNIT_TEST(ExecutorPlacement) {
+        auto validator = TMapBuilder()
+            .Field("actor_system_config", ActorSystemConfigBuilder())
+            .CreateValidator();
+        auto makeConfig = [](TStringBuf name, TStringBuf executorFields, TStringBuf actorSystemFields = {}) {
+            return ::TStringBuilder()
+                << "actor_system_config:\n"
+                << "  executor:\n"
+                << "  - name: " << name << "\n"
+                << executorFields
+                << actorSystemFields
+                << "  scheduler:\n"
+                << "    progress_threshold: 10000\n"
+                << "    resolution: 64\n"
+                << "    spin_threshold: 0\n";
+        };
+
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "BS0",
+            "    threads: 3\n"
+            "    placement: 1\n"
+            "    type: BASIC\n"))));
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "IO",
+            "    threads: 1\n"
+            "    placement: 0\n"
+            "    type: IO\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    placement: 0\n"
+            "    type: BASIC\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    threads: 1\n"
+            "    placement: -1\n"
+            "    type: BASIC\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "BS",
+            "    threads: 1\n"
+            "    placement: 0\n"
+            "    affinity:\n"
+            "      cpu_list: 0-1\n"
+            "    type: BASIC\n")).Ok());
+
+    }
+
 }
 
 } // namesapce NKikimr

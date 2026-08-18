@@ -509,7 +509,8 @@ namespace NActors {
                 return count;
             };
 
-            i64 budget = Max<i64>(ActivationCredits.load(std::memory_order_acquire) - countSearchingWorkers(), 0);
+            const i64 previousActivationCredits = ActivationCredits.load(std::memory_order_acquire);
+            i64 budget = Max<i64>(previousActivationCredits - countSearchingWorkers(), 0);
             i16 newlySleeping = 0;
 
             for (i16 workerId : Waker->ActiveWorkers) {
@@ -528,9 +529,6 @@ namespace NActors {
                 SleepingCount.fetch_add(newlySleeping, std::memory_order_release);
             }
 
-            // This reload closes the race where a producer publishes a credit
-            // before the waker publishes the corresponding sleeping worker.
-            budget = Max<i64>(ActivationCredits.load(std::memory_order_acquire) - countSearchingWorkers(), 0);
             while (budget > 0) {
                 bool wokeWorker = false;
                 for (size_t idx = Waker->SleepingStack.size(); idx > 0; --idx) {
@@ -549,6 +547,12 @@ namespace NActors {
                 if (!wokeWorker) {
                     break;
                 }
+            }
+
+            // A producer may publish a credit before the corresponding
+            // sleeping worker becomes visible through SleepingCount.
+            if (ActivationCredits.load(std::memory_order_acquire) > previousActivationCredits) {
+                RequestWaker();
             }
         }
     }

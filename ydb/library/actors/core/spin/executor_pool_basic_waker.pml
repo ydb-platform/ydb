@@ -103,6 +103,14 @@ proctype Worker(byte id) {
             request_waker()
         fi
 
+    :: state[id] == SPIN && activation_credits > 0 ->
+        atomic {
+            if
+            :: state[id] == SPIN && activation_credits > 0 -> state[id] = NONE
+            :: else -> skip
+            fi
+        }
+
     /* BLOCKING and SLEEP are parked; only the waker changes them. */
     od
 }
@@ -262,46 +270,14 @@ proctype Waker() {
         previous_activations = activation_credits;
         activations = previous_activations;
 
-        /* Resolve every active worker once. activations is a local budget: a
-         * NONE worker, or a worker which leaves SPIN by itself, consumes one
-         * unit without reserving the corresponding queue item. */
+        /* Resolve workers which claimed reductions published by an earlier
+         * pass. Reductions for the new target are not visible yet, so a
+         * worker which becomes BLOCKING after this loop is deferred until the
+         * next waker pass, matching the ordering in WakerLoop(). */
         i = 0;
         do
         :: i < N ->
             if
-            :: state[i] == NONE ->
-                if
-                :: activations > 0 -> activations--
-                :: else -> skip
-                fi
-
-            :: state[i] == SPIN ->
-                if
-                :: activations > 0 ->
-                    atomic {
-                        if
-                        :: state[i] == SPIN -> state[i] = NONE
-                        :: else ->
-                            assert(state[i] == NONE || state[i] == WORK)
-                        fi
-                    };
-                    activations--
-
-                :: activations == 0 ->
-                    atomic {
-                        if
-                        :: state[i] == SPIN ->
-                            assert(awake_workers > 0);
-                            assert(sleep_workers < N);
-                            state[i] = SLEEP;
-                            awake_workers--;
-                            sleep_workers++
-                        :: else ->
-                            assert(state[i] == NONE || state[i] == WORK)
-                        fi
-                    }
-                fi
-
             :: state[i] == BLOCKING ->
                 if
                 :: taken_tokens_to_wakeup > 0 ->
@@ -341,6 +317,65 @@ proctype Waker() {
         :: else -> break
         od;
 
+        /* C++ publishes CheckToSleepWorkers before it computes the activation
+         * budget and scans SPIN workers. Claims made from this publication are
+         * intentionally handled by the next pass. */
+        atomic {
+            reductions = remaining_reductions;
+            previous_reductions = remaining_reductions
+        };
+
+        /* Resolve every active worker once. activations is a local budget: a
+         * NONE worker, or a worker which leaves SPIN by itself, consumes one
+         * unit without reserving the corresponding queue item. */
+        i = 0;
+        do
+        :: i < N ->
+            if
+            :: state[i] == NONE ->
+                if
+                :: activations > 0 -> activations--
+                :: else -> skip
+                fi
+
+            :: state[i] == SPIN ->
+                if
+                :: activations > 0 ->
+                    atomic {
+                        if
+                        :: state[i] == SPIN ->
+                            state[i] = NONE;
+                            activations--
+                        :: else ->
+                            assert(state[i] == NONE || state[i] == WORK || state[i] == BLOCKING);
+                            if
+                            :: state[i] == NONE || state[i] == WORK -> activations--
+                            :: state[i] == BLOCKING -> skip
+                            fi
+                        fi
+                    }
+
+                :: activations == 0 ->
+                    atomic {
+                        if
+                        :: state[i] == SPIN ->
+                            assert(awake_workers > 0);
+                            assert(sleep_workers < N);
+                            state[i] = SLEEP;
+                            awake_workers--;
+                            sleep_workers++
+                        :: else ->
+                            assert(state[i] == NONE || state[i] == WORK || state[i] == BLOCKING)
+                        fi
+                    }
+                fi
+
+            :: else -> skip
+            fi;
+            i++
+        :: else -> break
+        od;
+
         /* Only the waker mutates SLEEP. Any sleeping worker may consume an
          * eligible sleeping slot because worker identities are symmetric. */
         i = 0;
@@ -371,16 +406,15 @@ proctype Waker() {
         :: else -> break
         od;
 
-        /* Publish both the remaining reductions and the baseline used to
-         * detect claims on the next pass. The baseline is waker-local. */
+        /* Recompute the number of eligible sleepers. Reductions were already
+         * published before the worker scan; previous_reductions remains the
+         * baseline used to detect claims on the next pass. */
         atomic {
             assert((thread_count + remaining_reductions)
                 + taken_tokens_to_sleep >= awake_workers);
             eligible_sleepers = ((thread_count + remaining_reductions)
                 + taken_tokens_to_sleep) - awake_workers;
-            assert(eligible_sleepers <= sleep_workers);
-            reductions = remaining_reductions;
-            previous_reductions = remaining_reductions
+            assert(eligible_sleepers <= sleep_workers)
         };
         atomic {
             sleeping_count = eligible_sleepers;

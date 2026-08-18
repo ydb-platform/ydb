@@ -104,6 +104,50 @@ inline publish_waker_final(id, final, published) {
     }
 }
 
+/* Make one non-blocking attempt to request a waker pass. The owner load is
+ * deliberately outside atomic: the model must preserve the completion race
+ * between observing waker_worker_id and forwarding the request. */
+inline try_request_waker(owner, candidate, notified, require_sleepers) {
+    notified = false;
+    owner = waker_worker_id;
+    if
+    :: owner < N ->
+        atomic {
+            if
+            :: state[owner] == WAKER ->
+                state[owner] = NEED_TO_BE_WAKER;
+                notified = true
+            :: state[owner] == NEED_TO_BE_WAKER ->
+                notified = true
+            :: else -> skip
+            fi
+        }
+
+    :: owner == INVALID_WAKER ->
+        if
+        :: !require_sleepers || sleeping_count > 0 ->
+            candidate = 0;
+            do
+            :: candidate < N && !notified ->
+                atomic {
+                    if
+                    :: waker_worker_id == INVALID_WAKER &&
+                            (state[candidate] == SPIN ||
+                                state[candidate] == BLOCKING ||
+                                state[candidate] == SLEEP) ->
+                        state[candidate] = NEED_TO_BE_WAKER;
+                        notified = true
+                    :: else -> skip
+                    fi
+                };
+                candidate++
+            :: else -> break
+            od
+        :: require_sleepers && sleeping_count == 0 -> skip
+        fi
+    fi
+}
+
 proctype Worker(byte id) {
     byte owner;
     byte i;
@@ -483,7 +527,6 @@ proctype Producer() {
     byte round = 0;
     bool notify;
     bool done;
-    bool found;
 
     do
     :: round < PRODUCER_ROUNDS ->
@@ -511,72 +554,39 @@ proctype Producer() {
             done = false;
             do
             :: !done ->
-                owner = waker_worker_id;
+                try_request_waker(owner, i, done, true);
                 if
-                :: owner < N ->
-                    atomic {
-                        if
-                        :: state[owner] == WAKER ->
-                            state[owner] = NEED_TO_BE_WAKER;
-                            done = true
-                        :: state[owner] == NEED_TO_BE_WAKER ->
-                            done = true
-                        :: else -> skip
-                        fi
-                    }
-
-                :: owner == INVALID_WAKER ->
+                :: done -> skip
+                :: !done && owner < N -> skip
+                :: !done && owner == INVALID_WAKER ->
                     if
                     :: sleeping_count > 0 ->
-                        found = false;
+                        /* An eligible sleeper may already be between its
+                         * candidate transition and index publication. */
                         i = 0;
                         do
-                        :: i < N && !found ->
-                            atomic {
-                                if
-                                :: waker_worker_id == INVALID_WAKER &&
-                                        (state[i] == SPIN ||
-                                            state[i] == BLOCKING ||
-                                            state[i] == SLEEP) ->
-                                    state[i] = NEED_TO_BE_WAKER;
-                                    found = true;
-                                    done = true
-                                :: else -> skip
-                                fi
-                            };
+                        :: i < N && !done ->
+                            if
+                            :: resume_state[i] == SLEEP &&
+                                    (state[i] == NEED_TO_BE_WAKER ||
+                                        state[i] == WAKER) ->
+                                done = true
+                            :: else -> skip
+                            fi;
                             i++
                         :: else -> break
                         od;
                         if
-                        :: found -> skip
-                        :: !found ->
-                            /* A counted sleeper may already be between its
-                             * candidate transition and index publication. */
-                            i = 0;
-                            do
-                            :: i < N && !done ->
+                        :: done -> skip
+                        :: else ->
+                            atomic {
                                 if
-                                :: resume_state[i] == SLEEP &&
-                                        (state[i] == NEED_TO_BE_WAKER ||
-                                            state[i] == WAKER) ->
+                                :: waker_worker_id == INVALID_WAKER ->
+                                    waker_pending = false;
                                     done = true
                                 :: else -> skip
-                                fi;
-                                i++
-                            :: else -> break
-                            od;
-                            if
-                            :: done -> skip
-                            :: else ->
-                                atomic {
-                                    if
-                                    :: waker_worker_id == INVALID_WAKER ->
-                                        waker_pending = false;
-                                        done = true
-                                    :: else -> skip
-                                    fi
-                                }
-                            fi
+                                fi
+                            }
                         fi
 
                     :: sleeping_count == 0 ->
@@ -606,7 +616,7 @@ proctype Controller() {
     byte round = 0;
     byte owner;
     byte i;
-    bool found;
+    bool notified;
 
     do
     :: round < CONTROLLER_ROUNDS ->
@@ -618,36 +628,7 @@ proctype Controller() {
             waker_pending = true
         };
 
-        owner = waker_worker_id;
-        if
-        :: owner < N ->
-            atomic {
-                if
-                :: state[owner] == WAKER ->
-                    state[owner] = NEED_TO_BE_WAKER
-                :: state[owner] == NEED_TO_BE_WAKER -> skip
-                :: else -> skip
-                fi
-            }
-        :: owner == INVALID_WAKER ->
-            found = false;
-            i = 0;
-            do
-            :: i < N && !found ->
-                atomic {
-                    if
-                    :: waker_worker_id == INVALID_WAKER &&
-                            (state[i] == SPIN || state[i] == BLOCKING ||
-                                state[i] == SLEEP) ->
-                        state[i] = NEED_TO_BE_WAKER;
-                        found = true
-                    :: else -> skip
-                    fi
-                };
-                i++
-            :: else -> break
-            od
-        fi;
+        try_request_waker(owner, i, notified, false);
         round++
     :: else -> break
     od

@@ -558,7 +558,7 @@ void TDataShardUserDb::CommitChanges(const TTableId& tableId, ui64 lockId) {
     }
 
     if (VolatileTxId) {
-        YDB_LOG_TRACE("Scheduling commit of",
+        YDB_LOG_TRACE("Scheduling commit",
             {"lockId", lockId},
             {"localTid", localTid},
             {"shard", Self.TabletID()});

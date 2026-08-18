@@ -142,12 +142,12 @@ public:
             Result->Record.SetLastKeyInclusive(ShardFinished ? ShardEnd.Inclusive : true);
             Result->Record.SetEndOfShard(ShardFinished);
 
-            YDB_LOG_DEBUG("Read columns scan result for table rows, bytes (event size",
+            YDB_LOG_DEBUG("Read columns scan result",
                 {"tabletId", TabletId},
                 {"tableName", TableName},
                 {"rows", Rows},
                 {"bytes", Bytes},
-                {"blocksCount", Result->Record.GetBlocks().size()},
+                {"eventsSize", Result->Record.GetBlocks().size()},
                 {"shardFinished", ShardFinished});
         } else {
             YDB_LOG_NOTICE("Read columns scan failed for table",
@@ -227,9 +227,9 @@ public:
             return true;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "Read",
+        YDB_LOG_DEBUG_CTX(ctx, "Read columns",
             {"tabletId", Self->TabletID()},
-            {"columns", Ev->Get()->Record});
+            {"record", Ev->Get()->Record});
 
         if (Self->State != TShardState::Ready &&
             Self->State != TShardState::Readonly)

@@ -205,10 +205,10 @@ void TDataShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, 
 
         const bool outOfSpace = domainDescription.GetDomainState().GetDiskQuotaExceeded();
 
-        YDB_LOG_DEBUG_CTX(ctx, "Discovered subdomain state, outOfSpace at datashard",
+        YDB_LOG_DEBUG_CTX(ctx, "Discovered subdomain state",
             {"pathId", msg->PathId},
             {"outOfSpace", outOfSpace},
-            {"tabletID", TabletID()});
+            {"tabletId", TabletID()});
 
         Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
 

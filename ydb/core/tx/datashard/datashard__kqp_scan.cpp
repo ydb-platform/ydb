@@ -80,7 +80,7 @@ public:
         }
 
         for (auto& range : TableRanges) {
-            YDB_LOG_TRACE("--> Scan",
+            YDB_LOG_TRACE("--> Scan range",
                 {"range", DebugPrintRange(TableInfo->KeyColumnTypes, range.ToTableRange(), *AppData()->TypeRegistry)});
         }
     }
@@ -110,7 +110,7 @@ private:
             {"scanId", ScanId},
             {"table", TablePath},
             {"gen", ev->Get()->Generation},
-            {"tablet", DatashardActorId},
+            {"tabletId", DatashardActorId},
             {"freeSpace", ev->Get()->FreeSpace},
             {"chunksLimiter", ChunksLimiter.DebugString()});
 
@@ -152,7 +152,7 @@ private:
         auto prio = msg.GetStatusCode() == NYql::NDqProto::StatusIds::SUCCESS ? NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_WARN;
         YDB_LOG(prio, "Got AbortExecution",
             {"at", ScanActorId},
-            {"tablet", DatashardActorId},
+            {"tabletId", DatashardActorId},
             {"scanId", ScanId},
             {"table", TablePath},
             {"code", NYql::NDqProto::StatusIds_StatusCode_Name(msg.GetStatusCode())},
@@ -171,7 +171,7 @@ private:
         YDB_LOG_ERROR("Undelivered",
             {"event", ev->GetTypeRewrite()},
             {"at", ScanActorId},
-            {"tablet", DatashardActorId},
+            {"tabletId", DatashardActorId},
             {"scanId", ScanId},
             {"table", TablePath});
 
@@ -225,7 +225,7 @@ private:
 
         YDB_LOG_INFO("Start scan",
             {"at", ScanActorId},
-            {"tablet", DatashardActorId},
+            {"tabletId", DatashardActorId},
             {"scanId", ScanId},
             {"table", TablePath},
             {"gen", Generation},
@@ -238,7 +238,7 @@ private:
         YQL_ENSURE(seq == CurrentRange);
 
         if (CurrentRange == TableRanges.size()) {
-            YDB_LOG_DEBUG("TableRanges is",
+            YDB_LOG_DEBUG("TableRanges is over",
                 {"at", ScanActorId},
                 {"scanId", ScanId},
                 {"table", TablePath});
@@ -317,7 +317,7 @@ private:
     }
 
     EScan Exhausted() override {
-        YDB_LOG_DEBUG("Range of exhausted: try next one. next",
+        YDB_LOG_DEBUG("Range exhausted: try next one",
             {"currentRange", CurrentRange},
             {"tableRangesCount", TableRanges.size()},
             {"table", TablePath},
@@ -474,14 +474,14 @@ private:
 
             PageFaults = 0;
 
-            YDB_LOG_DEBUG("Send ScanData page",
+            YDB_LOG_DEBUG("Send ScanData",
                 {"from", ScanActorId},
                 {"to", ComputeActorId},
                 {"scanId", ScanId},
                 {"table", TablePath},
                 {"bytes", sendBytes},
                 {"rows", Rows},
-                {"faults", Result->PageFaults},
+                {"pageFaults", Result->PageFaults},
                 {"finished", Result->Finished},
                 {"pageFault", Result->PageFault});
 

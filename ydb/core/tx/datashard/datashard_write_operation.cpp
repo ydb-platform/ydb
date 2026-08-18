@@ -54,7 +54,7 @@ TValidatedWriteTx::TValidatedWriteTx(TDataShard* self, ui64 globalTxId, TInstant
 
     NKikimrTxDataShard::TKqpTransaction::TDataTaskMeta meta;
 
-    YDB_LOG_TRACE("Parsing write transaction for",
+    YDB_LOG_TRACE("Parsing write transaction",
         {"globalTxId", globalTxId},
         {"tabletId", TabletId},
         {"record", record.ShortDebugString()});
@@ -259,7 +259,7 @@ void TValidatedWriteTxOperation::SetTxKeys(const TUserTable& tableInfo, ui64 tab
         YDB_LOG_TRACE("Table write point",
             {"tablePath", tableInfo.Path},
             {"shard", tabletId},
-            {"key", DebugPrintPoint(tableInfo.KeyColumnTypes, keyCells, *AppData()->TypeRegistry)});
+            {"writePoint", DebugPrintPoint(tableInfo.KeyColumnTypes, keyCells, *AppData()->TypeRegistry)});
 
         TTableRange tableRange(keyCells);
         keyValidator.AddWriteRange(TableId, tableRange, tableInfo.KeyColumnTypes, columnsWrites, isErase);
@@ -513,7 +513,7 @@ void TWriteOperation::ReleaseTxData(NTabletFlatExecutor::TTxMemoryProviderBase& 
     LocksCache().Locks.clear();
     ArtifactFlags = 0;
 
-    YDB_LOG_DEBUG("Tx at released its data",
+    YDB_LOG_DEBUG("Tx at tablet released its data",
         {"txId", GetTxId()},
         {"tabletId", TabletId});
 }
@@ -536,9 +536,9 @@ void TWriteOperation::DbStoreLocksAccessLog(NTable::TDatabase& txcDb)
     TStringBuf vecData(vecDataStart, vecDataSize);
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
-    YDB_LOG_TRACE("Storing locks for",
-        {"vectorSize", vec.size()},
-        {"txid", GetTxId()},
+    YDB_LOG_TRACE("Storing locks",
+        {"locksCount", vec.size()},
+        {"txId", GetTxId()},
         {"tabletId", TabletId});
 }
 
@@ -549,9 +549,9 @@ void TWriteOperation::DbStoreArtifactFlags(NTable::TDatabase& txcDb)
     NIceDb::TNiceDb db(txcDb);
     db.Table<Schema::TxArtifacts>().Key(GetTxId()).Update<Schema::TxArtifacts::Flags>(ArtifactFlags);
 
-    YDB_LOG_TRACE("Storing for",
+    YDB_LOG_TRACE("Storing artifactflags for tx",
         {"artifactflags", ArtifactFlags},
-        {"txid", GetTxId()},
+        {"txId", GetTxId()},
         {"tabletId", TabletId});
 }
 
@@ -615,7 +615,7 @@ ERestoreDataStatus TWriteOperation::RestoreTxData(TDataShard* self, NTable::TDat
 
     ReleasedTxDataSize = 0;
 
-    YDB_LOG_DEBUG("Tx at restored its data",
+    YDB_LOG_DEBUG("Tx at tablet restored its data",
         {"txId", GetTxId()},
         {"tabletId", self->TabletID()});
 
@@ -822,7 +822,7 @@ void TWriteOperation::UntrackMemory() const {
 void TWriteOperation::SetError(const NKikimrDataEvents::TEvWriteResult::EStatus& status, const TString& errorMsg) {
     SetAbortedFlag();
     WriteResult = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletId, GetTxId(), status, errorMsg);
-    YDB_LOG_INFO("Write transaction at has an",
+    YDB_LOG_INFO("Write transaction has an error",
         {"txId", GetTxId()},
         {"tabletId", TabletId},
         {"error", errorMsg});

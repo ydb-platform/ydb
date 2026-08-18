@@ -21,7 +21,7 @@ public:
         auto& record = Ev->Get()->Record;
 
         if (!Self->IsStateActive()) {
-            YDB_LOG_WARN_CTX(ctx, "Vacuum tx at non-ready tablet state requested",
+            YDB_LOG_WARN_CTX(ctx, "Vacuum tx at non-ready tablet",
                 {"tabletId", Self->TabletID()},
                 {"state", Self->State},
                 {"sender", Ev->Sender});
@@ -33,8 +33,8 @@ public:
         }
 
         if (Self->Executor()->HasLoanedParts()) {
-            YDB_LOG_WARN_CTX(ctx, "Vacuum of has borrowed parts requested",
-                {"tablet", Self->TabletID()},
+            YDB_LOG_WARN_CTX(ctx, "Vacuum: has borrowed parts",
+                {"tabletId", Self->TabletID()},
                 {"sender", Ev->Sender});
             Response = std::make_unique<TEvDataShard::TEvVacuumResult>(
                 record.GetVacuumGeneration(),
@@ -50,11 +50,11 @@ public:
         }
 
         if (lastGen >= record.GetVacuumGeneration()) {
-            YDB_LOG_DEBUG_CTX(ctx, "Vacuum of for requested generation requested already completed last persisted Vacuum",
-                {"tablet", Self->TabletID()},
-                {"vacuumGeneration", record.GetVacuumGeneration()},
-                {"from", Ev->Sender},
-                {"generation", lastGen});
+            YDB_LOG_DEBUG_CTX(ctx, "Vacuum already completed",
+                {"tabletId", Self->TabletID()},
+                {"requestedGeneration", record.GetVacuumGeneration()},
+                {"sender", Ev->Sender},
+                {"lastPersistedGeneration", lastGen});
             Response = std::make_unique<TEvDataShard::TEvVacuumResult>(
                 lastGen,
                 Self->TabletID(),
@@ -63,8 +63,8 @@ public:
         }
 
         if (Self->GetSnapshotManager().RemoveExpiredSnapshots(ctx.Now(), txc)) {
-            YDB_LOG_DEBUG_CTX(ctx, "Vacuum of expired snapshots removed",
-                {"tablet", Self->TabletID()});
+            YDB_LOG_DEBUG_CTX(ctx, "Vacuum: expired snapshots removed",
+                {"tabletId", Self->TabletID()});
         }
         Self->OutReadSets.Cleanup(db, ctx);
 
@@ -109,9 +109,9 @@ public:
             ctx.Send(waiterIt->second, std::move(response));
             waiterIt = Self->VacuumWaiters.erase(waiterIt);
         }
-        YDB_LOG_DEBUG_CTX(ctx, "Updated last Vacuum of last persisted Vacuum",
-            {"tablet", Self->TabletID()},
-            {"generation", VacuumGeneration});
+        YDB_LOG_DEBUG_CTX(ctx, "Updated last Vacuum",
+            {"tabletId", Self->TabletID()},
+            {"lastPersistedGeneration", VacuumGeneration});
     }
 };
 

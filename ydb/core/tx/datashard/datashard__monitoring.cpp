@@ -17,7 +17,7 @@ namespace NKikimr::NDataShard {
 
 void TDataShard::HandleMonIndexPage(NMon::TEvRemoteHttpInfo::TPtr& ev) {
     YDB_LOG_DEBUG("HTTP request",
-        {"tabletID", TabletID()},
+        {"tabletId", TabletID()},
         {"url", ev->Get()->PathInfo()});
 
     TString blob;

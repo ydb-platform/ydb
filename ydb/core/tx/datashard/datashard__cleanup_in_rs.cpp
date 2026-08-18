@@ -45,7 +45,7 @@ public:
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "Removing outdated read sets",
-            {"removed", removed},
+            {"removedCount", removed},
             {"tabletId", Self->TabletID()});
 
         return true;
@@ -65,7 +65,7 @@ public:
 
         if (!Self->InRSToRemove.empty()) {
             YDB_LOG_DEBUG_CTX(ctx, "Schedule TEvPrivate::TEvRemoveOldInReadSets",
-                {"REMOVALINTERVAL", REMOVAL_INTERVAL});
+                {"removalInterval", REMOVAL_INTERVAL});
 
             auto shardCtx = ctx.MakeFor(Self->SelfId());
             shardCtx.Schedule(REMOVAL_INTERVAL, new TEvPrivate::TEvRemoveOldInReadSets);
@@ -143,7 +143,7 @@ public:
 
         if (!Self->InRSToRemove.empty()) {
             YDB_LOG_DEBUG_CTX(ctx, "Schedule TEvPrivate::TEvRemoveOldInReadSets",
-                {"REMOVALINTERVAL", REMOVAL_INTERVAL});
+                {"removalInterval", REMOVAL_INTERVAL});
 
             auto shardCtx = ctx.MakeFor(Self->SelfId());
             shardCtx.Schedule(REMOVAL_INTERVAL, new TEvPrivate::TEvRemoveOldInReadSets);

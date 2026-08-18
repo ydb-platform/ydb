@@ -12,9 +12,9 @@ namespace NKikimr::NDataShard {
     {}
 
     bool TDataShard::TTxReadSet::Execute(TTransactionContext &txc, const TActorContext &ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "TTxReadSet::Execute at got read",
+         YDB_LOG_DEBUG_CTX(ctx, "TTxReadSet::Execute",
             {"tabletId", Self->TabletID()},
-            {"set", Ev->Get()->ToString().data()});
+            {"readSet", Ev->Get()->ToString().data()});
 
         DoExecute(txc, ctx);
 
@@ -59,7 +59,7 @@ namespace NKikimr::NDataShard {
         if (!Self->IsStateActive()) {
             /// @warning Ack and allow sender to forget readset.
             /// It's possible till readsets can't passwthough splits-merges or other shard mutations.
-            YDB_LOG_WARN_CTX(ctx, "Allow sender to lose readset, state",
+            YDB_LOG_WARN_CTX(ctx, "Allow sender to lose readset",
                 {"state", state},
                 {"tabletId", Self->TabletID()},
                 {"msg", msg});
@@ -99,7 +99,7 @@ namespace NKikimr::NDataShard {
             YDB_LOG_DEBUG_CTX(ctx, "Send RS",
                 {"replyType", Ack && NoDataReply ? "Ack+Reply" : Ack ? "Ack" : "Reply"},
                 {"tabletId", Self->TabletID()},
-                {"eventString", Ev->Get()->ToString().data()});
+                {"readSet", Ev->Get()->ToString().data()});
 
             struct TSendState : public TThrRefBase {
                 TDataShard* Self;

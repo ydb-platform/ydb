@@ -24,12 +24,12 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxActivateChangeSender Execute",
             {"origin", Origin},
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         if (!Self->ReceiveActivationsFrom.contains(Origin)) {
             YDB_LOG_DEBUG_CTX(ctx, "Ignoring received activation",
                 {"origin", Origin},
-                {"tablet", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             return true;
         }
 
@@ -45,7 +45,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxActivateChangeSender Complete",
             {"origin", Origin},
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         auto ev = MakeHolder<TEvChangeExchange::TEvActivateSenderAck>();
         ev->Record.SetOrigin(Self->TabletID());
@@ -85,7 +85,7 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxActivateChangeSenderAck Execute",
             {"origin", Origin},
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         Self->ChangeSenderActivator.Ack(Origin, ctx);
         AllDstAcksReceived = Self->ChangeSenderActivator.AllAcked();
@@ -99,7 +99,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxActivateChangeSenderAck Complete",
             {"origin", Origin},
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         if (AllDstAcksReceived && Self->SrcAckPartitioningChangedTo) {
             Self->Execute(Self->CreateTxSplitPartitioningChanged(std::move(Self->SrcAckPartitioningChangedTo)), ctx);

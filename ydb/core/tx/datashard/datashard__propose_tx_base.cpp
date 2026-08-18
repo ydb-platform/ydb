@@ -147,7 +147,7 @@ bool TDataShard::TTxProposeTransactionBase::Execute(NTabletFlatExecutor::TTransa
         return true;
     } catch (const TNotReadyTabletException &) {
         YDB_LOG_DEBUG_CTX(ctx, "TX can't prepare (tablet's not ready) at tablet",
-            {"0", 0},
+            {"step", 0},
             {"txId", TxId},
             {"tabletId", Self->TabletID()});
         return false;

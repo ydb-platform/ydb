@@ -18,7 +18,7 @@ public:
         const auto& record = Ev->Get()->Record;
 
         const auto pathId = TPathId::FromProto(record.GetPathId());
-        YDB_LOG_INFO_CTX(ctx, "TEvCompactBorrowed request from for table at tablet",
+        YDB_LOG_INFO_CTX(ctx, "TEvCompactBorrowed request",
             {"sender", Ev->Sender},
             {"pathId", pathId},
             {"tabletId", Self->TabletID()});
@@ -47,7 +47,7 @@ public:
         auto waiter = MakeIntrusive<TCompactBorrowedWaiter>(Ev->Sender, pathId.LocalPathId);
 
         for (auto tableToCompact : tablesToCompact) {
-            YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table starting compaction for local table at tablet",
+            YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request: starting compaction for local table",
                 {"sender", Ev->Sender},
                 {"pathId", pathId},
                 {"tableToCompact", tableToCompact},
@@ -60,7 +60,7 @@ public:
                 waiter->CompactingTables.insert(tableToCompact);
                 Self->CompactBorrowedWaiters[tableToCompact].push_back(waiter);
             } else {
-                YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table can not be compacted at tablet",
+                YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request: can not be compacted",
                     {"sender", Ev->Sender},
                     {"pathId", pathId},
                     {"tabletId", Self->TabletID()});
@@ -68,7 +68,7 @@ public:
         }
 
         if (waiter->CompactingTables.empty()) { // none has been triggered
-            YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request from for table has no parts for borrowed compaction at tablet",
+            YDB_LOG_DEBUG_CTX(ctx, "TEvCompactBorrowed request: has no parts for borrowed compaction",
                 {"sender", Ev->Sender},
                 {"pathId", pathId},
                 {"tabletId", Self->TabletID()});

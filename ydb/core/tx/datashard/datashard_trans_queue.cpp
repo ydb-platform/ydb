@@ -181,7 +181,7 @@ bool TTransQueue::Load(NIceDb::TNiceDb& db) {
                 ui64 txId = rowset.GetValue<Schema::ScanProgress::TxId>();
                 TSchemaOperation* op = FindSchemaTx(txId);
                 if (!op) {
-                    YDB_LOG_WARN("Op was not found for persisted scan tx id on tablet",
+                    YDB_LOG_WARN("Op was not found for persisted scan tx",
                         {"txId", txId},
                         {"tabletId", Self->TabletID()});
                     continue;

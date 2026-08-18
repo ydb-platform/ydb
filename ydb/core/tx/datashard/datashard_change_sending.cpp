@@ -230,7 +230,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxRequestChangeRecords Execute",
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
         if (!Precharge(db) || !Select(db)) {
@@ -251,7 +251,7 @@ public:
             YDB_LOG_DEBUG_CTX(ctx, "Send change records",
                 {"recordsCount", records.size()},
                 {"to", to},
-                {"tablet", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvRecords(std::move(records)));
         }
 
@@ -265,7 +265,7 @@ public:
             YDB_LOG_DEBUG_CTX(ctx, "Forget change records",
                 {"recordsCount", records.size()},
                 {"to", to},
-                {"tablet", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
             ctx.Send(to, new NChangeExchange::TEvChangeExchange::TEvForgetRecords(std::move(records)));
         }
 
@@ -277,7 +277,7 @@ public:
             {"sent", sent},
             {"forgotten", forgotten},
             {"left", left},
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         Self->SetCounter(COUNTER_CHANGE_RECORDS_REQUESTED, left);
         Self->IncCounter(COUNTER_CHANGE_RECORDS_SENT, sent);
@@ -326,8 +326,8 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_INFO_CTX(ctx, "TTxRemoveChangeRecords Execute",
-            {"records", Self->ChangeRecordsToRemove.size()},
-            {"tablet", Self->TabletID()});
+            {"recordsCount", Self->ChangeRecordsToRemove.size()},
+            {"tabletId", Self->TabletID()});
 
         if (!Self->ChangeRecordsToRemove) {
             FillActivationList();
@@ -352,7 +352,7 @@ public:
         YDB_LOG_INFO_CTX(ctx, "TTxRemoveChangeRecords Complete",
             {"removed", RemovedCount},
             {"left", Self->ChangeRecordsToRemove.size()},
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         if (Self->ChangeRecordsToRemove) {
             Self->Execute(new TTxRemoveChangeRecords(Self), ctx);
@@ -393,7 +393,7 @@ public:
 
     bool Execute(TTransactionContext&, const TActorContext& ctx) override {
         YDB_LOG_NOTICE_CTX(ctx, "TTxChangeExchangeSplitAck Execute",
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         Y_ENSURE(!Self->ChangesQueue);
 
@@ -411,7 +411,7 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_NOTICE_CTX(ctx, "TTxChangeExchangeSplitAck Complete",
-            {"tablet", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         for (const auto dstTabletId : ActivationList) {
             Self->ChangeSenderActivator.DoSend(dstTabletId, ctx);

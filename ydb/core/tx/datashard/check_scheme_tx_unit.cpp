@@ -239,7 +239,7 @@ bool TCheckSchemeTxUnit::CheckSchemaVersion(TActiveTransaction *activeTx,
         {"schemeVersion", proposedSchemaVersion},
         {"currentVersion", currentSchemaVersion},
         {"expectedVersion", expectedSchemaVersion},
-        {"tablet", DataShard.TabletID()},
+        {"tabletId", DataShard.TabletID()},
         {"txId", activeTx->GetTxId()});
 
     // Allow scheme tx if proposed or current schema version is zero. This simplify migration a lot.

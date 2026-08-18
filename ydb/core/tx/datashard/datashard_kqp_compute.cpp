@@ -242,9 +242,9 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
                                          key.Reverse ? NTable::EDirection::Reverse : NTable::EDirection::Forward,
                                          GetMvccVersion()).Ready;
 
-        YDB_LOG_TRACE("Run precharge on table columns",
-            {"tableName", tableInfo->Name},
-            {"columnTags", JoinSeq(", ", columnTags)},
+        YDB_LOG_TRACE("Run precharge on table",
+            {"table", tableInfo->Name},
+            {"columns", JoinSeq(", ", columnTags)},
             {"range", DebugPrintRange(key.KeyColumnTypes, key.Range, *AppData()->TypeRegistry)},
             {"itemsLimit", key.RangeLimits.ItemsLimit},
             {"bytesLimit", key.RangeLimits.BytesLimit},

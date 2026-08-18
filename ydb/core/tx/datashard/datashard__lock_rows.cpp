@@ -250,7 +250,7 @@ TLockInfo::TPtr TDataShard::FindValidLockOwner(ui64 lockId) {
 void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev) {
     auto* msg = ev->Get();
     YDB_LOG_TRACE("Handle TEvLockRows",
-        {"tablet", TabletID()},
+        {"tabletId", TabletID()},
         {"sender", ev->Sender},
         {"requestId", msg->Record.GetRequestId()},
         {"lockId", msg->Record.GetLockId()},

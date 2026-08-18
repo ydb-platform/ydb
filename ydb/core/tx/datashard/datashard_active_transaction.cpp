@@ -81,8 +81,8 @@ TValidatedDataTx::TValidatedDataTx(TDataShard *self,
     } else {
         Y_ENSURE(Tx.HasMiniKQL());
         if (Tx.GetLlvmRuntime()) {
-            YDB_LOG_DEBUG_CTX(ctx, "Using LLVM runtime to execute",
-                {"transaction", StepTxId_.TxId});
+            YDB_LOG_DEBUG_CTX(ctx, "Using LLVM runtime to execute transaction",
+                {"txId", StepTxId_.TxId});
             EngineBay.SetUseLlvmRuntime(true);
         }
         if (Tx.HasPerShardKeysSizeLimitBytes()) {
@@ -173,7 +173,7 @@ bool TValidatedDataTx::CheckCancelled(ui64 tabletId) {
     Cancelled = Cancelled || gCancelTxFailPoint.Check(tabletId, GetTxId());
 
     if (Cancelled) {
-        YDB_LOG_NOTICE_CTX(*TActivationContext::ActorSystem(), "CANCELLED TxId",
+        YDB_LOG_NOTICE_CTX(*TActivationContext::ActorSystem(), "CANCELLED transaction",
             {"txId", GetTxId()},
             {"tabletId", tabletId});
     }
@@ -527,8 +527,8 @@ void TActiveTransaction::DbStoreLocksAccessLog(ui64 tabletId,
         .Update(NIceDb::TUpdate<Schema::TxArtifacts::Locks>(vecData));
 
     YDB_LOG_TRACE_CTX(ctx, "Storing locks",
-        {"vectorSize", vec.size()},
-        {"txid", GetTxId()},
+        {"locksCount", vec.size()},
+        {"txId", GetTxId()},
         {"tabletId", tabletId});
 }
 
@@ -542,9 +542,9 @@ void TActiveTransaction::DbStoreArtifactFlags(ui64 tabletId,
     db.Table<Schema::TxArtifacts>().Key(GetTxId())
         .Update<Schema::TxArtifacts::Flags>(ArtifactFlags);
 
-    YDB_LOG_TRACE_CTX(ctx, "Storing",
+    YDB_LOG_TRACE_CTX(ctx, "Storing artifactflags for tx",
         {"artifactflags", ArtifactFlags},
-        {"txid", GetTxId()},
+        {"txId", GetTxId()},
         {"tabletId", tabletId});
 }
 
@@ -605,7 +605,7 @@ ERestoreDataStatus TActiveTransaction::RestoreTxData(
 
     ReleasedTxDataSize = 0;
 
-    YDB_LOG_DEBUG_CTX(ctx, "Tx at restored its data",
+    YDB_LOG_DEBUG_CTX(ctx, "Tx restored its data",
         {"txId", GetTxId()},
         {"tabletId", self->TabletID()});
 

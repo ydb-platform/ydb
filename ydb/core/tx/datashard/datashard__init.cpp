@@ -911,10 +911,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     if (FollowerState.LastSysUpdate < lastSysUpdate) {
-        YDB_LOG_DEBUG_CTX(ctx, "Updating sys metadata on follower, tabletId prev current",
-            {"tabletID", TabletID()},
-            {"lastSysUpdate", FollowerState.LastSysUpdate},
-            {"lastSysUpdate", lastSysUpdate});
+        YDB_LOG_DEBUG_CTX(ctx, "Updating sys metadata on follower",
+            {"tabletId", TabletID()},
+            {"prev", FollowerState.LastSysUpdate},
+            {"current", lastSysUpdate});
 
         bool ready = true;
         ready &= SysGetUi64(db, Schema::Sys_PathOwnerId, PathOwnerId);
@@ -928,10 +928,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
     }
 
     if (FollowerState.LastSchemeUpdate < lastSchemeUpdate) {
-        YDB_LOG_DEBUG_CTX(ctx, "Updating tables metadata on follower, tabletId prev current",
-            {"tabletID", TabletID()},
-            {"lastSchemeUpdate", FollowerState.LastSchemeUpdate},
-            {"lastSchemeUpdate", lastSchemeUpdate});
+        YDB_LOG_DEBUG_CTX(ctx, "Updating tables metadata on follower",
+            {"tabletId", TabletID()},
+            {"prev", FollowerState.LastSchemeUpdate},
+            {"current", lastSchemeUpdate});
 
         struct TRow {
             TPathId TableId;
@@ -999,10 +999,10 @@ bool TDataShard::SyncSchemeOnFollower(TTransactionContext &txc, const TActorCont
 
     // N.B. follower with snapshots support may be loaded in datashard without a snapshots table
     if (FollowerState.LastSnapshotsUpdate < lastSnapshotsUpdate) {
-        YDB_LOG_DEBUG_CTX(ctx, "Updating snapshots metadata on follower, tabletId prev current",
-            {"tabletID", TabletID()},
-            {"lastSnapshotsUpdate", FollowerState.LastSnapshotsUpdate},
-            {"lastSnapshotsUpdate", lastSnapshotsUpdate});
+        YDB_LOG_DEBUG_CTX(ctx, "Updating snapshots metadata on follower",
+            {"tabletId", TabletID()},
+            {"prev", FollowerState.LastSnapshotsUpdate},
+            {"current", lastSnapshotsUpdate});
 
         NIceDb::TNiceDb db(txc.DB);
         if (!SnapshotManager.ReloadSnapshots(db)) {

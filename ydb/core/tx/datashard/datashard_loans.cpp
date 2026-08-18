@@ -41,10 +41,10 @@ public:
 
         for (const auto& batch : perTabletParts) {
             // open a pipe to the part owner and send part metadata batch
-            YDB_LOG_DEBUG_CTX(ctx, "Initiating parts return",
+            YDB_LOG_DEBUG_CTX(ctx, "Initiating parts return to target tablet",
                 {"tabletId", Self->TabletID()},
-                {"batchEnd", batch.second},
-                {"batchStart", batch.first});
+                {"parts", batch.second},
+                {"targetTabletId", batch.first});
             Self->LoanReturnTracker.ReturnLoan(batch.first, batch.second, ctx);
         }
     }
@@ -56,7 +56,7 @@ NTabletFlatExecutor::ITransaction* TDataShard::CreateTxInitiateBorrowedPartsRetu
 
 void TDataShard::CompletedLoansChanged(const TActorContext &ctx) {
     YDB_LOG_INFO_CTX(ctx, "CompletedLoansChanged",
-        {"tabletID", TabletID()});
+        {"tabletId", TabletID()});
     Y_ENSURE(Executor()->GetStats().CompactedPartLoans);
 
     CheckInitiateBorrowedPartsReturn(ctx);
@@ -83,10 +83,10 @@ public:
         for (ui32 i = 0; i < Ev->Get()->Record.PartMetadataSize(); ++i) {
             TLogoBlobID partMeta = LogoBlobIDFromLogoBlobID(Ev->Get()->Record.GetPartMetadata(i));
             PartMetaVec.push_back(partMeta);
-            YDB_LOG_DEBUG_CTX(ctx, "Got returned parts",
+            YDB_LOG_DEBUG_CTX(ctx, "Got returned parts from srcTablet",
                 {"tabletId", Self->TabletID()},
-                {"partMetaVec", PartMetaVec},
-                {"fromTabletId", FromTabletId});
+                {"parts", PartMetaVec},
+                {"srcTabletId", FromTabletId});
 
             txc.Env.CleanupLoan(partMeta, FromTabletId);
         }
@@ -97,10 +97,10 @@ public:
     void Complete(const TActorContext &ctx) override {
         // Send Ack
         TActorId ackTo = Ev->Sender;
-        YDB_LOG_DEBUG_CTX(ctx, "Ack parts return to tablet",
+        YDB_LOG_DEBUG_CTX(ctx, "Ack parts return to target tablet",
             {"tabletId", Self->TabletID()},
-            {"partMetaVec", PartMetaVec},
-            {"fromTabletId", FromTabletId});
+            {"parts", PartMetaVec},
+            {"targetTabletId", FromTabletId});
 
         ctx.Send(ackTo, new TEvDataShard::TEvReturnBorrowedPartAck(PartMetaVec), 0, Ev->Cookie);
         Self->CheckStateChange(ctx);
@@ -139,7 +139,7 @@ public:
     void Complete(const TActorContext &ctx) override {
         YDB_LOG_DEBUG_CTX(ctx, "Parts return ack processed",
             {"tabletId", Self->TabletID()},
-            {"partMetaVec", PartMetaVec});
+            {"parts", PartMetaVec});
         for (const auto& partMeta : PartMetaVec) {
             Self->LoanReturnTracker.LoanDone(partMeta, ctx);
         }
@@ -187,7 +187,7 @@ public:
         Y_ENSURE(Self->OutReadSets.Empty(), "Cannot go offline while there is a non-Ack-ed readset at tablet " << Self->TabletID());
         Y_ENSURE(Self->TransQueue.GetSchemaOperations().empty(), "Cannot go offline while there is a schema Tx in flight at tablet " << Self->TabletID());
 
-        YDB_LOG_INFO_CTX(ctx, "Initiating switch from to Offline state",
+        YDB_LOG_INFO_CTX(ctx, "Initiating switch from current state to Offline state",
             {"tabletId", Self->TabletID()},
             {"state", DatashardStateName(Self->State)});
 
@@ -225,15 +225,15 @@ void TDataShard::CheckStateChange(const TActorContext& ctx) {
             return str.Str();
         };
 
-        YDB_LOG_DEBUG_CTX(ctx, "In PreOffline state OutReadSets ChangesQueue siblings to be wait to activation",
-            {"tabletID", TabletID()},
+        YDB_LOG_DEBUG_CTX(ctx, "Tablet in PreOffline state",
+            {"tabletId", TabletID()},
             {"hasSharedBobs", HasSharedBlobs()},
             {"schemaOperations", fnListTxIds(TransQueue.GetSchemaOperations())},
-            {"count", OutReadSets.CountReadSets()},
-            {"size", ChangesQueue.size()},
+            {"outReadSetsCount", OutReadSets.CountReadSets()},
+            {"changesQueueSize", ChangesQueue.size()},
             {"changeExchangeSplit", ChangeExchangeSplitter.Done()},
-            {"activated", ChangeSenderActivator.Dump()},
-            {"from", JoinSeq(", ", ReceiveActivationsFrom)});
+            {"siblingsToBeActivated", ChangeSenderActivator.Dump()},
+            {"waitToActivationFrom", JoinSeq(", ", ReceiveActivationsFrom)});
 
         const bool hasSharedBlobs = HasSharedBlobs();
         const bool hasSchemaOps = !TransQueue.GetSchemaOperations().empty();

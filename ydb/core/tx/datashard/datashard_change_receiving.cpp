@@ -155,7 +155,7 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         if (error) {
             YDB_LOG_CRIT_CTX(ctx, "Cannot apply change record",
                 {"error", error},
-                {"tablet", Self->TabletID()});
+                {"tabletId", Self->TabletID()});
         }
 
         if (status == NKikimrChangeExchange::TEvStatus::STATUS_REJECT) {
@@ -468,7 +468,7 @@ void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TAct
     YDB_LOG_DEBUG_CTX(ctx, "Handle TEvChangeExchange::TEvApplyRecords",
         {"origin", ev->Get()->Record.GetOrigin()},
         {"generation", ev->Get()->Record.GetGeneration()},
-        {"tablet", TabletID()});
+        {"tabletId", TabletID()});
     Execute(new TTxApplyChangeRecords(this, Pipeline, ev), ctx);
 }
 

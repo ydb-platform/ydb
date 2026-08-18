@@ -2483,8 +2483,8 @@ private:
                 return size;
             };
 
-            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Sending snapshot for split opId from datashard to datashard size",
-                {"operationCookie", ev->Record.GetOperationCookie()},
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Sending snapshot for split op from srcTablet to dstTablet",
+                {"operationId", ev->Record.GetOperationCookie()},
                 {"srcTabletId", ev->Record.GetSrcTabletId()},
                 {"dstTabletId", dstTabletId},
                 {"totalSize", fnCalcTotalSize(*ev)});
@@ -3586,7 +3586,7 @@ protected:
 
     void ReportState(const TActorContext &ctx, ui32 state) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Reporting state to schemeshard",
-            {"tabletID", TabletID()},
+            {"tabletId", TabletID()},
             {"state", DatashardStateName(State)},
             {"currentSchemeShardId", CurrentSchemeShardId});
         Y_ENSURE(state != TShardState::Offline || !HasSharedBlobs(),
@@ -3622,14 +3622,14 @@ protected:
             // Don't report stats until they are build for the first time
             if (!ti.Stats.StatsUpdateTime && !IsFollower()) {
                 YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats at datashard for tableId but no stats yet",
-                    {"tabletID", TabletID()},
+                    {"tabletId", TabletID()},
                     {"tableId", tableId});
                 continue;
             }
 
             if (!DbStatsReportPipe) {
-                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats register new pipe at datashard FollowerId TableInfos size",
-                    {"tabletID", TabletID()},
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "SendPeriodicTableStats register new pipe at datashard",
+                    {"tabletId", TabletID()},
                     {"followerId", FollowerId()},
                     {"tableInfosCount", TableInfos.size()});
 
@@ -3724,8 +3724,8 @@ protected:
             if (DstSplitDescription)
                 ev->Record.SetIsDstSplit(true);
 
-            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TEvPeriodicTableStats from datashard FollowerId tableId",
-                {"tabletID", TabletID()},
+            YDB_LOG_TRACE_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "TEvPeriodicTableStats from datashard",
+                {"tabletId", TabletID()},
                 {"followerId", FollowerId()},
                 {"tableId", tableId});
             NTabletPipe::SendData(ctx, DbStatsReportPipe, ev.Release());

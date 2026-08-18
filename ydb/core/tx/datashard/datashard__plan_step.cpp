@@ -57,8 +57,8 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     }
 
     if (! IsAccepted) {
-        YDB_LOG_ERROR_CTX(ctx, "Ignore old txIds for step outdated step at tablet",
-            {"txIdList", JoinStrings(txIds.begin(), txIds.end(), ", ")},
+        YDB_LOG_ERROR_CTX(ctx, "Ignore old txIds",
+            {"txIds", JoinStrings(txIds.begin(), txIds.end(), ", ")},
             {"step", step},
             {"outdatedCleanupStep", Self->Pipeline.OutdatedCleanupStep()},
             {"tabletId", Self->TabletID()});
@@ -67,7 +67,7 @@ bool TDataShard::TTxPlanStep::Execute(TTransactionContext &txc, const TActorCont
     }
 
     for (ui64 txId : txIds) {
-        YDB_LOG_DEBUG_CTX(ctx, "Planned transaction txId at step at tablet",
+        YDB_LOG_DEBUG_CTX(ctx, "Planned transaction",
             {"txId", txId},
             {"step", step},
             {"tabletId", Self->TabletID()},
@@ -93,7 +93,7 @@ void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
     for (auto& kv : TxByAck) {
         THolder<TEvTxProcessing::TEvPlanStepAck> ack =
             MakeHolder<TEvTxProcessing::TEvPlanStepAck>(Self->TabletID(), step, kv.second.begin(), kv.second.end());
-        YDB_LOG_DEBUG_CTX(ctx, "Sending",
+        YDB_LOG_DEBUG_CTX(ctx, "Sending Ack",
             {"ack", ack->ToString()});
 
         ctx.Send(kv.first, ack.Release()); // Ack to Tx coordinator
@@ -101,7 +101,7 @@ void TDataShard::TTxPlanStep::Complete(const TActorContext &ctx) {
 
     THolder<TEvTxProcessing::TEvPlanStepAccepted> accepted =
         MakeHolder<TEvTxProcessing::TEvPlanStepAccepted>(Self->TabletID(), step);
-    YDB_LOG_DEBUG_CTX(ctx, "Sending",
+    YDB_LOG_DEBUG_CTX(ctx, "Sending accepted",
         {"accepted", accepted->ToString()});
 
     ctx.Send(Ev->Sender, accepted.Release()); // Reply to the mediator

@@ -21,8 +21,7 @@ public:
         TxId = Ev->Get()->Record.GetTxId();
 
         YDB_LOG_DEBUG_CTX(ctx, "Got TEvSchemaChangedResult from SS",
-            {"tabletId", Self->TabletID()},
-            {"dupTabletId", Self->TabletID()});
+            {"tabletId", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
         Self->Pipeline.CompleteSchemaTx(db, TxId);

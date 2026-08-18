@@ -93,12 +93,12 @@ TVector<NKikimrDataEvents::TLock> ValidateLocks(const NKikimrDataEvents::TKqpLoc
 
         auto lock = sysLocks.GetLock(lockKey);
         if (lock.Generation != lockProto.GetGeneration() || lock.Counter != lockProto.GetCounter()) {
-            YDB_LOG_TRACE("ValidateLocks: broken lock expected found",
+            YDB_LOG_TRACE("ValidateLocks: broken lock",
                 {"lockId", lockProto.GetLockId()},
-                {"lockGeneration", lockProto.GetGeneration()},
-                {"lockCounter", lockProto.GetCounter()},
-                {"lockGeneration", lock.Generation},
-                {"lockCounter", lock.Counter});
+                {"expectedGeneration", lockProto.GetGeneration()},
+                {"expectedCounter", lockProto.GetCounter()},
+                {"actualLockGeneration", lock.Generation},
+                {"actualLockCounter", lock.Counter});
             brokenLocks.emplace_back(lockProto);
         }
     }
@@ -244,7 +244,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
                 continue;
             }
 
-            YDB_LOG_TRACE("Will wait for volatile decision",
+            YDB_LOG_TRACE("Will wait for volatile decision from srcTabletId to origin",
                 {"srcTabletId", srcTabletId},
                 {"origin", origin});
 
@@ -257,7 +257,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
             ui64 srcTabletId = record.GetTabletSource();
             ui64 dstTabletId = record.GetTabletDest();
             if (dstTabletId != origin) {
-                YDB_LOG_WARN("Ignoring unexpected readset from to for at tablet",
+                YDB_LOG_WARN("Ignoring unexpected readset from srcTabletId to dstTabletId for tx at origin tablet",
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
                     {"txId", txId},
@@ -272,7 +272,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
                 Y_ENSURE(!(record.GetFlags() & NKikimrTx::TEvReadSet::FLAG_EXPECT_READSET), "Unexpected FLAG_EXPECT_READSET + FLAG_NO_DATA in delayed readsets");
 
                 // No readset data: participant aborted the transaction
-                YDB_LOG_TRACE("Processed readset without data from to will abort",
+                YDB_LOG_TRACE("Processed readset without data from srcTabletId to dstTabletId, will abort tx",
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
                     {"txId", txId});
@@ -286,7 +286,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
 
             if (data.GetDecision() != NKikimrTx::TReadSetData::DECISION_COMMIT) {
                 // Explicit decision that is not a commit, need to abort
-                YDB_LOG_TRACE("Processed decision",
+                YDB_LOG_TRACE("Processed decision from srcTabletId to dstTabletId for tx",
                     {"decision", ui32(data.GetDecision())},
                     {"srcTabletId", srcTabletId},
                     {"dstTabletId", dstTabletId},
@@ -295,7 +295,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
                 break;
             }
 
-            YDB_LOG_TRACE("Processed commit decision",
+            YDB_LOG_TRACE("Processed commit decision from srcTabletId to dstTabletId for tx",
                 {"srcTabletId", srcTabletId},
                 {"dstTabletId", dstTabletId},
                 {"txId", txId});
@@ -323,7 +323,7 @@ std::tuple<bool, TVector<NKikimrDataEvents::TLock>> KqpValidateVolatileTx(ui64 o
                 continue;
             }
 
-            YDB_LOG_TRACE("Send commit decision",
+            YDB_LOG_TRACE("Send commit decision from origin to dstTabletId",
                 {"origin", origin},
                 {"dstTabletId", dstTabletId});
 
@@ -356,7 +356,7 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
         validateLocksResult.SetSuccess(brokenLocks.empty());
 
         for (auto& lock : brokenLocks) {
-            YDB_LOG_TRACE("Found broken",
+            YDB_LOG_TRACE("Found broken lock",
                 {"lock", lock.ShortDebugString()});
             if (useGenericReadSets) {
                 decision = NKikimrTx::TReadSetData::DECISION_ABORT;
@@ -370,8 +370,8 @@ void KqpFillOutReadSets(TOutputOpData::TOutReadSets& outReadSets, const NKikimrD
                 continue;
             }
 
-            YDB_LOG_TRACE("Send locks",
-                {"tabletId", tabletId},
+            YDB_LOG_TRACE("Send locks from srcTabletId to dstTabletId",
+                {"srcTabletId", tabletId},
                 {"dstTabletId", dstTabletId},
                 {"locks", validateLocksResult.ShortDebugString()});
 
@@ -500,9 +500,9 @@ void KqpPrepareInReadsets(TInputOpData::TInReadSets& inReadSets, const NKikimrDa
                 continue;
             }
 
-            YDB_LOG_TRACE("Prepare InReadsets",
-                {"shardId", shardId},
-                {"tabletId", tabletId});
+            YDB_LOG_TRACE("Prepare InReadsets from srcTabletId to dstTabletId",
+                {"srcTabletId", shardId},
+                {"dstTabletId", tabletId});
 
             auto key = std::make_pair(shardId, tabletId);
             inReadSets.emplace(key, TVector<TRSData>());

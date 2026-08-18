@@ -66,7 +66,7 @@ public:
         if (removed > 0) {
             YDB_LOG_WARN_CTX(ctx, "DataShard removed untracked uncommitted changes",
                 {"tabletId", Self->TabletID()},
-                {"removed", removed});
+                {"removedCount", removed});
         }
 
         return true;

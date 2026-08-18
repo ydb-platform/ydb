@@ -194,14 +194,14 @@ public:
             endKeyInclusive = false;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: start at key end at key last path: common",
+        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing",
             {"tabletId", Self->TabletID()},
             {"startKey", JoinVectorIntoString(key, " ")},
             {"endKey", JoinVectorIntoString(endKey, " ")},
             {"restarted", RestartCount-1},
             {"lastPath", LastPath},
             {"contents", Result->Record.ContentsRowsSize()},
-            {"prefixes", Result->Record.CommonPrefixesRowsSize()});
+            {"commonPrefixes", Result->Record.CommonPrefixesRowsSize()});
 
         Result->Record.SetMoreRows(!IsKeyInRange(endKey, tableInfo));
 
@@ -296,7 +296,7 @@ public:
             }
 
             TDbTupleRef value = iter->GetValues();
-            YDB_LOG_TRACE_CTX(ctx, "Dump #_Self->TabletID, path, #_num_0",
+            YDB_LOG_TRACE_CTX(ctx, "S3 Listing",
                 {"tabletId", Self->TabletID()},
                 {"path", path},
                 {"leafPathDetails", (isLeafPath ? " -> " + DbgPrintTuple(value, *AppData(ctx)->TypeRegistry) : TString())});
@@ -462,12 +462,12 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: finished description: common",
+        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: finished",
             {"tabletId", Self->TabletID()},
             {"status", Result->Record.GetStatus()},
             {"errorDescription", Result->Record.GetErrorDescription()},
             {"contents", Result->Record.ContentsRowsSize()},
-            {"prefixes", Result->Record.CommonPrefixesRowsSize()});
+            {"commonPrefixes", Result->Record.CommonPrefixesRowsSize()});
         ctx.Send(Ev->Sender, Result.Release());
 
         if (ListingSpan) {

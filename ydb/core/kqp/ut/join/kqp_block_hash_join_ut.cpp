@@ -2,6 +2,8 @@
 #include <counters/kqp_counters.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <util/folder/dirut.h>
+
 namespace NKikimr {
 namespace NKqp {
 
@@ -26,6 +28,7 @@ NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool
     auto* spilling = ts->MutableSpillingServiceConfig()->MutableLocalFileConfig();
 
     spilling->SetRoot("./spilling/");
+    MakeDirIfNotExist("./spilling");
     if (limitFileSize) {
         spilling->SetMaxTotalSize(1);
     }
@@ -1167,6 +1170,157 @@ Y_UNIT_TEST_SUITE(KqpBlockHashJoin) {
             astGrace.Contains("FilterNullMembers"),
             TStringBuilder() << "GraceJoin plan should keep FilterNullMembers for nullable join-key alignment. AST: "
                 << astGrace
+        );
+    }
+
+    Y_UNIT_TEST(BlockJoinsDuplicateKeyColumns) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* ts = settings.AppConfig.MutableTableServiceConfig();
+        ts->SetEnableNewRBO(false);
+        ts->SetAllowOlapDataQuery(true);
+        ts->SetEnableOlapSink(true);
+        ts->SetUseBlockHashJoin(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/t1` (
+                        a Int64 NOT NULL,
+                        b Int64 NOT NULL,
+                        PRIMARY KEY (a)
+                    ) WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/t2` (
+                        a Int64 NOT NULL,
+                        PRIMARY KEY (a)
+                    ) WITH (STORE = COLUMN);
+                )",
+                NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/t1` (a, b) VALUES (0, 0), (1, 1), (2, 2);
+                    INSERT INTO `/Root/t2` (a) VALUES (0), (1), (2);
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = '0';
+            PRAGMA ydb.HashJoinMode = 'grace';
+            PRAGMA ydb.UseBlockHashJoin = 'true';
+            SELECT t1.a, t2.a
+            FROM `/Root/t1` AS t1
+            INNER JOIN `/Root/t2` AS t2 ON t1.a = t2.a AND t1.b = t2.a
+            ORDER BY t1.a;
+        )";
+
+        {
+            auto explain = queryClient.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+            auto astOpt = explain.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            const TString ast(*astOpt);
+            UNIT_ASSERT_C(
+                ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
+                TStringBuilder() << "Expected BlockHashJoin. AST: " << ast
+            );
+        }
+
+        auto result = queryClient.ExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+        ).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResultSetYson(result.GetResultSet(0)),
+            R"([[0;0];[1;1];[2;2]])"
+        );
+    }
+
+    Y_UNIT_TEST(RegressionCountStarOverJoin) {
+        TKikimrSettings settings = TKikimrSettings().SetWithSampleTables(false);
+        auto* ts = settings.AppConfig.MutableTableServiceConfig();
+        ts->SetEnableNewRBO(true);
+        ts->SetEnableFallbackToYqlOptimizer(true);
+        ts->SetAllowOlapDataQuery(true);
+        ts->SetEnableOlapSink(true);
+        ts->SetUseBlockHashJoin(true);
+        TKikimrRunner kikimr(settings);
+
+        auto queryClient = kikimr.GetQueryClient();
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    CREATE TABLE `/Root/count_target` (
+                        a Int64 NOT NULL,
+                        PRIMARY KEY (a)
+                    ) WITH (STORE = COLUMN);
+
+                    CREATE TABLE `/Root/count_source` (
+                        a Int64 NOT NULL,
+                        PRIMARY KEY (a)
+                    ) WITH (STORE = COLUMN);
+                )",
+                NYdb::NQuery::TTxControl::NoTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+        {
+            auto status = queryClient.ExecuteQuery(
+                R"(
+                    INSERT INTO `/Root/count_target` (a) VALUES (0), (1), (2), (3);
+                    INSERT INTO `/Root/count_source` (a) VALUES (1), (2), (3), (4);
+                )",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()
+            ).GetValueSync();
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            PRAGMA ydb.CostBasedOptimizationLevel = '0';
+            PRAGMA ydb.HashJoinMode = 'grace';
+            PRAGMA ydb.UseBlockHashJoin = 'true';
+            SELECT COUNT(*)
+            FROM `/Root/count_target` AS t
+            INNER JOIN `/Root/count_source` AS s ON t.a = s.a;
+        )";
+
+        {
+            auto explain = queryClient.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain)
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+            auto astOpt = explain.GetStats()->GetAst();
+            UNIT_ASSERT(astOpt.has_value());
+            const TString ast(*astOpt);
+            UNIT_ASSERT_C(
+                ast.Contains("BlockHashJoin") || ast.Contains("DqBlockHashJoin"),
+                TStringBuilder() << "Expected BlockHashJoin. AST: " << ast
+            );
+        }
+
+        auto result = queryClient.ExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::NoTx()
+        ).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            FormatResultSetYson(result.GetResultSet(0)),
+            R"([[3u]])"
         );
     }
 }

@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_direct_storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ic_storage_transport_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/vhost/server.h>
@@ -116,6 +117,8 @@ void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
         NKikimrServices::NBS_PARTITION,
         "%s DetachEndpointAddDie",
         LogTitle.GetWithTime().c_str());
+
+    ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
@@ -252,6 +255,18 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
         // Session counters are aggregated at the disk level: all direct block
         // groups of this tablet share the same counters chain, so per-group
         // increments naturally sum up into disk-level counters.
+        std::unique_ptr<NTransport::IStorageTransport> transport;
+        if (nbsService->StorageConfig->GetUseDirectSessionTransport()) {
+            transport = NTransport::CreateDirectStorageTransport(
+                TActivationContext::ActorSystem(),
+                DiskDescription,
+                dbgIndex);
+        } else {
+            transport = std::make_unique<NTransport::TICStorageTransport>(
+                TActivationContext::ActorSystem(),
+                NTransport::CreateTransportActor(DiskDescription, dbgIndex));
+        }
+
         auto directBlockGroup = std::make_shared<TDirectBlockGroup>(
             TActivationContext::ActorSystem(),
             nbsService->StorageConfig,
@@ -260,9 +275,7 @@ TVector<IDirectBlockGroupPtr> TPartitionActor::CreateDirectBlockGroups(
             dbgIndex,
             std::move(ddiskIds),
             std::move(persistentBufferDDiskIds),
-            std::make_unique<NTransport::TICStorageTransport>(
-                TActivationContext::ActorSystem(),
-                NTransport::CreateTransportActor(DiskDescription, dbgIndex)),
+            std::move(transport),
             dbgCountersRoot);
 
         directBlockGroups.emplace_back(std::move(directBlockGroup));

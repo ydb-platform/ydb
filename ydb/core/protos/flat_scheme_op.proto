@@ -754,6 +754,7 @@ message TColumnTableSchemeOptions {
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
+    optional bool DeduplicationEnabled = 7;
 }
 
 message TColumnTableSchema {
@@ -800,6 +801,7 @@ message TColumnTableRequestedOptions {
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
     optional TInsertOptions InsertOptions = 6;
+    optional bool DeduplicationEnabled = 7;
 }
 
 message TAlterColumnTableSchema {
@@ -1415,6 +1417,7 @@ message TIndexAlteringConfig {
         TBloomNGrammFilter BloomNGrammFilterDescription = 9;
     }
     optional TVectorIndexKmeansTreeDescription VectorIndexKmeansTreeDescription = 3;
+    repeated string DataColumnNames = 10;
 }
 
 message TIndexedTableCreationConfig {
@@ -1907,6 +1910,7 @@ message TUpgradeSubDomain {
 message TIndexBuildConfig {
     optional string Table = 1;
     optional TIndexCreationConfig Index = 2;
+    optional bool IsRebuild = 3 [ default = false ];
 }
 
 message TIndexBuildControl {

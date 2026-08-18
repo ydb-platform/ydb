@@ -181,11 +181,17 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
                 {"proposeExecute", "move_table"},
                 {"src", srcSchemeShardLocalPathId},
                 {"dst", dstSchemeShardLocalPathId});
-            if (!owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false)) {
+            const auto srcInternalPathId = owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false);
+            if (!srcInternalPathId) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "No such table");
             }
             if (owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
                 return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Rename to existing table");
+            }
+            if (auto tableTtl = owner.TablesManager.GetTableTtl(*srcInternalPathId)) {
+                if (!tableTtl->GetUsedTiers().empty()) {
+                    return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR, "Cannot move a table that has tiering configured");
+                }
             }
             auto txIdsToWait = owner.GetProgressTxController().GetTxs();   //TODO #8650 Get transaction for moving pathId only
             if (!txIdsToWait.empty()) {

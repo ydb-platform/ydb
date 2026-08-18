@@ -104,6 +104,7 @@ THostSnapshot MakeHostSnapshot(const TOracleHostStat& stat)
         .InflightByOperation = stat.InflightByOperation,
         .Errors = stat.Errors,
         .PBufferUsedSize = stat.PBufferUsedSize,
+        .LatencyByOperation = stat.LatencyByOperation,
     };
 }
 
@@ -166,14 +167,6 @@ CreateWaitSessionCbForSyncWithPBuffer(
     };
 
     return cb;
-}
-
-bool IsDDiskOperation(EOperation operation)
-{
-    return operation == EOperation::ReadFromDDisk ||
-           operation == EOperation::WriteToDDisk ||
-           operation == EOperation::Flush ||
-           operation == EOperation::FlushCrossNode;
 }
 
 }   // namespace
@@ -1463,7 +1456,8 @@ void TDirectBlockGroup::AddDDiskAndPBufferConnection(
                 TabletId,
                 TabletGeneration,
                 InitialDDiskSessionSeqNo,
-                std::nullopt)}});
+                std::nullopt,
+                static_cast<ui32>(DirectBlockGroupIndex))}});
 
     PBufferConnections.push_back(TDDiskConnection{
         .HostConnection = NTransport::THostConnection{
@@ -1472,7 +1466,8 @@ void TDirectBlockGroup::AddDDiskAndPBufferConnection(
             .Credentials = NDDisk::TQueryCredentials::ToPersistentBuffer(
                 TabletId,
                 TabletGeneration,
-                std::nullopt)}});
+                std::nullopt,
+                static_cast<ui32>(DirectBlockGroupIndex))}});
 
     NKikimrBlobStorage::NDDisk::TDDiskId id;
     pbufferId.Serialize(&id);
@@ -1563,7 +1558,7 @@ void TDirectBlockGroup::DoEstablishConnection(
                 () mutable
                 {
                     if (auto self = weakSelf.lock()) {
-                        self->OnConnectionEstablished(
+                        self->OnConnectResponse(
                             connectionType,
                             hostIndex,
                             actualSeqNo,
@@ -1573,7 +1568,7 @@ void TDirectBlockGroup::DoEstablishConnection(
         });
 }
 
-void TDirectBlockGroup::OnConnectionEstablished(
+void TDirectBlockGroup::OnConnectResponse(
     EConnectionType connectionType,
     THostIndex hostIndex,
     ui64 seqNo,
@@ -1589,17 +1584,15 @@ void TDirectBlockGroup::OnConnectionEstablished(
 
     LOG_LOG(
         *ActorSystem,
-        HasError(error) ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_TRACE,
+        HasError(error) ? NActors::NLog::PRI_WARN : NActors::NLog::PRI_INFO,
         NKikimrServices::NBS_PARTITION,
-        "%s OnConnectionEstablished: %s %s",
+        "%s OnConnectResponse: %s %s",
         LogTitle.GetWithTime().c_str(),
         PrintHostAndNode(hostIndex).c_str(),
         FormatError(error).Quote().c_str());
 
     if (!HasError(error)) {
         Counters.OnConnectOk(ToDBGConnectionType(connectionType));
-        connection.HostConnection.Credentials.DDiskInstanceGuid =
-            result.GetDDiskInstanceGuid();
         if (connectionType == EConnectionType::DDisk) {
             if (seqNo <= connection.ConfirmedSessionSeqNo) {
                 LOG_WARN(
@@ -1613,6 +1606,24 @@ void TDirectBlockGroup::OnConnectionEstablished(
                     connection.ConfirmedSessionSeqNo);
                 return;
             }
+        }
+
+        connection.HostConnection.Credentials.DDiskInstanceGuid =
+            result.GetDDiskInstanceGuid();
+        if (result.HasConnectionToken()) {
+            auto creds = connectionType == EConnectionType::DDisk
+                             ? NDDisk::TQueryCredentials::ToDDisk(
+                                   result.GetConnectionToken())
+                             : NDDisk::TQueryCredentials::ToPersistentBuffer(
+                                   result.GetConnectionToken());
+            connection.HostConnection.Credentials.ConnectionToken =
+                creds.ConnectionToken;
+        } else {
+            connection.HostConnection.Credentials.ConnectionToken =
+                std::nullopt;
+        }
+
+        if (connectionType == EConnectionType::DDisk) {
             connection.SessionState = EDDiskSessionState::Locked;
             connection.ConfirmedSessionSeqNo = seqNo;
             Oracle.OnDDiskConnected(hostIndex, TInstant::Now());
@@ -2008,6 +2019,7 @@ TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot() const
         .VChunkCount = VChunks.size(),
         .Hosts = std::move(hosts),
         .Connections = std::move(connections),
+        .LatencyHistoryCapacity = Oracle.GetLatencyHistoryCapacity(),
     };
 }
 

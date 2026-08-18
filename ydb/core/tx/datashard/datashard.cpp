@@ -2147,7 +2147,7 @@ TUserTable::TPtr TDataShard::MoveUserIndex(TOperation::TPtr op, const NKikimrTxD
 
     newTableInfo->SetSchema(schema);
     TDataShardLocksDb locksDb(*this, txc);
-    AddUserTable(pathId, newTableInfo, &locksDb);
+    ReplaceUserTable(pathId, newTableInfo, locksDb);
 
     if (newTableInfo->NeedSchemaSnapshots()) {
         AddSchemaSnapshot(pathId, version, op->GetStep(), op->GetTxId(), txc, ctx);
@@ -2403,12 +2403,17 @@ bool TDataShard::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         {"TEvRemoteHttpInfo", ev->Get()->Query.data()});
 
     auto cgi = ev->Get()->Cgi();
-    const bool securePathMode = AppData(ctx)->FeatureFlags.GetEnableTabletDevUiSecurePath();
-    if (securePathMode) {
-        if (!(IsTabletDevUiSecurePath(ev->Get()->PathInfo()) && IsAdministrator(AppData(ctx), ev->Get()->GetUserToken()))) {
-            ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
-            return true;
-        }
+    // DataShard exposes no non-admin handlers, so nothing is whitelisted here. Must stay ahead of
+    // the action/page dispatch below, otherwise a CGI parameter would pick a handler before the
+    // access check runs.
+    if (!IsTabletDevUiAccessAllowed(
+            AppData(ctx),
+            ev->Get()->PathInfo(),
+            ev->Get()->GetUserToken(),
+            /*isMonitoringDevUiRequest=*/false))
+    {
+        ctx.Send(ev->Sender, new NMon::TEvRemoteBinaryInfoRes(NMonitoring::HTTPFORBIDDEN));
+        return true;
     }
 
     {

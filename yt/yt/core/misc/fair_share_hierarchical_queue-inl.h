@@ -721,18 +721,22 @@ bool TFairShareHierarchicalSlotQueue<TTag>::IsEmpty() const
 }
 
 template <typename TTag>
-TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> TFairShareHierarchicalSlotQueue<TTag>::EnqueueSlot(
+TFairShareHierarchicalSlotQueueSlotPtr<TTag> TFairShareHierarchicalSlotQueue<TTag>::CreateSlot(
     i64 size,
     std::vector<IFairShareHierarchicalSlotQueueResourcePtr> resources,
     std::vector<TFairShareHierarchyLevel<TTag>> levels)
 {
-    NProfiling::TEventTimerGuard timer(EnqueueSlotWallTimer_);
-
-    // Create a new queue slot.
-    auto slot = New<TFairShareHierarchicalSlotQueueSlot<TTag>>(
+    return New<TFairShareHierarchicalSlotQueueSlot<TTag>>(
         size,
         std::move(resources),
         std::move(levels));
+}
+
+template <typename TTag>
+TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> TFairShareHierarchicalSlotQueue<TTag>::EnqueueSlot(
+    TFairShareHierarchicalSlotQueueSlotPtr<TTag> slot)
+{
+    NProfiling::TEventTimerGuard timer(EnqueueSlotWallTimer_);
 
     // Check if the slot exceeds resource limits.
     if (slot->NeedExceedsLimit()) {
@@ -822,6 +826,15 @@ TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> TFairShareHierarchicalSlo
             }
         }
     }
+}
+
+template <typename TTag>
+TErrorOr<TFairShareHierarchicalSlotQueueSlotPtr<TTag>> TFairShareHierarchicalSlotQueue<TTag>::EnqueueSlot(
+    i64 size,
+    std::vector<IFairShareHierarchicalSlotQueueResourcePtr> resources,
+    std::vector<TFairShareHierarchyLevel<TTag>> levels)
+{
+    return EnqueueSlot(CreateSlot(size, std::move(resources), std::move(levels)));
 }
 
 template <typename TTag>

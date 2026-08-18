@@ -35,32 +35,31 @@ Given the above feature, it is useless to try to index all possible column combi
 
 ## Using secondary indexes in data retrieval {#use}
 
-To access a table by a secondary index, its name must be explicitly specified in the `VIEW` section after the table name, as described in the article about the [`SELECT` command](../yql/reference/syntax/select#secondary_index) in YQL. For example, to retrieve from the Orders table (`orders`) a sample of orders for a customer with a given ID (`id_customer`), the query will look as follows:
+When retrieving data from a table, {{ ydb-short-name }} provides two ways to use secondary indexes:
 
+1. **Explicit index specification** — the secondary index name is specified in the `VIEW` section after the table name, as described in the article about the [`SELECT` command](../yql/reference/syntax/select#secondary_index) in YQL. For example, to retrieve from the Orders table (`orders`) a sample of orders for a customer with a given ID (`id_customer`), the query will look as follows:
 
-```yql
-DECLARE $customer_id AS Uint64;
-SELECT *
-FROM   orders VIEW idx_customer AS o
-WHERE  o.id_customer = $customer_id
-```
+   ```yql
+   DECLARE $customer_id AS Uint64;
+   SELECT *
+   FROM   orders VIEW idx_customer AS o
+   WHERE  o.id_customer = $customer_id
+   ```
 
+   , where `idx_customer` is the name of the secondary index on the `orders` table, with the first field being `id_customer`.
 
-, where `idx_customer` is the name of the secondary index on the `orders` table, with the first field being `id_customer`.
-
-Without specifying the `VIEW` section, the `orders` table will be fully scanned to execute such a query.
-
-In transactional applications, such informational queries are executed using paginated data output, which prevents the cost and execution time from growing as the number of records matching the filter conditions increases. The approach to writing [paged queries](../dev/paging.md) described using the primary key example is also applicable to columns included in a secondary index.
-
-An experimental feature for automatic selection of a secondary index to use in a query is also implemented. The selection algorithm is currently rule-based and uses only the query text to automatically select a secondary index.
-
-### Automatic index usage in queries
+2. **Automatic index selection by the query optimizer** — if the `VIEW` section is not specified, the optimizer can independently decide to use a particular secondary index based on the query text. Detailed criteria for index selection are described below.
 
 {% note warning %}
 
-This mechanism is experimental and is currently disabled by default. It can be enabled using the [`index_auto_choose_mode` setting in `table_service_config`](https://github.com/ydb-platform/ydb/blob/main/ydb/core/protos/table_service_config.proto#L268). The setting will also affect the behavior of the query service.
+If you have existing queries without an explicit index (without the `VIEW` section), adding a new index to a table may cause those queries to start using it automatically. This can lead to unexpected changes in the query plan and execution time. To avoid such surprises, it is recommended to:
+
+* Explicitly specify which index a query should use via the `VIEW` section;
+* Based on the secondary index selection criteria, anticipate in advance whether adding a new secondary index may affect existing queries.
 
 {% endnote %}
+
+### Automatic index usage in queries
 
 Explicitly specifying the `VIEW` section takes precedence over the optimizer's decision to use secondary indexes. That is, the query
 

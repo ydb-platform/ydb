@@ -5744,7 +5744,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         }
 
         if (auto clean = RemoveDeadPayloadColumns(self, ctx); clean != node) {
-            return clean;
+            return KeepWorld(clean, *node, ctx, *optCtx.Types);
         }
 
         if (auto hopping = RewriteAsHoppingWindow(node, ctx)) {
@@ -5829,7 +5829,7 @@ void RegisterCoSimpleCallables1(TCallableOptimizerMap& map) {
         ret = RemoveDeadPayloadColumns(node, ctx);
         if (ret != node) {
             YQL_CLOG(DEBUG, Core) << "RemoveDeadPayloadColumns in EquiJoin";
-            return ret;
+            return KeepWorld(ret, *node, ctx, *optCtx.Types);
         }
 
         ret = PullAssumeColumnOrderOverEquiJoin(node, ctx, optCtx);

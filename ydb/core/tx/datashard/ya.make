@@ -49,7 +49,6 @@ SRCS(
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
     datashard__cleanup_uncommitted.cpp
-    datashard__column_stats.cpp
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
     datashard__conditional_erase_rows.cpp
@@ -324,9 +323,9 @@ RECURSE_FOR_TESTS(
     ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange
-    ut_column_stats
     ut_compaction
     ut_disk_quotas
+    ut_direct_restore
     ut_erase_rows
     ut_export
     ut_external_blobs

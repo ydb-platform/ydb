@@ -8,11 +8,13 @@ namespace NKikimr::NUdfStore {
 enum EEv {
     EvStoreInitialized = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
     EvStoreInitFailed,
+    EvArtifactTableInitialized,
     EvReadBodyResponse,
+    EvWasmCompileResponse,
+    EvLibraryCompileResponse,
     EvEnd
 };
 
-// Sent to the parent actor when the meta table and KV volume are ready.
 struct TEvStoreInitialized : public NActors::TEventLocal<TEvStoreInitialized, EvStoreInitialized> {
     TEvStoreInitialized(const TString& kvVolumePath)
         : KvVolumePath(kvVolumePath)
@@ -20,14 +22,19 @@ struct TEvStoreInitialized : public NActors::TEventLocal<TEvStoreInitialized, Ev
     TString KvVolumePath;
 };
 
-// Sent to the parent actor when infrastructure initialization fails.
+struct TEvArtifactTableInitialized : public NActors::TEventLocal<TEvArtifactTableInitialized, EvArtifactTableInitialized> {
+    explicit TEvArtifactTableInitialized(TString artifactTablePath)
+        : ArtifactTablePath(std::move(artifactTablePath))
+    {}
+    TString ArtifactTablePath;
+};
+
 struct TEvStoreInitFailed : public NActors::TEventLocal<TEvStoreInitFailed, EvStoreInitFailed> {
     explicit TEvStoreInitFailed(TString errorMessage)
         : ErrorMessage(std::move(errorMessage))
     {}
     TString ErrorMessage;
 };
-
 
 struct TEvReadBodyResponse : public NActors::TEventLocal<TEvReadBodyResponse, EvReadBodyResponse> {
     bool Success;
@@ -37,6 +44,36 @@ struct TEvReadBodyResponse : public NActors::TEventLocal<TEvReadBodyResponse, Ev
     TEvReadBodyResponse(bool success, const TString& name, const TString& errorMessage = {})
         : Success(success)
         , Name(name)
+        , ErrorMessage(errorMessage)
+    {}
+};
+
+struct TEvWasmCompileResponse : public NActors::TEventLocal<TEvWasmCompileResponse, EvWasmCompileResponse> {
+    bool Success;
+    bool Deferred = false;
+    TString Md5;
+    TString ErrorMessage;
+
+    TEvWasmCompileResponse(
+        bool success,
+        const TString& md5,
+        const TString& errorMessage = {},
+        bool deferred = false)
+        : Success(success)
+        , Deferred(deferred)
+        , Md5(md5)
+        , ErrorMessage(errorMessage)
+    {}
+};
+
+struct TEvLibraryCompileResponse : public NActors::TEventLocal<TEvLibraryCompileResponse, EvLibraryCompileResponse> {
+    bool Success;
+    TString LibraryName;
+    TString ErrorMessage;
+
+    TEvLibraryCompileResponse(bool success, const TString& libraryName, const TString& errorMessage = {})
+        : Success(success)
+        , LibraryName(libraryName)
         , ErrorMessage(errorMessage)
     {}
 };

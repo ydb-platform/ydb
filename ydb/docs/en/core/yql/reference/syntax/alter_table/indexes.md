@@ -21,6 +21,12 @@ ALTER TABLE `<table_name>`
 
 {% include [index_grammar_explanation.md](../_includes/index_grammar_explanation.md) %}
 
+{% if backend_name == "YDB" and oss == true %}
+
+You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.
+
+{% endif %}
+
 Parameters for all index types:
 
 * maximum number of `parallel` handlers based on [partitions](../../../../concepts/glossary.md#partition) involved in index building (an integer between `1` and `MaxBuildIndexShardsInFlight` from `SchemeShardConfig`).
@@ -47,23 +53,31 @@ Parameters specific to full-text indexes:
 
 {% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
 
-{% if backend_name == "YDB" and oss == true %}
+### Parameters of the local min_max index {#local-min-max}
 
-You can also add a secondary index using the [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) {{ ydb-short-name }} CLI command.
-
-{% endif %}
+{% include [min_max_index_parameters.md](../_includes/min_max_index_parameters.md) %}
 
 ### Limitations
 
-The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), via `ADD INDEX`, [only local bloom indexes are supported](#local-bloom).
+The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, etc.) and vector indexes is supported only for row tables. For [columnar tables](../../../../concepts/datamodel/table.md#column-oriented-tables), only local indexes are supported via `ADD INDEX`: [bloom index](#local-bloom) and [min_max index](#local-min-max).
 
-Features of local Bloom indexes:
+Features of local bloom indexes:
 
 {% include [bloom_skip_index_features.md](../_includes/bloom_skip_index_features.md) %}
 
 {% note info "Limitations" %}
 
 {% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
+
+Features of the local min_max index:
+
+{% include [min_max_index_features.md](../_includes/min_max_index_features.md) %}
+
+{% note info "Limitations" %}
+
+{% include [min_max_index_limitations.md](../_includes/min_max_index_limitations.md) %}
 
 {% endnote %}
 
@@ -139,6 +153,16 @@ ALTER TABLE `/Root/Table`
 ```
 
 
+min_max index:
+
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_created_at LOCAL USING min_max
+  ON (created_at);
+```
+
+
 ## Changing index parameters {#alter-index}
 
 Indexes have type-dependent parameters that you can configure. Global indexes, [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and replica parameters can be adjusted in the same way as regular table settings.
@@ -160,7 +184,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 * `<index_name>` - name of the index to change.
 * `<setting_name>` - name of the parameter to change. The set of allowed parameters depends on the index type:
 
-  * For global secondary indexes:
+  * for global secondary indexes:
 
     * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
     * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
@@ -172,6 +196,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
     * `FALSE_POSITIVE_PROBABILITY`
     * `NGRAM_SIZE` and `CASE_SENSITIVE` (only for `bloom_ngram_filter`)
+  * The min_max index does not support `ALTER INDEX`.
 
 {% note info %}
 
@@ -202,7 +227,7 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 ```
 
 
-For local Bloom indexes, you can also change parameters specific to them, for example:
+For local bloom indexes, you can also change their specific parameters, for example:
 
 
 ```yql

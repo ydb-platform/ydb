@@ -14,7 +14,8 @@ from numpy.testing import (
         assert_, assert_equal, IS_PYPY, assert_almost_equal,
         assert_array_equal, assert_array_almost_equal, assert_raises,
         assert_raises_regex, assert_warns, suppress_warnings,
-        _assert_valid_refcount, HAS_REFCOUNT, IS_PYSTON, IS_WASM
+        _assert_valid_refcount, HAS_REFCOUNT, IS_PYSTON, IS_WASM,
+        IS_64BIT,
         )
 from numpy.testing._private.utils import _no_tracing, requires_memory
 from numpy._utils import asbytes, asunicode
@@ -290,7 +291,7 @@ class TestRegression:
         x = np.rec.array([(1, 1.1, '1.0'),
                          (2, 2.2, '2.0')], dtype=descr)
         x[0].tolist()
-        [i for i in x[0]]
+        list(x[0])
 
     def test_unicode_string_comparison(self):
         # Ticket #190
@@ -1028,7 +1029,7 @@ class TestRegression:
     def test_mem_fromiter_invalid_dtype_string(self):
         x = [1, 2, 3]
         assert_raises(ValueError,
-                              np.fromiter, [xi for xi in x], dtype='S')
+                              np.fromiter, list(x), dtype='S')
 
     def test_reduce_big_object_array(self):
         # Ticket #713
@@ -1072,8 +1073,8 @@ class TestRegression:
         with open(filename, 'rb') as f:
             xp = pickle.load(f, encoding='latin1')
         xpd = xp.astype(np.float64)
-        assert_((xp.__array_interface__['data'][0] !=
-                xpd.__array_interface__['data'][0]))
+        assert_(xp.__array_interface__['data'][0] !=
+                xpd.__array_interface__['data'][0])
 
     def test_compress_small_type(self):
         # Ticket #789, changeset 5217.
@@ -2179,7 +2180,7 @@ class TestRegression:
             __array_priority__ = 1002
 
             def __array__(self, *args, **kwargs):
-                raise Exception()
+                raise Exception
 
         rhs = Foo()
         lhs = np.array(1)
@@ -2266,7 +2267,7 @@ class TestRegression:
     def test_reshape_size_overflow(self):
         # gh-7455
         a = np.ones(20)[::2]
-        if np.dtype(np.intp).itemsize == 8:
+        if IS_64BIT:
             # 64 bit. The following are the prime factors of 2**63 + 5,
             # plus a leading 2, so when multiplied together as int64,
             # the result overflows to a total size of 10.
@@ -2313,10 +2314,13 @@ class TestRegression:
 
             try:
                 hash(val)
-            except TypeError as e:
-                assert_equal(t.__hash__, None)
+            except TypeError:
+                assert_(t.__hash__ is None)
+            except ValueError:
+                assert_(t is np.timedelta64)
+                assert_(t.__hash__ is not None)
             else:
-                assert_(t.__hash__ != None)
+                assert_(t.__hash__ is not None)
 
     def test_scalar_copy(self):
         scalar_types = set(np._core.sctypeDict.values())
@@ -2568,15 +2572,17 @@ class TestRegression:
         assert xp is np
         xp = arr.__array_namespace__(api_version="2022.12")
         assert xp is np
+        xp = arr.__array_namespace__(api_version="2023.12")
+        assert xp is np
         xp = arr.__array_namespace__(api_version=None)
         assert xp is np
 
         with pytest.raises(
             ValueError,
-            match="Version \"2023.12\" of the Array API Standard "
+            match="Version \"2024.12\" of the Array API Standard "
                   "is not supported."
         ):
-            arr.__array_namespace__(api_version="2023.12")
+            arr.__array_namespace__(api_version="2024.12")
 
         with pytest.raises(
             ValueError,
@@ -2622,14 +2628,6 @@ class TestRegression:
         res = np.vectorize(f, otypes=[arr.dtype])(arr)
         assert res.dtype == "U30"
 
-    def test_sort_unique_crash(self):
-        # gh-27037
-        for _ in range(4):
-            vals = np.linspace(0, 1, num=128)
-            data = np.broadcast_to(vals, (128, 128, 128))
-            data = data.transpose(0, 2, 1).copy()
-            np.unique(data)
-
     def test_repeated_square_consistency(self):
         # gh-26940
         buf = np.array([-5.171866611150749e-07 + 2.5618634555957426e-07j,
@@ -2643,3 +2641,24 @@ class TestRegression:
                 res = buf[3:]
                 np.square(in_vec, out=res)
                 assert_equal(res, expected_res)
+
+    def test_sort_unique_crash(self):
+        # gh-27037
+        for _ in range(4):
+            vals = np.linspace(0, 1, num=128)
+            data = np.broadcast_to(vals, (128, 128, 128))
+            data = data.transpose(0, 2, 1).copy()
+            np.unique(data)
+
+    def test_sort_overlap(self):
+        # gh-27273
+        size = 100
+        inp = np.linspace(0, size, num=size, dtype=np.intc)
+        out = np.sort(inp)
+        assert_equal(inp, out)
+
+    def test_searchsorted_structured(self):
+        # gh-28190
+        x = np.array([(0, 1.)], dtype=[('time', '<i8'), ('value', '<f8')])
+        y = np.array((0, 0.), dtype=[('time', '<i8'), ('value', '<f8')])
+        x.searchsorted(y)

@@ -15,11 +15,13 @@
 #include <yql/essentials/core/dq_expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/core/dqs_expr_nodes/dqs_expr_nodes.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/core/type_ann/type_ann_core.h>
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/core/yql_expr_csee.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
@@ -623,8 +625,10 @@ TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, 
         }
 
         if (node->IsCallable("WithWorld")) {
-            remaps[node.Get()] = node->HeadPtr();
-            VisitExpr(node->HeadPtr(), visitor);
+            const auto head = node->HeadPtr();
+            VisitExpr(head, visitor);
+            const auto it = remaps.find(head.Get());
+            remaps[node.Get()] = it == remaps.end() ? head : it->second;
             return false;
         }
 
@@ -755,6 +759,26 @@ TYtOutputOpBase GetOutputOp(TYtOutput output, bool takeFirstInHybrid) {
         return tr.Cast().Second();
     }
     return output.Operation().Cast<TYtOutputOpBase>();
+}
+
+TMaybe<TStringBuf> FindReservedColumnName(const TTypeAnnotationNode& rowType, const TYtState& state) {
+    if (rowType.GetKind() != ETypeAnnotationKind::Struct) {
+        return Nothing();
+    }
+
+    const bool defaultForbid = IsAvailableLangVersion(NFeature::YtReservedColumnPrefix.MinLangVer, state.Types->LangVer);
+    const bool forbid = state.Configuration->_ForbidReservedColumns.Get().GetOrElse(defaultForbid);
+    if (!forbid) {
+        return Nothing();
+    }
+
+    for (auto item: rowType.Cast<TStructExprType>()->GetItems()) {
+        if (IsSystemMember(item->GetName())) {
+            return item->GetName();
+        }
+    }
+
+    return Nothing();
 }
 
 TVector<TYtTableBaseInfo::TPtr> GetInputTableInfos(TExprBase input) {

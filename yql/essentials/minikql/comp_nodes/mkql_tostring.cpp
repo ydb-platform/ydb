@@ -26,33 +26,32 @@ extern "C" NYql::NUdf::TUnboxedValuePod DecimalToString(NYql::NDecimal::TInt128 
 Y_PRAGMA_DIAGNOSTIC_POP
 #endif
 
-namespace NKikimr {
-namespace NMiniKQL {
+namespace NKikimr::NMiniKQL {
 
 namespace {
 
 template <bool IsOptional>
 class TDecimalToStringWrapper: public TMutableCodegeneratorNode<TDecimalToStringWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorNode<TDecimalToStringWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TDecimalToStringWrapper<IsOptional>>;
 
 public:
     TDecimalToStringWrapper(TComputationMutables& mutables, IComputationNode* data, ui8 precision, ui8 scale)
         : TBaseComputation(mutables, EValueRepresentation::String)
-        , Data(data)
-        , Precision(precision)
-        , Scale(scale)
+        , Data_(data)
+        , Precision_(precision)
+        , Scale_(scale)
     {
         MKQL_ENSURE(precision > 0 && precision <= NYql::NDecimal::MaxPrecision, "Wrong precision.");
         MKQL_ENSURE(scale <= precision, "Wrong scale.");
     }
 
     NUdf::TUnboxedValuePod DoCalculate(TComputationContext& ctx) const {
-        const auto& dataValue = Data->GetValue(ctx);
+        const auto& dataValue = Data_->GetValue(ctx);
         if (IsOptional && !dataValue) {
             return NUdf::TUnboxedValuePod();
         }
 
-        if (const auto str = NYql::NDecimal::ToString(dataValue.GetInt128(), Precision, Scale)) {
+        if (const auto str = NYql::NDecimal::ToString(dataValue.GetInt128(), Precision_, Scale_)) {
             return MakeString(NUdf::TStringRef(str, std::strlen(str)));
         }
 
@@ -60,7 +59,7 @@ public:
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
@@ -69,16 +68,16 @@ public:
         const auto name = "DecimalToString";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DecimalToString));
         const auto fnType =
-            FunctionType::get(valType, {valType, psType, psType}, false);
+            FunctionType::get(valType, {valType, psType, psType}, /*isVarArg=*/false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto fail = BasicBlock::Create(context, "fail", ctx.Func);
         const auto nice = BasicBlock::Create(context, "nice", ctx.Func);
 
         const auto zero = ConstantInt::get(valType, 0ULL);
-        const auto precision = ConstantInt::get(psType, Precision);
-        const auto scale = ConstantInt::get(psType, Scale);
-        const auto value = GetNodeValue(Data, ctx, block);
+        const auto precision = ConstantInt::get(psType, Precision_);
+        const auto scale = ConstantInt::get(psType, Scale_);
+        const auto value = GetNodeValue(Data_, ctx, block);
 
         Value* result;
         if constexpr (IsOptional) {
@@ -115,40 +114,40 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Data);
+        this->DependsOn(Data_);
     }
 
     [[noreturn]] static void Throw() {
         UdfTerminate("Ivalid Decimal value.");
     }
 
-    IComputationNode* const Data;
-    const ui8 Precision, Scale;
+    IComputationNode* const Data_;
+    const ui8 Precision_, Scale_;
 };
 
 template <bool IsOptional>
 class TToStringWrapper: public TMutableCodegeneratorNode<TToStringWrapper<IsOptional>> {
-    typedef TMutableCodegeneratorNode<TToStringWrapper<IsOptional>> TBaseComputation;
+    using TBaseComputation = TMutableCodegeneratorNode<TToStringWrapper<IsOptional>>;
 
 public:
     TToStringWrapper(TComputationMutables& mutables, IComputationNode* data, NUdf::TDataTypeId schemeType)
         : TBaseComputation(mutables, EValueRepresentation::String)
-        , Data(data)
-        , SchemeType(NUdf::GetDataSlot(schemeType))
+        , Data_(data)
+        , SchemeType_(NUdf::GetDataSlot(schemeType))
     {
     }
 
     NUdf::TUnboxedValue DoCalculate(TComputationContext& ctx) const {
-        const auto& dataValue = Data->GetValue(ctx);
+        const auto& dataValue = Data_->GetValue(ctx);
         if (IsOptional && !dataValue) {
             return NUdf::TUnboxedValuePod();
         }
 
-        return ValueToString(SchemeType, dataValue);
+        return ValueToString(SchemeType_, dataValue);
     }
 
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const {
+    Value* DoGenerateGetValue(const TCodegenContext& ctx, BasicBlock*& block) const override {
         auto& context = ctx.Codegen.GetContext();
 
         const auto valType = Type::getInt128Ty(context);
@@ -157,12 +156,12 @@ public:
         const auto name = "DataToString";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&DataToString));
         const auto fnType =
-            FunctionType::get(valType, {valType, slotType}, false);
+            FunctionType::get(valType, {valType, slotType}, /*isVarArg=*/false);
         const auto func = ctx.Codegen.GetModule().getOrInsertFunction(name, fnType);
 
         const auto zero = ConstantInt::get(valType, 0ULL);
-        const auto slot = ConstantInt::get(slotType, static_cast<ui32>(SchemeType));
-        const auto value = GetNodeValue(Data, ctx, block);
+        const auto slot = ConstantInt::get(slotType, static_cast<ui32>(SchemeType_));
+        const auto value = GetNodeValue(Data_, ctx, block);
 
         if constexpr (IsOptional) {
             const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -177,8 +176,8 @@ public:
 
             const auto string = CallInst::Create(func, {value, slot}, "to_string", block);
 
-            if (Data->IsTemporaryValue()) {
-                ValueCleanup(Data->GetRepresentation(), value, ctx, block);
+            if (Data_->IsTemporaryValue()) {
+                ValueCleanup(Data_->GetRepresentation(), value, ctx, block);
             }
 
             result->addIncoming(string, block);
@@ -189,8 +188,8 @@ public:
         } else {
             const auto string = CallInst::Create(func, {value, slot}, "to_string", block);
 
-            if (Data->IsTemporaryValue()) {
-                ValueCleanup(Data->GetRepresentation(), value, ctx, block);
+            if (Data_->IsTemporaryValue()) {
+                ValueCleanup(Data_->GetRepresentation(), value, ctx, block);
             }
 
             return string;
@@ -199,18 +198,18 @@ public:
 #endif
 private:
     void RegisterDependencies() const final {
-        this->DependsOn(Data);
+        this->DependsOn(Data_);
     }
 
-    IComputationNode* const Data;
-    const NUdf::EDataSlot SchemeType;
+    IComputationNode* const Data_;
+    const NUdf::EDataSlot SchemeType_;
 };
 
 class TAsIsWrapper: public TDecoratorCodegeneratorNode<TAsIsWrapper> {
     using TBaseComputation = TDecoratorCodegeneratorNode<TAsIsWrapper>;
 
 public:
-    TAsIsWrapper(IComputationNode* optional)
+    explicit TAsIsWrapper(IComputationNode* optional)
         : TBaseComputation(optional)
     {
     }
@@ -219,7 +218,7 @@ public:
         return value;
     }
 #ifndef MKQL_DISABLE_CODEGEN
-    Value* DoGenerateGetValue(const TCodegenContext&, Value* value, BasicBlock*&) const {
+    Value* DoGenerateGetValue(const TCodegenContext&, Value* value, BasicBlock*&) const override {
         return value;
     }
 #endif
@@ -253,5 +252,4 @@ IComputationNode* WrapToString(TCallable& callable, const TComputationNodeFactor
     }
 }
 
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL

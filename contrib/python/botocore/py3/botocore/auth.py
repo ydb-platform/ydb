@@ -30,6 +30,7 @@ from botocore.compat import (
     HTTPHeaders,
     encodebytes,
     ensure_unicode,
+    get_current_datetime,
     parse_qs,
     quote,
     unquote,
@@ -419,7 +420,7 @@ class SigV4Auth(BaseSigner):
     def add_auth(self, request):
         if self.credentials is None:
             raise NoCredentialsError()
-        datetime_now = datetime.datetime.now(datetime.UTC)
+        datetime_now = get_current_datetime()
         request.context['timestamp'] = datetime_now.strftime(SIGV4_TIMESTAMP)
         # This could be a retry.  Make sure the previous
         # authorization header is removed first.
@@ -557,7 +558,7 @@ class S3ExpressPostAuth(S3ExpressAuth):
     REQUIRES_IDENTITY_CACHE = True
 
     def add_auth(self, request):
-        datetime_now = datetime.datetime.utcnow()
+        datetime_now = get_current_datetime()
         request.context['timestamp'] = datetime_now.strftime(SIGV4_TIMESTAMP)
 
         fields = {}
@@ -816,7 +817,7 @@ class S3SigV4PostAuth(SigV4Auth):
     """
 
     def add_auth(self, request):
-        datetime_now = datetime.datetime.utcnow()
+        datetime_now = get_current_datetime()
         request.context['timestamp'] = datetime_now.strftime(SIGV4_TIMESTAMP)
 
         fields = {}
@@ -993,7 +994,7 @@ class HmacV1Auth(BaseSigner):
         string_to_sign = self.canonical_string(
             method, split, headers, auth_path=auth_path
         )
-        logger.debug(f'StringToSign:\n{string_to_sign}')
+        logger.debug('StringToSign:\n%s', string_to_sign)
         return self.sign_string(string_to_sign)
 
     def add_auth(self, request):
@@ -1001,7 +1002,7 @@ class HmacV1Auth(BaseSigner):
             raise NoCredentialsError
         logger.debug("Calculating signature using hmacv1 auth.")
         split = urlsplit(request.url)
-        logger.debug(f'HTTP request method: {request.method}')
+        logger.debug("HTTP request method: %s", request.method)
         signature = self.get_signature(
             request.method, split, request.headers, auth_path=request.auth_path
         )
@@ -1158,7 +1159,7 @@ def resolve_auth_scheme_preference(preference_list, auth_options):
     ]
     if unsupported:
         logger.debug(
-            f"Unsupported auth schemes in preference list: {', '.join(unsupported)}"
+            "Unsupported auth schemes in preference list: %r", unsupported
         )
 
     combined = preference_list + service_supported

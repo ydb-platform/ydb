@@ -271,6 +271,21 @@ namespace NKikimr::NBlobDepot {
             counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_OBJECTS] = RefCountS3.size();
             counters[NKikimrBlobDepot::COUNTER_TOTAL_S3_DATA_SIZE] = TotalS3DataSize;
 
+            if (Self->MoveData.IsInProgress() && !Self->MoveData.ApplyingIndexUpdate) {
+                const TString binaryKey = key.MakeBinaryKey();
+                if (Self->MoveData.Key && *Self->MoveData.Key == binaryKey) {
+                    Self->MoveData.RecordTouched = true;
+                }
+                if (outcome != EUpdateOutcome::DROP) {
+                    for (const auto& item : value.ValueChain) {
+                        if (item.HasBlobLocator() && Self->NeedMoveBlob(item.GetBlobLocator())) {
+                            Self->MoveData.NeedsAnotherPass = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
             auto row = NIceDb::TNiceDb(txc.DB).Table<Schema::Data>().Key(key.MakeBinaryKey());
             switch (outcome) {
                 case EUpdateOutcome::DROP:
@@ -350,6 +365,94 @@ namespace NKikimr::NBlobDepot {
 
             return EUpdateOutcome::CHANGE;
         }, item);
+    }
+
+    TData::EMoveDataReplaceResult TData::ReplaceLocatorForMoveData(const TKey& key, ui32 valueChainIndex,
+            ui32 expectedValueVersion, const NKikimrBlobDepot::TBlobLocator& oldLocator,
+            const NKikimrBlobDepot::TBlobLocator& newLocator,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {
+        Y_ABORT_UNLESS(IsKeyLoaded(key));
+
+        const TValue *value = FindKey(key);
+        if (!value) {
+            return EMoveDataReplaceResult::KeyMissing;
+        }
+
+        auto locatorEquals = [](const NKikimrBlobDepot::TBlobLocator& left,
+                const NKikimrBlobDepot::TBlobLocator& right) {
+            TString leftSerialized;
+            TString rightSerialized;
+            Y_ABORT_UNLESS(left.SerializeToString(&leftSerialized));
+            Y_ABORT_UNLESS(right.SerializeToString(&rightSerialized));
+            return leftSerialized == rightSerialized;
+        };
+
+        if (value->ValueVersion != expectedValueVersion ||
+                valueChainIndex >= static_cast<ui32>(value->ValueChain.size()) ||
+                !value->ValueChain[valueChainIndex].HasBlobLocator() ||
+                !locatorEquals(value->ValueChain[valueChainIndex].GetBlobLocator(), oldLocator)) {
+            return EMoveDataReplaceResult::KeyChanged;
+        }
+
+        Self->MoveData.ApplyingIndexUpdate = true;
+        Y_DEFER {
+            Self->MoveData.ApplyingIndexUpdate = false;
+        };
+
+        const bool changed = UpdateKey(key, txc, cookie, "ReplaceLocatorForMoveData",
+            [&](TValue& mutableValue, bool inserted) {
+                Y_ABORT_UNLESS(!inserted);
+                Y_ABORT_UNLESS(mutableValue.ValueVersion == expectedValueVersion);
+                Y_ABORT_UNLESS(valueChainIndex < static_cast<ui32>(mutableValue.ValueChain.size()));
+                auto& item = mutableValue.ValueChain[valueChainIndex];
+                Y_ABORT_UNLESS(item.HasBlobLocator());
+                Y_ABORT_UNLESS(locatorEquals(item.GetBlobLocator(), oldLocator));
+                item.MutableBlobLocator()->CopyFrom(newLocator);
+                ++mutableValue.ValueVersion;
+                return EUpdateOutcome::CHANGE;
+            });
+        Y_ABORT_UNLESS(changed);
+        return EMoveDataReplaceResult::Replaced;
+    }
+
+    bool TData::IsBlobReferenced(TLogoBlobID id) const {
+        return RefCountBlobs.contains(id);
+    }
+
+    TData::EMoveDataTrashStatus TData::CheckMoveDataTrash(const TSet<ui32>& groups) {
+        // TODO: rewrite
+
+        bool hasUsed = false;
+        bool waitingForGC = false;
+
+        for (auto& [key, record] : RecordsPerChannelGroup) {
+            const auto& [channel, groupId] = key;
+            Y_UNUSED(channel);
+            if (!groups.contains(groupId)) {
+                continue;
+            }
+
+            hasUsed = hasUsed || !record.Used.empty();
+            waitingForGC = waitingForGC || !record.Trash.empty() || !record.TrashInFlight.empty() ||
+                record.CollectGarbageRequestsInFlight;
+            record.CollectIfPossible(this);
+        }
+
+        for (const TLogoBlobID& id : AllInFlightTrashBlobs) {
+            if (groups.contains(Self->Info()->GroupFor(id.Channel(), id.Generation()))) {
+                waitingForGC = true;
+                break;
+            }
+        }
+
+        if (hasUsed) {
+            return EMoveDataTrashStatus::NeedsIndexRescan;
+        }
+        if (waitingForGC || !IsTrashFullyLoaded()) {
+            IssueLoadTrashBatch();
+            return EMoveDataTrashStatus::WaitingForGC;
+        }
+        return EMoveDataTrashStatus::Clear;
     }
 
     void TData::BindToBlob(const TKey& key, TBlobSeqId blobSeqId, bool keep, bool doNotKeep, NTabletFlatExecutor::TTransactionContext& txc, void *cookie) {

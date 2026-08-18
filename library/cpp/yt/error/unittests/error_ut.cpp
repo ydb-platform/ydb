@@ -408,6 +408,22 @@ TEST(TErrorTest, WithInnerErrorRange)
     EXPECT_TRUE(innerErrors.back().IsOK());
 }
 
+TEST(TErrorTest, WithOKInnerErrorIsDropped)
+{
+    auto error = TError("Outer error")
+        .With(TError())
+        .With(TError("Inner error"));
+
+    ASSERT_EQ(error.InnerErrors().size(), 1u);
+    EXPECT_EQ(error.InnerErrors()[0].GetMessage(), "Inner error");
+
+    std::vector innerErrors{TError(), TError("Ranged inner error")};
+    auto ranged = TError("Outer error").With(innerErrors);
+
+    ASSERT_EQ(ranged.InnerErrors().size(), 1u);
+    EXPECT_EQ(ranged.InnerErrors()[0].GetMessage(), "Ranged inner error");
+}
+
 TEST(TErrorTest, WrapOKError)
 {
     TError error;

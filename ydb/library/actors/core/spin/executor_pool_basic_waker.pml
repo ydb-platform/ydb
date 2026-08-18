@@ -6,7 +6,7 @@
  *  - SuggestedThreadCount updates by the controller;
  *  - ThreadCount and CheckToSleepWorkers updates owned by the waker;
  *  - workers preferring a reduction request over taking an activation;
- *  - independent infinite producers keeping the queue bounded by N + 1;
+ *  - independent infinite producers keeping the queue bounded by MAX_QUEUE;
  *  - None -> Blocking -> Sleep and immediate parking;
  *  - waker-local ActiveMask and sleeping-stack membership;
  *  - SleepingCount containing active sleeping workers only;
@@ -20,7 +20,7 @@
 
 #define N 2
 #define PRODUCERS 2
-#define MAX_QUEUE (N + 1)
+#define MAX_QUEUE N
 #define NONE 0
 #define SPIN 1
 #define SLEEP 2

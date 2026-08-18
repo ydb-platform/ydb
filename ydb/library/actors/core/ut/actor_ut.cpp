@@ -17,6 +17,9 @@
 #include <util/system/rwlock.h>
 #include <util/system/hp_timer.h>
 
+#include <array>
+#include <chrono>
+
 using namespace NActors;
 using namespace NActors::NTests;
 
@@ -25,6 +28,145 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     using TActorBenchmark = ::NActors::NTests::TActorBenchmark<>;
     using TSettings = TActorBenchmark::TSettings;
     using TSendReceiveActorParams = TActorBenchmark::TSendReceiveActorParams;
+
+    struct TWakerBurstCounters {
+        std::atomic<ui32> Remaining = 0;
+        TThreadParkPad Completed;
+    };
+
+    class TWakerBurstActor : public TActor<TWakerBurstActor> {
+    public:
+        explicit TWakerBurstActor(TWakerBurstCounters* counters)
+            : TActor<TWakerBurstActor>(&TWakerBurstActor::StateFunc)
+            , Counters(counters)
+        {}
+
+        STFUNC(StateFunc) {
+            switch (ev->GetTypeRewrite()) {
+                hFunc(TEvents::TEvPing, Handle);
+            }
+        }
+
+    private:
+        void Handle(TEvents::TEvPing::TPtr&) {
+            if (Counters->Remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                Counters->Completed.Unpark();
+            }
+        }
+
+        TWakerBurstCounters* const Counters;
+    };
+
+    struct TWakerBurstStats {
+        ui64 Mean = 0;
+        ui64 P50 = 0;
+        ui64 P99 = 0;
+    };
+
+    TWakerBurstStats CalculateWakerBurstStats(TVector<ui64> values) {
+        Sort(values);
+        ui64 sum = 0;
+        for (ui64 value : values) {
+            sum += value;
+        }
+        return {
+            .Mean = sum / values.size(),
+            .P50 = values[values.size() / 2],
+            .P99 = values[(values.size() * 99) / 100],
+        };
+    }
+
+    void RunWakerMessageBurstsBenchmark(bool enableWaker) {
+        constexpr ui32 Threads = 8;
+        constexpr ui32 Rounds = 100;
+        const TDuration idleDuration = TDuration::MilliSeconds(10);
+        constexpr std::array<ui32, 3> MessageCounts = {Threads, 10 * Threads, 100 * Threads};
+
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, Threads, false, false);
+        auto& config = setup->CpuManager.Basic.back();
+        config.EnableWaker = enableWaker;
+        config.SpinThreshold = 0;
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        TWakerBurstCounters counters;
+        TVector<TActorId> actors;
+        actors.reserve(Threads);
+        for (ui32 i = 0; i < Threads; ++i) {
+            actors.push_back(actorSystem.Register(new TWakerBurstActor(&counters)));
+        }
+
+        for (ui32 messageCount : MessageCounts) {
+            TVector<ui64> sendTimes;
+            TVector<ui64> completionTimes;
+            sendTimes.reserve(Rounds);
+            completionTimes.reserve(Rounds);
+
+            for (ui32 round = 0; round < Rounds; ++round) {
+                TVector<THolder<TEvents::TEvPing>> events;
+                events.reserve(messageCount);
+                for (ui32 i = 0; i < messageCount; ++i) {
+                    events.emplace_back(MakeHolder<TEvents::TEvPing>());
+                }
+
+                Sleep(idleDuration);
+                counters.Remaining.store(messageCount, std::memory_order_release);
+
+                const auto started = std::chrono::steady_clock::now();
+                for (ui32 i = 0; i < messageCount; ++i) {
+                    actorSystem.Send(actors[i % Threads], events[i].Release());
+                }
+                const auto sent = std::chrono::steady_clock::now();
+                counters.Completed.Park();
+                const auto completed = std::chrono::steady_clock::now();
+
+                sendTimes.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(sent - started).count());
+                completionTimes.push_back(std::chrono::duration_cast<std::chrono::nanoseconds>(completed - started).count());
+            }
+
+            const auto sendStats = CalculateWakerBurstStats(std::move(sendTimes));
+            const auto completionStats = CalculateWakerBurstStats(std::move(completionTimes));
+            Cout << "waker=" << (enableWaker ? "on" : "off")
+                 << ",messages=" << messageCount
+                 << ",send_mean_ns=" << sendStats.Mean
+                 << ",send_p50_ns=" << sendStats.P50
+                 << ",send_p99_ns=" << sendStats.P99
+                 << ",completion_mean_ns=" << completionStats.Mean
+                 << ",completion_p50_ns=" << completionStats.P50
+                 << ",completion_p99_ns=" << completionStats.P99
+                 << Endl;
+        }
+
+        actorSystem.Stop();
+    }
+
+    void RunWakerSaturatedBenchmark(bool enableWaker) {
+        constexpr ui32 Threads = 8;
+        constexpr ui32 ActorPairs = 2 * Threads;
+        constexpr ui32 InFlight = 1;
+        const TDuration duration = TDuration::Seconds(1);
+
+        const auto stats = TActorBenchmark::CountStats([=] {
+            return TActorBenchmark::BenchContentedThreads(
+                Threads,
+                ActorPairs,
+                TActorBenchmark::EPoolType::Basic,
+                ESendingType::Common,
+                duration,
+                InFlight,
+                enableWaker);
+        });
+        const double elapsedSeconds = stats.ElapsedTime.Mean / 1e9;
+        const ui64 eventsPerSecond = stats.SentEvents.Mean / elapsedSeconds;
+        Cout << "waker=" << (enableWaker ? "on" : "off")
+             << ",threads=" << Threads
+             << ",actor_pairs=" << ActorPairs
+             << ",in_flight=" << InFlight
+             << ",messages_per_second=" << eventsPerSecond
+             << Endl;
+    }
 
     class TLongRunningActor : public TActorBootstrapped<TLongRunningActor> {
         public:
@@ -440,6 +582,16 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
             });
             Cerr << stats.ToString() << " " << mType << " Tail" << Endl;
         }
+    }
+
+    Y_UNIT_TEST(WakerMessageBurstsBenchmark) {
+        RunWakerMessageBurstsBenchmark(false);
+        RunWakerMessageBurstsBenchmark(true);
+    }
+
+    Y_UNIT_TEST(WakerSaturatedBenchmark) {
+        RunWakerSaturatedBenchmark(false);
+        RunWakerSaturatedBenchmark(true);
     }
 
     Y_UNIT_TEST(SendReceive1Pool1ThreadNoAlloc) {

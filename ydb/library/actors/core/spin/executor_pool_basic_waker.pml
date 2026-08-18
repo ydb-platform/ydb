@@ -31,7 +31,7 @@ byte state[N];
 
 byte suggested_thread_count = N;
 byte thread_count = N;
-byte active_count = N;
+byte awake_workers = N;
 byte sleeping_count = 0;
 byte reductions = 0;
 byte activation_credits = 0;
@@ -52,8 +52,8 @@ inline check_safety() {
     atomic {
         assert(suggested_thread_count >= 1 && suggested_thread_count <= N);
         assert(thread_count >= 1 && thread_count <= N);
-        assert(active_count <= N);
-        assert(sleeping_count <= active_count);
+        assert(awake_workers <= N);
+        assert(awake_workers + sleeping_count <= N);
         assert(reductions <= N);
         assert(activation_credits <= MAX_QUEUE);
         assert(queued_activations <= activation_credits)
@@ -172,9 +172,9 @@ proctype Waker() {
         };
 
         /* The waker owns all mutable values in this reconciliation block.
-         * thread_count is the previously accepted target, active_count is the
-         * number of slots still eligible to execute, and sleep_workers is the
-         * total number of workers in Sleep. */
+         * thread_count is the previously accepted target, awake_workers is
+         * the number of workers outside Sleep, and sleep_workers is the total
+         * number of workers in Sleep. */
         atomic {
             if
             :: desired > thread_count ->
@@ -199,7 +199,6 @@ proctype Waker() {
                  * assigning that eligibility to concrete worker identities. */
                 assert(sleep_workers >= previous_sleeping_count + delta);
                 previous_sleeping_count = previous_sleeping_count + delta;
-                active_count = active_count + delta;
                 delta = 0
 
             :: desired < thread_count ->
@@ -219,7 +218,6 @@ proctype Waker() {
                 :: else -> converted = delta
                 fi;
                 previous_sleeping_count = previous_sleeping_count - converted;
-                active_count = active_count - converted;
                 delta = delta - converted;
                 remaining_reductions = remaining_reductions + delta;
                 delta = 0
@@ -262,6 +260,7 @@ proctype Waker() {
                         if
                         :: state[i] == SPIN ->
                             state[i] = SLEEP;
+                            awake_workers--;
                             previous_sleeping_count++;
                             sleep_workers++
                         :: else ->
@@ -283,6 +282,7 @@ proctype Waker() {
                     :: activations == 0 ->
                         atomic {
                             state[i] = SLEEP;
+                            awake_workers--;
                             previous_sleeping_count++;
                             sleep_workers++;
                             taken_tokens_to_wakeup--
@@ -293,7 +293,7 @@ proctype Waker() {
                     assert(taken_tokens_to_sleep > 0);
                     atomic {
                         state[i] = SLEEP;
-                        active_count--;
+                        awake_workers--;
                         sleep_workers++;
                         taken_tokens_to_sleep--
                     }
@@ -318,6 +318,7 @@ proctype Waker() {
                 :: state[i] == SLEEP ->
                     atomic {
                         state[i] = NONE;
+                        awake_workers++;
                         previous_sleeping_count--;
                         sleep_workers--;
                         activations--;
@@ -337,7 +338,7 @@ proctype Waker() {
 
         /* Publish both the remaining reductions and the baseline used to
          * detect claims on the next pass. The baseline is waker-local. */
-        assert(active_count == thread_count
+        assert(awake_workers + previous_sleeping_count == thread_count
             + remaining_reductions + taken_tokens_to_sleep);
         atomic {
             reductions = remaining_reductions;
@@ -356,15 +357,15 @@ proctype Waker() {
         check_safety();
         atomic {
             assert(previous_sleeping_count <= sleep_workers);
-            assert(active_count == N - sleep_workers + previous_sleeping_count)
+            assert(awake_workers == N - sleep_workers)
         }
     od
 }
 
 #define target_one (suggested_thread_count == 1)
 #define target_max (suggested_thread_count == N)
-#define reconciled_one (thread_count == 1 && active_count == 1 && reductions == 0)
-#define reconciled_max (thread_count == N && active_count == N && reductions == 0)
+#define reconciled_one (thread_count == 1 && awake_workers + sleeping_count == 1 && reductions == 0)
+#define reconciled_max (thread_count == N && awake_workers + sleeping_count == N && reductions == 0)
 ltl live_reconcile_stable {
     ((<>[] target_one) ->
         ((<>[] reconciled_one) && ([]<> work_epoch) && ([]<> !work_epoch))) &&

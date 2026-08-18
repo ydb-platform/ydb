@@ -8,6 +8,12 @@
 
 Columns of the same table can be grouped to set the following parameters:
 
+{% note info %}
+
+Column groups are supported for row-oriented tables only and are not available for column-oriented tables.
+
+{% endnote %}
+
 * `DATA`: A storage device type for the data in this column group. Acceptable values: `"ssd"`, `"rot"`.
 * `COMPRESSION`: A data compression codec. Acceptable values: `"off"`, `"lz4"`.
 * `CACHE_MODE`: [Caching mode](../../../../concepts/datamodel/table.md#cache-modes). Acceptable values: `"in_memory"`, `"regular"`.

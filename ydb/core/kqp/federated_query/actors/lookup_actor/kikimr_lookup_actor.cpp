@@ -75,7 +75,7 @@ namespace {
     constexpr TDuration MaxRetryDelay = TDuration::Seconds(30);
     // = retry for at most 6 minutes
     constexpr ui64 ChannelBufferSize = 1_MB;
-    constexpr ui64 SessionPoolLimit = 100; // arbitrary
+    constexpr ui64 SessionPoolLimit = 5; // arbitrary
 
     const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
         Y_ABORT_UNLESS(t1);
@@ -225,9 +225,13 @@ namespace {
             , ExceptionFunc(std::exception, HandleException)
         )
 
+        // TODO consider periodic check / forcibly terminate stuck sessions
+        // (then again, there are dev ui handle to terminate sessions)
+
         void HandleException(const std::exception& ex) {
-            Y_UNUSED(ex);
-            //SendError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Got unexpected exception: " << ex.what());
+            YDB_LOG_ERROR("Got unexpected exception",
+                    {"exception", ex.what()});
+            // TODO what can we do here? Except Y_ABORT?
         }
 
         void SendCreateSession(TSessionState::TPtr state) {
@@ -262,6 +266,7 @@ namespace {
                     continue;
                 }
                 auto sender = WaitingQueue.front();
+                Cerr << TInstant::Now() << " Take " << sender << Endl;
                 WaitingQueue.pop_front();
                 SendSession(sender, sessionId, std::move(session));
             }
@@ -269,6 +274,7 @@ namespace {
             while (!WaitingQueue.empty()) {
                 // too many sessions: wait until some session released
                 if (BusySessions.size() + InflightCreateSessions >= SessionPoolLimit) {
+                    Cerr << TInstant::Now() << " Hit pool limit " << BusySessions.size() << '+' << InflightCreateSessions << " " << WaitingQueue.front() << Endl;
                     return;
                 }
 
@@ -303,6 +309,7 @@ namespace {
                     TSessionInfo::TPtr sessionInfo(new TSessionInfo {
                         .SessionId = session->SessionId,
                     });
+                    Cerr << TInstant::Now() << " Pass to " << sender << " " << session->SessionId << Endl;
                     Send(sender, new TEvSessionAcquired(std::move(sessionInfo)));
                     return;
                 }
@@ -312,6 +319,7 @@ namespace {
                     SendDeleteSession(std::move(sessionInfo.SessionId));
                 }
             } else {
+                Cerr << TInstant::Now() << " Ready " << session->SessionId << Endl;
                 ReadySessions.push_back(std::move(session));
             }
             BusySessions.erase(it);
@@ -333,6 +341,7 @@ namespace {
                 return;
             }
             session->SessionId = std::move(*response.mutable_session_id());
+            Cerr << TInstant::Now() << " Created "<< session->SessionId << Endl;
             SendAttachSession(std::move(session));
         }
 
@@ -407,6 +416,7 @@ namespace {
 
                 Y_DEBUG_ABORT_UNLESS(InflightCreateSessions > 0);
                 --InflightCreateSessions;
+                Cerr << TInstant::Now() << " Attached "<< session->SessionId << Endl;
                 SendSession(sender, session->SessionId, session);
             }
             if (session->StreamProcessor->HasData()) {

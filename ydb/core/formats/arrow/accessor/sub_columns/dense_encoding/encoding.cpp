@@ -89,7 +89,7 @@ public:
         }
         const i64 bytesCount = (array.length() + CHAR_BIT - 1) / CHAR_BIT;
         // We want to reference the underlying array bitmap without copying, but it is possible
-        // only if the array is not a slice of another one with offset between byte borders (then copy).
+        // only if it starts at byte border (can be otherwise if it is a slice of another array - then copy).
         if (array.offset() % CHAR_BIT == 0) {
             Data = TStringBuf(reinterpret_cast<const char*>(array.null_bitmap_data()) + array.offset() / CHAR_BIT, bytesCount);
             return;
@@ -169,8 +169,8 @@ void AppendSection(TString& out, const TStringBuf raw, const std::shared_ptr<arr
     AppendFrameCompressed(out, raw, codec);
     const size_t encodedSize = out.size() - contentPosition;
     AFL_VERIFY(encodedSize <= Max<ui32>())("size", encodedSize);
-    const ui32 totalSize = encodedSize;
-    memcpy(out.Detach() + sizePosition, &totalSize, sizeof(totalSize));
+    const ui32 encodedSize32 = encodedSize;
+    memcpy(out.Detach() + sizePosition, &encodedSize32, sizeof(encodedSize32));
 }
 
 TString ReadSection(const TStringBuf blob, size_t& pos, const std::shared_ptr<arrow::util::Codec>& codec) {

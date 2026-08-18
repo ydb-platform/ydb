@@ -431,7 +431,7 @@ private:
         }
     }
 
-    void AdvancePointer(char*& ptr, char* begin, char* end) const {
+    void AdvancePointer(char*& ptr, char* begin, const char* end) const {
         ptr += AsDeriv().GetCellSize();
         ptr = (ptr == end) ? begin : ptr;
     }

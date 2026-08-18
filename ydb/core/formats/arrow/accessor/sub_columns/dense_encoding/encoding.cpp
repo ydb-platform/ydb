@@ -6,6 +6,7 @@
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/data.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/util/bit_run_reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bit_util.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/bitmap_ops.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/util/byte_stream_split.h>
@@ -103,8 +104,12 @@ public:
     }
 };
 
+const ui8* GetBitmapData(const TStringBuf bitmap) {
+    return reinterpret_cast<const ui8*>(bitmap.data());
+}
+
 inline bool GetBit(const TStringBuf bitmap, const ui64 index) {
-    return arrow::BitUtil::GetBit(reinterpret_cast<const ui8*>(bitmap.data()), index);
+    return arrow::BitUtil::GetBit(GetBitmapData(bitmap), index);
 }
 
 ui32 CountSetBits(const TStringBuf bitmap, const ui32 count) {
@@ -183,10 +188,6 @@ struct TParsedPrefix {
     TStringBuf Validity;
     ui32 PresentCount = 0;
     size_t Position = 0;
-
-    bool IsValid(const ui64 index) const {
-        return !NullBitmap || GetBit(Validity, index);
-    }
 };
 
 TParsedPrefix ParsePrefix(const TString& raw, const ui32 recordsCount) {
@@ -210,19 +211,25 @@ TParsedPrefix ParsePrefix(const TString& raw, const ui32 recordsCount) {
 }
 
 TString DecodeDenseValues(const TStringBuf encoded, const TParsedPrefix& prefix, const ui32 recordsCount, const ui32 width) {
+    if (!prefix.NullBitmap) {
+        return TString(encoded);
+    }
     TString values;
     const size_t valuesSize = static_cast<size_t>(recordsCount) * width;
     values.ReserveAndResize(valuesSize);
     char* out = values.Detach();
-    size_t encodedValueIndex = 0;
-    for (size_t i = 0; i < recordsCount; ++i) {
-        if (prefix.IsValid(i)) {
-            memcpy(out + i * width, encoded.data() + encodedValueIndex++ * width, width);
-        } else {
-            memset(out + i * width, 0, width);
-        }
-    }
-    AFL_VERIFY(encodedValueIndex == prefix.PresentCount)("actual", encodedValueIndex)("expected", prefix.PresentCount);
+    size_t encodedPosition = 0;
+    size_t previousPosition = 0;
+    arrow::internal::VisitSetBitRunsVoid(GetBitmapData(prefix.Validity), 0, recordsCount, [&](const i64 position, const i64 count) {
+        const size_t bytesBefore = (position - previousPosition) * width;
+        memset(out + previousPosition * width, 0, bytesBefore);
+        const size_t bytes = count * width;
+        memcpy(out + position * width, encoded.data() + encodedPosition, bytes);
+        encodedPosition += bytes;
+        previousPosition = position + count;
+    });
+    memset(out + previousPosition * width, 0, valuesSize - previousPosition * width);
+    AFL_VERIFY(encodedPosition == encoded.size())("actual", encodedPosition)("expected", encoded.size());
     return values;
 }
 
@@ -367,12 +374,11 @@ TString SerializeIndices(const std::shared_ptr<arrow::Array>& positions, const s
         if (!hasNulls) {
             memcpy(output + outputPosition, values, width * length);
         } else {
-            for (i64 i = 0; i < length; ++i) {
-                if (GetBit(validityData, i)) {
-                    memcpy(output + outputPosition, values + i * width, width);
-                    outputPosition += width;
-                }
-            }
+            arrow::internal::VisitSetBitRunsVoid(GetBitmapData(validityData), 0, length, [&](const i64 position, const i64 count) {
+                const size_t bytes = count * width;
+                memcpy(output + outputPosition, values + position * width, bytes);
+                outputPosition += bytes;
+            });
         }
     }
     return FrameCompress(payload, codec);

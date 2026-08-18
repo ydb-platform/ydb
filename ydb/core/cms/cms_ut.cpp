@@ -178,6 +178,30 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(after.GetGroups(0).GetDirectBlockGroupId(), 1);
     }
 
+    Y_UNIT_TEST(DDiskInfoSyncContinuesAfterBscRestart)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(2);
+
+        const ui64 tabletId = 1005;
+        const auto first = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), NKikimrProto::OK,
+            first.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId, 1);
+
+        env.RestartBSController();
+
+        const auto second = env.AllocateDDiskBlockGroup(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(second.GetStatus(), NKikimrProto::OK,
+            second.ShortDebugString());
+        const auto updated = env.WaitForDDiskInfo(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetRevision(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GroupsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(0).GetDirectBlockGroupId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(1).GetDirectBlockGroupId(), 2);
+    }
+
     Y_UNIT_TEST(DDiskInfoPersistsWhenBscIsUnavailable)
     {
         TCmsTestEnv env(8);

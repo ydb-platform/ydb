@@ -1993,6 +1993,10 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
 
     if (State->Sentinel)
         ctx.Send(State->Sentinel, new TEvSentinel::TEvBSCPipeDisconnected);
+
+    // Recreate the pipe here as well as on CMS activation. Otherwise a transient
+    // BSC restart leaves DDisk synchronization without a pipe forever.
+    StartDDiskSync(ctx);
 }
 
 void TCms::StartDDiskSync(const TActorContext& ctx) {
@@ -2046,8 +2050,9 @@ void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr&
 
     for (const auto& tablet : record.GetTablets()) {
         const auto it = State->DDiskInfo.find(tablet.GetTabletId());
-        const ui64 knownRevision = it == State->DDiskInfo.end() ? 0 : it->second.Revision;
-        if (tablet.GetRevision() > knownRevision) {
+        const bool isNewTablet = it == State->DDiskInfo.end();
+        const ui64 knownRevision = isNewTablet ? 0 : it->second.Revision;
+        if (isNewTablet || tablet.GetRevision() > knownRevision) {
             auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
             request->Record.SetTabletId(tablet.GetTabletId());
             request->Record.SetKnownRevision(knownRevision);

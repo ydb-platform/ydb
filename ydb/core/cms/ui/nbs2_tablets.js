@@ -35,11 +35,12 @@ const Nbs2Tablets = {
                 if (data.Status && data.Status !== 'OK') {
                     throw new Error(data.ErrorReason || data.Status);
                 }
-                this.tablets = data.Tablets || [];
-                const snapshotRequests = this.tablets.map((tablet) =>
-                    $.getJSON('cms/api/json/ddisk/tablet?tablet_id=' + encodeURIComponent(tablet.TabletId))
-                        .done((snapshot) => { this.snapshots[tablet.TabletId] = snapshot; })
-                );
+                this.tablets = this.field(data, 'Tablets', 'tablets') || [];
+                const snapshotRequests = this.tablets.map((tablet) => {
+                    const tabletId = this.tabletId(tablet);
+                    return $.getJSON('cms/api/json/ddisk/tablet?tablet_id=' + encodeURIComponent(tabletId))
+                        .done((snapshot) => { this.snapshots[tabletId] = snapshot; });
+                });
                 $.when.apply($, snapshotRequests).always(() => {
                     this.loadDiskStatuses().always(() => {
                         $('#nbs2-tablets-error').empty();
@@ -54,12 +55,18 @@ const Nbs2Tablets = {
         const ids = {};
         const nodes = {};
         const locations = {};
-        this.tablets.forEach((tablet) => (this.snapshots[tablet.TabletId] ? this.groups(tablet.TabletId) : []).forEach((group) => {
-            (group.DDiskId || []).concat(group.PersistentBufferDDiskId || []).forEach((id) => {
-                ids[this.diskId(id)] = id;
-                if (!nodes[id.NodeId]) nodes[id.NodeId] = id;
+        this.tablets.forEach((tablet) => {
+            const tabletId = this.tabletId(tablet);
+            (this.snapshots[tabletId] ? this.groups(tabletId) : []).forEach((group) => {
+                (this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [])
+                    .concat(this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [])
+                    .forEach((id) => {
+                        const nodeId = this.field(id, 'NodeId', 'nodeId');
+                        ids[this.diskId(id)] = id;
+                        if (!nodes[nodeId]) nodes[nodeId] = id;
+                    });
             });
-        }));
+        });
 
         // pdiskinfo requires pdisk_id, but its Whiteboard part contains the
         // complete PDiskStateInfo list for the node. One request per node is
@@ -67,28 +74,29 @@ const Nbs2Tablets = {
         const nodeListRequest = $.getJSON('viewer/nodelist')
             .done((data) => {
                 (Array.isArray(data) ? data : []).forEach((node) => {
-                    locations[node.Id] = node.PhysicalLocation || {};
+                    const nodeId = this.field(node, 'Id', 'id');
+                    locations[nodeId] = this.field(node, 'PhysicalLocation', 'physicalLocation') || {};
                 });
             });
         const requests = Object.keys(nodes).map((nodeId) => {
             const queryId = nodes[nodeId];
             return $.getJSON('viewer/pdiskinfo?node_id=' + encodeURIComponent(nodeId) +
-                    '&pdisk_id=' + encodeURIComponent(queryId.PDiskId))
+                    '&pdisk_id=' + encodeURIComponent(this.field(queryId, 'PDiskId', 'pdiskId')))
                 .done((response) => {
                     Object.keys(ids).forEach((key) => {
                         const id = ids[key];
-                        if (String(id.NodeId) === String(nodeId)) {
+                        if (String(this.field(id, 'NodeId', 'nodeId')) === String(nodeId)) {
                             this.disks[key] = {
                                 available: this.diskAvailability(response, id),
                                 path: this.diskPath(response, id),
-                                location: locations[id.NodeId] || {},
+                                location: locations[this.field(id, 'NodeId', 'nodeId')] || {},
                             };
                         }
                     });
                 })
                 .fail(() => {
                     Object.keys(ids).forEach((key) => {
-                        if (String(ids[key].NodeId) === String(nodeId)) {
+                        if (String(this.field(ids[key], 'NodeId', 'nodeId')) === String(nodeId)) {
                             this.disks[key] = {available: false};
                         }
                     });
@@ -100,14 +108,14 @@ const Nbs2Tablets = {
     diskPath: function(data, diskId) {
         const pdisks = this.field(data, 'PDiskStateInfo', 'pdiskStateInfo') || [];
         const pdisk = pdisks.find((item) =>
-            Number(this.field(item, 'PDiskId', 'pdiskId')) === Number(diskId.PDiskId));
+            Number(this.field(item, 'PDiskId', 'pdiskId')) === Number(this.field(diskId, 'PDiskId', 'pdiskId')));
         return pdisk && this.field(pdisk, 'Path', 'path') || '';
     },
 
     diskAvailability: function(data, diskId) {
         const pdisks = this.field(data, 'PDiskStateInfo', 'pdiskStateInfo') || [];
         const pdisk = pdisks.find((item) =>
-            Number(this.field(item, 'PDiskId', 'pdiskId')) === Number(diskId.PDiskId));
+            Number(this.field(item, 'PDiskId', 'pdiskId')) === Number(this.field(diskId, 'PDiskId', 'pdiskId')));
         if (pdisk) {
             // TPDiskState.E::Normal is 10 and means that the PDisk is working.
             return this.isNormalPDiskState(this.field(pdisk, 'State', 'state'));
@@ -117,6 +125,10 @@ const Nbs2Tablets = {
         const bscPDisk = bsc && this.field(bsc, 'PDisk', 'pdisk');
         const status = this.field(bscPDisk, 'StatusV2', 'statusV2', 'Status', 'status');
         return status === undefined || status === null ? false : this.isActiveDriveStatus(status);
+    },
+
+    tabletId: function(tablet) {
+        return this.field(tablet, 'TabletId', 'tabletId');
     },
 
     field: function(object, ...names) {
@@ -151,7 +163,7 @@ const Nbs2Tablets = {
     },
 
     diskId: function(id) {
-        return (id.NodeId || 0) + ':' + (id.PDiskId || 0);
+        return (this.field(id, 'NodeId', 'nodeId') || 0) + ':' + (this.field(id, 'PDiskId', 'pdiskId') || 0);
     },
 
     isUnavailable: function(id) {
@@ -161,24 +173,28 @@ const Nbs2Tablets = {
 
     groups: function(tabletId) {
         const snapshot = this.snapshots[tabletId];
-        return snapshot && snapshot.Groups || [];
+        return this.field(snapshot, 'Groups', 'groups') || [];
     },
 
     unavailableCount: function(tabletId) {
-        return this.groups(tabletId).reduce((sum, group) => sum + (group.DDiskId || []).filter((id) => this.isUnavailable(id)).length + (group.PersistentBufferDDiskId || []).filter((id) => this.isUnavailable(id)).length, 0);
+        return this.groups(tabletId).reduce((sum, group) => {
+            const ddiskIds = this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [];
+            const persistentBufferIds = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];
+            return sum + ddiskIds.filter((id) => this.isUnavailable(id)).length +
+                persistentBufferIds.filter((id) => this.isUnavailable(id)).length;
+        }, 0);
     },
 
     formatDisk: function(id) {
-        const label = (id.NodeId || 0) + ':' + (id.PDiskId || 0) + ':' + (id.DDiskSlotId || 0);
+        const label = (this.field(id, 'NodeId', 'nodeId') || 0) + ':' +
+            (this.field(id, 'PDiskId', 'pdiskId') || 0) + ':' +
+            (this.field(id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0);
         const disk = this.disks[this.diskId(id)] || {};
         const location = disk.location || {};
         const locationString = location.Location || '';
-        const dc = location.DataCenterId || location.DataCenter || '—';
-        const rack = location.RackId || this.locationPart(locationString, 'Rack') || '—';
         const hint = [
-            'Node: ' + (id.NodeId || '—'),
-            'DC: ' + dc,
-            'Rack: ' + rack,
+            'Node: ' + (this.field(id, 'NodeId', 'nodeId') || '—'),
+            'Location: ' + locationString,
             'Path: ' + (disk.path || '—'),
         ].join('\n');
         return '<span class="nbs2-disk ' + (this.isUnavailable(id) ? 'nbs2-disk-unavailable' : '') +
@@ -211,14 +227,19 @@ const Nbs2Tablets = {
         $('#nbs2-ddisks-table').hide();
         const body = $('#nbs2-tablets-body').empty();
         const tablets = this.tablets.slice().sort((a, b) => {
-            if ($('#nbs2-tablets-sort').val() === 'tablet') return Number(a.TabletId) - Number(b.TabletId);
-            return this.unavailableCount(b.TabletId) - this.unavailableCount(a.TabletId) || Number(a.TabletId) - Number(b.TabletId);
+            const aId = this.tabletId(a);
+            const bId = this.tabletId(b);
+            if ($('#nbs2-tablets-sort').val() === 'tablet') return Number(aId) - Number(bId);
+            return this.unavailableCount(bId) - this.unavailableCount(aId) || Number(aId) - Number(bId);
         });
         tablets.forEach((tablet) => {
-            const id = tablet.TabletId;
+            const id = this.tabletId(tablet);
             const groups = this.groups(id);
             const unavailable = this.unavailableCount(id);
-            body.append('<tr class="nbs2-tablet-row" data-tablet-id="' + id + '"><td><a href="#">' + id + '</a></td><td>' + (groups.length || tablet.GroupsCount || '—') + '</td><td class="' + (unavailable ? 'nbs2-count-unavailable' : '') + '">' + unavailable + '</td><td>' + (tablet.Revision || '—') + '</td><td>' + this.date(tablet.LastChangedAt) + '</td></tr>');
+            const groupsCount = this.field(tablet, 'GroupsCount', 'groupsCount');
+            const revision = this.field(tablet, 'Revision', 'revision');
+            const lastChangedAt = this.field(tablet, 'LastChangedAt', 'lastChangedAt');
+            body.append('<tr class="nbs2-tablet-row" data-tablet-id="' + id + '"><td><a href="#">' + id + '</a></td><td>' + (groups.length || groupsCount || '—') + '</td><td class="' + (unavailable ? 'nbs2-count-unavailable' : '') + '">' + unavailable + '</td><td>' + (revision || '—') + '</td><td>' + this.date(lastChangedAt) + '</td></tr>');
             if (this.snapshots[id]) this.renderDetails(body, id, groups);
         });
     },
@@ -229,18 +250,18 @@ const Nbs2Tablets = {
         $('#nbs2-ddisks-table').show();
         const disks = {};
         this.tablets.forEach((tablet) => {
-            const tabletId = tablet.TabletId;
+            const tabletId = this.tabletId(tablet);
             this.groups(tabletId).forEach((group) => {
-                (group.DDiskId || []).forEach((id) => this.addDiskUsage(disks, id, tabletId, 'DDisk'));
-                (group.PersistentBufferDDiskId || []).forEach((id) => this.addDiskUsage(disks, id, tabletId, 'PersistentBuffer'));
+                (this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || []).forEach((id) => this.addDiskUsage(disks, id, tabletId, 'DDisk'));
+                (this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || []).forEach((id) => this.addDiskUsage(disks, id, tabletId, 'PersistentBuffer'));
             });
         });
 
         Object.keys(disks).map((key) => disks[key]).sort((a, b) => {
             const unavailable = (this.isUnavailable(b.id) ? 1 : 0) - (this.isUnavailable(a.id) ? 1 : 0);
-            return unavailable || Number(a.id.NodeId) - Number(b.id.NodeId) ||
-                Number(a.id.PDiskId) - Number(b.id.PDiskId) ||
-                Number(a.id.DDiskSlotId) - Number(b.id.DDiskSlotId);
+            return unavailable || Number(this.field(a.id, 'NodeId', 'nodeId')) - Number(this.field(b.id, 'NodeId', 'nodeId')) ||
+                Number(this.field(a.id, 'PDiskId', 'pdiskId')) - Number(this.field(b.id, 'PDiskId', 'pdiskId')) ||
+                Number(this.field(a.id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId')) - Number(this.field(b.id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId'));
         }).forEach((disk) => {
             const key = this.ddiskKey(disk.id);
             const status = this.isUnavailable(disk.id) ? 'Unavailable' : 'Available';
@@ -250,8 +271,8 @@ const Nbs2Tablets = {
             if (disk.ddisk.length) roles.push('<div><b>DDisk:</b> ' + disk.ddisk.map((id) => this.escapeHtml(id)).join(', ') + '</div>');
             if (disk.persistentBuffer.length) roles.push('<div><b>Persistent Buffer:</b> ' + disk.persistentBuffer.map((id) => this.escapeHtml(id)).join(', ') + '</div>');
             body.append('<tr class="nbs2-ddisk-row" data-ddisk-key="' + this.escapeHtml(key) + '">' +
-                '<td>' + this.formatDisk(disk.id) + '</td><td>' + (disk.id.NodeId || '—') +
-                '</td><td>' + (disk.id.PDiskId || '—') + '</td><td class="' +
+                '<td>' + this.formatDisk(disk.id) + '</td><td>' + (this.field(disk.id, 'NodeId', 'nodeId') || '—') +
+                '</td><td>' + (this.field(disk.id, 'PDiskId', 'pdiskId') || '—') + '</td><td class="' +
                 (this.isUnavailable(disk.id) ? 'nbs2-count-unavailable' : '') + '">' + status +
                 '</td><td>' + tabletIds.size + '</td></tr>' +
                 '<tr id="nbs2-ddisk-details-' + this.escapeHtml(detailsId) + '" style="display: none"><td colspan="5">' +
@@ -260,7 +281,7 @@ const Nbs2Tablets = {
     },
 
     ddiskKey: function(id) {
-        return this.diskId(id) + ':' + (id.DDiskSlotId || 0);
+        return this.diskId(id) + ':' + (this.field(id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0);
     },
 
     addDiskUsage: function(disks, id, tabletId, role) {
@@ -273,7 +294,10 @@ const Nbs2Tablets = {
     renderDetails: function(body, id, groups) {
         let html = '<tr id="nbs2-tablet-details-' + id + '"><td colspan="5"><table class="table table-sm mb-0"><thead><tr><th>DBG</th><th>DDisk layout</th><th>Persistent buffer</th></tr></thead><tbody>';
         groups.forEach((group) => {
-            html += '<tr><td>' + (group.DirectBlockGroupId || 0) + '</td><td>' + (group.DDiskId || []).map((disk) => this.formatDisk(disk)).join(' ') + '</td><td>' + (group.PersistentBufferDDiskId || []).map((disk) => this.formatDisk(disk)).join(' ') + '</td></tr>';
+            const groupId = this.field(group, 'DirectBlockGroupId', 'directBlockGroupId');
+            const ddiskIds = this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [];
+            const persistentBufferIds = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];
+            html += '<tr><td>' + (groupId || 0) + '</td><td>' + ddiskIds.map((disk) => this.formatDisk(disk)).join(' ') + '</td><td>' + persistentBufferIds.map((disk) => this.formatDisk(disk)).join(' ') + '</td></tr>';
         });
         body.append(html + '</tbody></table></td></tr>').find('#nbs2-tablet-details-' + id).hide();
     },

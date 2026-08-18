@@ -101,17 +101,19 @@ TString TConfig::DebugString() const {
     return sb;
 }
 
-TConfig TConfig::BuildDefault() {
-    TConfig result;
-    ui32 idx = 0;
+NKikimrConfig::TCompositeConveyorConfig TConfig::BuildDefaultProto() {
+    NKikimrConfig::TCompositeConveyorConfig result;
     for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
-        result.Categories.emplace_back(i);
-        result.WorkerPools.emplace_back(idx, std::nullopt, 0.33);
-        AFL_VERIFY(result.WorkerPools.back().AddLink(i));
-        AFL_VERIFY(result.Categories.back().AddWorkerPool(idx));
-        ++idx;
+        result.AddCategories()->SetName(::ToString(i));
+        auto* workersPool = result.AddWorkerPools();
+        workersPool->SetDefaultFractionOfThreadsCount(0.33);
+        workersPool->AddLinks()->SetCategory(::ToString(i));
     }
     return result;
+}
+
+TConfig TConfig::BuildDefault() {
+    return BuildFromProto(BuildDefaultProto()).DetachResult();
 }
 
 TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction)

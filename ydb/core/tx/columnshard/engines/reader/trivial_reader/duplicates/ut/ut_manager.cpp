@@ -241,8 +241,10 @@ public:
 };
 
 void EnableDeduplicationConveyorFlag() {
+    const auto protoConfig = NConveyorComposite::NConfig::TConfig::BuildDefaultProto();
     std::unique_ptr<NActors::IActor> unusedDistributor(
-        NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), MakeIntrusive<NMonitoring::TDynamicCounters>()));
+        NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig).DetachResult(), protoConfig,
+            MakeIntrusive<NMonitoring::TDynamicCounters>()));
     Y_UNUSED(unusedDistributor);
 }
 

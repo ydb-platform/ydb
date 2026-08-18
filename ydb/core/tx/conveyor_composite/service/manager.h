@@ -2,6 +2,7 @@
 #include "category.h"
 #include "workers_pool.h"
 
+#include <ydb/core/kqp/query_data/kqp_predictor.h>
 #include <ydb/core/tx/conveyor_composite/usage/config.h>
 
 namespace NKikimr::NConveyorComposite {
@@ -64,6 +65,40 @@ public:
         AFL_VERIFY((ui64)category < Categories.size());
         AFL_VERIFY(!!Categories[(ui64)category]);
         return *Categories[(ui64)category];
+    }
+
+    bool StartWorkersUpdate(const NConfig::TConfig& config) {
+        const ui32 totalThreadsCount = NKqp::TStagePredictor::GetPossibleMaxLimitThreads();
+        for (ui32 poolIdx = 0; poolIdx < WorkerPools.size(); ++poolIdx) {
+            const auto& poolConfig = config.GetWorkerPools()[poolIdx];
+            const ui32 workersCount = poolConfig.GetWorkersCount(totalThreadsCount);
+            std::vector<double> desiredCPULimits;
+            desiredCPULimits.reserve(workersCount);
+            for (ui32 workerIdx = 0; workerIdx < workersCount; ++workerIdx) {
+                desiredCPULimits.emplace_back(poolConfig.GetWorkerCPUUsage(workerIdx, totalThreadsCount));
+            }
+            WorkerPools[poolIdx]->StartWorkersUpdate(desiredCPULimits);
+        }
+        return !HasWorkersUpdateInProgress();
+    }
+
+    bool OnWorkerCPULimitUpdated(const TEvInternal::TEvWorkerCPULimitUpdated& ev) {
+        MutableWorkersPool(ev.WorkersPoolId).OnWorkerCPULimitUpdated(ev);
+        return !HasWorkersUpdateInProgress();
+    }
+
+    bool OnWorkerStopped(const TEvInternal::TEvWorkerStopped& ev) {
+        MutableWorkersPool(ev.WorkersPoolId).OnWorkerStopped(ev);
+        return !HasWorkersUpdateInProgress();
+    }
+
+    bool HasWorkersUpdateInProgress() const {
+        for (const auto& pool : WorkerPools) {
+            if (pool->HasWorkersUpdateInProgress()) {
+                return true;
+            }
+        }
+        return false;
     }
 };
 

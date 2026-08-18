@@ -675,7 +675,18 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             UNIT_ASSERT_GT(maxChunks, 1);
         }
 
-        ExecuteScanQuery(tableClient, "SELECT * FROM `/Root/olapStore/olapTable`");
+        // The split filter must produce correct skip decisions: no false negatives on a matching substring,
+        // an empty result for an absent one.
+        {
+            auto total = ExecuteScanQuery(tableClient, "SELECT COUNT(*) AS Cnt FROM `/Root/olapStore/olapTable`");
+            auto matched =
+                ExecuteScanQuery(tableClient, "SELECT COUNT(*) AS Cnt FROM `/Root/olapStore/olapTable` WHERE uid LIKE \"%uid_%\"");
+            UNIT_ASSERT_GT(GetUint64(total[0].at("Cnt")), 0);
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(matched[0].at("Cnt")), GetUint64(total[0].at("Cnt")));
+            auto missed =
+                ExecuteScanQuery(tableClient, "SELECT COUNT(*) AS Cnt FROM `/Root/olapStore/olapTable` WHERE uid LIKE \"%qqzzqq%\"");
+            UNIT_ASSERT_VALUES_EQUAL(GetUint64(missed[0].at("Cnt")), 0);
+        }
     }
 
     // Several inplace (__LOCAL_METADATA) indexes on one table: each is size-guarded individually, so the one

@@ -52,20 +52,24 @@ inline request_waker() {
 }
 
 inline check_safety() {
-    assert(suggested_thread_count >= 1 && suggested_thread_count <= N);
-    assert(thread_count >= 1 && thread_count <= N);
-    assert(active_count <= N);
-    assert(sleeping_count <= active_count);
-    assert(reductions <= N);
-    assert(activation_credits <= MAX_QUEUE);
-    assert(queued_activations <= activation_credits);
+    atomic {
+        assert(suggested_thread_count >= 1 && suggested_thread_count <= N);
+        assert(thread_count >= 1 && thread_count <= N);
+        assert(active_count <= N);
+        assert(sleeping_count <= active_count);
+        assert(reductions <= N);
+        assert(activation_credits <= MAX_QUEUE);
+        assert(queued_activations <= activation_credits)
+    }
 }
 
 proctype Worker(byte id) {
     do
     :: worker_enabled[id] && state[id] == WORK ->
-        state[id] = NONE;
-        work_epoch = !work_epoch
+        atomic {
+            state[id] = NONE;
+            work_epoch = !work_epoch
+        }
 
     :: worker_enabled[id] && state[id] == NONE ->
         if
@@ -128,8 +132,10 @@ proctype Controller() {
         :: next = N
         fi;
         if
-        :: next != suggested_thread_count ->
-            suggested_thread_count = next;
+        :: atomic {
+            next != suggested_thread_count ->
+            suggested_thread_count = next
+        };
             request_waker()
         :: else -> skip
         fi;
@@ -159,14 +165,16 @@ proctype Waker() {
         :: i < N ->
             if
             :: worker_enabled[i] && state[i] == BLOCKING ->
-                if
-                :: active_count > desired ->
-                    state[i] = SLEEP;
-                    in_sleeping_stack[i] = true;
-                    worker_enabled[i] = false;
-                    active_count--
-                :: else -> state[i] = NONE
-                fi
+                atomic {
+                    if
+                    :: active_count > desired ->
+                        state[i] = SLEEP;
+                        in_sleeping_stack[i] = true;
+                        worker_enabled[i] = false;
+                        active_count--
+                    :: else -> state[i] = NONE
+                    fi
+                }
             :: else -> skip
             fi;
             i++

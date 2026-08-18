@@ -486,10 +486,10 @@ std::shared_ptr<arrow::Scalar> TIndexInfo::GetColumnExternalDefaultValueVerified
     return GetColumnFeaturesVerified(columnId).GetDefaultValue().GetValue();
 }
 
-NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>> chunks, const ui32 indexId,
+bool TIndexInfo::ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>> chunks, const ui32 indexId,
     const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier, TSecondaryData& result) const {
     if (chunks.empty()) {
-        return TConclusionStatus::Success();
+        return false;
     }
     ui32 checkRecordsCount = 0;
     for (auto&& chunk : chunks) {
@@ -500,17 +500,16 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
     for (auto&& chunk : chunks) {
         if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
-            // The chunk does not fit the target storage. Drop the whole index instead of failing: a failure
-            // would abort the compaction/actualization callers via DetachResult, i.e. the tablet crash #26733
-            // fixes. The portion stays correct without the index, only the skip optimization is lost.
+            // The chunk does not fit the target storage: the caller rebuilds the index via AppendIndex, which
+            // can split it (or drops it if it still cannot fit).
             auto indexMeta = GetIndexOptional(indexId);
             YDB_LOG_WARN("",
-                {"event", "index_skipped"},
+                {"event", "index_reuse_rejected"},
                 {"index_id", indexId},
                 {"index_name", indexMeta.HasObject() ? indexMeta->GetIndexName() : TString{}},
                 {"packed_size", chunk->GetPackedSize()},
                 {"limit", opStorage->GetBlobSplitSettings().GetMaxBlobSize()});
-            return TConclusionStatus::Success();
+            return false;
         }
     }
     if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
@@ -519,12 +518,11 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     } else {
         AFL_VERIFY(result.MutableExternalData().emplace(indexId, std::move(chunks)).second);
     }
-    return TConclusionStatus::Success();
+    return true;
 }
 
-NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-    const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier,
-    TSecondaryData& result) const {
+void TIndexInfo::AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData, const ui32 indexId,
+    const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier, TSecondaryData& result) const {
     auto it = Indexes.find(indexId);
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
@@ -547,24 +545,21 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
             {"index_id", indexId},
             {"index_name", index->GetIndexName()},
             {"error", indexChunkConclusion.GetErrorMessage()});
-        return TConclusionStatus::Success();
+        return;
     }
     if (indexChunkConclusion->empty()) {
-        return TConclusionStatus::Success();
+        return;
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> chunks(
         std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
-    // AppendIndex must never fail: its callers DetachResult and would crash (the #26733 symptom). ReuseIndexChunks
-    // already drops rather than fails, but guard defensively so a future Fail there cannot propagate.
-    auto status = ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
-    if (status.IsFail()) {
+    if (!ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result)) {
+        // The freshly built index still does not fit its storage: drop it, the portion stays correct without
+        // the index, only the skip optimization is lost.
         YDB_LOG_WARN("",
             {"event", "index_skipped"},
             {"index_id", indexId},
-            {"index_name", index->GetIndexName()},
-            {"reason", status.GetErrorMessage()});
+            {"index_name", index->GetIndexName()});
     }
-    return TConclusionStatus::Success();
 }
 
 std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui32 columnId) const {

@@ -137,14 +137,13 @@ std::optional<TWritePortionInfoWithBlobsResult> TReadPortionInfoWithBlobs::SyncP
             if (canTryReuse) {
                 auto existingChunks = source.GetEntityChunks(indexId);
                 if (!existingChunks.empty()) {
-                    reused = to->GetIndexInfo()
-                                 .ReuseIndexChunks(std::move(existingChunks), indexId, storages, recordsCount, targetTier, secondaryData)
-                                 .Ok();
+                    reused = to->GetIndexInfo().ReuseIndexChunks(
+                        std::move(existingChunks), indexId, storages, recordsCount, targetTier, secondaryData);
                 }
             }
         }
         if (!reused) {
-            to->GetIndexInfo().AppendIndex(entityChunksNew, indexId, storages, recordsCount, targetTier, secondaryData).Validate();
+            to->GetIndexInfo().AppendIndex(entityChunksNew, indexId, storages, recordsCount, targetTier, secondaryData);
         }
     }
 

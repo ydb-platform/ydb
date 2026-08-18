@@ -400,10 +400,7 @@ public:
         TSecondaryData result;
         result.MutableExternalData() = primaryData;
         for (auto&& i : Indexes) {
-            auto conclusion = AppendIndex(primaryData, i.first, operators, recordsCount, specialTier, result);
-            if (conclusion.IsFail()) {
-                return conclusion;
-            }
+            AppendIndex(primaryData, i.first, operators, recordsCount, specialTier, result);
         }
         return result;
     }
@@ -414,12 +411,15 @@ public:
     std::shared_ptr<NIndexes::NMinMax::TIndexMeta> GetIndexMetaMinMax(const ui32 columnId) const;
     std::shared_ptr<NIndexes::NCountMinSketch::TIndexMeta> GetIndexMetaCountMinSketch(const std::set<ui32>& columnIds) const;
 
-    [[nodiscard]] TConclusionStatus ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>> chunks, const ui32 indexId,
+    // Returns true when the existing chunks were stored for the new portion; false when they cannot be used
+    // (e.g. a chunk above the storage blob limit) and the index has to be rebuilt via AppendIndex.
+    [[nodiscard]] bool ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>> chunks, const ui32 indexId,
         const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier, TSecondaryData& result) const;
 
-    [[nodiscard]] TConclusionStatus AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData,
-        const ui32 indexId, const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier,
-        TSecondaryData& result) const;
+    // Never fails: an index that cannot be built or does not fit its storage is dropped, the portion stays
+    // correct without it (#26733 — a failure would crash the compaction/actualization callers).
+    void AppendIndex(const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& originalData, const ui32 indexId,
+        const std::shared_ptr<IStoragesManager>& operators, const ui32 recordsCount, const TString& specialTier, TSecondaryData& result) const;
 
     /// Returns an id of the column located by name. The name should exists in the schema.
     ui32 GetColumnIdVerified(const std::string& name) const;

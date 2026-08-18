@@ -225,9 +225,9 @@ Y_UNIT_TEST_SUITE(TReuseIndexChunksTests) {
             std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(MaxIndexId, 0), batch->num_rows(), marker.size(), marker),
         };
 
-        const auto status = schema->GetIndexInfo().ReuseIndexChunks(std::move(chunks), MaxIndexId, TTestStoragesManager::GetInstance(),
+        const bool reused = schema->GetIndexInfo().ReuseIndexChunks(std::move(chunks), MaxIndexId, TTestStoragesManager::GetInstance(),
             batch->num_rows(), IStoragesManager::DefaultStorageId, secondaryData);
-        UNIT_ASSERT(status.Ok());
+        UNIT_ASSERT(reused);
 
         const auto& inplace = secondaryData.GetSecondaryInplaceData();
         UNIT_ASSERT_EQUAL(inplace.size(), 1u);

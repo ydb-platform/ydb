@@ -253,9 +253,8 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
 
         TIndexInfo::TSecondaryData secondaryData;
         secondaryData.MutableExternalData() = chunks;
-        const auto conclusion = schema->GetIndexInfo().AppendIndex(
+        schema->GetIndexInfo().AppendIndex(
             chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 512, IStoragesManager::DefaultStorageId, secondaryData);
-        UNIT_ASSERT_C(conclusion.Ok(), conclusion.GetErrorMessage());
 
         const auto it = secondaryData.GetExternalData().find(NGrammIndexId);
         UNIT_ASSERT(it != secondaryData.GetExternalData().end());
@@ -283,9 +282,8 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
 
         TIndexInfo::TSecondaryData secondaryData;
         secondaryData.MutableExternalData() = chunks;
-        const auto conclusion = schema->GetIndexInfo().AppendIndex(
+        schema->GetIndexInfo().AppendIndex(
             chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 512, IStoragesManager::DefaultStorageId, secondaryData);
-        UNIT_ASSERT_C(conclusion.Ok(), conclusion.GetErrorMessage());
 
         const auto it = secondaryData.GetExternalData().find(NGrammIndexId);
         UNIT_ASSERT(it != secondaryData.GetExternalData().end());
@@ -310,9 +308,8 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
 
         TIndexInfo::TSecondaryData secondaryData;
         secondaryData.MutableExternalData() = chunks;
-        const auto conclusion = schema->GetIndexInfo().AppendIndex(
+        schema->GetIndexInfo().AppendIndex(
             chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 512, IStoragesManager::DefaultStorageId, secondaryData);
-        UNIT_ASSERT_C(conclusion.Ok(), conclusion.GetErrorMessage());
 
         const auto it = secondaryData.GetExternalData().find(NGrammIndexId);
         UNIT_ASSERT(it != secondaryData.GetExternalData().end());
@@ -340,9 +337,8 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
             TIndexInfo::TSecondaryData secondaryData;
             const auto chunks = BuildColumnChunks(schemaFrom, { MakeTestBatch() });
             secondaryData.MutableExternalData() = chunks;
-            const auto conclusion = schemaFrom->GetIndexInfo().AppendIndex(
+            schemaFrom->GetIndexInfo().AppendIndex(
                 chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 3, IStoragesManager::DefaultStorageId, secondaryData);
-            UNIT_ASSERT_C(conclusion.Ok(), conclusion.GetErrorMessage());
             UNIT_ASSERT(!secondaryData.GetExternalData().contains(NGrammIndexId));
             UNIT_ASSERT(secondaryData.GetSecondaryInplaceData().empty());
         }
@@ -377,9 +373,8 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
 
         TIndexInfo::TSecondaryData secondaryData;
         secondaryData.MutableExternalData() = chunks;
-        const auto conclusion = schema->GetIndexInfo().AppendIndex(
+        schema->GetIndexInfo().AppendIndex(
             chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 512, IStoragesManager::DefaultStorageId, secondaryData);
-        UNIT_ASSERT_C(conclusion.Ok(), conclusion.GetErrorMessage());
         UNIT_ASSERT(!secondaryData.GetExternalData().contains(NGrammIndexId));
         UNIT_ASSERT(secondaryData.GetSecondaryInplaceData().empty());
     }

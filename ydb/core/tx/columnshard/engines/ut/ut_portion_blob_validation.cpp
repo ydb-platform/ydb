@@ -136,9 +136,8 @@ Y_UNIT_TEST_SUITE(TPortionBlobValidation) {
 
         TIndexInfo::TSecondaryData secondaryData;
         secondaryData.MutableExternalData() = entityChunks;
-        schema->GetIndexInfo()
-            .AppendIndex(entityChunks, BloomIndexId, storages, batch->num_rows(), IStoragesManager::DefaultStorageId, secondaryData)
-            .Validate();
+        schema->GetIndexInfo().AppendIndex(
+            entityChunks, BloomIndexId, storages, batch->num_rows(), IStoragesManager::DefaultStorageId, secondaryData);
         UNIT_ASSERT(secondaryData.GetExternalData().contains(BloomIndexId));
         UNIT_ASSERT(secondaryData.GetSecondaryInplaceData().empty());
 

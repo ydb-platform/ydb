@@ -23,7 +23,7 @@ const Nbs2Tablets = {
             }
             this.loadSnapshot(tabletId, $(event.currentTarget));
         });
-        $('#nbs2-tablets-body').on('click', 'a', (event) => event.preventDefault());
+        $('#nbs2-tablets-body').on('click', 'a[href="#"]', (event) => event.preventDefault());
         $('a[href="#nbs2-tablets"]').on('shown.bs.tab', () => {
             if (!this.tablets.length) this.load();
         });
@@ -189,20 +189,39 @@ const Nbs2Tablets = {
         }, 0);
     },
 
-    formatDisk: function(id) {
-        const label = (this.field(id, 'NodeId', 'nodeId') || 0) + ':' +
-            (this.field(id, 'PDiskId', 'pdiskId') || 0) + ':' +
-            (this.field(id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0);
+    formatDisk: function(id, role) {
+        const nodeId = this.field(id, 'NodeId', 'nodeId') || 0;
+        const pdiskId = this.field(id, 'PDiskId', 'pdiskId') || 0;
+        const slotId = this.field(id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0;
+        const label = nodeId + ':' + pdiskId + ':' + slotId;
         const disk = this.disks[this.diskId(id)] || {};
         const location = disk.location || {};
         const locationString = location.Location || '';
         const hint = [
-            'Node: ' + (this.field(id, 'NodeId', 'nodeId') || '—'),
+            'Node: ' + (nodeId || '—'),
             'Location: ' + locationString,
             'Path: ' + (disk.path || '—'),
         ].join('\n');
+        const url = role === 'PersistentBuffer'
+            ? this.persistentBufferUrl(nodeId, pdiskId, slotId)
+            : this.ddiskUrl(nodeId, pdiskId, slotId);
         return '<span class="nbs2-disk ' + (this.isUnavailable(id) ? 'nbs2-disk-unavailable' : '') +
-            '" title="' + this.escapeHtml(hint) + '">' + label + '</span>';
+            '" title="' + this.escapeHtml(hint) + '"><a href="' + this.escapeHtml(url) + '">' + label + '</a></span>';
+    },
+
+    ddiskUrl: function(nodeId, pdiskId, slotId) {
+        return '/node/' + encodeURIComponent(nodeId) + '/actors/ddisks/ddisk_p' + String(pdiskId).padStart(9, '0') +
+            '_s' + String(slotId).padStart(9, '0');
+    },
+
+    persistentBufferUrl: function(nodeId, pdiskId, slotId) {
+        // MakeBlobStoragePersistentBufferId stores "NPB_" + PDiskId + slotId
+        // in TActorId's raw fields. TActorId::ToString() therefore renders
+        // [node:localId:hint], which is the value accepted by the PB viewer.
+        const localId = 0x5f42504en + (BigInt(pdiskId) << 32n);
+        const pb = '[' + nodeId + ':' + localId.toString() + ':' + slotId + ']';
+        return '/node/' + encodeURIComponent(nodeId) + '/actors/persistent_buffer?formPresent=1&autoRefresh=1&describeFreeSpace=1&showTablets=1&refreshRate=1&pb=' +
+            pb;
     },
 
     locationPart: function(location, name) {
@@ -278,10 +297,10 @@ const Nbs2Tablets = {
             const detailsId = key.replace(/:/g, '-');
             const roles = [];
             const tabletIds = new Set(disk.ddisk.concat(disk.persistentBuffer));
-            if (disk.ddisk.length) roles.push('<div><b>DDisk:</b> ' + disk.ddisk.map((id) => this.escapeHtml(id)).join(', ') + '</div>');
-            if (disk.persistentBuffer.length) roles.push('<div><b>Persistent Buffer:</b> ' + disk.persistentBuffer.map((id) => this.escapeHtml(id)).join(', ') + '</div>');
+            if (disk.ddisk.length) roles.push('<div><b>DDisk:</b> ' + this.formatDisk(disk.id, 'DDisk') + ' (' + disk.ddisk.map((id) => this.escapeHtml(id)).join(', ') + ')</div>');
+            if (disk.persistentBuffer.length) roles.push('<div><b>Persistent Buffer:</b> ' + this.formatDisk(disk.id, 'PersistentBuffer') + ' (' + disk.persistentBuffer.map((id) => this.escapeHtml(id)).join(', ') + ')</div>');
             body.append('<tr class="nbs2-ddisk-row" data-ddisk-key="' + this.escapeHtml(key) + '">' +
-                '<td>' + this.formatDisk(disk.id) + '</td><td>' + (this.field(disk.id, 'NodeId', 'nodeId') || '—') +
+                '<td>' + this.formatDisk(disk.id, disk.ddisk.length ? 'DDisk' : 'PersistentBuffer') + '</td><td>' + (this.field(disk.id, 'NodeId', 'nodeId') || '—') +
                 '</td><td>' + (this.field(disk.id, 'PDiskId', 'pdiskId') || '—') + '</td><td class="' +
                 (this.isUnavailable(disk.id) ? 'nbs2-count-unavailable' : '') + '">' + status +
                 '</td><td>' + tabletIds.size + '</td></tr>' +
@@ -319,7 +338,7 @@ const Nbs2Tablets = {
             const groupId = this.field(group, 'DirectBlockGroupId', 'directBlockGroupId');
             const ddiskIds = this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [];
             const persistentBufferIds = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];
-            html += '<tr><td>' + (groupId || 0) + '</td><td>' + ddiskIds.map((disk) => this.formatDisk(disk)).join(' ') + '</td><td>' + persistentBufferIds.map((disk) => this.formatDisk(disk)).join(' ') + '</td></tr>';
+            html += '<tr><td>' + (groupId || 0) + '</td><td>' + ddiskIds.map((disk) => this.formatDisk(disk, 'DDisk')).join(' ') + '</td><td>' + persistentBufferIds.map((disk) => this.formatDisk(disk, 'PersistentBuffer')).join(' ') + '</td></tr>';
         });
         body.append(html + '</tbody></table></td></tr>').find('#nbs2-tablet-details-' + id).hide();
     },

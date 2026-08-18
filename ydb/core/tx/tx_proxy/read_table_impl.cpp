@@ -478,7 +478,7 @@ private:
         entry.ShowPrivatePath = true;
         entry.SyncVersion = true;
 
-        YDB_LOG_DEBUG("Sending TEvNagivateKeySet for table",
+        YDB_LOG_DEBUG("Sending TEvNagivateKeySet",
             {"logPrefix", LogPrefix},
             {"tablePath", Settings.TablePath});
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
@@ -560,12 +560,12 @@ private:
     void HandleNavigate(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
         NSchemeCache::TSchemeCacheNavigate* resp = ev->Get()->Request.Get();
 
-        YDB_LOG_DEBUG("Received TEvNavigateKeySetResult for table",
+        YDB_LOG_DEBUG("Received TEvNavigateKeySetResult",
             {"logPrefix", LogPrefix},
             {"tablePath", Settings.TablePath});
 
         if (resp->ErrorCount > 0) {
-            YDB_LOG_ERROR("Navigate request failed for table",
+            YDB_LOG_ERROR("Navigate request failed",
                 {"logPrefix", LogPrefix},
                 {"tablePath", Settings.TablePath});
             TxProxyMon->ResolveKeySetWrongRequest->Inc();
@@ -706,7 +706,7 @@ private:
         request->DomainOwnerId = DomainInfo->ExtractSchemeShard();
         request->ResultSet.emplace_back(std::move(KeyDesc));
 
-        YDB_LOG_DEBUG("Sending TEvResolveKeySet for table",
+        YDB_LOG_DEBUG("Sending TEvResolveKeySet",
             {"logPrefix", LogPrefix},
             {"tablePath", Settings.TablePath});
         ctx.Send(Services.SchemeCache, new TEvTxProxySchemeCache::TEvResolveKeySet(request));
@@ -723,7 +723,7 @@ private:
 
         WallClockResolved = Now();
 
-        YDB_LOG_DEBUG("Received TEvResolveKeySetResult for table",
+        YDB_LOG_DEBUG("Received TEvResolveKeySetResult",
             {"logPrefix", LogPrefix},
             {"tablePath", Settings.TablePath});
 

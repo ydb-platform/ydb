@@ -347,6 +347,29 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         UNIT_ASSERT(!validator.Validate(makeConfig(30, "IO")).Ok());
     }
 
+    Y_UNIT_TEST(ExecutorIndices) {
+        auto validator = TMapBuilder()
+            .Field("actor_system_config", ActorSystemConfigBuilder())
+            .CreateValidator();
+
+        auto yaml =
+            "actor_system_config:\n"
+            "  executor:\n"
+            "  - name: System\n"
+            "    threads: 1\n"
+            "    type: BASIC\n"
+            "  sys_executor: 0\n"
+            "  user_executor: 0\n"
+            "  io_executor: 0\n"
+            "  batch_executor: 0\n"
+            "  scheduler:\n"
+            "    progress_threshold: 10000\n"
+            "    resolution: 64\n"
+            "    spin_threshold: 0\n";
+
+        UNIT_ASSERT(Valid(validator.Validate(yaml)));
+    }
+
     Y_UNIT_TEST(ExecutorPlacement) {
         auto validator = TMapBuilder()
             .Field("actor_system_config", ActorSystemConfigBuilder())

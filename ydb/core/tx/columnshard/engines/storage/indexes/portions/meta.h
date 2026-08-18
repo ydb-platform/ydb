@@ -64,7 +64,8 @@ public:
 // Groups pre-collected source chunks ((chunk, recordsCount) pairs) into consecutive batches of at most
 // maxRecordsPerChunk records and emits one index chunk per batch built by buildChunkData(chunks, begin, end,
 // batchRecords). Shared by indexes that split an oversized payload by record subranges; the scan applies
-// every produced chunk to its own record range.
+// every produced chunk to its own record range. A single source chunk above maxRecordsPerChunk forms its own
+// batch, so buildChunkData must bound the payload size itself (e.g. by clamping the filter).
 template <class TChunks, class TBuildChunkData>
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> BuildIndexChunksBatched(
     const ui32 indexId, const TChunks& chunks, const ui32 maxRecordsPerChunk, const TBuildChunkData& buildChunkData) {

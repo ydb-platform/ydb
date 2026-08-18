@@ -232,11 +232,9 @@ std::vector<std::pair<std::shared_ptr<NArrow::NAccessor::IChunkedArray>, ui32>> 
     return result;
 }
 
-}   // namespace
-
-namespace {
 constexpr ui64 BitsPerUi64 = sizeof(ui64) * CHAR_BIT;
 constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * CHAR_BIT;
+
 }   // namespace
 
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
@@ -281,6 +279,15 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::BuildIndex
         return GetBitsStorageConstructor()->SerializeToString(foldedStorage);
     };
 
+    // No size budget => splitting is impossible: hash everything into a single filter, skipping the
+    // per-chunk storages below that only pay off when a split may follow.
+    if (!chunkSizeLimit) {
+        TArrayPower2BitsStorage maxStorage(MaxBitsSize);
+        VisitAllChunksWithBuilder(reader, GetDataExtractor(), ngramSize, builder, maxStorage);
+        TString indexData = foldAndSerialize(std::move(maxStorage), MaxBitsSize);
+        return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
+    }
+
     // Hash every source chunk exactly once into its own max-size filter: the full-portion filter is the
     // bitwise union of the per-chunk filters, so deciding to split does not re-hash the data.
     const auto chunks = CollectChunks(reader);
@@ -295,7 +302,7 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::BuildIndex
         maxStorage |= storage;
     }
     TString indexData = foldAndSerialize(std::move(maxStorage), MaxBitsSize);
-    if (!chunkSizeLimit || indexData.size() <= *chunkSizeLimit) {
+    if (indexData.size() <= *chunkSizeLimit) {
         return { std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(GetIndexId(), 0), recordsCount, indexData.size(), indexData) };
     }
 

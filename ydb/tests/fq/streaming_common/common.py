@@ -40,7 +40,7 @@ def set_test_env(request):
     os.environ["YDB_TEST_ROW_DISPATCHER_REBALANCING_TIMEOUT_MS"] = rebalancing_timeout_ms
 
 
-def get_ydb_config(request):
+def get_ydb_config(request, enable_fq_connector=None):
     param = getattr(request, "param", {})
     enable_watermarks = param.get("enable_watermarks", True)
     enable_watermarks_advanced = param.get("enable_watermarks_advanced", True)
@@ -48,6 +48,7 @@ def get_ydb_config(request):
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
+    enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
 
     extra_feature_flags = {
         "enable_external_data_sources",
@@ -67,6 +68,13 @@ def get_ydb_config(request):
     else:
         disabled_feature_flags.append("enable_user_attributes_in_topic_query")
 
+    if os.environ.get("USE_ACCESS_SERVICE_V2", "false") == "true":
+        extra_feature_flags.add("enable_access_service_v2_interface")
+    else:
+        disabled_feature_flags.append("enable_access_service_v2_interface")
+
+    iam_emulator_endpoint = os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666")
+
     config = KikimrConfigGenerator(
         erasure=Erasure.MIRROR_3_DC,
         pq_client_service_types=["yandex-query"],
@@ -82,10 +90,11 @@ def get_ydb_config(request):
             "enable_watermarks_advanced": enable_watermarks_advanced,
             "enable_streaming_partition_balancing": enable_streaming_partition_balancing,
             "enable_compile_cache_warmup": False,
+            "enable_dq_source_stream_lookup_join": enable_dq_source_stream_lookup_join,
         },
         replication_config={
             "iam_service_control": {
-                "endpoint": os.environ.get("IAM_EMULATOR_ENDPOINT", "localhost:6666"),
+                "endpoint": iam_emulator_endpoint,
                 "service_id": "ydb",
                 "microservice_id": "data-plane",
                 "resource_type": "resource-manager.cloud",
@@ -96,6 +105,17 @@ def get_ydb_config(request):
         use_in_memory_pdisks=False,
     )
 
+    if enable_fq_connector:
+        config.yaml_config["query_service_config"]["generic"] = {
+            "connector": {
+                "use_ssl": False,
+                "endpoint": {
+                    "host": enable_fq_connector.connector.grpc_host,
+                    "port": enable_fq_connector.connector.grpc_port,
+                },
+            },
+        }
+
     config.yaml_config["log_config"]["default_level"] = 8
     if "auth_config" not in config.yaml_config:
         config.yaml_config["auth_config"] = {}
@@ -103,6 +123,8 @@ def get_ydb_config(request):
         "host": os.environ.get("VM_METADATA_EMULATOR_HOST", "localhost"),
         "port": int(os.environ.get("VM_METADATA_EMULATOR_PORT", 80)),
     }
+    config.yaml_config["auth_config"]["access_service_endpoint"] = iam_emulator_endpoint
+    config.yaml_config["auth_config"]["use_access_service_tls"] = False
     return config
 
 

@@ -485,7 +485,7 @@ private:
 
     void SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDqTask* result, bool serializeAsyncIoSettings) const;
 
-    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(const TStageInfo& stageInfo, ui32 previousTasksCount, ui32 nodesCount);
+    std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetMaxTasksAggregation(const TStageInfo& stageInfo, std::optional<ui32> previousTasksCount, ui32 nodesCount);
     std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> GetScanTasksPerNode(const TStageInfo& stageInfo, bool isOlapScan, ui64 nodeId, bool enableShuffleElimination = false) const;
 
     void FillSecureParamsFromStage(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;

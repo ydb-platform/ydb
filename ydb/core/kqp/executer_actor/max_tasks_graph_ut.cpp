@@ -40,10 +40,11 @@ public:
     void AddNodes(const TVector<NKikimrKqp::TKqpNodeResources>& snapshot) { Graph.AddNodes(snapshot); }
 
     void AddStage(const NYql::NDq::TStageId& stage, TMaxTasksGraph::EStageType type,
-        const std::list<NYql::NDq::TStageId>& inputs, std::optional<NYql::NDq::TStageId> copyInput = std::nullopt)
+        const std::list<NYql::NDq::TStageId>& inputs, std::optional<NYql::NDq::TStageId> copyInput = std::nullopt,
+        const std::list<NYql::NDq::TStageId>& scatterInputs = {})
     {
         auto& info = StageInfos.emplace_back(MakeStageInfo(stage));
-        Graph.AddStage(info, type, inputs, copyInput);
+        Graph.AddStage(info, type, inputs, copyInput, scatterInputs);
     }
 
     void AddTask(const TTask& task, std::optional<ui64> node) { Graph.AddTask(task, node); }
@@ -158,6 +159,26 @@ Y_UNIT_TEST_SUITE(TMaxTasksGraphTest) {
         // Проверяем, что каналы теперь в лимите
         // channels = tasksA * tasksB + tasksB * tasksA = 2 * tasksA * tasksB
         UNIT_ASSERT_LE(2 * tasksA * tasksB, 100u);
+    }
+
+    Y_UNIT_TEST(ScatterAccountingFollowsPostShrinkTopology) {
+        // The edge is initially 2 -> 16 and therefore scatter-eligible. With a four-endpoint budget, Shrink must not
+        // stop at 2 -> 2: equal widths use legacy Map wiring, whose two-by-two channels cost four endpoints on each
+        // node side in total (8), not the scatter estimate (4). The feasible post-shrink topology is 2 -> 1, costing 4.
+        auto graph = InitGraph(4, 1);
+
+        auto producer = MakeStageId(0, 0);
+        auto consumer = MakeStageId(0, 1);
+        graph.AddStage(producer, TMaxTasksGraph::FIXED, {});
+        graph.AddStage(consumer, TMaxTasksGraph::ANY, {producer}, std::nullopt, {producer});
+
+        AddTasks(graph, producer, 0, 2);
+        AddTasks(graph, consumer, 0, 16);
+
+        graph.Shrink();
+
+        UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(producer), 2);
+        UNIT_ASSERT_VALUES_EQUAL(graph.GetStageTasksCount(consumer), 1);
     }
 
     Y_UNIT_TEST(FixedStageNotScaled) {

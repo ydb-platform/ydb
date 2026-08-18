@@ -944,12 +944,18 @@ void TKqpTasksGraph::BuildParallelUnionAllChannels(const TStageInfo& stageInfo, 
 {
     const ui64 inputStageTasksSize = inputStageInfo.Tasks.size();
     const ui64 originStageTasksSize = stageInfo.Tasks.size();
+    // Runtime range pruning may legitimately leave one UNION ALL input with no producer tasks. Such an input is an
+    // empty stream: it needs no channels and, in particular, must not enter BuildScatterChannels (which divides by the
+    // producer count). Other non-empty UNION branches still wire normally.
+    if (!inputStageTasksSize) {
+        return;
+    }
     Y_ENSURE(originStageTasksSize);
     Y_ENSURE(nextOriginTaskId < originStageTasksSize);
 
     // More consumers than producers: one-to-one wiring would leave the extra consumers without any input, so give every
     // producer a fan of channels instead. Only reachable when the consumer stage was sized from resources.
-    if (originStageTasksSize > inputStageTasksSize) {
+    if (GetMeta().EnableParallelUnionAllConsumerSizing && originStageTasksSize > inputStageTasksSize) {
         BuildScatterChannels(stageInfo, inputIndex, inputStageInfo, outputIndex, enableSpilling, logFunc);
         return;
     }
@@ -2423,7 +2429,7 @@ void TKqpTasksGraph::BuildSysViewScanTasks(TStageInfo& stageInfo) {
     }
 }
 
-std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetMaxTasksAggregation(const TStageInfo& stageInfo, const ui32 previousTasksCount, const ui32 nodesCount) {
+std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetMaxTasksAggregation(const TStageInfo& stageInfo, const std::optional<ui32> previousTasksCount, const ui32 nodesCount) {
     TTaskType::ECreateReason taskReason = TTaskType::MINIMUM_COMPUTE;
     ui32 result = 1;
 
@@ -2436,7 +2442,9 @@ std::pair<ui32, TKqpTasksGraph::TTaskType::ECreateReason> TKqpTasksGraph::GetMax
     } else if (nodesCount) {
         const TStagePredictor& predictor = stageInfo.Meta.Tx.Body->GetCalculationPredictor(stageInfo.Id.StageId);
         taskReason = TTaskType::LEVEL_PREDICTED; // TODO: need to store also params for predictor
-        result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), previousTasksCount / nodesCount) * nodesCount;
+        const std::optional<ui32> previousTasksPerNode = previousTasksCount
+            ? std::make_optional(*previousTasksCount / nodesCount) : std::nullopt;
+        result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), previousTasksPerNode) * nodesCount;
     }
 
     return {result, taskReason};
@@ -4231,9 +4239,8 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
             stageType = TMaxTasksGraph::FIXED;
             partitionsCount = stage.GetTaskCount();
         } else if (autoSizingEligible) {
-            // Zero previous-stage count on purpose: CalcTasksOptimalCount clamps its result to that argument, which is
-            // exactly the producer-count cap being lifted here.
-            auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, 0, nodesCount);
+            // An absent previous-stage count lifts the producer-count cap. Zero is an explicit limit in the predictor.
+            auto [newPartitionCount, _] = GetMaxTasksAggregation(stageInfo, std::nullopt, nodesCount);
             partitionsCount = std::max(newPartitionCount, partitionsCount);
         }
         YDB_LOG_DEBUG("Selected ParallelUnionAll consumer stage size",
@@ -4253,7 +4260,8 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
                 continue;
             }
             const auto inputStageId = NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex());
-            if (partitionsCount > MaxTasksGraph->GetStageTasksCount(inputStageId)) {
+            const ui64 inputTasksCount = MaxTasksGraph->GetStageTasksCount(inputStageId);
+            if (inputTasksCount && partitionsCount > inputTasksCount) {
                 scatterInputs.push_back(inputStageId);
             }
         }

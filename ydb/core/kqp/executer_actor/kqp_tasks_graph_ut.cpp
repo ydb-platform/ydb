@@ -81,6 +81,7 @@ struct TTaskDistribution {
     // pair same-index tasks positionally, without checking node equality themselves (see BuildMapChannels /
     // BuildTransformChannels), relying entirely on the placement stage keeping copy-group columns co-located.
     TVector<TString> CrossNodeCopyChannels;
+    ui32 ScatterOutputs = 0;
 
     // ColumnShardHashV1 shuffle-elimination mapping check (see CheckShuffleEliminationHashMapping): one entry per
     // hash bucket routed to a task that does not read the matching shard. Should always be empty.
@@ -375,6 +376,11 @@ public:
             reply->Result.TasksPerStage[stageId] = static_cast<ui32>(stageInfo.Tasks.size());
             for (ui64 taskId : stageInfo.Tasks) {
                 const auto& task = Graph->GetTask(taskId);
+                for (const auto& output : task.Outputs) {
+                    if (output.Type == TTaskOutputType::Scatter) {
+                        ++reply->Result.ScatterOutputs;
+                    }
+                }
                 if (task.Meta.ExpectedNodeId) {
                     reply->Result.TasksPerStageNode[stageId][*task.Meta.ExpectedNodeId]++;
                 } else {
@@ -2973,6 +2979,14 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
                     PRIMARY KEY (k)
                 ) PARTITION BY HASH (k)
                 WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 4);
+
+                CREATE TABLE pua_src_wide (
+                    k Int64 NOT NULL,
+                    part Int32 NOT NULL,
+                    v Double NOT NULL,
+                    PRIMARY KEY (k)
+                ) PARTITION BY HASH (k)
+                WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 8);
             )");
         }
 
@@ -3033,6 +3047,24 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
                 SELECT k, v FROM pua_src WHERE part = 1
             ) GROUP BY k;
         )";
+
+        // Different producer widths exercise the compatibility path: with sizing disabled, a narrow PUA input must
+        // retain the legacy Map wire type even though the consumer copies the wider input's task count.
+        static constexpr TStringBuf UnequalInputsQuery = R"(
+            SELECT k, SUM(v) AS s FROM (
+                SELECT k, v FROM pua_src
+                UNION ALL
+                SELECT k, v FROM pua_src_wide
+            ) GROUP BY k;
+        )";
+
+        static constexpr TStringBuf EmptyRangeQuery = R"(
+            SELECT k, SUM(v) AS s FROM (
+                SELECT k, v FROM pua_src WHERE k > 10 AND k < 10
+                UNION ALL
+                SELECT k, v FROM pua_src_wide
+            ) GROUP BY k;
+        )";
     };
 
     // Returns the task count of the stage whose only inputs are ParallelUnionAll connections, plus the largest task
@@ -3064,6 +3096,36 @@ Y_UNIT_TEST_SUITE(TKqpTasksGraphParallelUnionAll) {
         UNIT_ASSERT_C(producers > 0, "no ParallelUnionAll consumer stage found in the plan");
         UNIT_ASSERT_VALUES_EQUAL_C(consumers, producers,
             "without the flag the consumer stage must copy the producer count");
+    }
+
+    Y_UNIT_TEST_F(FeatureFlagOffDoesNotEmitScatterWireType, TFixture) {
+        auto dist = Build(UnequalInputsQuery, /* enableSizing */ false);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(dist.ScatterOutputs, 0,
+            "the kill-switch must preserve the legacy Map wire type for rolling-upgrade compatibility");
+    }
+
+    Y_UNIT_TEST_F(EmptyPrunedProducerIsAnEmptyUnionInput, TFixture) {
+        auto dist = Build(EmptyRangeQuery, /* enableSizing */ true);
+        AssertNoCrossNodeCopyChannels(dist);
+
+        bool foundEmpty = false;
+        bool foundNonEmpty = false;
+        for (const auto& tx : LastPhysicalQuery().GetTransactions()) {
+            for (const auto& stage : tx.GetStages()) {
+                for (const auto& input : stage.GetInputs()) {
+                    if (input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kParallelUnionAll) {
+                        continue;
+                    }
+                    const ui32 tasks = dist.Count(0, input.GetStageIndex());
+                    foundEmpty |= tasks == 0;
+                    foundNonEmpty |= tasks > 0;
+                }
+            }
+        }
+        UNIT_ASSERT_C(foundEmpty && foundNonEmpty,
+            "test plan must retain one empty and one non-empty ParallelUnionAll producer");
     }
 
     Y_UNIT_TEST_F(ConsumerSizedFromResources, TFixture) {

@@ -694,7 +694,10 @@ size_t TMaxTasksGraph::CountChannelsOnNode(const std::vector<TColumnsPerNode>& c
         // Any other edge to another group is a full mesh: a channel to every task of the other stage.
         for (TStageIdx input : stage.Inputs) {
             const TGroupIdx inputGroup = Stages[input].Group;
-            if (inputGroup == stage.Group || stage.ScatterInputs.contains(input)) {
+            const bool isScatter = stage.ScatterInputs.contains(input)
+                && groupTotal[inputGroup] > 0
+                && groupTotal[stage.Group] > groupTotal[inputGroup];
+            if (inputGroup == stage.Group || isScatter) {
                 channelsPerTask += 1;
             } else {
                 channelsPerTask += groupTotal[inputGroup];
@@ -704,7 +707,9 @@ size_t TMaxTasksGraph::CountChannelsOnNode(const std::vector<TColumnsPerNode>& c
             const TGroupIdx outputGroup = Stages[output].Group;
             if (outputGroup == stage.Group) {
                 channelsPerTask += 1;
-            } else if (Stages[output].ScatterInputs.contains(stageIdx)) {
+            } else if (Stages[output].ScatterInputs.contains(stageIdx)
+                && groupTotal[stage.Group] > 0
+                && groupTotal[outputGroup] > groupTotal[stage.Group]) {
                 const size_t producers = groupTotal[stage.Group];
                 const size_t consumers = groupTotal[outputGroup];
                 channelsPerTask += producers ? (consumers + producers - 1) / producers : consumers;

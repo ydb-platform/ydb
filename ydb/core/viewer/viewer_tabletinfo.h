@@ -92,7 +92,8 @@ public:
         // node_id is normally validated by TBase::Bootstrap(), but this handler
         // calls it at the very end. So the check is done up front.
         if (TBase::IsStrictDatabaseOnlyRequest()) {
-            if (TBase::DenyRequestIfNodesAreOutOfDatabase(GetNodeIdsFromParams())) {
+             const auto nodeIds = GetNodeIdsFromParams();
+             if (TBase::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId>(nodeIds.data(), nodeIds.size()))) {
                 return;
             }
         }

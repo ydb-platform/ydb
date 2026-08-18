@@ -1058,14 +1058,18 @@ bool TViewerPipeClient::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNode
     }
     for (const auto& nodeId : nodeIds) {
         if (!databaseNodes.contains(nodeId)) {
-            YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Access denied: requested node is outside the database",
+            YDB_LOG_NOTICE_COMP(
+                NKikimrServices::VIEWER,
+                "Access denied: requested node is outside the specified database or cannot be validated",
                 {"logPrefix", GetLogPrefix()},
                 {"user", GetUserSID()},
                 {"database", Database},
                 {"outOfDatabaseNode", nodeId},
                 {"databaseNodesKnown", databaseNodesKnown});
             ReplyAndPassAway(
-                GETHTTPACCESSDENIED("text/plain", "Some requested nodes are outside the specified database"),
+                GETHTTPACCESSDENIED(
+                    "text/plain",
+                    "Some requested nodes are outside the specified database or cannot be validated"),
                 "Access denied");
             return true;
         }

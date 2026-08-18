@@ -29,7 +29,7 @@ size_t GetFrameMaxSize(const TStringBuf payload, const std::shared_ptr<arrow::ut
     if (!codec) {
         return sizeof(ui32) + payload.size();
     }
-    return sizeof(ui32) + codec->MaxCompressedLen(payload.size(), (const uint8_t*)payload.data());
+    return sizeof(ui32) + codec->MaxCompressedLen(payload.size(), reinterpret_cast<const uint8_t*>(payload.data()));
 }
 
 size_t GetSectionMaxSize(const TStringBuf payload, const std::shared_ptr<arrow::util::Codec>& codec) {
@@ -40,16 +40,17 @@ size_t GetSectionMaxSize(const TStringBuf payload, const std::shared_ptr<arrow::
 void AppendFrameCompressed(TString& out, const TStringBuf payload, const std::shared_ptr<arrow::util::Codec>& codec) {
     AFL_VERIFY(payload.size() <= Max<ui32>())("size", payload.size());
     const ui32 rawSize = payload.size();
-    out.append((const char*)&rawSize, sizeof(rawSize));
+    out.append(reinterpret_cast<const char*>(&rawSize), sizeof(rawSize));
     if (!codec) {
         out.append(payload);
         return;
     }
-    const i64 maxLen = codec->MaxCompressedLen(payload.size(), (const uint8_t*)payload.data());
+    const i64 maxLen = codec->MaxCompressedLen(payload.size(), reinterpret_cast<const uint8_t*>(payload.data()));
     const size_t compressedPosition = out.size();
     out.ReserveAndResize(compressedPosition + maxLen);
     const i64 actual = TStatusValidator::GetValid(
-        codec->Compress(payload.size(), (const uint8_t*)payload.data(), maxLen, (uint8_t*)out.Detach() + compressedPosition));
+        codec->Compress(payload.size(), reinterpret_cast<const uint8_t*>(payload.data()), maxLen,
+            reinterpret_cast<uint8_t*>(out.Detach()) + compressedPosition));
     out.resize(compressedPosition + actual);
 }
 
@@ -71,7 +72,7 @@ TString FrameDecompress(TStringBuf blob, const std::shared_ptr<arrow::util::Code
     TString raw;
     raw.ReserveAndResize(rawSize);
     TStatusValidator::GetValid(codec->Decompress(
-        payload.size(), (const uint8_t*)payload.data(), rawSize, (uint8_t*)raw.Detach()));
+        payload.size(), reinterpret_cast<const uint8_t*>(payload.data()), rawSize, reinterpret_cast<uint8_t*>(raw.Detach())));
     return raw;
 }
 
@@ -90,12 +91,12 @@ public:
         // We want to reference the underlying array bitmap without copying, but it is possible
         // only if the array is not a slice of another one with offset between byte borders (then copy).
         if (array.offset() % CHAR_BIT == 0) {
-            Data = TStringBuf((const char*)array.null_bitmap_data() + array.offset() / CHAR_BIT, bytesCount);
+            Data = TStringBuf(reinterpret_cast<const char*>(array.null_bitmap_data()) + array.offset() / CHAR_BIT, bytesCount);
             return;
         }
         Storage.ReserveAndResize(bytesCount);
         arrow::internal::CopyBitmap(
-            array.null_bitmap_data(), array.offset(), array.length(), (uint8_t*)Storage.Detach(), 0);
+            array.null_bitmap_data(), array.offset(), array.length(), reinterpret_cast<uint8_t*>(Storage.Detach()), 0);
         Data = Storage;
     }
 
@@ -113,7 +114,7 @@ inline bool GetBit(const TStringBuf bitmap, const ui64 index) {
 }
 
 ui32 CountSetBits(const TStringBuf bitmap, const ui32 count) {
-    return arrow::internal::CountSetBits((const uint8_t*)bitmap.data(), 0, count);
+    return arrow::internal::CountSetBits(reinterpret_cast<const uint8_t*>(bitmap.data()), 0, count);
 }
 
 ui32 GetIndexByteWidth(const arrow::FixedWidthType& type) {
@@ -138,7 +139,8 @@ TString EncodeLengthsImpl(const TConstArrayRef<ui32> values) {
     out.ReserveAndResize(1 + sizeof(T) * values.size());
     out[0] = sizeof(T);
     if (values.size()) {
-        arrow::util::internal::ByteStreamSplitEncode<T>((const uint8_t*)lengths.data(), lengths.size(), (uint8_t*)out.Detach() + 1);
+        arrow::util::internal::ByteStreamSplitEncode<T>(reinterpret_cast<const uint8_t*>(lengths.data()), lengths.size(),
+            reinterpret_cast<uint8_t*>(out.Detach()) + 1);
     }
     return out;
 }
@@ -148,7 +150,7 @@ TVector<ui32> DecodeLengthsImpl(const TStringBuf data, const ui32 count) {
     AFL_VERIFY(data.size() == 1ull + sizeof(T) * count)("size", data.size())("count", count);
     TVector<T> lengths(count);
     if (count) {
-        arrow::util::internal::ByteStreamSplitDecode<T>((const uint8_t*)data.data() + 1, count, count, lengths.data());
+        arrow::util::internal::ByteStreamSplitDecode<T>(reinterpret_cast<const uint8_t*>(data.data()) + 1, count, count, lengths.data());
     }
     TVector<ui32> values(count);
     for (ui32 i = 0; i < count; ++i) {

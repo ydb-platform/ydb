@@ -89,6 +89,14 @@ public:
         if (NeedToRedirect()) {
             return;
         }
+        // node_id is normally validated by TBase::Bootstrap(), but this handler calls it at the very
+        // end: with a "path" param it first asks SchemeShard and reaches TBase::Bootstrap() only from
+        // the describe response handler. Denying the request there would be both too late (SchemeShard
+        // has already been asked) and unsafe (the handler goes on building the whiteboard request
+        // that TBase::Bootstrap() never created). So the check is done up front, for both branches.
+        if (TBase::DenyRequestIfNodeIdsAreOutOfDatabase()) {
+            return;
+        }
         if (DatabaseNavigateResponse && DatabaseNavigateResponse->IsOk()) {
             TPathId domainRoot;
             if (AppData()) {

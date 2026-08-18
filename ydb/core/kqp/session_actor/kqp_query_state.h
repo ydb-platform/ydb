@@ -112,7 +112,8 @@ public:
 
         if (NWilson::TTraceId traceId = RequestEv->GetUserFacingWilsonTraceId()) {
             UserFacingTrace = std::make_unique<TUserFacingTraceContext>(std::move(traceId),
-                StartTime, RequestEv->Record.GetProxyRequestHops());
+                StartTime, RequestEv->Record.GetProxyRequestHops(),
+                TInstant::MicroSeconds(RequestEv->Record.GetUserFacingTraceOriginSentAtUs()));
         }
 
         KqpSessionSpan = NWilson::TSpan(

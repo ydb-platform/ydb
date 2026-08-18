@@ -689,6 +689,10 @@ public:
                 {"marker", "KQPSA"},
                 {"logPrefix", LogPrefix()},
                 {"traceId", TraceId()});
+            if (QueryState && QueryState->UserFacingTrace) {
+                QueryState->UserFacingTrace->AdmissionFinishedAt = TInstant::Now();
+                QueryState->UserFacingTrace->AdmissionStatus = Ydb::StatusIds::UNAVAILABLE;
+            }
             ContinueAfterWmAdmission();
             return;
         }
@@ -732,6 +736,10 @@ public:
             return;
         }
         QueryState->ContinueTime = TInstant::Now();
+        if (QueryState->UserFacingTrace) {
+            QueryState->UserFacingTrace->AdmissionFinishedAt = QueryState->ContinueTime;
+            QueryState->UserFacingTrace->AdmissionStatus = ev->Get()->Status;
+        }
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
             YDB_LOG_TRACE("Failed to place request in resource pool, feature flag is disabled",
@@ -983,6 +991,29 @@ public:
         }
     }
 
+    void MarkSplitEnd(const TEvKqp::TEvSplitResponse& response) {
+        if (!QueryState || !QueryState->UserFacingTrace) {
+            return;
+        }
+        auto& trace = *QueryState->UserFacingTrace;
+        if (!trace.ActiveCompileAttempt && !trace.OverflowCompileAttempt) {
+            return;
+        }
+        auto& attempt = trace.ActiveCompileAttempt
+            ? trace.CompileAttempts[*trace.ActiveCompileAttempt]
+            : *trace.OverflowCompileAttempt;
+        attempt.End = TInstant::Now();
+        attempt.Status = response.Status;
+        attempt.Partial = true;
+        if (trace.OverflowCompileAttempt) {
+            KeepCompileAttempt(trace.CompileAttempts,
+                std::move(*trace.OverflowCompileAttempt), trace.CompileAttemptsDropped);
+            trace.OverflowCompileAttempt.reset();
+        } else {
+            trace.ActiveCompileAttempt.reset();
+        }
+    }
+
     void SendCompileServiceRequest(IEventBase* request) {
         MarkCompileStart();
         Send(MakeKqpCompileServiceID(SelfId().NodeId()), request, 0, QueryState->QueryId,
@@ -1129,6 +1160,7 @@ public:
 
         YQL_ENSURE(QueryState);
         TTimerGuard timer(this);
+        MarkSplitEnd(*ev->Get());
         if (!QueryState->SaveAndCheckSplitResult(ev->Get())) {
             ReplySplitError(ev->Get());
             return;
@@ -2851,12 +2883,14 @@ public:
         if (executerResults.HasStats()) {
             QueryState->QueryStats.Executions.emplace_back();
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
-            if (QueryState->UserFacingTrace) {
-                auto& trace = *QueryState->UserFacingTrace;
-                AppendExecutionTraceSnapshots(trace.ExecutionTraces,
-                    trace.ExecutionTracesDropped, ev->ExecutionTraces,
-                    ev->ExecutionTracesDropped, trace.DiagnosticsPolicy.MaxExecutions);
-            }
+        }
+        if (QueryState->UserFacingTrace) {
+            auto& trace = *QueryState->UserFacingTrace;
+            AccumulateExecutionTraceTotals(trace.ExecutionTraceTotals,
+                ev->ExecutionTraceTotals);
+            AppendExecutionTraceSnapshots(trace.ExecutionTraces,
+                trace.ExecutionTracesDropped, ev->ExecutionTraces,
+                ev->ExecutionTracesDropped, trace.DiagnosticsPolicy.MaxExecutions);
         }
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;
@@ -3476,12 +3510,23 @@ public:
             TlsActivationContext->AsActorContext()
         );
 
+        if (request->Get()->Record.HasUserFacingTraceId()) {
+            TString traceName = NKikimrKqp::EQueryAction_Name(request->Get()->GetAction());
+            constexpr TStringBuf actionPrefix = "QUERY_ACTION_";
+            if (traceName.StartsWith(actionPrefix)) {
+                traceName = traceName.substr(actionPrefix.size());
+            }
+            response->Record.SetUserFacingTraceName(traceName);
+            response->Record.SetUserFacingTraceOperation(traceName);
+            response->Record.SetUserFacingTraceCoverage("rejected_before_query_state");
+        }
+
         IActor* userFacingRenderer = CreateRejectedUserFacingTraceRenderer(
             *request->Get(), ydbStatus);
 
         Send(request->Sender, response.release(), 0, proxyRequestId);
         if (userFacingRenderer) {
-            Register(userFacingRenderer);
+            Register(userFacingRenderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
         }
     }
 
@@ -3586,11 +3631,11 @@ public:
         KQP_REQ_LOG(TLogQuery::Completed(*QueryState, record, responseByteSize));
 
         IActor* userFacingRenderer = CreateUserFacingTraceRenderer(*QueryState,
-            status == Ydb::StatusIds::SUCCESS, Ydb::StatusIds::StatusCode_Name(status));
+            status == Ydb::StatusIds::SUCCESS, Ydb::StatusIds::StatusCode_Name(status), &record);
 
         Send<ESendingType::Tail>(QueryState->Sender, QueryResponse.release(), 0, QueryState->ProxyRequestId);
         if (userFacingRenderer) {
-            Register(userFacingRenderer);
+            Register(userFacingRenderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
         }
         YDB_LOG_DEBUG("Sent query response back to proxy",
             {"marker", "KQPSA"},
@@ -3898,9 +3943,17 @@ public:
             if (QueryState->KqpSessionSpan) {
                 QueryState->KqpSessionSpan.EndError("Request ended without a response");
             }
+            NKikimrKqp::TEvQueryResponse traceSummary;
             if (IActor* renderer = CreateUserFacingTraceRenderer(*QueryState, /*success*/ false,
-                    Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::CANCELLED))) {
-                Register(renderer);
+                    Ydb::StatusIds::StatusCode_Name(Ydb::StatusIds::CANCELLED), &traceSummary)) {
+                Register(renderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
+
+                auto completion = MakeHolder<TEvKqp::TEvUserFacingTraceCompletion>();
+                completion->Record.SetYdbStatus(Ydb::StatusIds::CANCELLED);
+                completion->Record.SetName(traceSummary.GetUserFacingTraceName());
+                completion->Record.SetOperation(traceSummary.GetUserFacingTraceOperation());
+                completion->Record.SetCoverage(traceSummary.GetUserFacingTraceCoverage());
+                Send(QueryState->Sender, completion.Release(), 0, QueryState->ProxyRequestId);
             }
         }
 

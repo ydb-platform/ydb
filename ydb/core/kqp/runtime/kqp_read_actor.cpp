@@ -401,6 +401,9 @@ public:
         if (Settings->HasMaxInFlightShards()) {
             MaxInFlight = Settings->GetMaxInFlightShards();
         }
+        if (Settings->GetCollectDiagnostics()) {
+            ShardReadDiagnostics = std::make_unique<TShardReadDiagnosticsCollector>();
+        }
     }
 
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -873,8 +876,8 @@ public:
     }
 
     void StartRead(TShardState* state) {
-        if (Settings->GetCollectDiagnostics()) {
-            ShardReadDiagnostics.OnStart(state->TabletId);
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnStart(state->TabletId);
         }
         TMaybe<ui64> limit;
         if (Settings->GetItemsLimit()) {
@@ -1041,8 +1044,8 @@ public:
             return;
         }
 
-        if (Settings->GetCollectDiagnostics()) {
-            ShardReadDiagnostics.OnFinish(Reads[id].Shard->TabletId, record.GetRowCount(),
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnFinish(Reads[id].Shard->TabletId, record.GetRowCount(),
                 Reads[id].Shard->RetryAttempt,
                 Reads[id].Shard->NodeId ? *Reads[id].Shard->NodeId : 0,
                 record.GetStatus().GetCode(), record.GetFinished());
@@ -1595,8 +1598,8 @@ public:
             //tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
 
             // Add lock stats for broken locks from read operations
-            if (!BrokenLocks.empty() || (Settings->GetCollectDiagnostics()
-                    && (TotalRetries > 0 || !ShardReadDiagnostics.Empty()))) {
+            if (!BrokenLocks.empty() || (ShardReadDiagnostics
+                    && (TotalRetries > 0 || !ShardReadDiagnostics->Empty()))) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
@@ -1605,8 +1608,8 @@ public:
                     extraStats.MutableLockStats()->SetBrokenAsVictim(
                         extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
                 }
-                if (Settings->GetCollectDiagnostics()) {
-                    ShardReadDiagnostics.Export(extraStats, TotalRetries);
+                if (ShardReadDiagnostics) {
+                    ShardReadDiagnostics->Export(extraStats, TotalRetries);
                 }
                 stats->MutableExtra()->PackFrom(extraStats);
             }
@@ -1637,8 +1640,8 @@ public:
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
-        if (Settings->GetCollectDiagnostics()) {
-            ShardReadDiagnostics.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
                 ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
         }
         NYql::TIssue issue(message);
@@ -1776,7 +1779,7 @@ private:
     NActors::TActorId PipeCacheId;
 
     size_t TotalRetries = 0;
-    TShardReadDiagnosticsCollector ShardReadDiagnostics;
+    std::unique_ptr<TShardReadDiagnosticsCollector> ShardReadDiagnostics;
 
     bool FirstShardStarted = false;
 

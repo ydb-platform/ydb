@@ -14,6 +14,7 @@
 
 namespace NKikimr::NKqp {
 
+// Bounded source-side collectors retain failures, retries, and stragglers under high fan-out.
 constexpr size_t MaxShardReadDiagnostics = 8;
 constexpr size_t MaxActiveShardReadDiagnostics = 32;
 constexpr size_t MaxCommitShardDiagnostics = 8;
@@ -31,13 +32,11 @@ struct TTimeWindow {
 class TShardReadDiagnosticsCollector {
 public:
     ui64 OnStart(ui64 shardId, TInstant now = TInstant::Now()) {
-        ui64 startTimeMs = now.MilliSeconds();
-        if (const auto it = Indexes_.find(shardId); it != Indexes_.end()) {
-            startTimeMs = Reads_[it->second].GetStartTimeMs();
-        }
         if (const auto it = ActiveStarts_.find(shardId); it != ActiveStarts_.end()) {
             return it->second;
         }
+        Indexes_.erase(shardId);
+        const ui64 startTimeMs = now.MilliSeconds();
         if (ActiveStarts_.size() < MaxActiveShardReadDiagnostics) {
             ActiveStarts_.emplace(shardId, startTimeMs);
             return startTimeMs;
@@ -81,7 +80,10 @@ public:
                 Dropped_ += terminal;
                 return;
             }
-            Indexes_.erase(Reads_[replacement].GetShardId());
+            if (const auto retained = Indexes_.find(Reads_[replacement].GetShardId());
+                    retained != Indexes_.end() && retained->second == replacement) {
+                Indexes_.erase(retained);
+            }
             Reads_[replacement] = std::move(candidate);
             Indexes_.emplace(shardId, replacement);
             ++Dropped_;

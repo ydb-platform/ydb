@@ -2511,7 +2511,7 @@ private:
     static constexpr size_t RowIdResolveBatchSize = 5000;
 
     // Read infrastructure.
-    TShardReadDiagnosticsCollector ShardReadDiagnostics;
+    std::unique_ptr<TShardReadDiagnosticsCollector> ShardReadDiagnostics;
     TReadsState ReadsState;                                // Tracks all in-flight reads
     TReadItemsQueue<TDocInfoPtr> DocsReadingQueue;         // Docs table + main table reads
     TVector<TWordStatePtr> Words;                          // Tokenized query terms
@@ -2900,8 +2900,10 @@ public:
         , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance(), PrefixCells))
         , UniqueIndexReader(TUniqueIndexReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
+        , ShardReadDiagnostics(Settings->GetCollectDiagnostics()
+            ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
         , ReadsState(Counters, LogPrefix,
-            Settings->GetCollectDiagnostics() ? &ShardReadDiagnostics : nullptr)
+            ShardReadDiagnostics.get())
         , DocsReadingQueue(this->SelfId(), ReadsState)
     {
         Y_ABORT_UNLESS(Arena);
@@ -2996,8 +2998,8 @@ public:
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode,
         const NYql::TIssues& subIssues = {})
     {
-        if (Settings->GetCollectDiagnostics()) {
-            ShardReadDiagnostics.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
                 ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
         }
         NYql::TIssue issue(message);
@@ -3496,12 +3498,12 @@ public:
             if (UniqueIndexReader) {
                 ExportTableReaderStats(stats, UniqueIndexReader);
             }
-            if (Settings->GetCollectDiagnostics() && !ShardReadDiagnostics.Empty()) {
+            if (ShardReadDiagnostics && !ShardReadDiagnostics->Empty()) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
                 }
-                ShardReadDiagnostics.Export(extraStats, 0);
+                ShardReadDiagnostics->Export(extraStats, 0);
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }
@@ -3644,8 +3646,8 @@ public:
             {"txLocks", txLocks},
             {"brokenTxLocks", borkenTxlocks});
 
-        if (Settings->GetCollectDiagnostics()) {
-            ShardReadDiagnostics.OnFinish(readInfo.ShardId, record.GetRowCount(),
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnFinish(readInfo.ShardId, record.GetRowCount(),
                 ReadsState.GetRetries(readInfo.ShardId), record.HasNodeId() ? record.GetNodeId() : 0,
                 record.GetStatus().GetCode(), record.GetFinished());
         }

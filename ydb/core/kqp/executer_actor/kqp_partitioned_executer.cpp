@@ -255,6 +255,8 @@ public:
 
         AbortBuffer(partInfo->BufferId);
         ForgetExecuterAndBuffer(partInfo);
+        AccumulateExecutionTraceTotals(ResponseEv->ExecutionTraceTotals,
+            ev->Get()->ExecutionTraceTotals);
         AppendExecutionTraceSnapshots(ResponseEv->ExecutionTraces,
             ResponseEv->ExecutionTracesDropped, ev->Get()->ExecutionTraces,
             ev->Get()->ExecutionTracesDropped, Request.DiagnosticsPolicy

@@ -32,7 +32,9 @@ TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& tas
     if (startMs && finishMs >= startMs) {
         snapshot.Window = {
             TInstant::MilliSeconds(startMs),
-            TInstant::MilliSeconds(finishMs),
+            finishMs == startMs
+                ? TInstant::MilliSeconds(finishMs) + TDuration::MicroSeconds(1)
+                : TInstant::MilliSeconds(finishMs),
         };
     }
     if (task.GetCreateTimeMs() && task.GetStartTimeMs() > task.GetCreateTimeMs()) {
@@ -1414,6 +1416,8 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                         stage.TasksByNode.emplace_back(nodeId, 1);
                     } else if (nodeIt != stage.TasksByNode.end()) {
                         ++nodeIt->second;
+                    } else {
+                        ++stage.NodesTruncated;
                     }
                     const ui64 durationUs = task.DurationUs();
                     auto& durations = stage.Durations;
@@ -1720,9 +1724,30 @@ void TQueryExecutionStats::ExportTraceSnapshot(TExecutionTraceSnapshot& snapshot
                     ? EStageOperation::Write : EStageOperation::Read;
             }
         }
+        for (const auto& input : stageInfo.Meta.GetStage(stageId).GetInputs()) {
+            if (input.GetTypeCase() != NKqpProto::TKqpPhyConnection::kStreamLookup) {
+                continue;
+            }
+            const auto strategy = input.GetStreamLookup().GetLookupStrategy();
+            if (strategy == NKqpProto::EStreamLookupStrategy::JOIN
+                    || strategy == NKqpProto::EStreamLookupStrategy::SEMI_JOIN) {
+                stage.Operation = EStageOperation::Join;
+                break;
+            }
+        }
         if (!stage.TablePath && stageInfo.Meta.TablePath) {
             stage.TablePath = stageInfo.Meta.TablePath;
-            stage.Operation = stageInfo.Meta.HasWrites() ? EStageOperation::Write : EStageOperation::Read;
+            if (stage.Operation == EStageOperation::Compute) {
+                stage.Operation = stageInfo.Meta.HasWrites()
+                    ? EStageOperation::Write : EStageOperation::Read;
+            }
+        }
+        snapshot.WaitUs += stage.WaitUs;
+        snapshot.SpilledBytes += stage.SpilledBytes;
+        if (stage.Durations.Count > 1 && stage.Durations.SumUs > 0) {
+            const double average = static_cast<double>(stage.Durations.SumUs) / stage.Durations.Count;
+            snapshot.MaxTaskSkew = Max(snapshot.MaxTaskSkew,
+                static_cast<double>(stage.Durations.MaxUs) / average);
         }
         std::sort(stage.TasksByNode.begin(), stage.TasksByNode.end(), [](const auto& lhs, const auto& rhs) {
             return lhs.second > rhs.second;

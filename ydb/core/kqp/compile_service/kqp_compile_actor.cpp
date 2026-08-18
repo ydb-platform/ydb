@@ -479,8 +479,8 @@ private:
             KqpCompileResult->ReplayMessageUserView = std::move(*ReplayMessageUserView);
         }
         auto responseEv = MakeHolder<TEvKqp::TEvCompileResponse>(KqpCompileResult);
+        const TInstant finishTime = TInstant::Now();
         if (CompileDiagnosticsCollector) {
-            const TInstant finishTime = TInstant::Now();
             responseEv->CompileDiagnostics = CompileDiagnosticsCollector->Snapshot(finishTime);
             responseEv->CompileActorDiagnostic = TCompileActorDiagnostic{
                 .Start = StartTime,

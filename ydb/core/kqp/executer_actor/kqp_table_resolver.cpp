@@ -478,7 +478,7 @@ private:
         }
 
         if (!ResolvingNamesFinished) {
-            if (CollectTimeline) {
+            if (CollectTimeline && NavigateWindow.Start == TInstant::Zero()) {
                 NavigateWindow.Start = TInstant::Now();
             }
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));
@@ -487,7 +487,7 @@ private:
         }
 
         if (requestNavigate->ResultSet.size()) {
-            if (CollectTimeline) {
+            if (CollectTimeline && NavigateWindow.Start == TInstant::Zero()) {
                 NavigateWindow.Start = TInstant::Now();
             }
             Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(requestNavigate.release()));

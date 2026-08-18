@@ -18,6 +18,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
 #include <atomic>
+#include <algorithm>
 #include <functional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
@@ -1529,11 +1530,13 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 auto s = resp.Simple;
                 result.Metadata->RecordsCount = s.RowCount;
                 result.Metadata->DataSize = s.BytesSize;
-                result.Metadata->StatsLoaded = response.Success;
+                result.Metadata->StatsLoaded = resp.Success;
                 promise.SetValue(result);
         }, diagnostics, ECompileDependency::StatisticsService, table,
         [](const NStat::TEvStatistics::TEvGetStatisticsResult& response) {
             return response.Success && !response.StatResponses.empty()
+                && std::all_of(response.StatResponses.begin(), response.StatResponses.end(),
+                    [](const auto& item) { return item.Success; })
                 ? ECompileDependencyStatus::Ok : ECompileDependencyStatus::Error;
         });
     });

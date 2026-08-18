@@ -23,10 +23,14 @@ struct TEvQueryRequest;
 
 constexpr size_t MaxUserFacingSpansPerQuery = 1000;
 
+TInstant MapUserFacingSessionStart(TInstant localStart, TInstant originSentAt,
+    const google::protobuf::RepeatedPtrField<NKikimrKqp::TProxyRequestHop>& proxyHops);
+
 class TUserFacingTraceContext {
 public:
     TUserFacingTraceContext(NWilson::TTraceId traceId, TInstant sessionStart,
-        const google::protobuf::RepeatedPtrField<NKikimrKqp::TProxyRequestHop>& proxyHops);
+        const google::protobuf::RepeatedPtrField<NKikimrKqp::TProxyRequestHop>& proxyHops,
+        TInstant originSentAt);
 
     TUserFacingTraceContext(const TUserFacingTraceContext&) = delete;
     TUserFacingTraceContext& operator=(const TUserFacingTraceContext&) = delete;
@@ -36,9 +40,11 @@ public:
     NWilson::TTraceId TraceId;
     TExecutionDiagnosticsPolicy DiagnosticsPolicy;
     TInstant SessionStart;
-    TInstant ProxyRequestStart;
+    i64 TimestampOffsetUs = 0;
     std::vector<NKikimrKqp::TProxyRequestHop> ProxyHops;
     TInstant AdmissionStartedAt;
+    TInstant AdmissionFinishedAt;
+    Ydb::StatusIds::StatusCode AdmissionStatus = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     bool ExecutionDelegated = false;
     TString RootName;
     TString Operation;
@@ -47,6 +53,7 @@ public:
     std::optional<TCompileAttemptDiagnostic> OverflowCompileAttempt;
     size_t CompileAttemptsDropped = 0;
     std::vector<TExecutionTraceSnapshot> ExecutionTraces;
+    TExecutionTraceTotals ExecutionTraceTotals;
     size_t ExecutionTracesDropped = 0;
 };
 
@@ -55,7 +62,7 @@ TTimeWindow FitUserFacingRemoteWindow(TTimeWindow window, const TTimeWindow& par
 class TUserFacingSpanBudget {
 public:
     explicit TUserFacingSpanBudget(ui8 verbosity, size_t limit = MaxUserFacingSpansPerQuery,
-            size_t reserved = 2)
+            size_t reserved = 5)
         : Remaining_(limit > reserved ? limit - reserved : 0)
         , Verbosity_(verbosity)
     {}
@@ -101,7 +108,7 @@ TString FallbackUserFacingQueryName(const TKqpQueryState& state);
 
 // Consumes the sampled context and detaches an immutable snapshot for asynchronous rendering.
 NActors::IActor* CreateUserFacingTraceRenderer(TKqpQueryState& state, bool success,
-    const TString& statusCode);
+    const TString& statusCode, NKikimrKqp::TEvQueryResponse* response = nullptr);
 
 // Detaches a sampled request rejected before a per-query state can be created.
 NActors::IActor* CreateRejectedUserFacingTraceRenderer(const NPrivateEvents::TEvQueryRequest& request,

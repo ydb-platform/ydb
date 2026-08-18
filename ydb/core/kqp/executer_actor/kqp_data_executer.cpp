@@ -251,6 +251,9 @@ public:
                 {"bufferActorId", BufferActorId},
                 {"traceId", TraceId()});
 
+            if (Y_UNLIKELY(ExecutionDiagnostics)) {
+                ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::Rollback);
+            }
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
             Send<ESendingType::Tail>(
@@ -271,7 +274,7 @@ public:
                 {"traceId", TraceId()});
 
             if (Y_UNLIKELY(ExecutionDiagnostics)) {
-                ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::Commit);
+                ExecutionDiagnostics->OnPhaseStarted(EExecutionPhase::FlushEffects);
             }
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();

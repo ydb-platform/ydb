@@ -96,10 +96,8 @@ public:
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), 0);
         TasksGraph.GetMeta().CollectAffectedRows = Request.CollectAffectedRows;
         if (Request.DiagnosticsPolicy) {
-            ExecutionTrace = std::make_unique<TExecutionTraceSnapshot>();
-            ExecutionTrace->ExecuterActorType = "TKqpLiteralExecuter";
-            ExecutionTrace->ComputeActorType = "TKqpLiteralExecuter";
-            ExecutionTrace->Timeline.Execute.Start = TInstant::Now();
+            ExecutionDiagnostics = std::make_unique<TExecutionDiagnosticsCapture>(
+                "TKqpLiteralExecuter", "TKqpLiteralExecuter");
         }
         StartTime = TAppData::TimeProvider->Now();
         if (Request.Timeout) {
@@ -439,15 +437,15 @@ private:
     }
 
     void ExportExecutionTrace(Ydb::StatusIds::StatusCode status) {
-        if (!ExecutionTrace) {
+        if (!ExecutionDiagnostics) {
             return;
         }
-        ExecutionTrace->Status = status;
-        ExecutionTrace->Timeline.Execute.End = TInstant::Now();
-        Stats->ExportTraceSnapshot(*ExecutionTrace);
-        TrimExecutionTraceSnapshot(*ExecutionTrace);
-        ResponseEv->ExecutionTraces.push_back(std::move(*ExecutionTrace));
-        ExecutionTrace.reset();
+        auto snapshot = ExecutionDiagnostics->Finish(status);
+        Stats->ExportTraceSnapshot(snapshot);
+        AccumulateExecutionTraceTotals(ResponseEv->ExecutionTraceTotals, snapshot);
+        TrimExecutionTraceSnapshot(snapshot);
+        ResponseEv->ExecutionTraces.push_back(std::move(snapshot));
+        ExecutionDiagnostics.reset();
     }
 
     const TIntrusivePtr<TUserRequestContext>& GetUserRequestContext() {
@@ -466,7 +464,7 @@ private:
     TKqpTasksGraph TasksGraph;
     std::unordered_map<ui64, ui32> TaskId2StageId;
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-    std::unique_ptr<TExecutionTraceSnapshot> ExecutionTrace;
+    std::unique_ptr<TExecutionDiagnosticsCapture> ExecutionDiagnostics;
 
     TVector<TIntrusivePtr<NYql::NDq::IDqTaskRunner>> TaskRunners;
     std::unique_ptr<NKikimr::NMiniKQL::TKqpComputeContextBase> ComputeCtx;

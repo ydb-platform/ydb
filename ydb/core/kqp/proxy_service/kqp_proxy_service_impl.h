@@ -29,43 +29,37 @@ namespace NKikimr::NKqp {
 
 using TNodeId = ui32;
 
+// The entry proxy owns the root; forwarded actors only receive its id as a parent.
 class TProxyUserFacingTraceContext {
 public:
-    enum class EOwner {
-        Proxy,
-        Session,
-        Finished,
-    };
-
-    explicit TProxyUserFacingTraceContext(const NPrivateEvents::TEvQueryRequest& request)
-        : TraceId(request.GetUserFacingWilsonTraceId())
+    explicit TProxyUserFacingTraceContext(NPrivateEvents::TEvQueryRequest& request)
+        : ParentTraceId(request.GetUserFacingWilsonTraceId())
         , Seed(request.GetProxyTraceSeed())
         , Action(request.GetAction())
-    {}
+        , Origin(request.Record.ProxyRequestHopsSize() == 0)
+    {
+        if (Origin) {
+            RootTraceId = ParentTraceId.Span(ParentTraceId.GetVerbosity());
+            RootTraceId.Serialize(request.Record.MutableUserFacingTraceId());
+        } else {
+            RootTraceId = NWilson::TTraceId(ParentTraceId);
+        }
+    }
 
     TProxyUserFacingTraceContext(const TProxyUserFacingTraceContext&) = delete;
     TProxyUserFacingTraceContext& operator=(const TProxyUserFacingTraceContext&) = delete;
     TProxyUserFacingTraceContext(TProxyUserFacingTraceContext&&) = default;
     TProxyUserFacingTraceContext& operator=(TProxyUserFacingTraceContext&&) = default;
 
-    void TransferToSession() {
-        if (Owner == EOwner::Proxy) {
-            Owner = EOwner::Session;
-        }
+    std::pair<NWilson::TTraceId, NWilson::TTraceId> Take() {
+        return {std::move(ParentTraceId), std::move(RootTraceId)};
     }
 
-    void ReclaimByProxy() {
-        if (Owner == EOwner::Session) {
-            Owner = EOwner::Proxy;
+    void MarkSent(ui32 targetNodeId) {
+        TargetNodeId = targetNodeId;
+        if (Seed) {
+            SentAt = Seed->StartTime + (NActors::TMonotonic::Now() - Seed->StartedAt);
         }
-    }
-
-    NWilson::TTraceId TakeIfProxyOwned() {
-        if (Owner != EOwner::Proxy) {
-            return {};
-        }
-        Owner = EOwner::Finished;
-        return std::move(TraceId);
     }
 
     const auto& GetSeed() const {
@@ -76,11 +70,26 @@ public:
         return Action;
     }
 
+    TInstant GetSentAt() const {
+        return SentAt;
+    }
+
+    ui32 GetTargetNodeId() const {
+        return TargetNodeId;
+    }
+
+    bool IsOrigin() const {
+        return Origin;
+    }
+
 private:
-    NWilson::TTraceId TraceId;
+    NWilson::TTraceId ParentTraceId;
+    NWilson::TTraceId RootTraceId;
     std::optional<NPrivateEvents::TEvQueryRequest::TProxyTraceSeed> Seed;
     NKikimrKqp::EQueryAction Action;
-    EOwner Owner = EOwner::Proxy;
+    TInstant SentAt;
+    ui32 TargetNodeId = 0;
+    bool Origin = false;
 };
 
 struct TKqpProxyRequest {
@@ -106,21 +115,15 @@ struct TKqpProxyRequest {
         DbCounters = dbCounters;
     }
 
-    void SetUserFacingTrace(const NPrivateEvents::TEvQueryRequest& request) {
+    void SetUserFacingTrace(NPrivateEvents::TEvQueryRequest& request) {
         if (request.Record.HasUserFacingTraceId()) {
             UserFacingTrace = std::make_unique<TProxyUserFacingTraceContext>(request);
         }
     }
 
-    void TransferUserFacingTrace() {
+    void MarkUserFacingTraceSent(ui32 targetNodeId) {
         if (UserFacingTrace) {
-            UserFacingTrace->TransferToSession();
-        }
-    }
-
-    void ReclaimUserFacingTrace() {
-        if (UserFacingTrace) {
-            UserFacingTrace->ReclaimByProxy();
+            UserFacingTrace->MarkSent(targetNodeId);
         }
     }
 };
@@ -149,7 +152,7 @@ public:
         return PendingRequests.FindPtr(requestId);
     }
 
-    void SetUserFacingTrace(ui64 requestId, const NPrivateEvents::TEvQueryRequest& request) {
+    void SetUserFacingTrace(ui64 requestId, NPrivateEvents::TEvQueryRequest& request) {
         if (auto* ptr = PendingRequests.FindPtr(requestId)) {
             ptr->SetUserFacingTrace(request);
         }
@@ -160,15 +163,9 @@ public:
         ptr->SetSessionId(sessionId, dbCounters);
     }
 
-    void TransferUserFacingTrace(ui64 requestId) {
+    void MarkUserFacingTraceSent(ui64 requestId, ui32 targetNodeId) {
         if (auto* ptr = PendingRequests.FindPtr(requestId)) {
-            ptr->TransferUserFacingTrace();
-        }
-    }
-
-    void ReclaimUserFacingTrace(ui64 requestId) {
-        if (auto* ptr = PendingRequests.FindPtr(requestId)) {
-            ptr->ReclaimUserFacingTrace();
+            ptr->MarkUserFacingTraceSent(targetNodeId);
         }
     }
 

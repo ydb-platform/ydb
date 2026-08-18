@@ -84,48 +84,156 @@ static constexpr TDuration DEFAULT_KEEP_ALIVE_TIMEOUT = TDuration::MilliSeconds(
 static constexpr TDuration DEFAULT_EXTRA_TIMEOUT_WAIT = TDuration::MilliSeconds(50);
 static constexpr TDuration DEFAULT_CREATE_SESSION_TIMEOUT = TDuration::MilliSeconds(5000);
 
-void FinishProxyOwnedTrace(TProxyUserFacingTraceContext& context,
-        Ydb::StatusIds::StatusCode status, ui32 nodeId) {
-    NWilson::TTraceId traceId = context.TakeIfProxyOwned();
-    if (!traceId) {
+struct TProxyUserFacingTraceSnapshot {
+    NWilson::TTraceId ParentTraceId;
+    NWilson::TTraceId RootTraceId;
+    TInstant StartedAt;
+    TInstant SentAt;
+    TInstant FinishedAt;
+    TString Name;
+    TString Operation;
+    Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+    ui32 NodeId = 0;
+    ui32 TargetNodeId = 0;
+    bool HasSessionTrace = false;
+    TString Coverage;
+};
+
+void RenderProxyUserFacingTrace(TProxyUserFacingTraceSnapshot snapshot) {
+    NWilson::TTraceId parentTraceId = std::move(snapshot.ParentTraceId);
+    NWilson::TTraceId rootTraceId = std::move(snapshot.RootTraceId);
+    if (!parentTraceId || !rootTraceId) {
         return;
     }
-
-    const TInstant finishedAt = TInstant::Now();
-    const auto& seed = context.GetSeed();
-    const TInstant startedAt = seed ? seed->StartTime : finishedAt;
-    const auto action = context.GetAction();
-    TString name = NKikimrKqp::EQueryAction_Name(action);
-    constexpr TStringBuf prefix = "QUERY_ACTION_";
-    if (name.StartsWith(prefix)) {
-        name = name.substr(prefix.size());
-    }
-
+    const bool success = snapshot.Status == Ydb::StatusIds::SUCCESS;
+    const auto spanStatus = success
+        ? NWilson::NTraceProto::Status::STATUS_CODE_OK
+        : NWilson::NTraceProto::Status::STATUS_CODE_ERROR;
     NWilson::TSpan root = NWilson::TSpan::ConstructTerminated(
-        traceId, traceId.Span(traceId.GetVerbosity()), startedAt, finishedAt,
-        NWilson::NTraceProto::Status::STATUS_CODE_ERROR, name,
-        NWilson::MakeUserFacingWilsonUploaderId());
+        parentTraceId, rootTraceId, snapshot.StartedAt, snapshot.FinishedAt,
+        spanStatus, snapshot.Name, NWilson::MakeUserFacingWilsonUploaderId());
     if (!root) {
         return;
     }
     root.Attribute("ydb.tracing.layer", TString("user"));
     root.Attribute("ydb.code.component", TString("KQP"));
     root.Attribute("db.system.name", TString("ydb"));
-    root.Attribute("db.operation.name", name);
-    root.Attribute("db.response.status_code", Ydb::StatusIds::StatusCode_Name(status));
-    root.Attribute("ydb.trace.coverage", TString("proxy_only"));
+    root.Attribute("db.operation.name", snapshot.Operation);
+    root.Attribute("db.response.status_code", Ydb::StatusIds::StatusCode_Name(snapshot.Status));
+    root.Attribute("ydb.duration.source", TString("origin_monotonic"));
+    if (AppData()) {
+        root.Attribute("db.namespace", AppData()->TenantName);
+    }
+    if (!snapshot.HasSessionTrace) {
+        root.Attribute("ydb.trace.coverage", TString("proxy_only"));
+    } else if (snapshot.Coverage) {
+        root.Attribute("ydb.trace.coverage", snapshot.Coverage);
+    }
 
+    const TInstant proxyEnd = snapshot.SentAt != TInstant::Zero()
+        ? snapshot.SentAt : snapshot.FinishedAt;
     NWilson::TSpan proxy = NWilson::TSpan::ConstructTerminated(
         root.GetTraceId(), root.GetTraceId().Span(root.GetTraceId().GetVerbosity()),
-        startedAt, finishedAt, NWilson::NTraceProto::Status::STATUS_CODE_ERROR,
+        snapshot.StartedAt, proxyEnd,
+        snapshot.SentAt == TInstant::Zero() ? spanStatus
+                                            : NWilson::NTraceProto::Status::STATUS_CODE_OK,
         "KQP proxy", NWilson::MakeUserFacingWilsonUploaderId());
     if (proxy) {
         proxy.Attribute("ydb.actor.type", TString("TKqpProxyService"));
-        proxy.Attribute("ydb.node_id", static_cast<i64>(nodeId));
-        proxy.Attribute("ydb.rejected", true);
-        proxy.EndError(Ydb::StatusIds::StatusCode_Name(status));
+        proxy.Attribute("ydb.node_id", static_cast<i64>(snapshot.NodeId));
+        if (snapshot.SentAt == TInstant::Zero()) {
+            proxy.Attribute("ydb.rejected", true);
+        }
+        proxy.End();
     }
-    root.EndError(Ydb::StatusIds::StatusCode_Name(status));
+    if (snapshot.SentAt != TInstant::Zero() && snapshot.FinishedAt >= snapshot.SentAt) {
+        NWilson::TSpan roundTrip = NWilson::TSpan::ConstructTerminated(
+            root.GetTraceId(), root.GetTraceId().Span(root.GetTraceId().GetVerbosity()),
+            snapshot.SentAt, snapshot.FinishedAt, spanStatus,
+            "KQP session round trip", NWilson::MakeUserFacingWilsonUploaderId());
+        if (roundTrip) {
+            roundTrip.Attribute("ydb.actor.type", TString("TKqpSessionActor"));
+            roundTrip.Attribute("ydb.source_node_id", static_cast<i64>(snapshot.NodeId));
+            roundTrip.Attribute("ydb.target_node_id", static_cast<i64>(snapshot.TargetNodeId));
+            roundTrip.Attribute("ydb.forwarded", snapshot.NodeId != snapshot.TargetNodeId);
+            roundTrip.Attribute("ydb.duration.source", TString("origin_monotonic"));
+            roundTrip.End();
+        }
+    }
+    if (snapshot.SentAt != TInstant::Zero() && snapshot.NodeId != snapshot.TargetNodeId) {
+        NWilson::TSpan forwarding = NWilson::TSpan::ConstructTerminated(
+            root.GetTraceId(), root.GetTraceId().Span(root.GetTraceId().GetVerbosity()),
+            snapshot.SentAt, snapshot.SentAt, NWilson::NTraceProto::Status::STATUS_CODE_OK,
+            "Forward to KQP proxy", NWilson::MakeUserFacingWilsonUploaderId());
+        if (forwarding) {
+            forwarding.Attribute("ydb.actor.type", TString("InterconnectProxy"));
+            forwarding.Attribute("ydb.source_node_id", static_cast<i64>(snapshot.NodeId));
+            forwarding.Attribute("ydb.target_node_id", static_cast<i64>(snapshot.TargetNodeId));
+            forwarding.Attribute("ydb.duration.measured", false);
+            forwarding.End();
+        }
+    }
+    if (success) {
+        root.EndOk();
+    } else {
+        root.EndError(Ydb::StatusIds::StatusCode_Name(snapshot.Status));
+    }
+}
+
+class TProxyUserFacingTraceRendererActor
+    : public NActors::TActorBootstrapped<TProxyUserFacingTraceRendererActor> {
+public:
+    explicit TProxyUserFacingTraceRendererActor(TProxyUserFacingTraceSnapshot snapshot)
+        : Snapshot(std::move(snapshot))
+    {}
+
+    void Bootstrap() {
+        RenderProxyUserFacingTrace(std::move(Snapshot));
+        PassAway();
+    }
+
+private:
+    TProxyUserFacingTraceSnapshot Snapshot;
+};
+
+NActors::IActor* CreateProxyUserFacingTraceRenderer(TProxyUserFacingTraceContext& context,
+        Ydb::StatusIds::StatusCode status, ui32 nodeId,
+        TString name = {}, TString operation = {}, TString coverage = {}) {
+    if (!context.IsOrigin()) {
+        return nullptr;
+    }
+    auto [parentTraceId, rootTraceId] = context.Take();
+    if (!parentTraceId || !rootTraceId) {
+        return nullptr;
+    }
+    const auto& seed = context.GetSeed();
+    const TInstant finishedAt = seed
+        ? seed->StartTime + (NActors::TMonotonic::Now() - seed->StartedAt)
+        : TInstant::Now();
+    const TInstant startedAt = seed ? seed->StartTime : finishedAt;
+    const bool hasSessionTrace = bool(name);
+    if (!hasSessionTrace) {
+        name = NKikimrKqp::EQueryAction_Name(context.GetAction());
+        constexpr TStringBuf prefix = "QUERY_ACTION_";
+        if (name.StartsWith(prefix)) {
+            name = name.substr(prefix.size());
+        }
+        operation = name;
+    }
+    return new TProxyUserFacingTraceRendererActor({
+        .ParentTraceId = std::move(parentTraceId),
+        .RootTraceId = std::move(rootTraceId),
+        .StartedAt = startedAt,
+        .SentAt = context.GetSentAt(),
+        .FinishedAt = finishedAt,
+        .Name = std::move(name),
+        .Operation = std::move(operation),
+        .Status = status,
+        .NodeId = nodeId,
+        .TargetNodeId = context.GetTargetNodeId(),
+        .HasSessionTrace = hasSessionTrace,
+        .Coverage = std::move(coverage),
+    });
 }
 
 using VSessions = NKikimr::NSysView::Schema::QuerySessions;
@@ -663,7 +771,6 @@ public:
                     {"targetId", ev->Sender},
                     {"requestId", ev->Cookie});
 
-                PendingRequests.ReclaimUserFacingTrace(ev->Cookie);
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, "Session not found.", ev->Cookie);
                 RemoveSession("", ev->Sender);
                 break;
@@ -905,12 +1012,17 @@ public:
         if (ev->Get()->Record.HasUserFacingTraceId()) {
             const auto& seed = ev->Get()->GetProxyTraceSeed();
             Y_ABORT_UNLESS(seed);
+            const TDuration hopDuration = TMonotonic::Now() - seed->StartedAt;
+            if (!ev->Get()->Record.HasUserFacingTraceOriginSentAtUs()) {
+                ev->Get()->Record.SetUserFacingTraceOriginSentAtUs(
+                    (seed->StartTime + hopDuration).MicroSeconds());
+            }
             auto* hop = ev->Get()->Record.AddProxyRequestHops();
             hop->SetNodeId(SelfId().NodeId());
             hop->SetTargetNodeId(targetId.NodeId());
-            hop->SetDurationUs((TMonotonic::Now() - seed->StartedAt).MicroSeconds());
+            hop->SetDurationUs(hopDuration.MicroSeconds());
         }
-        PendingRequests.TransferUserFacingTrace(requestId);
+        PendingRequests.MarkUserFacingTraceSent(requestId, targetId.NodeId());
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 
@@ -1097,7 +1209,21 @@ public:
             LocalSessions->StartIdleCheck(info, GetSessionIdleDuration());
         }
 
+        IActor* userFacingRenderer = nullptr;
+        if constexpr (std::is_same_v<TEvent, TEvKqp::TEvQueryResponse::TPtr>) {
+            if (proxyRequest->UserFacingTrace) {
+                const auto& record = ev->Get()->Record;
+                userFacingRenderer = CreateProxyUserFacingTraceRenderer(
+                    *proxyRequest->UserFacingTrace, record.GetYdbStatus(), SelfId().NodeId(),
+                    record.GetUserFacingTraceName(), record.GetUserFacingTraceOperation(),
+                    record.GetUserFacingTraceCoverage());
+            }
+        }
+
         Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0, proxyRequest->SenderCookie);
+        if (userFacingRenderer) {
+            Register(userFacingRenderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
+        }
 
         if (info && proxyRequest->EventType == TKqpEvents::EvQueryRequest) {
             LocalSessions->DetachQueryText(info);
@@ -1111,6 +1237,34 @@ public:
             {"selfId", SelfId()},
             {"source", ev->Sender});
 
+        PendingRequests.Erase(requestId);
+    }
+
+    void Handle(TEvKqp::TEvUserFacingTraceCompletion::TPtr& ev) {
+        const ui64 requestId = ev->Cookie;
+        StopQueryTimeout(requestId);
+        auto proxyRequest = PendingRequests.FindPtr(requestId);
+        if (!proxyRequest) {
+            return;
+        }
+
+        if (proxyRequest->UserFacingTrace && !proxyRequest->UserFacingTrace->IsOrigin()) {
+            Send<ESendingType::Tail>(proxyRequest->Sender, ev->Release().Release(), 0,
+                proxyRequest->SenderCookie);
+            PendingRequests.Erase(requestId);
+            return;
+        }
+
+        IActor* renderer = nullptr;
+        if (proxyRequest->UserFacingTrace) {
+            const auto& record = ev->Get()->Record;
+            renderer = CreateProxyUserFacingTraceRenderer(
+                *proxyRequest->UserFacingTrace, record.GetYdbStatus(), SelfId().NodeId(),
+                record.GetName(), record.GetOperation(), record.GetCoverage());
+        }
+        if (renderer) {
+            Register(renderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
+        }
         PendingRequests.Erase(requestId);
     }
 
@@ -1528,6 +1682,7 @@ public:
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
+            hFunc(TEvKqp::TEvUserFacingTraceCompletion, Handle);
             hFunc(TEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);
@@ -1588,10 +1743,6 @@ private:
             {"eventType", static_cast<ui64>(request->EventType)},
             {"status", ydbStatus},
             {"issues", issues.ToOneLineString()});
-
-        if (request->EventType == TKqpEvents::EvQueryRequest && request->UserFacingTrace) {
-            FinishProxyOwnedTrace(*request->UserFacingTrace, ydbStatus, SelfId().NodeId());
-        }
 
         if (request->EventType == TKqpEvents::EvPingSessionRequest) {
             auto response = std::make_unique<TEvKqp::TEvPingSessionResponse>();
@@ -1834,7 +1985,10 @@ private:
                 auto* request = static_cast<TEvKqp::TEvQueryRequest*>(requestEvent->GetBase());
                 if (request && request->Record.HasUserFacingTraceId()) {
                     TProxyUserFacingTraceContext trace(*request);
-                    FinishProxyOwnedTrace(trace, status, SelfId().NodeId());
+                    if (IActor* renderer = CreateProxyUserFacingTraceRenderer(
+                            trace, status, SelfId().NodeId())) {
+                        Register(renderer, TMailboxType::HTSwap, AppData()->BatchPoolId);
+                    }
                 }
                 auto response = std::make_unique<TEvKqp::TEvQueryResponse>();
                 response->Record.SetYdbStatus(status);

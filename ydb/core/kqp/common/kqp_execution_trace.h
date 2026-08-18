@@ -45,6 +45,8 @@ enum class EExecutionPhase : size_t {
     Commit,
     ResolveMetadata,
     ResolvePartitioning,
+    FlushEffects,
+    Rollback,
     Count,
 };
 
@@ -135,12 +137,30 @@ struct TExecutionTraceSnapshot {
     std::optional<EExecutionPhase> FailedPhase;
     TExecutionTimeline Timeline;
     ui64 CpuUs = 0;
+    ui64 WaitUs = 0;
+    ui64 SpilledBytes = 0;
+    double MaxTaskSkew = 0.0;
     std::vector<TStageTraceSnapshot> Stages;
     size_t StagesTruncated = 0;
     TBufferLookupDiagnostics BufferLookup;
     TCommitDiagnostics Commit;
 };
 
+// Exact query-wide scalars are accumulated before bounded diagnostic snapshots are retained.
+struct TExecutionTraceTotals {
+    ui64 CpuUs = 0;
+    ui64 WaitUs = 0;
+    ui64 SpilledBytes = 0;
+    double MaxTaskSkew = 0.0;
+};
+
+void AccumulateExecutionTraceTotals(TExecutionTraceTotals& totals,
+    const TExecutionTraceSnapshot& snapshot);
+
+void AccumulateExecutionTraceTotals(TExecutionTraceTotals& totals,
+    const TExecutionTraceTotals& source);
+
+// Owns optional execution-phase timing and assembles the terminal diagnostics snapshot.
 class TExecutionDiagnosticsCapture {
 public:
     TExecutionDiagnosticsCapture(TString executerActorType, TString computeActorType);

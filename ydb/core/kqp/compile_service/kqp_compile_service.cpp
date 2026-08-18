@@ -172,7 +172,7 @@ public:
                 continue;
             }
 
-            if (!HasActiveRequest(request.Query)) {
+            if (!ActiveRequests.contains(request.Query)) {
                 auto result = std::move(request);
 
                 Counters->ReportCompileQueueWaitTime(now - result.CompileQueueEnqueuedAt);
@@ -197,25 +197,15 @@ public:
             return {};
         }
 
-        TVector<TRequestsIterator> matches;
-        matches.reserve(queryIt->second.size());
-        for (const auto& requestIt : queryIt->second) {
-            matches.push_back(requestIt);
-        }
+        auto matches = std::move(queryIt->second);
+        QueryIndex.erase(queryIt);
 
         TVector<TKqpCompileRequest> result;
+        result.reserve(matches.size());
         for (const auto& requestIt : matches) {
             Y_ENSURE(requestIt != Queue.end());
-            auto request = std::move(*requestIt);
-
-            queryIt->second.erase(requestIt);
+            result.push_back(std::move(*requestIt));
             Queue.erase(requestIt);
-
-            result.push_back(std::move(request));
-        }
-
-        if (queryIt->second.empty()) {
-            QueryIndex.erase(queryIt);
         }
         return result;
     }
@@ -248,10 +238,6 @@ public:
     }
 
 private:
-    bool HasActiveRequest(const TKqpQueryId& query) const {
-        return ActiveRequests.contains(query);
-    }
-
     TIntrusivePtr<TKqpCounters> Counters;
     size_t MaxSize = 0;
     TRequestsList Queue;

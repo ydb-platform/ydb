@@ -273,6 +273,7 @@ message TEvQueryRequest {
     optional NActorsProto.TTraceId UserFacingTraceId = 10;
     reserved 11;
     repeated TProxyRequestHop ProxyRequestHops = 12;
+    optional uint64 UserFacingTraceOriginSentAtUs = 13;
 }
 
 message TParameterBinding {
@@ -345,6 +346,16 @@ message TEvQueryResponse {
     reserved 5; // (deprecated) ForcedNewEngine
     optional uint64 ConsumedRu = 6;
     optional bool WorkerIsClosing = 7 [default = false];
+    optional string UserFacingTraceName = 8;
+    optional string UserFacingTraceOperation = 9;
+    optional string UserFacingTraceCoverage = 10;
+}
+
+message TEvUserFacingTraceCompletion {
+    optional Ydb.StatusIds.StatusCode YdbStatus = 1;
+    optional string Name = 2;
+    optional string Operation = 3;
+    optional string Coverage = 4;
 }
 
 message TCloseSessionRequest {

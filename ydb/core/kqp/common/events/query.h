@@ -202,6 +202,12 @@ public:
         return RequestCtx ? YqlText : Record.GetRequest().GetQuery();
     }
 
+    TString ExtractQuery() {
+        return RequestCtx
+            ? std::move(YqlText)
+            : std::move(*Record.MutableRequest()->MutableQuery());
+    }
+
     const ::Ydb::Table::TransactionControl& GetTxControl() const {
         return RequestCtx ? *TxControl : Record.GetRequest().GetTxControl();
     }
@@ -571,5 +577,8 @@ struct TEvQueryResponse: public TEventPBWithArena<TEvQueryResponse, NKikimrKqp::
         : TEventPBBase(arena ? std::move(arena) : MakeIntrusive<NActors::TProtoArenaHolder>())
     {}
 };
+
+struct TEvUserFacingTraceCompletion : public TEventPB<TEvUserFacingTraceCompletion,
+    NKikimrKqp::TEvUserFacingTraceCompletion, TKqpEvents::EvUserFacingTraceCompletion> {};
 
 } // namespace NKikimr::NKqp

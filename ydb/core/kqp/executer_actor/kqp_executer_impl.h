@@ -1926,6 +1926,7 @@ protected:
 
         auto snapshot = ExecutionDiagnostics->Finish(ResponseEv->Record.GetResponse().GetStatus());
         Stats->ExportTraceSnapshot(snapshot);
+        AccumulateExecutionTraceTotals(ResponseEv->ExecutionTraceTotals, snapshot);
         TrimExecutionTraceSnapshot(snapshot);
         ResponseEv->ExecutionTraces.push_back(std::move(snapshot));
         ExecutionDiagnostics.reset();

@@ -89,6 +89,22 @@ struct TOwnedCommitShard {
 
 } // namespace
 
+void AccumulateExecutionTraceTotals(TExecutionTraceTotals& totals,
+        const TExecutionTraceSnapshot& snapshot) {
+    totals.CpuUs += snapshot.CpuUs;
+    totals.WaitUs += snapshot.WaitUs;
+    totals.SpilledBytes += snapshot.SpilledBytes;
+    totals.MaxTaskSkew = std::max(totals.MaxTaskSkew, snapshot.MaxTaskSkew);
+}
+
+void AccumulateExecutionTraceTotals(TExecutionTraceTotals& totals,
+        const TExecutionTraceTotals& source) {
+    totals.CpuUs += source.CpuUs;
+    totals.WaitUs += source.WaitUs;
+    totals.SpilledBytes += source.SpilledBytes;
+    totals.MaxTaskSkew = std::max(totals.MaxTaskSkew, source.MaxTaskSkew);
+}
+
 TExecutionDiagnosticsCapture::TExecutionDiagnosticsCapture(TString executerActorType,
         TString computeActorType) {
     Snapshot.ExecuterActorType = std::move(executerActorType);

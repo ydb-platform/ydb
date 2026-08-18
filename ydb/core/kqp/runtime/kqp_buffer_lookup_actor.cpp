@@ -79,6 +79,8 @@ public:
         , Partitioning(Settings.TxManager->GetPartitioning(Settings.TableId))
         , LogPrefix(TStringBuilder() << "Table: `" << Settings.TablePath << "` (" << Settings.TableId << "), "
             << "SessionActorId: " << Settings.SessionActorId)
+        , ShardReadDiagnostics(Settings.CollectDiagnostics
+            ? std::make_unique<TShardReadDiagnosticsCollector>() : nullptr)
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(Settings.ParentTraceId), "LookupActor") {
     }
 
@@ -336,8 +338,8 @@ public:
     }
 
     void StartTableRead(ui64 cookie, ui64 shardId, bool isUniqueCheck, bool failOnUniqueCheck, THolder<TEvDataShard::TEvRead> request) {
-        if (Settings.CollectDiagnostics) {
-            ShardReadDiagnostics.OnStart(shardId);
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnStart(shardId);
         }
         Settings.Counters->CreatedIterators->Inc();
         auto& record = request->Record;
@@ -441,8 +443,8 @@ public:
         const auto shardId = read.ShardId;
         const auto cookie = read.LookupCookie;
 
-        if (Settings.CollectDiagnostics) {
-            ShardReadDiagnostics.OnFinish(shardId, record.GetRowCount(), read.RetryAttempts,
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnFinish(shardId, record.GetRowCount(), read.RetryAttempts,
                 record.HasNodeId() ? record.GetNodeId() : 0,
                 record.GetStatus().GetCode(), record.GetFinished());
         }
@@ -818,8 +820,8 @@ public:
             NYql::EYqlIssueCode id,
             const TString& message,
             const NYql::TIssues& subIssues = {}) {
-        if (Settings.CollectDiagnostics) {
-            ShardReadDiagnostics.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+        if (Y_UNLIKELY(ShardReadDiagnostics)) {
+            ShardReadDiagnostics->OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
                 ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
         }
         if (LookupActorSpan) {
@@ -847,7 +849,7 @@ public:
         ReadRowsCount = 0;
         ReadBytesCount = 0;
 
-        if (BrokenLocksCount > 0 || !ShardReadDiagnostics.Empty()) {
+        if (BrokenLocksCount > 0 || (ShardReadDiagnostics && !ShardReadDiagnostics->Empty())) {
             NKqpProto::TKqpTaskExtraStats extraStats;
             if (stats->HasExtra()) {
                 stats->GetExtra().UnpackTo(&extraStats);
@@ -856,7 +858,9 @@ public:
                 extraStats.MutableLockStats()->SetBrokenAsVictim(
                     extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocksCount);
             }
-            ShardReadDiagnostics.Export(extraStats, 0);
+            if (ShardReadDiagnostics) {
+                ShardReadDiagnostics->Export(extraStats, 0);
+            }
             stats->MutableExtra()->PackFrom(extraStats);
             BrokenLocksCount = 0;
         }
@@ -884,7 +888,7 @@ private:
     THashMap<ui64, TLookupState> CookieToLookupState;
     THashMap<ui64, TShardState> ShardToState;
     THashMap<ui64, TReadState> ReadIdToState;
-    TShardReadDiagnosticsCollector ShardReadDiagnostics;
+    std::unique_ptr<TShardReadDiagnosticsCollector> ShardReadDiagnostics;
 
     ui64 ReadId = 0;
 

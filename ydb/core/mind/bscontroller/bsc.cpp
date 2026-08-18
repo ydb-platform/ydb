@@ -274,8 +274,14 @@ NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const T
     }
 }
 
-void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
+void TBlobStorageController::OnActivateExecutor(const TActorContext& ctx) {
+    Y_UNUSED(ctx);
     StartConsoleInteraction();
+
+    if (!CmsPipe) {
+        CmsPipe = Register(NTabletPipe::CreateClient(SelfId(), MakeCmsID(),
+            NTabletPipe::TClientRetryPolicy::WithRetries()));
+    }
 
     // create stat processor
     StatProcessorActorId = Register(CreateStatProcessorActor());
@@ -1065,6 +1071,9 @@ void TBlobStorageController::PassAway() {
         if (const auto& actorId = info.VirtualGroupSetupMachineId) {
             TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, actorId, SelfId(), nullptr, 0));
         }
+    }
+    if (CmsPipe) {
+        NTabletPipe::CloseAndForgetClient(SelfId(), CmsPipe);
     }
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, GetNameserviceActorId(), SelfId(),
         nullptr, 0));

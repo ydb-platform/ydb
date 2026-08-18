@@ -16,6 +16,8 @@ namespace NKikimr::NBsController {
         std::unique_ptr<TEventHandle<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>> RequestEv;
         std::unique_ptr<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult> Result;
         bool CompatReply = false;
+        ui64 ChangedTabletId = 0;
+        ui64 ChangedTabletRevision = 0;
 
         class TStoragePoolRecord {
             using TEntityId = NLayoutChecker::TEntityId;
@@ -665,10 +667,12 @@ namespace NKikimr::NBsController {
             }
 
             if (!updates.empty()) {
+                ChangedTabletId = tabletId;
+                ChangedTabletRevision = currentRevision + 1;
                 db.Table<TabletStateTable>().Key(tabletId).Update<
                     TabletStateTable::Revision,
                     TabletStateTable::LastChangedAt>(
-                        currentRevision + 1,
+                        ChangedTabletRevision,
                         TInstant::Now());
             }
 
@@ -693,6 +697,13 @@ namespace NKikimr::NBsController {
                 h->Rewrite(TEvInterconnect::EvForward, RequestEv->InterconnectSession);
             }
             TActivationContext::Send(h.release());
+
+            if (ChangedTabletId && Self->CmsPipe) {
+                auto notification = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged>();
+                notification->Record.SetTabletId(ChangedTabletId);
+                notification->Record.SetRevision(ChangedTabletRevision);
+                NTabletPipe::SendData(ctx, Self->CmsPipe, notification.Release());
+            }
         }
     };
 

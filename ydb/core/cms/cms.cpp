@@ -2010,6 +2010,34 @@ void TCms::Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr& ev, const TActorContext
     Execute(CreateTxPersistDDiskInfo(ev), ctx);
 }
 
+void TCms::Handle(TEvCms::TEvDDiskInfoListRequest::TPtr& ev, const TActorContext& ctx) {
+    auto response = MakeHolder<TEvCms::TEvDDiskInfoListResponse>();
+    response->Record.SetStatus(NKikimrProto::OK);
+    for (const auto& [tabletId, info] : State->DDiskInfo) {
+        auto* tablet = response->Record.AddTablets();
+        tablet->SetTabletId(tabletId);
+        tablet->SetRevision(info.Revision);
+        tablet->SetLastChangedAt(info.LastChangedAt.MicroSeconds());
+    }
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext& ctx) {
+    auto response = MakeHolder<TEvCms::TEvDDiskInfoGetResponse>();
+    const auto it = State->DDiskInfo.find(ev->Get()->Record.GetTabletId());
+    if (it == State->DDiskInfo.end()) {
+        response->Record.SetStatus(NKikimrProto::NOT_FOUND);
+        response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
+        response->Record.SetErrorReason("DDisk snapshot is not available");
+    } else if (!response->Record.ParseFromString(it->second.State)) {
+        response->Record.Clear();
+        response->Record.SetStatus(NKikimrProto::ERROR);
+        response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
+        response->Record.SetErrorReason("failed to parse persisted DDisk snapshot");
+    }
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
 void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     if (record.GetStatus() != NKikimrProto::OK || !State->BSControllerPipe) {
@@ -2019,7 +2047,7 @@ void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr&
     for (const auto& tablet : record.GetTablets()) {
         const auto it = State->DDiskInfo.find(tablet.GetTabletId());
         const ui64 knownRevision = it == State->DDiskInfo.end() ? 0 : it->second.Revision;
-        if (tablet.GetRevision() != knownRevision) {
+        if (tablet.GetRevision() > knownRevision) {
             auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
             request->Record.SetTabletId(tablet.GetTabletId());
             request->Record.SetKnownRevision(knownRevision);
@@ -2034,6 +2062,21 @@ void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult::TPtr& e
         persist->Record.CopyFrom(ev->Get()->Record);
         ctx.Send(SelfId(), persist.Release());
     }
+}
+
+void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    const auto it = State->DDiskInfo.find(record.GetTabletId());
+    const ui64 knownRevision = it == State->DDiskInfo.end() ? 0 : it->second.Revision;
+
+    if (!State->BSControllerPipe || record.GetRevision() <= knownRevision) {
+        return;
+    }
+
+    auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
+    request->Record.SetTabletId(record.GetTabletId());
+    request->Record.SetKnownRevision(knownRevision);
+    NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
 }
 
 void TCms::Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx) {
@@ -2730,8 +2773,15 @@ void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
                   const TActorContext &ctx)
 {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-    if (msg->ClientId == State->BSControllerPipe && msg->Status != NKikimrProto::OK)
+    if (msg->ClientId != State->BSControllerPipe) {
+        return;
+    }
+
+    if (msg->Status != NKikimrProto::OK) {
         OnBSCPipeDestroyed(ctx);
+    } else {
+        StartDDiskSync(ctx);
+    }
 }
 
 void TCms::Handle(::NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx)

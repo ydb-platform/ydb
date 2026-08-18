@@ -275,6 +275,8 @@ private:
             HFunc(TEvCms::TEvStoreWalleTask, Handle);
             HFunc(TEvCms::TEvRemoveWalleTask, Handle);
             // public api begin
+            HFunc(TEvCms::TEvDDiskInfoListRequest, Handle);
+            HFunc(TEvCms::TEvDDiskInfoGetRequest, Handle);
             HFunc(TEvCms::TEvListClusterNodesRequest, Handle);
             HFunc(TEvCms::TEvCreateMaintenanceTaskRequest, Handle);
             HFunc(TEvCms::TEvRefreshMaintenanceTaskRequest, Handle);
@@ -297,6 +299,7 @@ private:
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
             HFunc(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult, Handle);
             HFunc(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult, Handle);
+            HFunc(TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
@@ -435,11 +438,14 @@ private:
     void OnBSCPipeDestroyed(const TActorContext &ctx);
     void StartDDiskSync(const TActorContext &ctx);
 
+    void Handle(TEvCms::TEvDDiskInfoListRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvUpdateClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvManageRequestRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvManagePermissionRequest::TPtr &ev, const TActorContext &ctx);

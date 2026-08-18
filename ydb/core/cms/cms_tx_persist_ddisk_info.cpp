@@ -9,6 +9,7 @@ class TCms::TTxPersistDDiskInfo : public TTransactionBase<TCms> {
     NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult Record;
     TString SerializedState;
     TInstant ChangedAt;
+    bool Persisted = false;
 
 public:
     TTxPersistDDiskInfo(TCms* self, TEvPrivate::TEvPersistDDiskInfo::TPtr& ev)
@@ -29,12 +30,21 @@ public:
             return true;
         }
 
+        NIceDb::TNiceDb db(txc.DB);
+        auto current = db.Table<Schema::DDiskInfo>().Key(Record.GetTabletId()).Select();
+        if (!current.IsReady()) {
+            return false;
+        }
+        if (current.IsValid()
+                && current.GetValueOrDefault<Schema::DDiskInfo::Revision>(0) >= Record.GetRevision()) {
+            return true;
+        }
+
         if (!Record.SerializeToString(&SerializedState)) {
             return true;
         }
 
         ChangedAt = ctx.Now();
-        NIceDb::TNiceDb db(txc.DB);
         db.Table<Schema::DDiskInfo>().Key(Record.GetTabletId()).Update<
             Schema::DDiskInfo::Revision,
             Schema::DDiskInfo::LastChangedAt,
@@ -42,11 +52,12 @@ public:
                 Record.GetRevision(),
                 ChangedAt.MicroSeconds(),
                 SerializedState);
+        Persisted = true;
         return true;
     }
 
     void Complete(const TActorContext& /*ctx*/) override {
-        if (Record.GetStatus() == NKikimrProto::OK && SerializedState) {
+        if (Persisted) {
             Self->State->DDiskInfo[Record.GetTabletId()] = TCmsDDiskInfo{
                 .Revision = Record.GetRevision(),
                 .LastChangedAt = ChangedAt,

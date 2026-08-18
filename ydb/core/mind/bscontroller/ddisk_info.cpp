@@ -90,7 +90,7 @@ public:
 
         NIceDb::TNiceDb db(txc.DB);
         auto revision = db.Table<Schema::DirectBlockGroupTabletState>().Key(tabletId).Select();
-        auto rows = db.Table<Schema::DirectBlockGroupClaims>().Range(tabletId, tabletId).Select();
+        auto rows = db.Table<Schema::DirectBlockGroupClaims>().Prefix(tabletId).Select();
         if (!revision.IsReady() || !rows.IsReady()) {
             return false;
         }

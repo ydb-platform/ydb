@@ -131,14 +131,22 @@ proctype Producer() {
 }
 
 proctype Controller() {
+    bit counter = 0;
+
     do
-    :: true -> check_safety()
-    :: true ->
+    :: counter == 0 ->
+        awake_workers == suggested_thread_count;
+        check_safety();
+        counter = 1
+
+    :: counter == 1 ->
+        check_safety();
         atomic {
             if
             :: suggested_thread_count == 1 -> suggested_thread_count = N
             :: suggested_thread_count == N -> suggested_thread_count = 1
-            fi
+            fi;
+            counter = 0
         };
         request_waker()
     od

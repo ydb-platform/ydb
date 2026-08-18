@@ -1,0 +1,47 @@
+Model: executor_pool_basic_waker.pml
+Model SHA-256: a63bf79a035f7b0719dab458e77c58a76f05a17f0da9c419f1b622c1962d0aaa
+Host: mr-nvme-testing-004.ydb.yandex.net
+Started: 2026-08-18T19:00:58+03:00
+Spin: Spin Version 6.5.2 -- 6 December 2019
+
+Commands:
+  spin -a executor_pool_basic_waker.pml
+  cc -O3 -DCOLLAPSE -o pan pan.c
+  ./pan -a -N live_queue_changes -m800000000 -w30 -n -Q60
+
+Result: HOLDS (full state-space search completed with errors: 0)
+
+Full statespace search for:
+  never claim             + (live_queue_changes)
+  assertion violations    + (if within scope of claim)
+  acceptance cycles       + (fairness disabled)
+  invalid end states      - (disabled by never claim)
+
+State-vector 96 byte, depth reached 116414149, errors: 0
+4.1833897e+08 states, stored (5.63613e+08 visited)
+1.5828258e+09 states, matched
+2.1464386e+09 transitions (= visited+matched)
+3.495041e+08 atomic steps
+hash conflicts: 2.3104401e+08 (resolved)
+
+Stats on memory usage (in Megabytes):
+52662.605  equivalent memory usage for states (stored*(State-vector + overhead))
+22497.175  actual memory usage for states (compression: 42.72%)
+            state-vector as stored = 20 byte + 36 byte overhead
+ 8192.000  memory used for hash table (-w30)
+42724.610  memory used for DFS stack (-m800000000)
+    6.159  memory lost to fragmentation
+73407.625  total actual memory usage
+
+nr of templates: [ 0:globals 1:chans 2:procs ]
+collapse counts: [ 0:3121 2:28 3:5 4:7 5:4033 6:2 7:3 ]
+
+pan: elapsed time 887 seconds
+pan: rate 635543.54 states/second
+
+User time (seconds): 879.54
+System time (seconds): 29.90
+Percent of CPU this job got: 99%
+Elapsed (wall clock) time: 15:10.23
+Maximum resident set size (kbytes): 75174792
+Exit status: 0

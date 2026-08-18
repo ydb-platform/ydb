@@ -113,8 +113,8 @@ protected:
     }
 
     ECutState GetCutStateForTest(const TEntryKey& key) const {
-        const auto it = CutState.find(key);
-        return it == CutState.end() ? ECutState::None : it->second;
+        const auto* state = CutState.FindPtr(key);
+        return state ? *state : ECutState::None;
     }
 
 public:

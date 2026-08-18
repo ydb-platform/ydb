@@ -7,6 +7,8 @@
 
 #include <ydb/library/accessor/accessor.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NOlap::NDataSharing {
 
 class TStorageSharedBlobsManager {
@@ -61,16 +63,13 @@ public:
     // queue while shared, but a hard barrier for the range would collect it under
     // the borrower — the cut-history drain gate must see it.
     bool HasSharedBlobsInRange(const ui64 tabletId, const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
-        for (auto it = SharedBlobIds.GetIterator(); it.IsValid(); ++it) {
-            const TLogoBlobID& logoBlobId = it.GetBlobId().GetLogoBlobId();
-            if (logoBlobId.TabletID() != tabletId || logoBlobId.Channel() != channel) {
-                continue;
-            }
-            if (logoBlobId.Generation() >= fromGen && logoBlobId.Generation() < nextFromGen) {
-                return true;
-            }
-        }
-        return false;
+        // Iterating the blob keys rather than TIterator: the predicate only looks at the
+        // blob, and TIterator would revisit it once per tablet it is shared with.
+        return AnyOf(SharedBlobIds, [&](const auto& blob) {
+            const TLogoBlobID& logoBlobId = blob.first.GetLogoBlobId();
+            return logoBlobId.TabletID() == tabletId && logoBlobId.Channel() == channel && logoBlobId.Generation() >= fromGen &&
+                   logoBlobId.Generation() < nextFromGen;
+        });
     }
 
     TBlobsCategories GetBlobCategories() const {

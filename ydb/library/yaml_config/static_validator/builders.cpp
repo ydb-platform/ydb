@@ -160,6 +160,9 @@ TMapBuilder ActorSystemConfigBuilder() {
     .Bool("use_auto_config", [](auto& useAutoConfig){
       useAutoConfig.Optional();
     })
+    .Bool("use_shared_threads", [](auto& useSharedThreads){
+      useSharedThreads.Optional();
+    })
     .Enum("node_type", [](auto& nodeType){
       nodeType
       .SetItems({"STORAGE", "COMPUTE", "HYBRID"})
@@ -175,13 +178,22 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Optional()
       .MapItem([](auto& executorItem){
         executorItem
-        .Enum("name", {"System", "User", "Batch", "IO", "IC"})
+        .String("name")
         .Int64("spin_threshold", [](auto& spinThreshold){
           spinThreshold
           .Min(0)
           .Optional();
         })
-        .Int64("threads", nonNegative())
+        .Int64("threads", [](auto& threads){
+          threads
+          .Optional()
+          .Min(0);
+        })
+        .Int64("placement", [](auto& placement){
+          placement
+          .Optional()
+          .Min(0);
+        })
         .Int64("max_threads", [](auto& maxThreads){
           maxThreads
           .Optional()
@@ -203,12 +215,37 @@ TMapBuilder ActorSystemConfigBuilder() {
           .Min(0);
         })
         .Enum("type", {"IO", "BASIC"})
+        .AddCheck("Executor placement settings", [](auto& executorContext) {
+          auto node = executorContext.Node();
+          executorContext.Expect(node["threads"].Exists(),
+            "executor must define threads");
+          if (node["placement"].Exists()) {
+            executorContext.Expect(node["type"].Enum().Value() == "BASIC",
+              "placement is supported only for BASIC executors");
+            executorContext.Expect(!node["affinity"].Exists(),
+              "executor must not define both affinity and placement");
+          }
+        })
         .AddCheck("Harmonizer needy CPU window is supported only for BASIC executors", [](auto& executorContext){
           auto node = executorContext.Node();
           if (node["harmonizer_needy_cpu_window_seconds"].Exists()) {
             executorContext.Expect(node["type"].Enum().Value() == "BASIC");
           }
         });
+      });
+    })
+    .Int64("sys_executor", [](auto& sysExecutor){
+      sysExecutor
+      .Optional()
+      .Min(0);
+    })
+    .Array("service_executor", [](auto& serviceExecutor){
+      serviceExecutor
+      .Optional()
+      .MapItem([](auto& serviceExecutorItem){
+        serviceExecutorItem
+        .String("service_name")
+        .Int64("executor_id", nonNegative());
       });
     })
     .Map("scheduler", [](auto& scheduler){

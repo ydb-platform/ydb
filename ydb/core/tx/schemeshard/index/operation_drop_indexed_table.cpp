@@ -417,8 +417,10 @@ TVector<ISubOperation::TPtr> CreateDropIndexedTable(TOperationId nextId, const T
                     .IsCommonSensePath();
 
                 if (checks) {
-                    // DROP TABLE statement has no info is it a drop of row or column table
-                    return {CreateDropColumnTable(nextId, tx)};
+                    // DROP TABLE statement has no info whether it is a drop of row or column table.
+                    // Use the same cascade as ESchemeOpDropColumnTable so local indexes are dropped
+                    // and move-with-replace can recreate them at the destination path.
+                    return DropColumnTableWithLocalIndexes(nextId, tx, context);
                 }
             } else {
                 checks

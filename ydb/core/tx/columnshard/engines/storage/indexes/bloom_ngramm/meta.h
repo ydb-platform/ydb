@@ -86,7 +86,10 @@ protected:
     }
 
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
-        TChunkedBatchReader& reader, const ui32 recordsCount) const override;
+        TChunkedBatchReader& reader, const ui32 recordsCount, const std::optional<ui64> chunkSizeLimit) const override;
+
+    virtual std::optional<TString> DoBuildIndexChunkData(
+        const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& columnChunk, const ui32 recordsCount, const ui64 sizeLimit) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));

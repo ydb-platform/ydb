@@ -9,7 +9,8 @@
 namespace NKikimr::NOlap::NIndexes {
 
 TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByColumns::DoBuildIndexOptional(
-    const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo) const {
+    const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo,
+    const std::optional<ui64> chunkSizeLimit) const {
     AFL_VERIFY(Serializer);
     AFL_VERIFY(data.size());
     std::vector<TChunkedColumnReader> columnReaders;
@@ -30,7 +31,30 @@ TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> TIndexByC
         columnReaders.emplace_back(it->second, indexInfo.GetColumnLoaderVerified(i));
     }
     TChunkedBatchReader reader(std::move(columnReaders));
-    return DoBuildIndexImpl(reader, recordsCount);
+    // Per-source-chunk emission: one index chunk per column chunk, each bounded by chunkSizeLimit, applied by
+    // the scan to its own record range. Only index types implementing DoBuildIndexChunkData participate (the
+    // first std::nullopt falls back to the whole-portion build); inplace indexes get no limit and stay single.
+    if (chunkSizeLimit && reader.GetColumnsCount() == 1) {
+        std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> result;
+        ui32 chunkIdx = 0;
+        bool supported = true;
+        for (reader.Start(); reader.IsCorrect(); reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount())) {
+            const auto& columnChunk = reader.begin()->GetCurrentChunk();
+            const ui32 chunkRecords = columnChunk->GetRecordsCount();
+            std::optional<TString> indexData = DoBuildIndexChunkData(columnChunk, chunkRecords, *chunkSizeLimit);
+            if (!indexData) {
+                AFL_VERIFY(result.empty())("index_id", GetIndexId());
+                supported = false;
+                break;
+            }
+            result.emplace_back(std::make_shared<NChunks::TPortionIndexChunk>(
+                TChunkAddress(GetIndexId(), chunkIdx++), chunkRecords, indexData->size(), std::move(*indexData)));
+        }
+        if (supported) {
+            return result;
+        }
+    }
+    return DoBuildIndexImpl(reader, recordsCount, chunkSizeLimit);
 }
 
 bool TIndexByColumns::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& /*proto*/) {

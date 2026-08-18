@@ -24,11 +24,19 @@ protected:
     }
 
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
-        TChunkedBatchReader& reader, const ui32 recordsCount) const = 0;
+        TChunkedBatchReader& reader, const ui32 recordsCount, const std::optional<ui64> chunkSizeLimit) const = 0;
+
+    // Index-aware hook for the common per-source-chunk build: return the serialized index payload for one
+    // column chunk (bounded by sizeLimit), or std::nullopt when the index type only supports a whole-portion
+    // build. One index chunk per source chunk lets the scan apply every chunk to its own record range.
+    virtual std::optional<TString> DoBuildIndexChunkData(
+        const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& /*columnChunk*/, const ui32 /*recordsCount*/, const ui64 /*sizeLimit*/) const {
+        return std::nullopt;
+    }
 
     virtual TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> DoBuildIndexOptional(
-        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount,
-        const TIndexInfo& indexInfo) const override final;
+        const THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>>& data, const ui32 recordsCount, const TIndexInfo& indexInfo,
+        const std::optional<ui64> chunkSizeLimit) const override final;
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override;
 
     TConclusionStatus CheckSameColumnsForModification(const IIndexMeta& newMeta) const;

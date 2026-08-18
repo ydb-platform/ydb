@@ -190,34 +190,92 @@ public:
 namespace {
 
 template <class TBuilder, class TFiller>
+void VisitChunkWithBuilder(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& chunk, const TReadDataExtractorContainer& dataExtractor,
+    const ui32 nGrammSize, TBuilder& builder, TFiller& filler) {
+    dataExtractor->VisitAll(
+        chunk,
+        [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
+            builder.FillNGrammHashes(nGrammSize, arr, filler);
+        },
+        [&](const NArrow::NAccessor::TJsonValueView& data, const ui32 /*hashBase*/) {
+            auto view = data.GetScalarOptional();
+            if (!view.has_value()) {
+                return;
+            }
+
+            builder.BuildNGramms(view->data(), view->size(), {}, nGrammSize, filler);
+        });
+}
+
+template <class TBuilder, class TFiller>
 void VisitAllChunksWithBuilder(
     TChunkedBatchReader& reader, const TReadDataExtractorContainer& dataExtractor, const ui32 nGrammSize, TBuilder& builder, TFiller& filler) {
     for (reader.Start(); reader.IsCorrect();) {
         AFL_VERIFY(reader.GetColumnsCount() == 1);
         for (auto&& r : reader) {
-            dataExtractor->VisitAll(
-                r.GetCurrentChunk(),
-                [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
-                    builder.FillNGrammHashes(nGrammSize, arr, filler);
-                },
-                [&](const NArrow::NAccessor::TJsonValueView& data, const ui32 /*hashBase*/) {
-                    auto view = data.GetScalarOptional();
-                    if (!view.has_value()) {
-                        return;
-                    }
-
-                    builder.BuildNGramms(view->data(), view->size(), {}, nGrammSize, filler);
-                });
+            VisitChunkWithBuilder(r.GetCurrentChunk(), dataExtractor, nGrammSize, builder, filler);
         }
 
         reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
     }
 }
 
+constexpr ui64 BitsPerUi64 = sizeof(ui64) * CHAR_BIT;
+constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * CHAR_BIT;
+
 }   // namespace
 
+std::optional<TString> TIndexMeta::DoBuildIndexChunkData(
+    const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& columnChunk, const ui32 recordsCount, const ui64 sizeLimit) const {
+    const ui32 hashesCount = Request.ResolvedHashesCount();
+    const ui32 ngramSize = Request.ResolvedNGrammSize();
+    TNGrammBuilder builder(hashesCount, Request.ResolvedCaseSensitive());
+    // The largest power-of-2 filter strictly below the blob limit: serialization adds a small header, so a
+    // filter of exactly sizeLimit * CHAR_BIT bits would overflow the blob. Folding a bloom filter down keeps
+    // it correct, only its FPR grows.
+    const ui64 clampBits = std::max<ui64>(BitsPerUi64, std::bit_floor(sizeLimit * CHAR_BIT - 1));
+
+    if (Request.IsOldSizingMode()) {
+        const ui32 filterSizeBytes = Request.ResolvedFilterSizeBytes();
+        const ui32 resolvedRecordsCount = Request.ResolvedRecordsCount();
+        ui64 size = static_cast<ui64>(filterSizeBytes) * CHAR_BIT;
+        if ((size & (size - 1)) == 0) {
+            ui32 recordsCountBase = resolvedRecordsCount;
+            // TODO: the guard compares bits against MaxFilterSizeBytes (bytes) — pre-existing sizing kept
+            // as-is for compatibility with already written filters.
+            while (recordsCountBase < recordsCount && size * 2 <= TConstants::MaxFilterSizeBytes) {
+                size <<= 1;
+                recordsCountBase *= 2;
+            }
+        } else {
+            size = std::bit_ceil(size * ((recordsCount + resolvedRecordsCount - 1) / resolvedRecordsCount));
+        }
+        size = std::min<ui64>(std::max<ui64>(16, size), clampBits);
+        TArrayPower2BitsStorage storage(size);
+        VisitChunkWithBuilder(columnChunk, GetDataExtractor(), ngramSize, builder, storage);
+        return GetBitsStorageConstructor()->SerializeToString(storage);
+    }
+
+    const double falsePositiveProbability = Request.ResolvedFalsePositiveProbability();
+    TArrayPower2BitsStorage maxStorage(MaxBitsSize);
+    VisitChunkWithBuilder(columnChunk, GetDataExtractor(), ngramSize, builder, maxStorage);
+
+    const ui64 setBitsCount = maxStorage.CountSetBits();
+    const double m = static_cast<double>(MaxBitsSize);
+    const double k = static_cast<double>(hashesCount);
+    const double ratio = static_cast<double>(setBitsCount) / m;
+    const double estimatedUniqueCount = (ratio >= 1.0) ? m / k : std::max(10.0, -(m / k) * std::log(1.0 - ratio));
+
+    const double requestedBitsSizeDouble = std::ceil((-k * estimatedUniqueCount) / std::log(1.0 - std::pow(falsePositiveProbability, 1.0 / k)));
+    const ui64 requestedBitsSize = std::max<ui64>(BitsPerUi64, static_cast<ui64>(requestedBitsSizeDouble));
+    const ui64 targetSize = std::min<ui64>({ MaxBitsSize, clampBits, std::bit_ceil(requestedBitsSize) });
+
+    auto foldedStorage = targetSize < MaxBitsSize ? maxStorage.Fold(MaxBitsSize / targetSize) : std::move(maxStorage);
+    return GetBitsStorageConstructor()->SerializeToString(foldedStorage);
+}
+
 std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildIndexImpl(
-    TChunkedBatchReader& reader, const ui32 recordsCount) const {
+    TChunkedBatchReader& reader, const ui32 recordsCount, const std::optional<ui64> /*chunkSizeLimit*/) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     const ui32 hashesCount = Request.ResolvedHashesCount();
     const bool caseSensitive = Request.ResolvedCaseSensitive();
@@ -229,9 +287,6 @@ std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> TIndexMeta::DoBuildInd
     TNGrammBuilder builder(hashesCount, caseSensitive);
 
     if (!useOldSizing) {
-        static constexpr ui64 BitsPerUi64 = sizeof(ui64) * CHAR_BIT;
-        static constexpr ui64 MaxBitsSize = static_cast<ui64>(TConstants::MaxFilterSizeBytes) * CHAR_BIT;
-
         TArrayPower2BitsStorage maxStorage(MaxBitsSize);
         VisitAllChunksWithBuilder(reader, GetDataExtractor(), ngramSize, builder, maxStorage);
 

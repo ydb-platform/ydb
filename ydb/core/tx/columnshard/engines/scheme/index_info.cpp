@@ -522,8 +522,20 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     AFL_VERIFY(it != Indexes.end());
     auto& index = it->second;
     TMemoryProfileGuard mpg("IndexConstruction::" + index->GetIndexName());
+    // An inplace (_LOCAL) index must stay a single chunk, so it gets no per-chunk size budget; for blob
+    // storages the budget lets the builder emit one chunk per source column chunk, each under the blob limit.
+    std::optional<ui64> chunkSizeLimit;
+    const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
+    if (indexStorageId != IStoragesManager::LocalMetadataStorageId) {
+        const i64 maxBlobSize = operators->GetOperatorVerified(indexStorageId)->GetBlobSplitSettings().GetMaxBlobSize();
+        // Guard the i64 -> ui64 conversion: a non-positive limit (broken configuration) must not become a
+        // huge budget.
+        if (maxBlobSize > 0) {
+            chunkSizeLimit = static_cast<ui64>(maxBlobSize);
+        }
+    }
     TConclusion<std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>>> indexChunkConclusion =
-        index->BuildIndexOptional(originalData, recordsCount, *this);
+        index->BuildIndexOptional(originalData, recordsCount, *this, chunkSizeLimit);
     if (indexChunkConclusion.IsFail()) {
         return indexChunkConclusion;
     }

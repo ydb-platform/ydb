@@ -16,6 +16,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NOlap::NTest {
 
@@ -30,7 +31,10 @@ constexpr ui32 NGrammIndexId = 1001;
 constexpr ui32 FilterSizeBytes = NLocalIndex::NBloom::TConstants::MaxFilterSizeBytes;
 constexpr i64 MaxBlobSize = FilterSizeBytes / 2;
 
-ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version) {
+// falsePositiveProbability set => new sizing mode (IsOldSizingMode() == false).
+ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version, const ui32 filterSizeBytes = FilterSizeBytes,
+    const ui32 recordsCountBase = 1024, const TString& indexStorageId = IStoragesManager::DefaultStorageId,
+    const std::optional<double> falsePositiveProbability = std::nullopt) {
     NKikimrSchemeOp::TColumnTableSchema proto;
     const std::vector<NArrow::NTest::TTestColumn> columns = {
         NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
@@ -43,12 +47,16 @@ ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version) {
 
     NLocalIndex::NBloom::TRequestSettings request;
     request.NGrammSize = 3;
-    request.DeprecatedHashesCount = 2;
-    request.DeprecatedFilterSizeBytes = FilterSizeBytes;
-    request.DeprecatedRecordsCount = 1024;
+    if (falsePositiveProbability) {
+        request.FalsePositiveProbability = *falsePositiveProbability;
+    } else {
+        request.DeprecatedHashesCount = 2;
+        request.DeprecatedFilterSizeBytes = filterSizeBytes;
+        request.DeprecatedRecordsCount = recordsCountBase;
+    }
     *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
-        std::make_shared<NIndexes::NBloomNGramm::TIndexMeta>(NGrammIndexId, "ngramm_value", IStoragesManager::DefaultStorageId, false,
-            ValueColumnId, NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>()),
+        std::make_shared<NIndexes::NBloomNGramm::TIndexMeta>(NGrammIndexId, "ngramm_value", indexStorageId, false, ValueColumnId,
+            NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>()),
             NIndexes::IBitsStorageConstructor::GetDefault(), request))
                               .SerializeToProto();
 
@@ -58,29 +66,58 @@ ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version) {
     return std::make_shared<TSnapshotSchema>(cache->UpsertIndexInfo(std::move(*indexInfo)), TSnapshot(1, 1));
 }
 
-std::shared_ptr<arrow::RecordBatch> MakeTestBatch() {
+std::shared_ptr<arrow::RecordBatch> MakeTestBatch(const ui32 firstPk = 1, const ui32 rowsCount = 3) {
     arrow::UInt64Builder pkBuilder;
     arrow::StringBuilder valueBuilder;
-    UNIT_ASSERT(pkBuilder.AppendValues({ 1, 2, 3 }).ok());
-    UNIT_ASSERT(valueBuilder.AppendValues({ "alpha", "beta", "gamma" }).ok());
+    for (ui32 i = 0; i < rowsCount; ++i) {
+        UNIT_ASSERT(pkBuilder.Append(firstPk + i).ok());
+        const TString value = "value_" + ::ToString(firstPk + i);
+        UNIT_ASSERT(valueBuilder.Append(value.data(), value.size()).ok());
+    }
     auto schema = arrow::schema({ arrow::field("pk", arrow::uint64()), arrow::field("value", arrow::utf8()) });
-    return arrow::RecordBatch::Make(schema, 3, { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie() });
+    return arrow::RecordBatch::Make(schema, rowsCount, { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie() });
+}
+
+// Values with many distinct n-grams so the FalsePositiveProbability-sized filter grows above the blob limit.
+std::shared_ptr<arrow::RecordBatch> MakeDiverseBatch(const ui32 firstPk, const ui32 rowsCount) {
+    static const TString alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    constexpr ui32 valueLength = 40;
+    arrow::UInt64Builder pkBuilder;
+    arrow::StringBuilder valueBuilder;
+    for (ui32 i = 0; i < rowsCount; ++i) {
+        const ui32 pk = firstPk + i;
+        UNIT_ASSERT(pkBuilder.Append(pk).ok());
+        TString value;
+        value.reserve(valueLength);
+        for (ui32 j = 0; j < valueLength; ++j) {
+            ui64 mix = (ui64)pk * 0x9E3779B97F4A7C15ull + (ui64)j * 0xD1B54A32D192ED03ull;
+            mix ^= mix >> 30;
+            mix *= 0xBF58476D1CE4E5B9ull;
+            mix ^= mix >> 27;
+            value.append(alphabet[mix % alphabet.size()]);
+        }
+        UNIT_ASSERT(valueBuilder.Append(value.data(), value.size()).ok());
+    }
+    auto schema = arrow::schema({ arrow::field("pk", arrow::uint64()), arrow::field("value", arrow::utf8()) });
+    return arrow::RecordBatch::Make(schema, rowsCount, { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie() });
 }
 
 THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> BuildColumnChunks(
-    const ISnapshotSchema::TPtr& schema, const std::shared_ptr<arrow::RecordBatch>& batch) {
+    const ISnapshotSchema::TPtr& schema, const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches) {
     THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> chunks;
-    for (const auto& field : batch->schema()->fields()) {
+    for (const auto& field : batches.front()->schema()->fields()) {
         const ui32 columnId = schema->GetColumnIdVerified(field->name());
         auto loader = schema->GetIndexInfo().GetColumnLoaderVerified(columnId);
         const auto& accessorConstructor = loader->GetAccessorConstructor();
-        auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(batch->GetColumnByName(field->name()));
-        const auto loadContext = loader->BuildAccessorContext(accessor->GetRecordsCount());
-        auto arrToWrite = accessorConstructor->Construct(accessor, loadContext);
-        UNIT_ASSERT(arrToWrite.IsSuccess());
-        chunks[columnId] = { std::make_shared<NChunks::TChunkPreparation>(
-            accessorConstructor->SerializeToBlobAndMeta(*arrToWrite, loadContext).Blob, *arrToWrite, TChunkAddress(columnId, 0),
-            schema->GetIndexInfo().GetColumnFeaturesVerified(columnId)) };
+        for (ui32 chunkIdx = 0; chunkIdx < batches.size(); ++chunkIdx) {
+            auto accessor = std::make_shared<NArrow::NAccessor::TTrivialArray>(batches[chunkIdx]->GetColumnByName(field->name()));
+            const auto loadContext = loader->BuildAccessorContext(accessor->GetRecordsCount());
+            auto arrToWrite = accessorConstructor->Construct(accessor, loadContext);
+            UNIT_ASSERT(arrToWrite.IsSuccess());
+            chunks[columnId].emplace_back(
+                std::make_shared<NChunks::TChunkPreparation>(accessorConstructor->SerializeToBlobAndMeta(*arrToWrite, loadContext).Blob,
+                    *arrToWrite, TChunkAddress(columnId, chunkIdx), schema->GetIndexInfo().GetColumnFeaturesVerified(columnId)));
+        }
     }
     return chunks;
 }
@@ -89,7 +126,7 @@ TWritePortionInfoWithBlobsResult BuildPortionWithoutIndexes(const ISnapshotSchem
     const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) {
     std::shared_ptr<TDefaultSchemaDetails> schemaDetails(
         new TDefaultSchemaDetails(schema, std::make_shared<NArrow::NSplitter::TSerializationStats>()));
-    TGeneralSerializedSlice slice(BuildColumnChunks(schema, batch), schemaDetails, splitterCounters);
+    TGeneralSerializedSlice slice(BuildColumnChunks(schema, { batch }), schemaDetails, splitterCounters);
 
     const NSplitter::TEntityGroups groups(NSplitter::TSplitSettings(), NBlobOperations::TGlobal::DefaultStorageId);
     std::vector<TSplittedBlob> blobs;
@@ -139,8 +176,9 @@ bool HasIndex(const TWritePortionInfoWithBlobsResult& portion, const ui32 indexI
 
 Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
     // Issue #26733: actualization rebuilds the index for the target tier, and a filter above the storage
-    // MaxBlobSize used to abort the tablet with "blob size for secondary data ... bigger than limit".
-    Y_UNIT_TEST(OversizedIndexOnActualizationIsSkipped) {
+    // MaxBlobSize used to abort the tablet with "blob size for secondary data ... bigger than limit". A
+    // filter above the limit is folded down to it instead (higher FPR, index kept).
+    Y_UNIT_TEST(OversizedIndexOnActualizationIsClampedToLimit) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(MaxBlobSize).SetMinBlobSize(MaxBlobSize / 4));
 
@@ -158,7 +196,12 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
         UNIT_ASSERT(syncResult);
         syncResult->RegisterFakeBlobIds();
         syncResult->FinalizePortionConstructor(TSnapshot(1, 1));
-        UNIT_ASSERT(!HasIndex(*syncResult, NGrammIndexId));
+        UNIT_ASSERT(HasIndex(*syncResult, NGrammIndexId));
+        for (const auto& index : syncResult->GetPortionResult().GetIndexesVerified()) {
+            if (index.GetIndexId() == NGrammIndexId) {
+                UNIT_ASSERT_LE(index.GetDataSize(), MaxBlobSize);
+            }
+        }
     }
 
     // The same index fits when the storage limit is the production one, so the portion keeps its index.
@@ -181,6 +224,126 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
         syncResult->RegisterFakeBlobIds();
         syncResult->FinalizePortionConstructor(TSnapshot(1, 1));
         UNIT_ASSERT(HasIndex(*syncResult, NGrammIndexId));
+    }
+
+    // On a blob storage the index is emitted as one chunk per source column chunk, each fitting the limit.
+    Y_UNIT_TEST(IndexEmittedPerSourceChunk) {
+        constexpr i64 blobLimit = 10_KB;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
+
+        // 512 records over 4 column chunks: the whole-portion filter is 32 KB (8 KB doubled twice), while
+        // a 128-record subrange keeps the base 8 KB, which fits the 10 KB limit.
+        const auto schema = MakeSchemaWithNGrammIndex(1, 8_KB, 128);
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        for (ui32 i = 0; i < 4; ++i) {
+            batches.emplace_back(MakeTestBatch(1 + i * 128, 128));
+        }
+        const auto chunks = BuildColumnChunks(schema, batches);
+
+        TIndexInfo::TSecondaryData secondaryData;
+        secondaryData.MutableExternalData() = chunks;
+        schema->GetIndexInfo()
+            .AppendIndex(chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 512, IStoragesManager::DefaultStorageId, secondaryData)
+            .Validate();
+
+        const auto it = secondaryData.GetExternalData().find(NGrammIndexId);
+        UNIT_ASSERT(it != secondaryData.GetExternalData().end());
+        UNIT_ASSERT_VALUES_EQUAL(it->second.size(), 4);
+        ui32 recordsSum = 0;
+        for (const auto& chunk : it->second) {
+            UNIT_ASSERT_LE(chunk->GetPackedSize(), blobLimit);
+            recordsSum += chunk->GetRecordsCountVerified();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(recordsSum, 512);
+    }
+
+    // A single source chunk whose filter would exceed the limit is folded down to fit (higher FPR).
+    Y_UNIT_TEST(OversizedSingleChunkIsClampedToLimit) {
+        constexpr i64 blobLimit = 10_KB;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
+
+        // One column chunk of 512 records: the 8 KB base filter doubles past the 10 KB limit, but a single
+        // source chunk cannot be split, so one chunk clamped to the limit is emitted.
+        const auto schema = MakeSchemaWithNGrammIndex(1, 8_KB, 128);
+        const auto chunks = BuildColumnChunks(schema, { MakeTestBatch(1, 512) });
+
+        TIndexInfo::TSecondaryData secondaryData;
+        secondaryData.MutableExternalData() = chunks;
+        schema->GetIndexInfo()
+            .AppendIndex(chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 512, IStoragesManager::DefaultStorageId, secondaryData)
+            .Validate();
+
+        const auto it = secondaryData.GetExternalData().find(NGrammIndexId);
+        UNIT_ASSERT(it != secondaryData.GetExternalData().end());
+        UNIT_ASSERT_VALUES_EQUAL(it->second.size(), 1);
+        UNIT_ASSERT_LE(it->second.front()->GetPackedSize(), blobLimit);
+        UNIT_ASSERT_VALUES_EQUAL(it->second.front()->GetRecordsCountVerified(), 512);
+    }
+
+    // Per-source-chunk emission in the new sizing mode (FalsePositiveProbability).
+    Y_UNIT_TEST(IndexEmittedPerSourceChunkNewSizing) {
+        constexpr i64 blobLimit = 2_KB;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
+
+        const auto schema = MakeSchemaWithNGrammIndex(1, FilterSizeBytes, 1024, IStoragesManager::DefaultStorageId, 0.005);
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+        for (ui32 i = 0; i < 4; ++i) {
+            batches.emplace_back(MakeDiverseBatch(1 + i * 128, 128));
+        }
+        const auto chunks = BuildColumnChunks(schema, batches);
+
+        TIndexInfo::TSecondaryData secondaryData;
+        secondaryData.MutableExternalData() = chunks;
+        schema->GetIndexInfo()
+            .AppendIndex(chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 512, IStoragesManager::DefaultStorageId, secondaryData)
+            .Validate();
+
+        const auto it = secondaryData.GetExternalData().find(NGrammIndexId);
+        UNIT_ASSERT(it != secondaryData.GetExternalData().end());
+        UNIT_ASSERT_VALUES_EQUAL(it->second.size(), 4);
+        ui32 recordsSum = 0;
+        for (const auto& chunk : it->second) {
+            UNIT_ASSERT_LE(chunk->GetPackedSize(), blobLimit);
+            recordsSum += chunk->GetRecordsCountVerified();
+        }
+        UNIT_ASSERT_VALUES_EQUAL(recordsSum, 512);
+    }
+
+    // An oversized inplace (_LOCAL) index cannot be split: it is dropped completely, leaving no chunks and
+    // no inplace metadata, so nothing about it is persisted with the portion (IndexColumnsV2 stays clean).
+    Y_UNIT_TEST(OversizedLocalIndexIsSkippedWithoutMeta) {
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(MaxBlobSize).SetMinBlobSize(MaxBlobSize / 4));
+
+        const auto schemaFrom = MakeSchemaWithNGrammIndex(1, FilterSizeBytes, 1024, IStoragesManager::LocalMetadataStorageId);
+        const auto schemaTo = MakeSchemaWithNGrammIndex(2, FilterSizeBytes, 1024, IStoragesManager::LocalMetadataStorageId);
+        const auto splitterCounters = std::make_shared<NColumnShard::TIndexationCounters>("test")->SplitterCounters;
+
+        {
+            TIndexInfo::TSecondaryData secondaryData;
+            const auto chunks = BuildColumnChunks(schemaFrom, { MakeTestBatch() });
+            secondaryData.MutableExternalData() = chunks;
+            schemaFrom->GetIndexInfo()
+                .AppendIndex(chunks, NGrammIndexId, TTestStoragesManager::GetInstance(), 3, IStoragesManager::DefaultStorageId, secondaryData)
+                .Validate();
+            UNIT_ASSERT(!secondaryData.GetExternalData().contains(NGrammIndexId));
+            UNIT_ASSERT(secondaryData.GetSecondaryInplaceData().empty());
+        }
+
+        auto writePortion = BuildPortionWithoutIndexes(schemaFrom, MakeTestBatch(), splitterCounters);
+        auto blobs = ReadBlobs(writePortion);
+        auto readPortion = TReadPortionInfoWithBlobs::RestorePortion(writePortion.GetPortionResult(), blobs, schemaFrom->GetIndexInfo());
+
+        auto syncResult = TReadPortionInfoWithBlobs::SyncPortion(std::move(readPortion), schemaFrom, schemaTo,
+            IStoragesManager::DefaultStorageId, TTestStoragesManager::GetInstance(), splitterCounters);
+
+        UNIT_ASSERT(syncResult);
+        syncResult->RegisterFakeBlobIds();
+        syncResult->FinalizePortionConstructor(TSnapshot(1, 1));
+        UNIT_ASSERT(!HasIndex(*syncResult, NGrammIndexId));
     }
 }
 

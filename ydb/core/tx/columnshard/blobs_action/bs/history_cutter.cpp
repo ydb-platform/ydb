@@ -124,21 +124,17 @@ bool THistoryCutterWrapper::IsEnabled() const {
 
 bool THistoryCutterWrapper::SeenGroupsCheckPasses(
     const std::vector<TTabletChannelInfo::THistoryEntry>& hist, const ui32 fromGeneration, const std::unordered_set<ui32>& cutFromGenerations) {
-    ui32 targetGroup = 0;
-    bool found = false;
-    std::unordered_set<ui32> seenGroups;
-    for (const auto& entry : hist) {
-        if (entry.FromGeneration == fromGeneration) {
-            targetGroup = entry.GroupID;
-            found = true;
-            break;
-        }
-        if (cutFromGenerations.contains(entry.FromGeneration)) {
-            continue;
-        }
-        seenGroups.insert(entry.GroupID);
+    const auto target = FindIf(hist, [fromGeneration](const TTabletChannelInfo::THistoryEntry& entry) {
+        return entry.FromGeneration == fromGeneration;
+    });
+    if (target == hist.end()) {
+        return false;
     }
-    return found && !seenGroups.contains(targetGroup);
+    // No entry before the target may still be live in the target's group: a hard barrier
+    // for the target's range would collect that entry's blobs too.
+    return !AnyOf(hist.begin(), target, [&](const TTabletChannelInfo::THistoryEntry& entry) {
+        return entry.GroupID == target->GroupID && !cutFromGenerations.contains(entry.FromGeneration);
+    });
 }
 
 bool THistoryCutterWrapper::SeenGroupsCheckPasses(const TEntryKey& key) const {
@@ -159,12 +155,15 @@ ui32 THistoryCutterWrapper::GetNextFromGeneration(const TEntryKey& key) const {
         return 0;
     }
     const auto& hist = TabletInfo->Channels[key.Channel].History;
-    for (int i = 0; i < static_cast<int>(hist.size()) - 1; ++i) {
-        if (hist[i].FromGeneration == key.FromGeneration) {
-            return hist[i + 1].FromGeneration;
-        }
+    // History is ascending by FromGeneration, so the successor is one past the entry
+    // itself; TCmp is the comparator TTabletChannelInfo::GroupForGeneration uses for
+    // the same search. `next == end()` means the entry is the active one, which has no
+    // successor and is therefore never a cut candidate.
+    const auto next = UpperBound(hist.begin(), hist.end(), key.FromGeneration, TTabletChannelInfo::THistoryEntry::TCmp());
+    if (next == hist.begin() || next == hist.end() || (next - 1)->FromGeneration != key.FromGeneration) {
+        return 0;
     }
-    return 0;
+    return next->FromGeneration;
 }
 
 bool THistoryCutterWrapper::IsDrained(const TEntryKey& key) const {
@@ -200,17 +199,16 @@ bool THistoryCutterWrapper::GetEntryKey(const TLogoBlobID& blobId, TEntryKey& ou
         return false;
     }
     const auto& hist = TabletInfo->Channels[ch].History;
-    for (int i = static_cast<int>(hist.size()) - 2; i >= 0; --i) {
-        if (hist[i].FromGeneration <= blobId.Generation()) {
-            // Check it falls in [hist[i].FromGen, hist[i+1].FromGen).
-            if (blobId.Generation() < hist[i + 1].FromGeneration) {
-                out = TEntryKey{ ch, hist[i].FromGeneration };
-                return true;
-            }
-            break;
-        }
+    // The same search TTabletChannelInfo::GroupForGeneration performs, but the entry's
+    // FromGeneration is the key here rather than its group. `entry` is one past the
+    // owning history entry: at begin() no entry covers the generation, and at end() the
+    // owner is the active entry, which is never a cut candidate.
+    const auto entry = UpperBound(hist.begin(), hist.end(), blobId.Generation(), TTabletChannelInfo::THistoryEntry::TCmp());
+    if (entry == hist.begin() || entry == hist.end()) {
+        return false;
     }
-    return false;
+    out = TEntryKey{ ch, (entry - 1)->FromGeneration };
+    return true;
 }
 
 void THistoryCutterWrapper::PublishLevels(const std::optional<ui64> sweepCandidates) {
@@ -348,16 +346,14 @@ bool THistoryCutterWrapper::TryNominate(const TActorContext& ctx) {
         // All entries except the last (active) are candidates.
         for (int i = 0; i < static_cast<int>(hist.size()) - 1; ++i) {
             const TEntryKey key{ ch, hist[i].FromGeneration };
-            const auto stateIt = CutState.find(key);
-            if (stateIt != CutState.end() && stateIt->second != ECutState::None) {
+            if (const auto* state = CutState.FindPtr(key); state && *state != ECutState::None) {
                 continue;
             }
-            const auto cntIt = Counters.find(key);
-            if (cntIt != Counters.end() && cntIt->second != 0) {
+            if (const auto* count = Counters.FindPtr(key); count && *count != 0) {
                 continue;
             }
-            const auto disprovedIt = DisprovedAt.find(key);
-            if (disprovedIt != DisprovedAt.end() && ctx.Now() - disprovedIt->second.At < GetDisprovedCooldown(disprovedIt->second.Attempts)) {
+            if (const auto* disproval = DisprovedAt.FindPtr(key);
+                disproval && ctx.Now() - disproval->At < GetDisprovedCooldown(disproval->Attempts)) {
                 continue;
             }
             // Cheap history walk first; the queue scans in IsDrained run only for
@@ -446,8 +442,7 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
 
     for (const auto& key : SweepSurvivors) {
         // Re-check: counter must still be zero and no blobs in flight.
-        const auto cntIt = Counters.find(key);
-        if (cntIt != Counters.end() && cntIt->second != 0) {
+        if (const auto* count = Counters.FindPtr(key); count && *count != 0) {
             CutState[key] = ECutState::None;
             continue;
         }
@@ -470,11 +465,14 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
 
         std::optional<ui32> groupId;
         if (key.Channel < static_cast<ui32>(TabletInfo->Channels.size())) {
-            for (const auto& entry : TabletInfo->Channels[key.Channel].History) {
-                if (entry.FromGeneration == key.FromGeneration) {
-                    groupId = entry.GroupID;
-                    break;
-                }
+            // Exact match rather than GroupForGeneration: once the entry has been cut
+            // away, the entry that covers its generation belongs to a different, live
+            // group, and barriering that one would collect blobs still in use.
+            if (const auto* entry =
+                    FindIfPtr(TabletInfo->Channels[key.Channel].History, [&key](const TTabletChannelInfo::THistoryEntry& historyEntry) {
+                        return historyEntry.FromGeneration == key.FromGeneration;
+                    })) {
+                groupId = entry->GroupID;
             }
         }
         if (!groupId) {
@@ -501,16 +499,16 @@ void THistoryCutterWrapper::OnBatchComplete(const THashSet<TEntryKey>& disproved
 }
 
 void THistoryCutterWrapper::OnBarrierResult(const TEntryKey& key, bool ok) {
-    auto it = CutState.find(key);
-    if (it == CutState.end()) {
+    auto* state = CutState.FindPtr(key);
+    if (!state) {
         return;
     }
     Signals.OnBarrierResult(ok);
     if (ok) {
-        it->second = ECutState::Cut;
+        *state = ECutState::Cut;
         NYDBTest::TControllers::GetColumnShardController()->OnHistoryEntryCut(key.Channel, key.FromGeneration);
     } else {
-        it->second = ECutState::None;
+        *state = ECutState::None;
     }
 }
 

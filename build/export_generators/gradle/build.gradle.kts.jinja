@@ -1,6 +1,11 @@
 {%- set publish = target.publish -%}
 {%- set mainClass = target.app_main_class -%}
 {%- set has_junit5_test = extra_targets|selectattr('junit5_test') -%}
+{%- if target.required_jdk -%}
+{%-     set jdk_version = target.required_jdk -%}
+{%- else -%}
+{%-     set jdk_version = target.jdk_version -%}
+{%- endif -%}
 plugins {
 {%  if mainClass -%}
     `application`
@@ -33,6 +38,16 @@ java {
     withJavadocJar()
 }
 
+{%  if jdk_version -%}
+tasks.withType<JavaCompile>().configureEach {
+    options.release.set({{ jdk_version }})
+}
+
+tasks.withType<Javadoc>().configureEach {
+    (options as CoreJavadocOptions).addStringOption("source", "{{ jdk_version }}")
+}
+
+{%  endif -%}
 dependencies {
 {%  if has_junit5_test -%}
     testImplementation("org.junit.jupiter:junit-jupiter:5.8.2")

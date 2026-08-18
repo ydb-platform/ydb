@@ -4,16 +4,14 @@
 
 namespace NKikimr::NReplication::NController {
 
-NActors::NStructuredLog::TStructuredMessage CreateTabletLogPrefix(const TController* self)
-{
+NActors::NStructuredLog::TStructuredMessage CreateTabletLogPrefix(const TController* self) {
     NStructuredLog::TStructuredMessage result;
     YDB_LOG_UPDATE_MESSAGE(result,
         {"tabletId", self->TabletID()});
     return result;
 }
 
-NActors::NStructuredLog::TStructuredMessage CreateTabletLogPrefix(const TController* self, const TString& txName)
-{
+NActors::NStructuredLog::TStructuredMessage CreateTabletLogPrefix(const TController* self, const TString& txName) {
     NStructuredLog::TStructuredMessage result;
     YDB_LOG_UPDATE_MESSAGE(result,
         {"tabletId", self->TabletID()},
@@ -21,8 +19,7 @@ NActors::NStructuredLog::TStructuredMessage CreateTabletLogPrefix(const TControl
     return result;
 }
 
-NActors::NStructuredLog::TStructuredMessage CreateActorLogPrefix(const TString& activity, ui64 rid, ui64 tid)
-{
+NActors::NStructuredLog::TStructuredMessage CreateActorLogPrefix(const TString& activity, ui64 rid, ui64 tid) {
     NStructuredLog::TStructuredMessage result;
     YDB_LOG_UPDATE_MESSAGE(result,
         {"activity", activity});

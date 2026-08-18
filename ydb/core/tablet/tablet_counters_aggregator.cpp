@@ -179,7 +179,7 @@ public:
         iterDbLabeled->Apply(tabletId, labeledCounters);
     }
 
-    void ForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId) {
+    void ForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, ui32 followerId) {
         AllTypes->Forget(tabletId);
         // and now erase from every other path
         auto iterTabletType = CountersByTabletType.find(tabletType);
@@ -1043,7 +1043,7 @@ void
 TTabletCountersAggregatorActor::HandleWork(TEvTabletCounters::TEvTabletCountersForgetTablet::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ctx);
     TEvTabletCounters::TEvTabletCountersForgetTablet* msg = ev->Get();
-    TabletMon->ForgetTablet(msg->TabletID, msg->TabletType, msg->TenantPathId);
+    TabletMon->ForgetTablet(msg->TabletID, msg->TabletType, msg->TenantPathId, msg->FollowerId);
 }
 
 ////////////////////////////////////////////
@@ -1330,9 +1330,9 @@ CreateTabletCountersAggregator(bool follower) {
     return new TTabletCountersAggregatorActor(follower);
 }
 
-void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity) {
+void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity, ui32 followerId) {
     const TActorId countersAggregator = MakeTabletCountersAggregatorID(identity.NodeId(), follower);
-    identity.Send(countersAggregator, new TEvTabletCounters::TEvTabletCountersForgetTablet(tabletId, tabletType, tenantPathId));
+    identity.Send(countersAggregator, new TEvTabletCounters::TEvTabletCountersForgetTablet(tabletId, tabletType, tenantPathId, followerId));
 }
 
 ///////////////////////////////////////////

@@ -336,8 +336,11 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
         ui64 maxOffset = sit != SourceIdStorage.GetInMemorySourceIds().end() ? sit->second.Offset : 0;
 
         if (sit != SourceIdStorage.GetInMemorySourceIds().end() && partNo + 1 == totalParts) {
+            // Change-sender stalls until ReplyWrite, so SeqNo should not advance while deferred.
+            // Still take Max to avoid regressing SeqNo if that invariant ever breaks.
+            const ui64 registerSeqNo = Max(seqNo, sit->second.SeqNo);
             SourceIdStorage.RegisterSourceId(s, sit->second.Updated(
-                seqNo, maxOffset, CurrentTimestamp,
+                registerSeqNo, maxOffset, CurrentTimestamp,
                 TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data}, producerEpoch));
         }
 
@@ -345,7 +348,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
         ReplyWrite(
             ctx, writeResponse.Cookie, s, seqNo, partNo, totalParts,
             replyOffset, CurrentTimestamp, false, maxSeqNo,
-            PartitionQuotaWaitTimeForCurrentBlob, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime, pending.Span
+            TDuration::Zero(), TDuration::Zero(), queueTime, writeTime, pending.Span
         );
         it = PendingSchemaChangeResponses.erase(it);
     }
@@ -2054,7 +2057,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
-                .SchemaChangeVersion = std::nullopt, // emitted as regular data for consumers
+                .SchemaChangeVersion = std::nullopt, // must be nullopt to avoid re-deferral in AnswerCurrentWrites
             }, std::nullopt};
 
             WriteInflightSize += schemaChange->Data.size();

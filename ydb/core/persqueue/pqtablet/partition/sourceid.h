@@ -49,7 +49,10 @@ protected:
 class THeartbeatEmitter;
 class TSchemaChangeEmitter;
 
-class TSourceIdStorage: private THeartbeatProcessor, private TSchemaChangeProcessor {
+class TSourceIdStorage
+    : private THeartbeatProcessor
+    , private TSchemaChangeProcessor
+{
     friend class THeartbeatEmitter;
     friend class TSchemaChangeEmitter;
 

@@ -512,16 +512,10 @@ TRowVersion TSourceIdStorage::GetCommittedSchemaChangeVersion() const {
         return TRowVersion::Min();
     }
 
-    TRowVersion minVersion = TRowVersion::Max();
-    for (const auto& sourceId : ExplicitSourceIds) {
-        auto it = InMemorySourceIds.find(sourceId);
-        if (it == InMemorySourceIds.end() || !it->second.LastSchemaChange) {
-            return TRowVersion::Min();
-        }
-        minVersion = Min(minVersion, it->second.LastSchemaChange->Version);
-    }
-
-    return minVersion;
+    // Each explicit source with a schema change is in exactly one version bucket;
+    // the map is ordered, so the minimum committed version is begin()->first.
+    AFL_ENSURE(!SourceIdsBySchemaChange.empty());
+    return SourceIdsBySchemaChange.begin()->first;
 }
 
 /// TSourceIdWriter

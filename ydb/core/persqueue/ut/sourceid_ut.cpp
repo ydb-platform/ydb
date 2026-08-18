@@ -609,16 +609,21 @@ Y_UNIT_TEST_SUITE(TSourceIdTests) {
             UNIT_ASSERT(!emitter.CanEmit().Defined());
         }
 
+        storage.RegisterSourceId(TestSourceId(1), MakeExplicitSourceIdInfoWithSchemaChange(++offset, MakeSchemaChange(3, "v3")));
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetCommittedSchemaChangeVersion(), MakeSchemaChange(1).Version);
+        storage.RegisterSourceId(TestSourceId(2), MakeExplicitSourceIdInfoWithSchemaChange(++offset, MakeSchemaChange(2, "v2")));
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetCommittedSchemaChangeVersion(), MakeSchemaChange(2).Version);
+
         {
             TSchemaChangeEmitter emitter(storage);
-            emitter.Process(TestSourceId(1), MakeSchemaChange(2, "v2"));
+            emitter.Process(TestSourceId(1), MakeSchemaChange(4, "v4"));
             UNIT_ASSERT(!emitter.CanEmit().Defined());
-            emitter.Process(TestSourceId(2), MakeSchemaChange(2, "v2"));
+            emitter.Process(TestSourceId(2), MakeSchemaChange(4, "v4"));
             {
                 const auto schemaChange = emitter.CanEmit();
                 UNIT_ASSERT(schemaChange.Defined());
-                UNIT_ASSERT_VALUES_EQUAL(schemaChange->Version, MakeSchemaChange(2).Version);
-                UNIT_ASSERT_VALUES_EQUAL(schemaChange->Data, "v2");
+                UNIT_ASSERT_VALUES_EQUAL(schemaChange->Version, MakeSchemaChange(4).Version);
+                UNIT_ASSERT_VALUES_EQUAL(schemaChange->Data, "v4");
             }
         }
     }

@@ -171,7 +171,8 @@ void TPartitionSourceManager::TSourceManager::Update(THeartbeat&& heartbeat) {
 }
 
 void TPartitionSourceManager::TSourceManager::Update(TSchemaChangeInfo&& schemaChange) {
-    Batch.SchemaChangeEmitter.Process(SourceId, TSchemaChangeInfo(schemaChange));
+    auto copySchemaChange = schemaChange;
+    Batch.SchemaChangeEmitter.Process(SourceId, std::move(copySchemaChange));
     if (InMemory != MemoryStorage().end()) {
         Batch.SourceIdWriter.RegisterSourceId(SourceId, InMemory->second.Updated(std::move(schemaChange)));
     } else if (InWriter != WriteStorage().end()) {

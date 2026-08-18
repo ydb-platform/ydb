@@ -717,6 +717,12 @@ private:
     size_t BuffersSizePerStream = CURL_MAX_WRITE_SIZE << 3U;
     TCurlInitConfig InitConfig;
 
+    struct TPoolCounters {
+        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolCap;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolAllocated;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolAwait;
+    };
+
     void InitCurl() {
         // FIXME: NOT SAFE (see man libcurl(3))
         const CURLcode globalInitResult = curl_global_init(CURL_GLOBAL_ALL);
@@ -1137,11 +1143,6 @@ private:
     THashMap<TString, size_t> PoolCaps;
     THashMap<TString, size_t> AllocatedPerPool;
 
-    struct TPoolCounters {
-        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolCap;
-        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolAllocated;
-        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolAwait;
-    };
     THashMap<TString, TPoolCounters> PoolCounters;
 
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;

@@ -152,7 +152,6 @@ proctype Waker() {
     byte previous_sleeping_count;
     byte activations;
     byte sleep_workers;
-    byte non_sleep_workers;
     bool found;
 
     do
@@ -179,76 +178,64 @@ proctype Waker() {
             previous_reductions = 0
         };
 
-        /* thread_count is the target accepted by the previous waker pass,
-         * while active_count is the number of worker slots still eligible to
-         * execute. Claimed and unclaimed reduction tokens account for their
-         * temporary difference. */
-        if
-        :: desired > thread_count ->
-            delta = desired - thread_count;
-
+        /* The waker owns all mutable values in this reconciliation block.
+         * thread_count is the previously accepted target, active_count is the
+         * number of slots still eligible to execute, and sleep_workers is the
+         * total number of workers in Sleep. */
+        atomic {
             if
-            :: taken_tokens_to_sleep < delta -> converted = taken_tokens_to_sleep
-            :: else -> converted = delta
-            fi;
-            taken_tokens_to_sleep = taken_tokens_to_sleep - converted;
-            taken_tokens_to_wakeup = taken_tokens_to_wakeup + converted;
-            delta = delta - converted;
+            :: desired > thread_count ->
+                delta = desired - thread_count;
 
-            if
-            :: remaining_reductions < delta -> converted = remaining_reductions
-            :: else -> converted = delta
-            fi;
-            remaining_reductions = remaining_reductions - converted;
-            delta = delta - converted;
-
-            /* Sleeping workers are symmetric. Growth only increases the
-             * number of sleepers eligible for wakeup; no worker identity has
-             * to be added to a separate active set. */
-            sleep_workers = 0;
-            i = 0;
-            do
-            :: i < N ->
                 if
-                :: state[i] == SLEEP -> sleep_workers++
-                :: else -> skip
+                :: taken_tokens_to_sleep < delta -> converted = taken_tokens_to_sleep
+                :: else -> converted = delta
                 fi;
-                i++
-            :: else -> break
-            od;
-            atomic {
+                taken_tokens_to_sleep = taken_tokens_to_sleep - converted;
+                taken_tokens_to_wakeup = taken_tokens_to_wakeup + converted;
+                delta = delta - converted;
+
+                if
+                :: remaining_reductions < delta -> converted = remaining_reductions
+                :: else -> converted = delta
+                fi;
+                remaining_reductions = remaining_reductions - converted;
+                delta = delta - converted;
+
+                /* Growth makes existing sleepers eligible for wakeup without
+                 * assigning that eligibility to concrete worker identities. */
                 assert(sleep_workers >= previous_sleeping_count + delta);
                 previous_sleeping_count = previous_sleeping_count + delta;
                 active_count = active_count + delta;
                 delta = 0
-            }
 
-        :: desired < thread_count ->
-            delta = thread_count - desired;
-            if
-            :: taken_tokens_to_wakeup < delta -> converted = taken_tokens_to_wakeup
-            :: else -> converted = delta
-            fi;
-            taken_tokens_to_wakeup = taken_tokens_to_wakeup - converted;
-            taken_tokens_to_sleep = taken_tokens_to_sleep + converted;
-            delta = delta - converted;
+            :: desired < thread_count ->
+                delta = thread_count - desired;
+                if
+                :: taken_tokens_to_wakeup < delta -> converted = taken_tokens_to_wakeup
+                :: else -> converted = delta
+                fi;
+                taken_tokens_to_wakeup = taken_tokens_to_wakeup - converted;
+                taken_tokens_to_sleep = taken_tokens_to_sleep + converted;
+                delta = delta - converted;
 
-            /* Retire already sleeping slots before asking an awake worker to
-             * claim a new reduction token. */
-            if
-            :: previous_sleeping_count < delta -> converted = previous_sleeping_count
-            :: else -> converted = delta
-            fi;
-            atomic {
+                /* Retire already sleeping slots before asking an awake worker
+                 * to claim a new reduction token. */
+                if
+                :: previous_sleeping_count < delta -> converted = previous_sleeping_count
+                :: else -> converted = delta
+                fi;
                 previous_sleeping_count = previous_sleeping_count - converted;
                 active_count = active_count - converted;
-                delta = delta - converted
-            };
-            remaining_reductions = remaining_reductions + delta
+                delta = delta - converted;
+                remaining_reductions = remaining_reductions + delta;
+                delta = 0
 
-        :: else -> skip
-        fi;
-        thread_count = desired;
+            :: else -> skip
+            fi;
+            thread_count = desired;
+            converted = 0
+        };
 
         activations = activation_credits;
 
@@ -282,7 +269,8 @@ proctype Waker() {
                         if
                         :: state[i] == SPIN ->
                             state[i] = SLEEP;
-                            previous_sleeping_count++
+                            previous_sleeping_count++;
+                            sleep_workers++
                         :: else ->
                             assert(state[i] == NONE || state[i] == WORK)
                         fi
@@ -303,6 +291,7 @@ proctype Waker() {
                         atomic {
                             state[i] = SLEEP;
                             previous_sleeping_count++;
+                            sleep_workers++;
                             taken_tokens_to_wakeup--
                         }
                     fi
@@ -312,6 +301,7 @@ proctype Waker() {
                     atomic {
                         state[i] = SLEEP;
                         active_count--;
+                        sleep_workers++;
                         taken_tokens_to_sleep--
                     }
                 fi
@@ -336,6 +326,7 @@ proctype Waker() {
                     atomic {
                         state[i] = NONE;
                         previous_sleeping_count--;
+                        sleep_workers--;
                         activations--;
                         found = true
                     }
@@ -370,20 +361,10 @@ proctype Waker() {
          */
 
         check_safety();
-        sleep_workers = 0;
-        non_sleep_workers = 0;
-        i = 0;
-        do
-        :: i < N ->
-            if
-            :: state[i] == SLEEP -> sleep_workers++
-            :: else -> non_sleep_workers++
-            fi;
-            i++
-        :: else -> break
-        od;
-        assert(previous_sleeping_count <= sleep_workers);
-        assert(active_count == non_sleep_workers + previous_sleeping_count)
+        atomic {
+            assert(previous_sleeping_count <= sleep_workers);
+            assert(active_count == N - sleep_workers + previous_sleeping_count)
+        }
     od
 }
 

@@ -1309,6 +1309,283 @@ Y_UNIT_TEST(DeleteThenSelectByIndex_ReadCommitted) {
     tester.Execute();
 }
 
+// ============================================================================
+// Conflict / unique constraint scenarios
+// ============================================================================
+
+// INSERT → (SELECT sees first row) → INSERT same PK → tx aborts → DB is clean.
+class TInsertThenInsertSamePkConflictThenSelect : public TTableDataModificationTester {
+    TTxSettings TxSettings_;
+public:
+    TInsertThenInsertSamePkConflictThenSelect(TTxSettings txSettings)
+        : TxSettings_(txSettings)
+    {
+        SetFillTables(false);
+    }
+protected:
+    void DoExecute() override {
+        auto client = Kikimr->GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO KV2 (Key, Value) VALUES (1u, "first");
+        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            SELECT Value FROM KV2 WHERE Key = 1u;
+        )", TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[["first"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            INSERT INTO KV2 (Key, Value) VALUES (1u, "second");
+        )", TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        // Tx is aborted — first INSERT must also be rolled back.
+        result = session.ExecuteQuery(R"(
+            SELECT Value FROM KV2 WHERE Key = 1u;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+};
+
+Y_UNIT_TEST_TWIN(InsertThenInsertSamePkConflictThenSelect_Serializable, IsOlap) {
+    TInsertThenInsertSamePkConflictThenSelect tester(TTxSettings::SerializableRW());
+    tester.SetIsOlap(IsOlap);
+    tester.Execute();
+}
+
+Y_UNIT_TEST_TWIN(InsertThenInsertSamePkConflictThenSelect_Snapshot, IsOlap) {
+    TInsertThenInsertSamePkConflictThenSelect tester(TTxSettings::SnapshotRW());
+    tester.SetIsOlap(IsOlap);
+    tester.Execute();
+}
+
+Y_UNIT_TEST(InsertThenInsertSamePkConflictThenSelect_ReadCommitted) {
+    TInsertThenInsertSamePkConflictThenSelect tester(TTxSettings::ReadCommittedRW());
+    tester.Execute();
+}
+
+// INSERT → INSERT same PK (no mid-tx read) → tx aborts → DB is clean.
+class TInsertThenInsertSamePkConflictAfterAbort : public TTableDataModificationTester {
+    TTxSettings TxSettings_;
+public:
+    TInsertThenInsertSamePkConflictAfterAbort(TTxSettings txSettings)
+        : TxSettings_(txSettings)
+    {
+        SetFillTables(false);
+    }
+protected:
+    void DoExecute() override {
+        auto client = Kikimr->GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO KV2 (Key, Value) VALUES (1u, "first");
+        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            INSERT INTO KV2 (Key, Value) VALUES (1u, "second");
+        )", TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"(
+            SELECT Value FROM KV2 WHERE Key = 1u;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+};
+
+Y_UNIT_TEST_TWIN(InsertThenInsertSamePkConflictAfterAbort_Serializable, IsOlap) {
+    TInsertThenInsertSamePkConflictAfterAbort tester(TTxSettings::SerializableRW());
+    tester.SetIsOlap(IsOlap);
+    tester.Execute();
+}
+
+Y_UNIT_TEST_TWIN(InsertThenInsertSamePkConflictAfterAbort_Snapshot, IsOlap) {
+    TInsertThenInsertSamePkConflictAfterAbort tester(TTxSettings::SnapshotRW());
+    tester.SetIsOlap(IsOlap);
+    tester.Execute();
+}
+
+Y_UNIT_TEST(InsertThenInsertSamePkConflictAfterAbort_ReadCommitted) {
+    TInsertThenInsertSamePkConflictAfterAbort tester(TTxSettings::ReadCommittedRW());
+    tester.Execute();
+}
+
+// INSERT → (SELECT by index sees first row) → INSERT same unique index value → tx aborts → DB is clean.
+class TInsertThenInsertSameUniqueIndexConflictThenSelect : public TTableDataModificationTester {
+    TTxSettings TxSettings_;
+public:
+    TInsertThenInsertSameUniqueIndexConflictThenSelect(TTxSettings txSettings)
+        : TxSettings_(txSettings)
+    {
+        SetFillTables(false);
+    }
+protected:
+    void DoExecute() override {
+        auto client = Kikimr->GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");
+        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
+        )", TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[1u;"A"]])", FormatResultSetYson(result.GetResultSet(0)));
+        tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");
+        )", TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"(
+            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+};
+
+Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictThenSelect_Serializable) {
+    TInsertThenInsertSameUniqueIndexConflictThenSelect tester(TTxSettings::SerializableRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictThenSelect_Snapshot) {
+    TInsertThenInsertSameUniqueIndexConflictThenSelect tester(TTxSettings::SnapshotRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictThenSelect_ReadCommitted) {
+    TInsertThenInsertSameUniqueIndexConflictThenSelect tester(TTxSettings::ReadCommittedRW());
+    tester.Execute();
+}
+
+// INSERT → INSERT same unique index value (no mid-tx read) → tx aborts → DB is clean.
+class TInsertThenInsertSameUniqueIndexConflictAfterAbort : public TTableDataModificationTester {
+    TTxSettings TxSettings_;
+public:
+    TInsertThenInsertSameUniqueIndexConflictAfterAbort(TTxSettings txSettings)
+        : TxSettings_(txSettings)
+    {
+        SetFillTables(false);
+    }
+protected:
+    void DoExecute() override {
+        auto client = Kikimr->GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");
+        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");
+        )", TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"(
+            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+};
+
+Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictAfterAbort_Serializable) {
+    TInsertThenInsertSameUniqueIndexConflictAfterAbort tester(TTxSettings::SerializableRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictAfterAbort_Snapshot) {
+    TInsertThenInsertSameUniqueIndexConflictAfterAbort tester(TTxSettings::SnapshotRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictAfterAbort_ReadCommitted) {
+    TInsertThenInsertSameUniqueIndexConflictAfterAbort tester(TTxSettings::ReadCommittedRW());
+    tester.Execute();
+}
+
+// DELETE row → INSERT different row with same unique index value → must succeed.
+// The unique constraint is satisfied because the holder of the index value was deleted first.
+class TDeleteThenInsertSameUniqueIndexValue : public TTableDataModificationTester {
+    TTxSettings TxSettings_;
+public:
+    TDeleteThenInsertSameUniqueIndexValue(TTxSettings txSettings)
+        : TxSettings_(txSettings)
+    {
+        SetFillTables(false);
+    }
+protected:
+    void DoExecute() override {
+        auto client = Kikimr->GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"(
+            DELETE FROM Test2 WHERE Group = 1u AND Name = "A";
+        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
+        )", TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");
+        )", TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
+        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[2u;"B"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+};
+
+Y_UNIT_TEST(DeleteThenInsertSameUniqueIndexValue_Serializable) {
+    TDeleteThenInsertSameUniqueIndexValue tester(TTxSettings::SerializableRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(DeleteThenInsertSameUniqueIndexValue_Snapshot) {
+    TDeleteThenInsertSameUniqueIndexValue tester(TTxSettings::SnapshotRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(DeleteThenInsertSameUniqueIndexValue_ReadCommitted) {
+    TDeleteThenInsertSameUniqueIndexValue tester(TTxSettings::ReadCommittedRW());
+    tester.Execute();
+}
+
 } // Y_UNIT_TEST_SUITE
 
 } // namespace NKqp

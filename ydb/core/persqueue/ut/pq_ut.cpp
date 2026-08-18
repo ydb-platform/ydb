@@ -4227,8 +4227,13 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
 
         static ui32 pqConfigVersion = 1'000;
 
-        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1, .specVersion=pqConfigVersion++},
-                        {{"user1", true}, {"user2", true}}, tc);
+        TTabletPreparationParameters prepareParams{
+            .maxCountInPartition=100,
+            .deleteTime=TDuration::Days(2).Seconds(),
+            .partitions=1,
+            .specVersion=pqConfigVersion++,
+        };
+        PQTabletPrepare(prepareParams, {{"user1", true}, {"user2", true}}, tc);
         CmdWrite(0, "sourceid1", data, tc, false, {}, true);
 
         // Reset tablet cache
@@ -4237,8 +4242,6 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         TAutoPtr<IEventHandle> handle;
         TEvPersQueue::TEvResponse* readResult = nullptr;
         THolder<TEvPersQueue::TEvRequest> readRequest;
-        TEvPersQueue::TEvUpdateConfigResponse* consumerDeleteResult = nullptr;
-        THolder<TEvPersQueue::TEvUpdateConfig> consumerDeleteRequest;
 
         // Read request
         {
@@ -4253,20 +4256,12 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             read->SetTimeoutMs(5000);
         }
 
-        // Consumer delete request
-        {
-            consumerDeleteRequest.Reset(new TEvPersQueue::TEvUpdateConfig());
-            consumerDeleteRequest->MutableRecord()->SetTxId(42);
-            auto& cfg = *consumerDeleteRequest->MutableRecord()->MutableTabletConfig();
-            cfg.SetVersion(pqConfigVersion++);
-            cfg.AddPartitionIds(0);
-            cfg.AddPartitions()->SetPartitionId(0);
-            cfg.SetLocalDC(true);
-            cfg.SetTopic("topic");
-            auto& cons = *cfg.AddConsumers();
-            cons.SetName("user2");
-            cons.SetImportant(true);
-        }
+        TVector<TConsumerPreparationParameters> remainingConsumers{{
+            .Name = "user2",
+            .Important = true,
+        }};
+        auto consumerDeleteConfig = MakePQTabletConfig(
+            prepareParams, remainingConsumers, *tc.Runtime, pqConfigVersion++);
 
         TActorId edge = tc.Runtime->AllocateEdgeActor();
 
@@ -4280,13 +4275,8 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         });
 
         // Delete consumer while read request is still in progress
-        tc.Runtime->SendToPipe(tc.TabletId, edge, consumerDeleteRequest.Release(), 0, GetPipeConfigWithRetries());
-        consumerDeleteResult = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
-        {
-            //Cerr << "Got consumer delete response: " << consumerDeleteResult->Record << Endl;
-            UNIT_ASSERT(consumerDeleteResult->Record.HasStatus());
-            UNIT_ASSERT_VALUES_EQUAL((int)consumerDeleteResult->Record.GetStatus(), (int)NKikimrPQ::EStatus::OK);
-        }
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, edge, consumerDeleteConfig,
+                           tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
 
         // Resend intercepted blob responses and wait for read result
         captureBlobResponsesObserver.Remove();

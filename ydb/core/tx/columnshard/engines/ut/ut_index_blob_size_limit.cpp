@@ -8,7 +8,6 @@
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/meta.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
-#include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/test_helper/helper.h>
@@ -45,11 +44,6 @@ ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version, const ui32 f
     *proto.MutableColumns()->Add() = columns[1].CreateColumn(ValueColumnId);
     proto.AddKeyColumnNames("pk");
     proto.SetVersion(version);
-    // A planner is only needed so BuildFromProto does not fall back to AppDataVerified() (absent in this
-    // tablet-less UT); the tests never run compaction. Use the product default instead of a named optimizer.
-    *proto.MutableOptions()->MutableCompactionPlannerConstructor() =
-        NStorageOptimizer::TOptimizerPlannerConstructorContainer(NStorageOptimizer::IOptimizerPlannerConstructor::BuildDefault())
-            .SerializeToProto();
 
     NLocalIndex::NBloom::TRequestSettings request;
     request.NGrammSize = 3;

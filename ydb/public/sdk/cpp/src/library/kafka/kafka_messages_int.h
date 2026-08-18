@@ -572,7 +572,10 @@ public:
             if (magic < CURRENT_RECORD_VERSION) {
                 ReadLegacyRecordBatch(readable, magic, length, *value);
             } else {
-                (*value).Read(readable, magic);
+                const auto data = readable.Bytes(static_cast<size_t>(length));
+                TBuffer buffer(data.data(), data.size());
+                TKafkaReadable batchReadable(buffer, readable);
+                (*value).Read(batchReadable, magic);
             }
         } else {
             value = std::nullopt;

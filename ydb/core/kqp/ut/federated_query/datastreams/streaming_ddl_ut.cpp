@@ -3767,9 +3767,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopic[] = "streamingQueryMultiOutputInvalidInputTopic";
         constexpr char outputTopic[] = "streamingQueryMultiOutputInvalidOutputTopic";
         constexpr char pqSource[] = "pqSourceName";
+        constexpr char otherPqSource[] = "otherPqSourceName";
         CreateTopic(inputTopic);
         CreateTopic(outputTopic);
         CreatePqSource(pqSource);
+        CreatePqSource(otherPqSource);
 
         constexpr char rowTable[] = "rowSink";
         constexpr char columnTable[] = "columnSink";
@@ -3817,17 +3819,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 "output_topic"_a = outputTopic
             ), EStatus::GENERIC_ERROR, TStringBuilder() << "Write mode '" << to_lower(TString(mode)) << "' is not supported for external entities");
         }
-
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `streamingQuery` AS
-            DO BEGIN
-                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}`;
-                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}`;
-            END DO;)",
-            "pq_source"_a = pqSource,
-            "input_topic"_a = inputTopic,
-            "output_topic"_a = outputTopic
-        ), EStatus::UNSUPPORTED, "Save state of query is not supported for queries with intermediate writes");
 
         for (const auto& table : {rowTable, columnTable}) {
             for (const auto& mode : {"INSERT", "REPLACE"}) {
@@ -4741,6 +4732,73 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             });
 
             return hasIssues;
+        });
+    }
+
+    Y_UNIT_TEST_F(StreamingQueryRestartsWhenUpsertTableDeletedWhileRunning, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "sqRestartsUpsertMissingTableRuntimeInputTopic";
+        constexpr char pqSourceName[] = "sqRestartsUpsertMissingTableRuntimePqSource";
+        constexpr char outputTableName[] = "sqRestartsUpsertMissingTableRuntime";
+        constexpr char queryName[] = "sqRestartsUpsertMissingTableRuntimeQuery";
+
+        CreateTopic(inputTopicName);
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE TABLE `{output_table}` (
+                Key String NOT NULL,
+                Value String NOT NULL,
+                PRIMARY KEY (Key)
+            );)",
+            "output_table"_a = outputTableName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                UPSERT INTO `{output_table}`
+                SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
+                    FORMAT = json_each_row,
+                    SCHEMA (
+                        Key String NOT NULL,
+                        Value String NOT NULL
+                    )
+                )
+            END DO;)",
+            "query_name"_a = queryName,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_table"_a = outputTableName
+        ));
+
+        CheckScriptExecutionsCount(1, 1);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, R"({"Key": "key1", "Value": "value1"})");
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+        CheckTable(*this, outputTableName, {{"key1", "value1"}});
+
+        ExecQuery(fmt::format(R"(DROP TABLE `{output_table}`;)",
+            "output_table"_a = outputTableName
+        ));
+
+        // Trigger another batch so the write actor tries to write to the now-deleted table.
+        WriteTopicMessage(inputTopicName, R"({"Key": "key2", "Value": "value2"})");
+
+        WaitFor(TDuration::Seconds(60), "Wait for execution restart after table drop", [&](TString& error) {
+            const auto& result = ExecQuery(
+                R"sql(SELECT lease_generation FROM `.metadata/script_executions`;)sql"
+            );
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            i64 generation = 0;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                generation = resultSet.ColumnParser(0).GetOptionalInt64().value_or(0);
+            });
+            error = TStringBuilder() << "Lease generation: " << generation;
+            return generation > 1;
         });
     }
 }

@@ -37,7 +37,10 @@ public:
      */
     bool IsInitialized;
 
-    explicit TAggregatedTabletCounters(::NMonitoring::TDynamicCounterPtr counterGroup);
+    explicit TAggregatedTabletCounters(
+        ::NMonitoring::TDynamicCounterPtr counterGroup,
+        ::NMonitoring::TCountableBase::EVisibility visibility
+            = ::NMonitoring::TCountableBase::EVisibility::Public);
 
     /**
      * Create the aggregated counters for the counter set reported by the tablets.
@@ -96,6 +99,7 @@ private:
     THashMap<ui64, TInstant> LastAggregateUpdateTime;
 
     ::NMonitoring::TDynamicCounterPtr CounterGroup;
+    ::NMonitoring::TCountableBase::EVisibility Visibility;
 };
 
 } // namespace NKikimr::NPrivate

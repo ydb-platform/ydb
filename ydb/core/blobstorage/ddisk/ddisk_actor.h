@@ -3,6 +3,7 @@
 #include "defs.h"
 
 #include "ddisk.h"
+#include "integrity_manager.h"
 #include "persistent_buffer.h"
 #include "persistent_buffer_header.h"
 #include "persistent_buffer_barriers_manager.h"
@@ -30,6 +31,7 @@
 
 #include <array>
 #include <atomic>
+#include <optional>
 #include <queue>
 
 #include <util/generic/hash_set.h>
@@ -97,6 +99,7 @@ namespace NKikimr::NDDisk {
         class TDDiskIoOp;
         class TPersistentBufferPartIoOp;
         class TInternalSyncWriteOp;
+        class TIntegrityIoOp;
 
         std::queue<std::unique_ptr<TDirectIoOpBase>> DirectIoQueue;
 
@@ -297,6 +300,8 @@ namespace NKikimr::NDDisk {
                 EvDeallocatePersistentBufferChunk,
                 EvDeallocatePersistentBufferChunkResult,
                 EvRetryListPersistentBuffer,
+                EvDDiskIoResult,
+                EvIntegrityIoResult,
             };
 
            struct TEvRetryListPersistentBuffer : TEventLocal<TEvRetryListPersistentBuffer, EvRetryListPersistentBuffer> {
@@ -389,6 +394,59 @@ namespace NKikimr::NDDisk {
                 ~TEvShortIO();
             };
 
+            // Completion-thread callback for a client DDisk read/write. The completion thread
+            // only packages status/data and routing metadata; the actor serializes it with
+            // integrity failures, decides the final reply status, and sends the client response.
+            struct TEvDDiskIoResult : TEventLocal<TEvDDiskIoResult, EvDDiskIoResult> {
+                NPDisk::TUringOperationBase::EOperationType OperationType;
+                NKikimrBlobStorage::NDDisk::TReplyStatus::E Status;
+                TString ErrorMessage;
+                TRope Data;
+                TActorId OriginalRequester;
+                TActorId InterconnectSession;
+                ui64 Cookie = 0;
+                NWilson::TSpan Span;
+                ui64 TotalSize = 0;
+                double RequestTimeMs = 0;
+                ui64 TabletId = 0;
+                ui64 VChunkIndex = 0;
+                bool HasChunkKey = false;
+
+                TEvDDiskIoResult(NPDisk::TUringOperationBase::EOperationType operationType,
+                        NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorMessage,
+                        TRope data, TActorId originalRequester, TActorId interconnectSession,
+                        ui64 cookie, NWilson::TSpan span, ui64 totalSize, double requestTimeMs,
+                        ui64 tabletId = 0, ui64 vChunkIndex = 0, bool hasChunkKey = false)
+                    : OperationType(operationType)
+                    , Status(status)
+                    , ErrorMessage(std::move(errorMessage))
+                    , Data(std::move(data))
+                    , OriginalRequester(originalRequester)
+                    , InterconnectSession(interconnectSession)
+                    , Cookie(cookie)
+                    , Span(std::move(span))
+                    , TotalSize(totalSize)
+                    , RequestTimeMs(requestTimeMs)
+                    , TabletId(tabletId)
+                    , VChunkIndex(vChunkIndex)
+                    , HasChunkKey(hasChunkKey)
+                {}
+            };
+
+            // Completion of a TIntegrityManager-emitted TWriteIo executed via TIntegrityIoOp.
+            struct TEvIntegrityIoResult : TEventLocal<TEvIntegrityIoResult, EvIntegrityIoResult> {
+                ui64 IoId = 0;
+                NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN;
+                TString ErrorMessage;
+
+                TEvIntegrityIoResult(ui64 ioId, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+                        TString errorMessage = {})
+                    : IoId(ioId)
+                    , Status(status)
+                    , ErrorMessage(std::move(errorMessage))
+                {}
+            };
+
             struct TEvInternalSyncWriteResult : TEventLocal<TEvInternalSyncWriteResult, EvInternalSyncWriteResult> {
                 ui64 SyncId = 0;
                 ui64 RequestId = 0;
@@ -434,6 +492,17 @@ namespace NKikimr::NDDisk {
         void CollectPbStatsSnapshot();
 
         const bool IsPersistentBufferActor = false;
+
+        // Actor-thread-only health state. Completion threads communicate status/data exclusively
+        // through TEvPrivate callbacks, so Broken ordering is defined by the actor mailbox.
+        bool Broken = false;
+        TString BrokenReason;
+
+        bool IsBroken() const;
+        TString GetBrokenReason() const;
+        void EnterBroken(TString reason);
+        void FailPendingDDiskQuery(std::unique_ptr<IEventHandle> ev);
+        void FailDirectIoOp(std::unique_ptr<TDirectIoOpBase> op, bool wasRunning);
 
     public:
         TDDiskActor(TVDiskConfig::TBaseInfo&& baseInfo, TIntrusivePtr<TBlobStorageGroupInfo> info,
@@ -485,6 +554,7 @@ namespace NKikimr::NDDisk {
 
         struct TChunkRef {
             TChunkIdx ChunkIdx = 0;
+            ui32 InFlightDataIo = 0;
             std::queue<TPendingEvent> PendingEventsForChunk;
         };
 
@@ -495,6 +565,8 @@ namespace NKikimr::NDDisk {
         ui64 ChunkMapSnapshotLsn = Max<ui64>();
         std::queue<TPendingEvent> PendingQueries;
         bool HandlingQueries = false;
+        bool LogReplayComplete = false;
+        std::optional<ui64> DeferredCutLogFreeUpToLsn;
         ui64 NextLsn = 1;
         std::set<std::tuple<ui64, ui64, ui32>> ChunkMapIncrementsInFlight;
 
@@ -515,7 +587,11 @@ namespace NKikimr::NDDisk {
 
         // Chunk management code
 
-        static constexpr ui32 MinChunksReserved = 2;
+        // DDisk may pull an integrity chunk from the same reserve as a data
+        // chunk, so it keeps a larger reserve than PersistentBuffer.
+        static constexpr ui32 MinChunksReservedDDisk = 4;
+        static constexpr ui32 MinChunksReservedPersistentBuffer = 2;
+        const ui32 MinChunksReserved;
         std::queue<TChunkIdx> ChunkReserve;
         bool ReserveInFlight = false;
 
@@ -526,8 +602,15 @@ namespace NKikimr::NDDisk {
 
         struct TChunkForPersistentBuffer {};
 
-        std::queue<std::variant<TChunkForData, TChunkForPersistentBuffer>> ChunkAllocateQueue;
-        THashMap<ui64, std::function<void()>> LogCallbacks;
+        struct TChunkForIntegrity {};
+
+        std::queue<std::variant<TChunkForData, TChunkForPersistentBuffer,
+            TChunkForIntegrity>> ChunkAllocateQueue;
+        struct TLogCallback {
+            std::function<void()> Callback;
+            bool IsDDisk = false;
+        };
+        absl::flat_hash_map<ui64, TLogCallback> LogCallbacks;
         ui64 NextCookie = 1;
 
         struct TPendingIoOp {
@@ -556,7 +639,18 @@ namespace NKikimr::NDDisk {
         void Handle(TEvPrivate::TEvHandlePersistentBufferEventForChunk::TPtr ev);
 
         void Handle(NPDisk::TEvCutLog::TPtr ev);
+        void ProcessCutLog(ui64 freeUpToLsn);
         void Handle(TEvDeleteTabletChunks::TPtr ev);
+        // Tablets whose removal snapshot is not committed yet. Their integrity extents are
+        // quarantined in TIntegrityManager and data operations must not start a new incarnation
+        // with the same (TabletId, VChunkIndex) keys until the deletion becomes durable.
+        absl::flat_hash_set<ui64> TabletChunkDeletionsInFlight;
+        struct TTabletChunkDeletionReply {
+            TActorId ReplyTo;
+            ui64 Cookie = 0;
+            TActorId InterconnectSession;
+        };
+        THashMap<ui64, TTabletChunkDeletionReply> TabletChunkDeletionReplies;
 
         void Handle(NPDisk::TEvChunkWriteRawResult::TPtr ev);
         void Handle(NPDisk::TEvChunkReadRawResult::TPtr ev);
@@ -566,11 +660,77 @@ namespace NKikimr::NDDisk {
         void IssuePDiskLogRecord(TLogSignature signature, TChunkIdx chunkIdxToCommit, const NProtoBuf::Message& data,
             ui64 *startingPointLsnPtr, std::function<void()> callback,
             TVector<TChunkIdx> chunksToDelete = {});
+        void IssuePDiskLogRecord(TLogSignature signature, TVector<TChunkIdx> chunksToCommit,
+            const NProtoBuf::Message& data, ui64 *startingPointLsnPtr, std::function<void()> callback,
+            TVector<TChunkIdx> chunksToDelete = {});
 
         NKikimrBlobStorage::NDDisk::NInternal::TPersistentBufferChunkMapLogRecord CreatePersistentBufferChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapSnapshot();
         NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord CreateChunkMapIncrement(ui64 tabletId, ui64 vChunkIndex,
-            TChunkIdx chunkIdx);
+            TChunkIdx chunkIdx, const TIntegrityManager::TExtentRef& extentRef,
+            const TIntegrityManager::TMappingSnapshot::TIntegrityChunkEntry* integrityChunk = nullptr);
+
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // Integrity management (DDisk mode only)
+        //
+        // TIntegrityManager is the pure-logic owner of integrity chunks / extents; the actor executes
+        // its queued actions (chunk allocations, formatting writes) asynchronously. A reserved
+        // chunk is formatted immediately. Data writes start once the extent is placed (IntegrityChunk
+        // found). The combined chunk-map increment is logged only after the extent is Ready, and
+        // the originating write/sync is not answered until that record is durable.
+        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+        // Constructed in Handle(TEvYardInitResult) once DiskFormat (chunk size) is known.
+        std::optional<TIntegrityManager> IntegrityManager;
+
+        // Integrity chunks that have appeared in a durable (or in-flight) log record, with the
+        // generation stamped into that record. Appended when the increment is issued, so a
+        // concurrently written snapshot already includes the chunk - by the time that snapshot is
+        // read back the commit has landed.
+        std::vector<TIntegrityManager::TMappingSnapshot::TIntegrityChunkEntry> CommittedIntegrityChunks;
+
+        // DataChunk -> IntegrityExtent mapping accumulated from the chunk-map snapshot and log
+        // increments during boot; fed to IntegrityManager->ApplyMappingSnapshot at end-of-log.
+        TIntegrityManager::TMappingSnapshot RestoredIntegrityMapping;
+
+        struct TParkedWriteReply {
+            NKikimrBlobStorage::NDDisk::TReplyStatus::E Status = NKikimrBlobStorage::NDDisk::TReplyStatus::UNKNOWN;
+            TString ErrorMessage;
+            TActorId OriginalRequester;
+            TActorId InterconnectSession;
+            ui64 Cookie = 0;
+            NWilson::TSpan Span;
+            ui64 TotalSize = 0;
+            double RequestTimeMs = 0;
+        };
+
+        struct TDataChunkAllocationInFlight {
+            TChunkIdx ChunkIdx = 0;
+            bool LogIssued = false;
+            ui32 NewlyCommittedChunks = 0;
+            std::vector<TParkedWriteReply> ParkedWriteResults;
+            std::vector<ui64> ParkedSyncIds;
+        };
+
+        absl::flat_hash_map<std::pair<ui64, ui64>, TDataChunkAllocationInFlight>
+            DataChunkAllocationsInFlight; // (tabletId, vChunkIndex)
+
+        // Drains IntegrityManager->TakeActions(): submits TWriteIo-s via TIntegrityIoOp and queues
+        // TChunkForIntegrity entries. Returns true when a chunk allocation was queued; callers not
+        // already inside HandleChunkReserved() must then call it.
+        bool ProcessIntegrityActions();
+        void OpenDataChunkWritePath(std::vector<TIntegrityManager::TDataChunkKey> placedKeys);
+        void DrainIntegrityManager(bool kickReserve = true);
+        // Assigns newly free slots to pending extents, submits the resulting actions, and
+        // releases integrity chunks that remain completely unused. Never-logged chunks return to
+        // the reserve; committed ones are dropped via a snapshot. completion runs after the
+        // optional release snapshot commits.
+        void ReclaimUnusedIntegrityChunks(std::function<void()> completion = {});
+        void IssueDataChunkIncrement(ui64 tabletId, ui64 vChunkIndex);
+        void CompleteDataChunkAllocation(ui64 tabletId, ui64 vChunkIndex);
+        void FlushParkedAllocationReplies(TDataChunkAllocationInFlight& allocation);
+        bool IsIntegrityChunkCommitted(TChunkIdx chunkIdx) const;
+        void Handle(TEvPrivate::TEvIntegrityIoResult::TPtr ev);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Connection management
@@ -644,6 +804,13 @@ namespace NKikimr::NDDisk {
                     counters->Reply(false);
                 }
             };
+
+            if (IsBroken()) {
+                SendReply(ev, std::make_unique<typename TEvent::TResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason()));
+                registerError();
+                return false;
+            }
 
             auto logError = [&](TStringBuf reason) {
                 YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "TDDiskActor::CheckQuery validation failed",
@@ -742,6 +909,7 @@ namespace NKikimr::NDDisk {
 
         void Handle(TEvWrite::TPtr ev);
         void Handle(TEvRead::TPtr ev);
+        void Handle(TEvPrivate::TEvDDiskIoResult::TPtr ev);
 
         // Regular direct I/O.
         // Note: releases the op on success (returns true).
@@ -794,6 +962,7 @@ namespace NKikimr::NDDisk {
         std::unique_ptr<IEventHandle> MakeSyncResult(const TSyncInFlight& sync);
 
         void ReplySync(TSyncIt it);
+        void MaybeReplySync(TSyncIt it);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Persistent buffer services

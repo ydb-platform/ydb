@@ -47,6 +47,7 @@ protected:
     i32 DataRequests = 0; // how many requests we wait to process data
     bool PassedAway = false;
     bool ReplySent = false;
+    std::optional<bool> StrictDatabaseOnlyRequest; // lazily calculated by IsStrictDatabaseOnlyRequest()
     bool UseCache = false;
     bool CheckDatabase = true;
     TDuration CachedDataMaxAge;
@@ -340,6 +341,11 @@ protected:
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
     std::vector<TNodeId> GetDatabaseNodes();
     bool IsDatabaseRequest() const;
+
+    // Such a user is allowed to see the information about its own database only
+    bool IsStrictDatabaseOnlyRequest();
+    TString GetUserSID() const;
+
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);
     void BuildParamsFromJson(TStringBuf data);

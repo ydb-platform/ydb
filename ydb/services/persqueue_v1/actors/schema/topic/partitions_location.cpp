@@ -39,6 +39,7 @@ public:
                         .Status = Ydb::StatusIds::BAD_REQUEST,
                         .Message = TStringBuilder() << "No partition " << partitionId << " in topic",
                         .IssueCode = Ydb::PersQueue::ErrorCode::BAD_REQUEST,
+                        .RetryWithSync = true,
                     },
                 };
             }

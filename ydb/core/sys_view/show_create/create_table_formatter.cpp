@@ -266,6 +266,25 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     TStringStreamWrapper wrapper(Stream);
 
+    std::optional<TString> generatedContext;
+    for (const auto& column : tableDesc.GetColumns()) {
+        if (!column.HasDefaultFromExpression()) {
+            continue;
+        }
+
+        const auto& context = column.GetDefaultFromExpression().GetContext();
+        if (generatedContext && *generatedContext != context) {
+            return TFormatResult(
+                Ydb::StatusIds::UNSUPPORTED,
+                "Generated columns have inconsistent expression contexts");
+        }
+        generatedContext = context;
+    }
+
+    if (generatedContext && !generatedContext->empty()) {
+        Stream << *generatedContext << "\n";
+    }
+
     Ydb::Table::CreateTableRequest createRequest;
     if (temporary) {
         Stream << "CREATE TEMPORARY TABLE ";

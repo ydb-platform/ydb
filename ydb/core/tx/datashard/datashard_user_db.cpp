@@ -63,7 +63,9 @@ NTable::EReady TDataShardUserDb::SelectRow(
         GetReadTxMap(tableId),
         GetReadTxObserver(tableId));
 
-    if (LockMode == ELockMode::Optimistic && stats.InvisibleRowSkips > 0) {
+    if (LockMode != ELockMode::OptimisticSnapshotIsolation && stats.InvisibleRowSkips > 0) {
+        // In PessimisticNone lock mode this shouldn't happen, but we still
+        // break the lock to avoid data corruption.
         if (LockTxId) {
             Self.SysLocksTable().BreakSetLocks();
         }

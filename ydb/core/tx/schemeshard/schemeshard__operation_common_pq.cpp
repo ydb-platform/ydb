@@ -155,50 +155,16 @@ void MakePQTabletConfig(const TOperationContext& context,
 }
 
 class TBootstrapConfigWrapper: public NKikimrPQ::TBootstrapConfig {
-    struct TSerializedProposeTransaction {
-        TString Value;
-
-        static TSerializedProposeTransaction Serialize(const NKikimrPQ::TBootstrapConfig& value) {
-            NKikimrPQ::TEvProposeTransaction record;
-            record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(value);
-            return {record.SerializeAsString()};
-        }
-    };
-
-    struct TSerializedUpdateConfig {
-        TString Value;
-
-        static TSerializedUpdateConfig Serialize(const NKikimrPQ::TBootstrapConfig& value) {
-            NKikimrPQ::TUpdateConfig record;
-            record.MutableBootstrapConfig()->CopyFrom(value);
-            return {record.SerializeAsString()};
-        }
-    };
-
-    mutable std::optional<std::variant<
-        TSerializedProposeTransaction,
-        TSerializedUpdateConfig
-    >> PreSerialized;
-
-    template <typename T>
-    const TString& Get() const {
-        if (!PreSerialized) {
-            PreSerialized.emplace(T::Serialize(*this));
-        }
-
-        const auto* value = std::get_if<T>(&PreSerialized.value());
-        Y_ABORT_UNLESS(value);
-
-        return value->Value;
-    }
+    mutable std::optional<TString> PreSerializedProposeTransaction;
 
 public:
     const TString& GetPreSerializedProposeTransaction() const {
-        return Get<TSerializedProposeTransaction>();
-    }
-
-    const TString& GetPreSerializedUpdateConfig() const {
-        return Get<TSerializedUpdateConfig>();
+        if (!PreSerializedProposeTransaction) {
+            NKikimrPQ::TEvProposeTransaction record;
+            record.MutableConfig()->MutableBootstrapConfig()->CopyFrom(*this);
+            PreSerializedProposeTransaction = record.SerializeAsString();
+        }
+        return *PreSerializedProposeTransaction;
     }
 };
 
@@ -696,19 +662,8 @@ bool TPropose::ProgressState(TOperationContext& context)
     Y_ABORT_UNLESS(txState);
     Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreatePQGroup || txState->TxType == TTxState::TxAlterPQGroup);
 
-    //
-    // If the program works according to the new scheme, then we must add PQ tablets to the list for
-    // the Coordinator. At this stage, we cannot rely on the value of
-    // the EnablePQConfigTransactionsAtSchemeShard flag. Because the operation could have started on one tablet
-    // and moved to another by that time.
-    //
-    // Therefore, here we check the value of the minStep field, which is filled in in
-    // the TEvProposeTransactionResult handler
-    //
     TSet<TTabletId> shardSet;
-    if (ui64(txState->MinStep) > 0) {
-        PrepareShards(*txState, shardSet, context);
-    }
+    PrepareShards(*txState, shardSet, context);
     context.OnComplete.ProposeToCoordinator(OperationId, txState->TargetPathId, txState->MinStep, shardSet);
 
     return false;

@@ -26,6 +26,34 @@ bool IsValidBlockAsStruct(const TExprNode *node) {
 }
 } // namespace
 
+TExprBase KqpEliminateBlockMemberOverBlockAsStruct(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
+    Y_UNUSED(ctx);
+    Y_UNUSED(typesCtx);
+
+    if (!node.Ref().IsCallable("BlockMember")) {
+        return node;
+    }
+
+    const auto& blockMember = node.Ref();
+    const auto& structExpr = blockMember.Head();
+    if (!structExpr.IsCallable("BlockAsStruct")) {
+        return node;
+    }
+
+    // BlockAsStruct produces a non-optional Block<Struct<...>>/Scalar<Struct<...>>,
+    // so BlockMember falls into the "ReturnChildAsIs" path: the field value can be
+    // returned directly without changing optionality.
+    const auto memberName = blockMember.Tail().Content();
+    for (ui32 i = 0; i < structExpr.ChildrenSize(); ++i) {
+        const auto* pair = structExpr.Child(i);
+        if (pair->ChildrenSize() == 2 && pair->Head().Content() == memberName) {
+            return TExprBase(pair->TailPtr());
+        }
+    }
+
+    return node;
+}
+
 TExprBase KqpEliminateWideMapPackUnpack(const TExprBase& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx) {
     Y_UNUSED(typesCtx);
     if (!node.Maybe<TCoWideMap>()) {

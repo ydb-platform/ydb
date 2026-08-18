@@ -9,6 +9,8 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
+#include <util/generic/algorithm.h>
+
 namespace NKikimr::NOlap::NActualizer {
 
 namespace {
@@ -134,13 +136,9 @@ void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& acces
     if (!PendingPortionIds.erase(portionId)) {
         return;
     }
-    bool hasTargetBlob = false;
-    for (auto& blobId : accessor.GetBlobIds()) {
-        if (TargetGroups.contains(blobId.GetDsGroup())) {
-            hasTargetBlob = true;
-            break;
-        }
-    }
+    const bool hasTargetBlob = AnyOf(accessor.GetBlobIds(), [this](const TUnifiedBlobId& blobId) {
+        return TargetGroups.contains(blobId.GetDsGroup());
+    });
     if (!hasTargetBlob) {
         return;
     }

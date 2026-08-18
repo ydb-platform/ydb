@@ -68,9 +68,7 @@ void TGranuleActualizationIndex::StopMoveData() {
     if (!MoveDataActualizer) {
         return;
     }
-    EraseIf(Actualizers, [&](const std::shared_ptr<IActualizer>& actualizer) {
-        return actualizer == MoveDataActualizer;
-    });
+    Erase(Actualizers, MoveDataActualizer);
     MoveDataActualizer.reset();
 }
 

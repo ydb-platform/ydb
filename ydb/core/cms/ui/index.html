@@ -392,10 +392,12 @@
               <option value="unavailable">Unavailable</option>
               <option value="tablet">Id</option>
             </select>
+            <label for="nbs2-tablets-problems" class="ml-3 mr-2">Only problems</label>
+            <input id="nbs2-tablets-problems" type="checkbox" class="mr-2">
             <button id="nbs2-tablets-refresh" class="btn btn-secondary ml-2">Refresh</button>
           </div>
           <table id="nbs2-tablets-table" class="table table-sm table-hover">
-            <thead><tr><th>Tablet</th><th>Groups</th><th>Unavailable disks</th><th>Revision</th><th>Changed</th></tr></thead>
+            <thead><tr><th>Tablet</th><th>Groups</th><th>Unavailable DDisk</th><th>Unavailable Persistent Buffer</th><th>Changed</th></tr></thead>
             <tbody id="nbs2-tablets-body"></tbody>
           </table>
           <table id="nbs2-ddisks-table" class="table table-sm table-hover" style="display: none">

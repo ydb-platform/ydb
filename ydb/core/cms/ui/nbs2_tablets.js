@@ -8,6 +8,7 @@ const Nbs2Tablets = {
     init: function() {
         $('#nbs2-tablets-view').on('change', () => this.render());
         $('#nbs2-tablets-sort').on('change', () => this.render());
+        $('#nbs2-tablets-problems').on('change', () => this.render());
         $('#nbs2-tablets-refresh').on('click', () => this.load());
         $('#nbs2-ddisks-body').on('click', 'tr.nbs2-ddisk-row', (event) => {
             const details = $('#nbs2-ddisk-details-' + $(event.currentTarget).data('ddisk-key').toString().replace(/:/g, '-'));
@@ -176,12 +177,15 @@ const Nbs2Tablets = {
         return this.field(snapshot, 'Groups', 'groups') || [];
     },
 
-    unavailableCount: function(tabletId) {
+    unavailableCount: function(tabletId, role) {
         return this.groups(tabletId).reduce((sum, group) => {
-            const ddiskIds = this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [];
-            const persistentBufferIds = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];
-            return sum + ddiskIds.filter((id) => this.isUnavailable(id)).length +
-                persistentBufferIds.filter((id) => this.isUnavailable(id)).length;
+            const ids = role === 'PersistentBuffer'
+                ? this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || []
+                : role === 'DDisk'
+                    ? this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || []
+                    : (this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [])
+                        .concat(this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || []);
+            return sum + ids.filter((id) => this.isUnavailable(id)).length;
         }, 0);
     },
 
@@ -226,20 +230,24 @@ const Nbs2Tablets = {
         $('#nbs2-tablets-table').show();
         $('#nbs2-ddisks-table').hide();
         const body = $('#nbs2-tablets-body').empty();
-        const tablets = this.tablets.slice().sort((a, b) => {
+        const onlyProblems = $('#nbs2-tablets-problems').prop('checked');
+        const tablets = this.tablets.slice().filter((tablet) =>
+            !onlyProblems || this.unavailableCount(this.tabletId(tablet)) > 0
+        ).sort((a, b) => {
             const aId = this.tabletId(a);
             const bId = this.tabletId(b);
-            if ($('#nbs2-tablets-sort').val() === 'tablet') return Number(aId) - Number(bId);
+            const sort = $('#nbs2-tablets-sort').val();
+            if (sort === 'tablet') return Number(aId) - Number(bId);
             return this.unavailableCount(bId) - this.unavailableCount(aId) || Number(aId) - Number(bId);
         });
         tablets.forEach((tablet) => {
             const id = this.tabletId(tablet);
             const groups = this.groups(id);
-            const unavailable = this.unavailableCount(id);
+            const unavailableDDisk = this.unavailableCount(id, 'DDisk');
+            const unavailablePersistentBuffer = this.unavailableCount(id, 'PersistentBuffer');
             const groupsCount = this.field(tablet, 'GroupsCount', 'groupsCount');
-            const revision = this.field(tablet, 'Revision', 'revision');
             const lastChangedAt = this.field(tablet, 'LastChangedAt', 'lastChangedAt');
-            body.append('<tr class="nbs2-tablet-row" data-tablet-id="' + id + '"><td><a href="#">' + id + '</a></td><td>' + (groups.length || groupsCount || '—') + '</td><td class="' + (unavailable ? 'nbs2-count-unavailable' : '') + '">' + unavailable + '</td><td>' + (revision || '—') + '</td><td>' + this.date(lastChangedAt) + '</td></tr>');
+            body.append('<tr class="nbs2-tablet-row" data-tablet-id="' + id + '"><td><a href="#">' + id + '</a></td><td>' + (groups.length || groupsCount || '—') + '</td><td class="' + (unavailableDDisk ? 'nbs2-count-unavailable' : '') + '">' + unavailableDDisk + '</td><td class="' + (unavailablePersistentBuffer ? 'nbs2-count-unavailable' : '') + '">' + unavailablePersistentBuffer + '</td><td>' + this.date(lastChangedAt) + '</td></tr>');
             if (this.snapshots[id]) this.renderDetails(body, id, groups);
         });
     },
@@ -257,11 +265,13 @@ const Nbs2Tablets = {
             });
         });
 
-        Object.keys(disks).map((key) => disks[key]).sort((a, b) => {
+        const onlyProblems = $('#nbs2-tablets-problems').prop('checked');
+        const sort = $('#nbs2-tablets-sort').val();
+        Object.keys(disks).map((key) => disks[key]).filter((disk) =>
+            !onlyProblems || this.isUnavailable(disk.id)
+        ).sort((a, b) => {
             const unavailable = (this.isUnavailable(b.id) ? 1 : 0) - (this.isUnavailable(a.id) ? 1 : 0);
-            return unavailable || Number(this.field(a.id, 'NodeId', 'nodeId')) - Number(this.field(b.id, 'NodeId', 'nodeId')) ||
-                Number(this.field(a.id, 'PDiskId', 'pdiskId')) - Number(this.field(b.id, 'PDiskId', 'pdiskId')) ||
-                Number(this.field(a.id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId')) - Number(this.field(b.id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId'));
+            return (sort === 'unavailable' ? unavailable : 0) || this.compareDiskIds(a.id, b.id);
         }).forEach((disk) => {
             const key = this.ddiskKey(disk.id);
             const status = this.isUnavailable(disk.id) ? 'Unavailable' : 'Available';
@@ -280,6 +290,12 @@ const Nbs2Tablets = {
         });
     },
 
+    compareDiskIds: function(a, b) {
+        return Number(this.field(a, 'NodeId', 'nodeId') || 0) - Number(this.field(b, 'NodeId', 'nodeId') || 0) ||
+            Number(this.field(a, 'PDiskId', 'pdiskId') || 0) - Number(this.field(b, 'PDiskId', 'pdiskId') || 0) ||
+            Number(this.field(a, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0) - Number(this.field(b, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0);
+    },
+
     ddiskKey: function(id) {
         return this.diskId(id) + ':' + (this.field(id, 'DDiskSlotId', 'dDiskSlotId', 'ddiskSlotId') || 0);
     },
@@ -293,7 +309,13 @@ const Nbs2Tablets = {
 
     renderDetails: function(body, id, groups) {
         let html = '<tr id="nbs2-tablet-details-' + id + '"><td colspan="5"><table class="table table-sm mb-0"><thead><tr><th>DBG</th><th>DDisk layout</th><th>Persistent buffer</th></tr></thead><tbody>';
-        groups.forEach((group) => {
+        const onlyProblems = $('#nbs2-tablets-problems').prop('checked');
+        groups.filter((group) => {
+            if (!onlyProblems) return true;
+            const ddiskIds = this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [];
+            const persistentBufferIds = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];
+            return ddiskIds.concat(persistentBufferIds).some((id) => this.isUnavailable(id));
+        }).forEach((group) => {
             const groupId = this.field(group, 'DirectBlockGroupId', 'directBlockGroupId');
             const ddiskIds = this.field(group, 'DDiskId', 'dDiskId', 'ddiskId') || [];
             const persistentBufferIds = this.field(group, 'PersistentBufferDDiskId', 'persistentBufferDDiskId') || [];

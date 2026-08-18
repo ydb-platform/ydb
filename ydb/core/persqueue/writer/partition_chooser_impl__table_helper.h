@@ -18,7 +18,10 @@
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
-constexpr TDuration SourceIdLegacyKeyPeriod = TDuration::Days(15);
+// Fallback window for the legacy name-keyed read during the Id-key transition.
+// Must be >= the mapping-row TTL (expire_after_seconds = 1 382 400 = 16 days)
+// set in metadata_initializers.cpp for the TopicPartitionsMapping table
+constexpr TDuration SourceIdLegacyKeyPeriod = TDuration::Days(16);
 
 class TTableHelper {
 public:

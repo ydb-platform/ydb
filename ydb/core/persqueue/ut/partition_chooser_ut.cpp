@@ -781,7 +781,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenWindowClosed_Test) 
 
     auto config = CreateConfig0(false);
     config.MutablePQTabletConfig()->SetId(TestTopicId);
-    config.MutablePQTabletConfig()->SetIdTxStep((TInstant::Now() - TDuration::Days(16)).MilliSeconds());
+    config.MutablePQTabletConfig()->SetIdTxStep((TInstant::Now() - TDuration::Days(20)).MilliSeconds());
     AddPartition(config, 0);
     AddPartition(config, 1);
 

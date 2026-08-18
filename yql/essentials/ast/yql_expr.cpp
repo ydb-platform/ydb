@@ -1710,14 +1710,14 @@ template <typename T>
 using TVectorIAllocator = std::vector<T, TStdIAllocator<T>>;
 
 template <typename K, typename V>
-using TMapIAllocator = std::map<K, V, std::less<K>, TStdIAllocator<std::pair<const K, V>>>;
+using TMapIAllocator = std::map<K, V, std::less<>, TStdIAllocator<std::pair<const K, V>>>;
 
 template <typename K, typename V>
-using TUnorderedMapIAllocator = std::unordered_map<K, V, std::hash<K>, std::equal_to<K>, TStdIAllocator<std::pair<const K, V>>>;
+using TUnorderedMapIAllocator = std::unordered_map<K, V, std::hash<K>, std::equal_to<>, TStdIAllocator<std::pair<const K, V>>>;
 
 struct TFrameContext {
     explicit TFrameContext(IAllocator* allocator)
-        : Nodes(std::less<size_t>(), allocator)
+        : Nodes(std::less<>(), allocator)
         , TopoSortedNodes(allocator)
         , Bindings(0, allocator)
     {
@@ -1737,7 +1737,7 @@ struct TVisitNodeContext {
         , FreeArgs(0, allocator)
         , Frames(allocator)
         , LambdaFrames(0, allocator)
-        , Parameters(std::less<TStringBuf>(), allocator)
+        , Parameters(std::less<>(), allocator)
         , References(0, allocator)
     {
     }

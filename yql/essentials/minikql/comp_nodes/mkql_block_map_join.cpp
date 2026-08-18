@@ -581,7 +581,7 @@ class TBlockIndex: public TComputationValue<TBlockIndex> {
     using TIndexMap = TRobinHoodHashFixedMap<
         ui64,
         TIndexMapValue,
-        std::equal_to<ui64>,
+        std::equal_to<>,
         std::hash<ui64>,
         TMKQLHugeAllocator<char>>;
 

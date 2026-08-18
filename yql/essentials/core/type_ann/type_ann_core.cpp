@@ -12598,7 +12598,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             auto underlyingType = input->Head().GetTypeAnn()->Cast<TVariantExprType>()->GetUnderlyingType();
             if (underlyingType->GetKind() == ETypeAnnotationKind::Tuple) {
                 auto tupleTypeItems = underlyingType->Cast<TTupleExprType>()->GetItems();
-                if (std::adjacent_find(tupleTypeItems.cbegin(), tupleTypeItems.cend(), std::not_equal_to<const TTypeAnnotationNode*>()) == tupleTypeItems.cend()) {
+                if (std::adjacent_find(tupleTypeItems.cbegin(), tupleTypeItems.cend(), std::not_equal_to<>()) == tupleTypeItems.cend()) {
                     // All types are the same
                     output = ctx.Expr.Builder(input->Pos())
                         .Apply(input->ChildPtr(1))

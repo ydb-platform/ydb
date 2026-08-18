@@ -12,7 +12,7 @@ using namespace NUdf;
 namespace {
 class THybridHyperLogLog {
 private:
-    using THybridSet = THashSet<ui64, std::hash<ui64>, std::equal_to<ui64>, TStdAllocatorForUdf<ui64>>;
+    using THybridSet = THashSet<ui64, std::hash<ui64>, std::equal_to<>, TStdAllocatorForUdf<ui64>>;
     using THybridHll = THyperLogLogWithAlloc<TStdAllocatorForUdf<ui8>>;
 
     explicit THybridHyperLogLog(unsigned precision)

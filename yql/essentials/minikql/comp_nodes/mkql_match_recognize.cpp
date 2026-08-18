@@ -258,7 +258,7 @@ private:
 class TStateForInterleavedPartitions
     : public TComputationValue<TStateForInterleavedPartitions> {
     using TPartitionMapValue = std::unique_ptr<TStreamingMatchRecognize>;
-    using TPartitionMap = std::unordered_map<TString, TPartitionMapValue, std::hash<TString>, std::equal_to<TString>, TMKQLAllocator<std::pair<const TString, TPartitionMapValue>>>;
+    using TPartitionMap = std::unordered_map<TString, TPartitionMapValue, std::hash<TString>, std::equal_to<>, TMKQLAllocator<std::pair<const TString, TPartitionMapValue>>>;
 
 public:
     TStateForInterleavedPartitions(
@@ -502,7 +502,7 @@ private:
 };
 
 TOutputColumnOrder GetOutputColumnOrder(TRuntimeNode partitionKyeColumnsIndexes, TRuntimeNode measureColumnsIndexes) {
-    std::unordered_map<size_t, TOutputColumnEntry, std::hash<size_t>, std::equal_to<size_t>, TMKQLAllocator<std::pair<const size_t, TOutputColumnEntry>, EMemorySubPool::Temporary>> temp;
+    std::unordered_map<size_t, TOutputColumnEntry, std::hash<size_t>, std::equal_to<>, TMKQLAllocator<std::pair<const size_t, TOutputColumnEntry>, EMemorySubPool::Temporary>> temp;
     {
         auto list = AS_VALUE(TListLiteral, partitionKyeColumnsIndexes);
         for (ui32 i = 0; i != list->GetItemsCount(); ++i) {

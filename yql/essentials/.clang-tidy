@@ -348,7 +348,7 @@ Checks: >
   modernize-use-override,
   modernize-use-starts-ends-with,
   -modernize-use-trailing-return-type,
-  -modernize-use-transparent-functors,
+  modernize-use-transparent-functors,
   -modernize-use-uncaught-exceptions,
   modernize-use-using,
   -performance-faster-string-find,

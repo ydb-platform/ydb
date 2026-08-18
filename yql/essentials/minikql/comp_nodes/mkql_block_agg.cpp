@@ -710,6 +710,8 @@ std::equal_to<T> MakeEqual(ui32 keyLength) {
 
 template <>
 std::equal_to<TExternalFixedSizeKey> MakeEqual(ui32 keyLength) {
+    // The typed specialization carries the fixed key length, unlike std::equal_to<>.
+    // NOLINTNEXTLINE(modernize-use-transparent-functors)
     return std::equal_to<TExternalFixedSizeKey>(keyLength);
 }
 

@@ -170,7 +170,7 @@ private:
 class IArrowKernelComputationNode;
 class IComputationExternalNode;
 class TComputationExternalNodeInvalidator;
-using TComputationExternalNodePtrSet = std::unordered_set<IComputationExternalNode*, std::hash<IComputationExternalNode*>, std::equal_to<IComputationExternalNode*>, TMKQLAllocator<IComputationExternalNode*>>;
+using TComputationExternalNodePtrSet = std::unordered_set<IComputationExternalNode*, std::hash<IComputationExternalNode*>, std::equal_to<>, TMKQLAllocator<IComputationExternalNode*>>;
 
 class IComputationNode {
 public:
@@ -323,7 +323,7 @@ using TComputationNodePtrVector = std::vector<IComputationNode*, TMKQLAllocator<
 using TComputationWideFlowNodePtrVector = std::vector<IComputationWideFlowNode*, TMKQLAllocator<IComputationWideFlowNode*>>;
 using TConstComputationNodePtrVector = std::vector<const IComputationNode*, TMKQLAllocator<const IComputationNode*>>;
 using TComputationNodePtrDeque = std::deque<IComputationNode::TPtr, TMKQLAllocator<IComputationNode::TPtr>>;
-using TComputationNodeOnNodeMap = std::unordered_map<const IComputationNode*, IComputationNode*, std::hash<const IComputationNode*>, std::equal_to<const IComputationNode*>, TMKQLAllocator<std::pair<const IComputationNode* const, IComputationNode*>>>;
+using TComputationNodeOnNodeMap = std::unordered_map<const IComputationNode*, IComputationNode*, std::hash<const IComputationNode*>, std::equal_to<>, TMKQLAllocator<std::pair<const IComputationNode* const, IComputationNode*>>>;
 
 class IComputationGraph {
 public:

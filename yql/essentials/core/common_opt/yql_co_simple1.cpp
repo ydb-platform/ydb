@@ -1827,7 +1827,7 @@ TExprNode::TPtr SplitPredicateChain(TExprNode::TPtr&& node, const TExprNode::TPt
         return std::move(node);
     }
 
-    children.erase(std::remove_if(children.begin(), children.end(), std::logical_not<TExprNode::TPtr>()), children.end());
+    children.erase(std::remove_if(children.begin(), children.end(), std::logical_not<>()), children.end());
 
     if (children.empty()) {
         return {};

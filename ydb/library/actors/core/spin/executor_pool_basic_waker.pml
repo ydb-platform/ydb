@@ -351,25 +351,16 @@ proctype Worker(byte id) {
 
         waker_budget = activation_credits;
 
-        /* Account for workers which are already searching before changing
-         * SPIN/BLOCKING states. The budget is local and never reserves the
-         * corresponding queue item. */
+        /* Observe every worker once. NONE only consumes the local budget at
+         * the point where it is seen; it does not reserve a queue item and
+         * may concurrently move to WORK or back into the idle path. */
         waker_i = 0;
         do
         :: waker_i < N ->
             if
             :: waker_i != id && state[waker_i] == NONE &&
                     waker_budget > 0 -> waker_budget--
-            :: else -> skip
-            fi;
-            waker_i++
-        :: else -> break
-        od;
 
-        waker_i = 0;
-        do
-        :: waker_i < N ->
-            if
             :: waker_i != id && state[waker_i] == SPIN ->
                 if
                 :: waker_budget > 0 ->

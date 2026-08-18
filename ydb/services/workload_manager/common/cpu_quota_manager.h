@@ -30,6 +30,18 @@ class TCpuQuotaManager {
     };
 
 public:
+    struct TSettings {
+        TDuration MonitoringRequestDelay = TDuration::Seconds(1);
+        TDuration AverageLoadInterval = TDuration::Seconds(10);
+        // How long an admitted query keeps its cpu reservation before its load is expected
+        // to be visible in the measured cluster load
+        TDuration LoadVisibilityDelay = TDuration::Seconds(5);
+        TDuration IdleTimeout = TDuration::Seconds(60);
+        double DefaultQueryLoad = 0.1;
+        bool Strict = true;
+        bool EnableLoadReservations = false;
+    };
+
     struct TCpuQuotaResponse {
         explicit TCpuQuotaResponse(int32_t currentLoad, NYdb::EStatus status = NYdb::EStatus::SUCCESS, NYql::TIssues issues = {});
 
@@ -39,10 +51,14 @@ public:
     };
 
 public:
-    TCpuQuotaManager(TDuration monitoringRequestDelay, TDuration averageLoadInterval, TDuration idleTimeout, double defaultQueryLoad, bool strict, ui64 cpuNumber, const ::NMonitoring::TDynamicCounterPtr& subComponent);
+    TCpuQuotaManager(const TSettings& settings, const ::NMonitoring::TDynamicCounterPtr& subComponent);
+    virtual ~TCpuQuotaManager() = default;
+
+    void UpdateSettings(const TSettings& settings);
 
     double GetInstantLoad() const;
     double GetAverageLoad() const;
+    double GetQuotedLoad() const;
     TDuration GetMonitoringRequestDelay() const;
     TInstant GetMonitoringRequestTime() const;
 
@@ -53,14 +69,12 @@ public:
     TCpuQuotaResponse RequestCpuQuota(double quota, double maxClusterLoad);
     void AdjustCpuQuota(double quota, TDuration duration, double cpuSecondsConsumed);
 
+protected:
+    virtual TInstant GetNow() const;
+
 private:
     TCounters Counters;
-
-    const TDuration MonitoringRequestDelay;
-    const TDuration AverageLoadInterval;
-    const TDuration IdleTimeout;
-    const double DefaultQueryLoad;
-    const bool Strict;
+    TSettings Settings;
     ui64 CpuNumber = 0;
 
     TInstant LastCpuLoad;

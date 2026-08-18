@@ -24,11 +24,6 @@ namespace {
 
 const TString DATABASE_PATH = "/Root/db";
 
-const TString TABLE_PATH = "/Root/db/dir/table";
-const TString RELATIVE_TABLE_PATH = "dir/table";
-
-const TPathId TABLE_ID(72057594046644480ull, 42);
-
 // The same schemeshard owner as TABLE_ID, but a different local id, reporting under
 // the very same TABLE_PATH: models a table dropped and recreated at the same path,
 // or an ESchemeOpMoveTable rename that moves the old table away and a new one is
@@ -48,158 +43,12 @@ const TString RENAMED_RELATIVE_TABLE_PATH = "dir/renamed_table";
 
 const TPathId RENAMED_TABLE_ID(72057594046644480ull, 45);
 
-constexpr TTabletTypes::EType TABLET_TYPE = TTabletTypes::DataShard;
-
 ////////////////////////////////////////////////////////////////////////////////
-// A small stand-in for the low level counters of Data Shard. The real counter set
-// has hundreds of counters, which would make the assertions unreadable without
-// covering anything, which is not covered by these few counters.
-
-constexpr const char* EXECUTOR_SIMPLE_COUNTER_NAMES[] = {
-    "DbUniqueRowsTotal",
-    "DbUniqueDataBytes",
-    // Absent from the DataShard allow-list (ydb/core/protos/counters_detailed_datashard.proto),
-    // used to verify Initialize()'s nameFilter is honored (see NameFilterDropsUnlistedCounters)
-    "NotInTheAllowList",
-};
-
-constexpr const char* EXECUTOR_CUMULATIVE_COUNTER_NAMES[] = {
-    "ConsumedCPU",
-};
-
-constexpr const char* EXECUTOR_PERCENTILE_COUNTER_NAMES[] = {
-    // A histogram aggregate: it is NOT filled by the tablet, it collects
-    // one observation per tablet from the "ConsumedCPU" cumulative counter.
-    // It is DataShard's only percentile: there is no ordinary one in the allow-list.
-    "HIST(ConsumedCPU)",
-};
-
-constexpr const char* APP_CUMULATIVE_COUNTER_NAMES[] = {
-    "DataShard/EngineHostRowUpdates",
-    "DataShard/EngineHostRowUpdateBytes",
-};
-
-constexpr TTabletPercentileCounter::TRangeDef PERCENTILE_RANGES[] = {
-    {  0,   "0"},
-    { 10,  "10"},
-    {100, "100"},
-};
-
-enum ESimpleCounter : ui32 {
-    DB_UNIQUE_ROWS_TOTAL = 0,
-    DB_UNIQUE_DATA_BYTES = 1,
-    NOT_IN_ALLOW_LIST = 2,
-};
-
-enum ECumulativeCounter : ui32 {
-    CONSUMED_CPU = 0,
-};
-
-enum EAppCumulativeCounter : ui32 {
-    ENGINE_HOST_ROW_UPDATES = 0,
-    ENGINE_HOST_ROW_UPDATE_BYTES = 1,
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
-/**
- * A single tablet, which reports the low level counters above.
- *
- * @note Reporting goes through MakeDiffForAggr()/RememberCurrentStateAsBaseline(),
- *       exactly like the Executor does it, so what the aggregator sees is what it
- *       sees in production: the simple counters are absolute, the cumulative ones
- *       are the delta since the previous report of THIS tablet, and the integral
- *       percentile counters are absolute.
- */
-struct TFakeTablet {
-    TFakeTablet(ui64 tabletId, ui32 followerId)
-        : TabletId(tabletId)
-        , FollowerId(followerId)
-        , ExecutorCounters(
-            Y_ARRAY_SIZE(EXECUTOR_SIMPLE_COUNTER_NAMES),
-            Y_ARRAY_SIZE(EXECUTOR_CUMULATIVE_COUNTER_NAMES),
-            Y_ARRAY_SIZE(EXECUTOR_PERCENTILE_COUNTER_NAMES),
-            EXECUTOR_SIMPLE_COUNTER_NAMES,
-            EXECUTOR_CUMULATIVE_COUNTER_NAMES,
-            EXECUTOR_PERCENTILE_COUNTER_NAMES
-        )
-        , AppCounters(
-            0,
-            Y_ARRAY_SIZE(APP_CUMULATIVE_COUNTER_NAMES),
-            0,
-            nullptr,
-            APP_CUMULATIVE_COUNTER_NAMES,
-            nullptr
-        )
-    {
-        for (ui32 i = 0; i < Y_ARRAY_SIZE(EXECUTOR_PERCENTILE_COUNTER_NAMES); ++i) {
-            ExecutorCounters.Percentile()[i].Initialize(PERCENTILE_RANGES, true /* integral */);
-        }
-    }
-
-    TFakeTablet& SetSimple(ESimpleCounter counter, ui64 value) {
-        ExecutorCounters.Simple()[counter].Set(value);
-        return *this;
-    }
-
-    TFakeTablet& AddCumulative(ECumulativeCounter counter, ui64 delta) {
-        ExecutorCounters.Cumulative()[counter] += delta;
-        return *this;
-    }
-
-    TFakeTablet& AddAppCumulative(EAppCumulativeCounter counter, ui64 delta) {
-        AppCounters.Cumulative()[counter] += delta;
-        return *this;
-    }
-
-    /**
-     * Send everything accumulated since the previous report, the way the Executor does.
-     */
-    void Report(
-        const TNodeDatabaseMetricsAggregatorPtr& aggregator,
-        EDetailedMetricsLevel level,
-        TInstant now,
-        const TPathId& tableId = TABLE_ID,
-        const TString& tablePath = TABLE_PATH,
-        TTabletTypes::EType tabletType = TABLET_TYPE,
-        ui64 schemaVersion = 1
-    ) {
-        TDetailedMetricsTableInfo table;
-        table.TableId = tableId;
-        table.TablePath = tablePath;
-        table.SchemaVersion = schemaVersion;
-        table.MetricsLevel = level;
-
-        // An empty baseline (the very first report) makes the diff a plain copy
-        auto appDiff = AppCounters.MakeDiffForAggr(AppBaseline);
-        auto executorDiff = ExecutorCounters.MakeDiffForAggr(ExecutorBaseline);
-
-        aggregator->AddCounters(
-            table,
-            TabletId,
-            FollowerId,
-            tabletType,
-            *executorDiff,
-            *appDiff,
-            now
-        );
-
-        AppCounters.RememberCurrentStateAsBaseline(AppBaseline);
-        ExecutorCounters.RememberCurrentStateAsBaseline(ExecutorBaseline);
-    }
-
-    const ui64 TabletId;
-    const ui32 FollowerId;
-
-    TTabletCountersBase ExecutorCounters;
-    TTabletCountersBase AppCounters;
-
-    // The state as of the previous report, subtracted from the cumulative counters
-    TTabletCountersBase ExecutorBaseline;
-    TTabletCountersBase AppBaseline;
-};
-
-////////////////////////////////////////////////////////////////////////////////
+// TABLE_ID, TABLE_PATH, RELATIVE_TABLE_PATH, TABLET_TYPE, ESimpleCounter,
+// ECumulativeCounter, EAppCumulativeCounter and TFakeTablet itself live in
+// ut_helpers.h now (NDetailedMetricsTests, brought in by the using-directive
+// above): they are shared with processor_database_metrics_aggregator_ut.cpp,
+// which drives the very same fixture through Pack() into the processor side.
 
 /**
  * @return The counter group of the table (or nullptr if there is none)
@@ -424,53 +273,9 @@ void DumpCounters(const TString& title, NMonitoring::TDynamicCounterPtr rootGrou
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// Pack() helpers (step 08)
-
-/**
- * Pack a single instance's own tables into a fresh field, the way the SysView
- * Service would pack one role's stream for one message.
- */
-NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> PackOnce(
-    const TNodeDatabaseMetricsAggregatorPtr& aggregator,
-    ui64 generation
-) {
-    NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> out;
-    aggregator->Pack(out, generation);
-    return out;
-}
-
-/**
- * @return The packed entry of the table at the given (unstripped) path, or
- *         nullptr if this instance packed nothing for it
- */
-const NKikimrSysView::TDetailedTableCounters* FindPackedTable(
-    const NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& tables,
-    const TString& tablePath = TABLE_PATH
-) {
-    for (const auto& table : tables) {
-        if (table.GetTablePath() == tablePath) {
-            return &table;
-        }
-    }
-    return nullptr;
-}
-
-/**
- * @return The packed leaf of the given (tabletId, followerId), or nullptr if
- *         this entry carries none
- */
-const NKikimrSysView::TDetailedTableCounters::TLeaf* FindPackedLeaf(
-    const NKikimrSysView::TDetailedTableCounters& table,
-    ui64 tabletId,
-    ui32 followerId
-) {
-    for (const auto& leaf : table.GetLeaves()) {
-        if (leaf.GetTabletId() == tabletId && leaf.GetFollowerId() == followerId) {
-            return &leaf;
-        }
-    }
-    return nullptr;
-}
+// Pack() helpers (step 08). PackOnce/FindPackedTable/FindPackedLeaf live in
+// ut_helpers.h now (shared with processor_database_metrics_aggregator_ut.cpp);
+// the byte-level diff readers below are only ever asserted on here.
 
 /**
  * @return The Simple value at the given low level counter index (Simple/GAUGE

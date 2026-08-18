@@ -319,7 +319,7 @@ Information about resource pool metrics can be found in the [metrics reference](
 
 ### System views
 
-Information about system views related to resource pools and resource pool classifiers can be found on the [{#T}](system-views.md#resource_pools) page.
+Information about system views related to resource pools and resource pool classifiers can be found on the [Resource pool information](system-views.md#resource_pools) page.
 
 ## See also
 

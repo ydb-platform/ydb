@@ -1,4 +1,3 @@
-<!-- markdownlint-disable MD030 -->
 # CREATE TRANSFER
 
 Creates a [transfer](../../../concepts/transfer.md) from a [topic](../../../concepts/datamodel/topic.md) to a [table](../../../concepts/datamodel/table.md).

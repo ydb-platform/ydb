@@ -44,7 +44,7 @@ Download the YDB EM package to the control machine (from which the installation 
 
 Version | Link
 --- | ---
-`<VERSION>` | `https://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz`
+`<VERSION>` | [Download archive](https://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz)
 
 Extract the downloaded archive into a working directory (replace `<VERSION>` with the actual version):
 

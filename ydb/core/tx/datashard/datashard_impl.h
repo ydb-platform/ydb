@@ -1975,8 +1975,13 @@ public:
         }
         const TString key = TSerializedCellVec::Serialize(keyCells);
         if (!entry.Index->HasDelta(key)) {
+            const size_t indexSize = entry.Index->Size();
+            if (indexSize == 0) {
+                HnswIndexCache.erase(it);
+                return;
+            }
             auto reservation = TryReserveHnswCacheMemory(
-                entry.Index->EstimatedMemoryBytes() / entry.Index->Size());
+                entry.Index->EstimatedMemoryBytes() / indexSize);
             if (!reservation) {
                 HnswIndexCache.erase(it);
                 return;

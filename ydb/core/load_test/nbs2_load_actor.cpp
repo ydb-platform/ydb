@@ -9,6 +9,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/request.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/partition_actor_id.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/diagnostics/histogram.h>
@@ -103,7 +104,14 @@ public:
         VERIFY_PARAM(DurationSeconds);
         VERIFY_PARAM(RangeTest);
 
-        DirectPartitionId.Parse(cmd.GetDirectPartitionId().data(), cmd.GetDirectPartitionId().size());
+        if (!NYdb::NBS::NBlockStore::TryDeserializePartitionActorId(
+                cmd.GetDirectPartitionId(),
+                DirectPartitionId))
+        {
+            ythrow NKikimr::TLoadActorException()
+                << "Invalid DirectPartitionId (expected [node:pool:localId:hint]): "
+                << cmd.GetDirectPartitionId();
+        }
         google::protobuf::TextFormat::PrintToString(cmd, &ConfigString);
 
         if (RangeTest.GetStart() >= RangeTest.GetEnd() || RangeTest.GetEnd() >= MaxSupportedBlockCount) {

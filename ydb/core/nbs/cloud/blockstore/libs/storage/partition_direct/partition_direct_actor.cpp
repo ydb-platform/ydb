@@ -2,11 +2,11 @@
 
 #include "direct_block_group_impl.h"
 #include "fast_path_service.h"
-#include "load_actor_adapter.h"
 
 #include <ydb/core/nbs/cloud/blockstore/bootstrap/nbs_service.h>
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/api/partition_actor_id.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/counters_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
@@ -117,8 +117,6 @@ void TPartitionActor::DetachEndpointAddDie(const TActorContext& ctx)
         NKikimrServices::NBS_PARTITION,
         "%s DetachEndpointAddDie",
         LogTitle.GetWithTime().c_str());
-
-    ctx.Send(LoadActorAdapter, new TEvents::TEvPoisonPill());
 
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
@@ -412,34 +410,23 @@ void TPartitionActor::HandleFastPathServiceReady(
             AddHostInFlight->NewHostIndex);
     }
 
-    LoadActorAdapter = CreateLoadActorAdapter(ctx.SelfID, FastPathService);
+    auto service = GetNbsService();
 
-    {
-        auto service = GetNbsService();
-
-        const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
-        NVhost::TStorageOptions options{
-            .DiskId = VolumeConfig.GetDiskId(),
-            .ClientId = "client-1",
-            .BlockSize = VolumeConfig.GetBlockSize(),
-            .StripeSize = StorageConfig->GetStripeSize(),
-            .BlocksCount = blockCount,
-            .VChunkSize = StorageConfig->GetVChunkSize(),
-            .VhostQueuesCount = StorageConfig->GetVhostQueuesCount(),
-            .Generation = Executor()->Generation()};
-        service->VhostServer->StartEndpoint(
-            GetSocketPath(),
-            FastPathService,
-            FastPathService,
-            options);
-    }
-
-    LOG_INFO(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "%s Started NBS LoadActorAdapter: %s",
-        LogTitle.GetWithTime().c_str(),
-        LoadActorAdapter.ToString().c_str());
+    const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
+    NVhost::TStorageOptions options{
+        .DiskId = VolumeConfig.GetDiskId(),
+        .ClientId = "client-1",
+        .BlockSize = VolumeConfig.GetBlockSize(),
+        .StripeSize = StorageConfig->GetStripeSize(),
+        .BlocksCount = blockCount,
+        .VChunkSize = StorageConfig->GetVChunkSize(),
+        .VhostQueuesCount = StorageConfig->GetVhostQueuesCount(),
+        .Generation = Executor()->Generation()};
+    service->VhostServer->StartEndpoint(
+        GetSocketPath(),
+        FastPathService,
+        FastPathService,
+        options);
 }
 
 void TPartitionActor::HandleFastPathServiceShutdown(
@@ -595,7 +582,7 @@ void TPartitionActor::HandleGetLoadActorAdapterActorId(
 {
     auto response =
         std::make_unique<TEvService::TEvGetLoadActorAdapterActorIdResponse>();
-    response->Record.SetActorId(LoadActorAdapter.ToString());
+    response->Record.SetActorId(SerializePartitionActorId(ctx.SelfID));
     ctx.Send(ev->Sender, response.release(), 0, ev->Cookie);
 }
 
@@ -726,6 +713,9 @@ STFUNC(TPartitionActor::StateWork)
             HandlePoisonByBlockedGeneration);
 
         HFunc(TEvService::TEvDeletePartitionRequest, HandleDeletePartition);
+
+        HFunc(TEvService::TEvWriteBlocksRequest, HandleWriteBlocksRequest);
+        HFunc(TEvService::TEvReadBlocksRequest, HandleReadBlocksRequest);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

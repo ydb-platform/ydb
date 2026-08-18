@@ -32,9 +32,16 @@ public:
     /**
      * Aggregate the current counter value with the value of the given source counter.
      *
-     * @param[in] sourceCounter The source counter to aggregate
+     * @param[in] sourceCounter The source counter to aggregate, or nullptr for a
+     *            LeaderOnly counter's empty slot on a follower source (step 09.5,
+     *            TYdbMetricsAggregator::AddSourceCountersGroup's isFollowerSource):
+     *            skipped rather than dereferenced, exactly as if that source had
+     *            not contributed at all.
      */
     void AggregateValue(NMonitoring::TDynamicCounters::TCounterPtr sourceCounter) noexcept {
+        if (!sourceCounter) {
+            return;
+        }
         Value += sourceCounter->Val();
     }
 
@@ -80,7 +87,8 @@ public:
     /**
      * Aggregate the current counter value with the value of the given source counter.
      *
-     * @param[in] sourceCounter The source counter to aggregate
+     * @param[in] sourceCounter The source counter to aggregate, or nullptr for an
+     *            empty slot (step 09.5) — skipped rather than dereferenced
      */
     void AggregateValue(NMonitoring::THistogramPtr sourceCounter);
 

@@ -57,7 +57,7 @@ std::unique_ptr<similarity::Space<float>> CreateSpace(VectorIndexSettings::Metri
 // Returns an invalid view (Data == nullptr) if the bytes are not a
 // well-formed FloatVector.
 struct TFloatVectorView {
-    const float* Data = nullptr;
+    const void* Data = nullptr;
     size_t Dimension = 0;
 
     static TFloatVectorView FromSerialized(TStringBuf serialized) {
@@ -76,7 +76,10 @@ struct TFloatVectorView {
             return result;
         }
 
-        result.Data = reinterpret_cast<const float*>(serialized.data());
+        // similarity::Object copies raw bytes into its own aligned storage;
+        // keep this as an untyped pointer because TStringBuf itself does not
+        // guarantee float alignment.
+        result.Data = serialized.data();
         result.Dimension = dataSize / sizeof(float);
         return result;
     }
@@ -96,20 +99,20 @@ public:
     {}
 
     ~TImpl() {
+        // Hnsw keeps pointers to Objects, so destroy it before their owners.
         Index.reset();
-        for (const similarity::Object* obj : Objects) {
-            delete obj;
-        }
     }
 
-    void AddVector(TString key, TString vector, const float* data) {
+    void AddVector(TString key, TString vector, const void* data) {
         const auto id = static_cast<similarity::IdType>(Keys.size());
-        auto* obj = new similarity::Object(id, /* label */ -1, Dimension * sizeof(float), data);
+        auto obj = std::make_unique<similarity::Object>(
+            id, /* label */ -1, Dimension * sizeof(float), data);
         KeyBytes += key.size();
         Keys.push_back(std::move(key));
         Vectors.push_back(std::move(vector));
         KeyToIndex.emplace(Keys.back(), static_cast<size_t>(id));
-        Objects.push_back(obj);
+        Objects.push_back(obj.get());
+        OwnedObjects.push_back(std::move(obj));
     }
 
     bool Build(const VectorIndexSettings& settings) {
@@ -250,6 +253,7 @@ private:
     ui32 Connectivity = DefaultHnswConnectivity;
     size_t KeyBytes = 0;
     std::vector<const similarity::Object*> Objects;
+    std::vector<std::unique_ptr<similarity::Object>> OwnedObjects;
     std::vector<TString> Keys; // Object::id() -> serialized primary key
     std::vector<TString> Vectors; // Object::id() -> wire-format vector
     THashMap<TString, size_t> KeyToIndex;

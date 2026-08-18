@@ -139,6 +139,14 @@ void SampleCpu(TStats& stats) {
     stats.LastCpu = cpu;
 }
 
+void ClobberMemory() {
+#if defined(__GNUC__) || defined(__clang__)
+    asm volatile("" : : : "memory");
+#else
+    std::atomic_signal_fence(std::memory_order_seq_cst);
+#endif
+}
+
 void MemoryWorker(uint32_t index, const TOptions& options, std::barrier<>& ready, TStats& stats) {
     if (!options.Cpus.empty()) {
         PinThread(options.Cpus[index]);
@@ -150,6 +158,10 @@ void MemoryWorker(uint32_t index, const TOptions& options, std::barrier<>& ready
     size_t offset = 0;
     while (!Stop.load(std::memory_order_relaxed)) {
         std::memcpy(buffer.get() + BufferSize / 2 + offset, buffer.get() + offset, PartSize);
+        // The copied bytes are the load itself.  Make the resulting memory
+        // state observable so an optimizing compiler cannot remove the copy
+        // as a dead store.
+        ClobberMemory();
         ++stats.Operations;
         stats.Bytes += PartSize * 2;
         offset = (offset + PartSize) % (BufferSize / 2);

@@ -1486,6 +1486,9 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(manifest["runs"], [])
         self.assertEqual(manifest["affinity"][0]["status"], "unsupported")
         self.assertTrue((output / "summary.csv").exists())
+        self.assertEqual(manifest["summary"], "summary.csv")
+        self.assertEqual(manifest["repetitions"], "repetitions.csv")
+        self.assertEqual(manifest["summary_rows"], 0)
 
 
 class WebTest(unittest.TestCase):

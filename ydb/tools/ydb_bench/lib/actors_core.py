@@ -273,6 +273,8 @@ def run_benchmark(
         atomic_write_text(output_directory / "repetitions.csv", measurement_output.getvalue())
         manifest["summary"] = "summary.csv"
         manifest["repetitions"] = "repetitions.csv"
+        manifest["summary_rows"] = 0
+        write_manifest(manifest_path, manifest)
         return manifest
 
     repetition_rows = []

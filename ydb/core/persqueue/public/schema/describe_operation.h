@@ -22,6 +22,7 @@ struct TDescribeOperationSettings {
     NDescriber::TAccessRights AccessRights;
     bool IncludeStats = false;
     bool IncludeLocation = false;
+    bool ForceSyncVersion = false;
 };
 
 struct TPartitionDescribeInfo {
@@ -42,12 +43,14 @@ struct TEvDescribeOperationResponse
     Ydb::Scheme::Entry SelfEntry;
     absl::flat_hash_map<ui32, TPartitionDescribeInfo> Partitions;
     TString ConsumerName;
+    bool UsedSyncVersion = false;
 };
 
 struct TDescribeSchemaError {
     Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::BAD_REQUEST;
     TString Message;
     Ydb::PersQueue::ErrorCode::ErrorCode IssueCode = Ydb::PersQueue::ErrorCode::BAD_REQUEST;
+    bool RetryWithSync = false;
 };
 
 struct TDescribeSchemaResult {

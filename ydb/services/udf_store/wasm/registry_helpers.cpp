@@ -18,10 +18,13 @@ namespace {
 // Bump allocator used when a UDF has empty required_libraries.
 // CreateEmptyImage alone has host intrinsics but no RuntimeLibraryInstance_
 // with wasm malloc/free; compartment->AllocateBytes needs those exports.
+//
+// Heap starts above a reserved low region so UDF data segments (e.g. at 1024)
+// are not clobbered by the first malloc used for argument/result marshalling.
 constexpr TStringBuf DefaultRegistrySdkWast = R"WAST(
 (module
     (import "env" "memory" (memory i64 8 2097152))
-    (global $heap (mut i64) (i64.const 1024))
+    (global $heap (mut i64) (i64.const 65536))
     (func $malloc (param $n i64) (result i64)
         (local $p i64)
         (local.set $p (global.get $heap))

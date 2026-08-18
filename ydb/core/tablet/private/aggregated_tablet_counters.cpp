@@ -4,12 +4,15 @@
 
 namespace NKikimr::NPrivate {
 
-TAggregatedTabletCounters::TAggregatedTabletCounters(::NMonitoring::TDynamicCounterPtr counterGroup)
+TAggregatedTabletCounters::TAggregatedTabletCounters(
+    ::NMonitoring::TDynamicCounterPtr counterGroup,
+    ::NMonitoring::TCountableBase::EVisibility visibility)
     : IsInitialized(false)
-    , AggregatedSimpleCounters(counterGroup)
-    , AggregatedCumulativeCounters(counterGroup)
-    , AggregatedHistogramCounters(counterGroup)
+    , AggregatedSimpleCounters(counterGroup, visibility)
+    , AggregatedCumulativeCounters(counterGroup, visibility)
+    , AggregatedHistogramCounters(counterGroup, visibility)
     , CounterGroup(counterGroup)
+    , Visibility(visibility)
 {}
 
 void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters) {
@@ -67,7 +70,7 @@ void TAggregatedTabletCounters::Initialize(const TTabletCountersBase* counters) 
             } else {
                 AggregatedCumulativeCounters.AddCumulativeCounter(name);
             }
-            auto counter = CounterGroup->GetCounter(name, true);
+            auto counter = CounterGroup->GetCounter(name, true, Visibility);
             CumulativeCounters.push_back(counter);
         }
     }

@@ -386,19 +386,34 @@ TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics 
                     partition.Metadata = groupPartitionToOffset->second.Metadata;
                     partition.ErrorCode = NONE_ERROR;
                 } else {
-                    partition.ErrorCode = RESOURCE_NOT_FOUND;
-                    YDB_LOG_ERROR("Group not found for topic",
+                    // Existing partition, no committed offset for this group.
+                    partition.CommittedOffset = -1;
+                    partition.ErrorCode = NONE_ERROR;
+                    YDB_LOG_DEBUG("No committed offset for group on partition",
                         {LogPrefix()},
                         {"groupId", groupId},
-                        {"topicName", topicName});
+                        {"topicName", topicName},
+                        {"requestPartition", requestPartition});
                 }
             } else {
-                partition.ErrorCode = RESOURCE_NOT_FOUND;
-                YDB_LOG_ERROR("Partition not found for topic",
+                // Kafka OffsetFetch does not fail on an unknown partition:
+                // NONE + committedOffset = -1.
+                partition.CommittedOffset = -1;
+                partition.ErrorCode = NONE_ERROR;
+                YDB_LOG_DEBUG("Partition not found for topic",
                     {LogPrefix()},
                     {"requestPartition", requestPartition},
                     {"topicName", topicName});
             }
+            topic.Partitions.push_back(partition);
+        }
+    } else if (TopicsToResponses[topicName]->Status == UNKNOWN_TOPIC_OR_PARTITION) {
+        // Kafka coordinator OffsetFetch does not check that the topic exists.
+        for (auto requestPartition: requestTopic.PartitionIndexes) {
+            TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
+            partition.PartitionIndex = requestPartition;
+            partition.CommittedOffset = -1;
+            partition.ErrorCode = NONE_ERROR;
             topic.Partitions.push_back(partition);
         }
     } else {

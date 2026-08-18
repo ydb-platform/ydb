@@ -50,7 +50,14 @@ from ydb.tools.ydb_bench.lib.topology import (
     topology_record,
 )
 from ydb.tools.ydb_bench.lib.import_results import export_archive, import_archive
-from ydb.tools.ydb_bench.lib.web import RunService, chart_data, comparison_keys, make_server, read_model
+from ydb.tools.ydb_bench.lib.web import (
+    RunService,
+    _add_memory_fairness_rows,
+    chart_data,
+    comparison_keys,
+    make_server,
+    read_model,
+)
 
 
 class YdbBenchTest(unittest.TestCase):
@@ -1860,6 +1867,35 @@ class WebTest(unittest.TestCase):
         self.assertEqual(value["series"][1]["cpus"], [0, 1, 2, 4])
         self.assertIn("dimension_metadata", value)
 
+    def test_memory_fairness_is_derived_per_repeat_before_aggregation(self):
+        dimensions = ["threads", "random_percent", "scope", "worker_aggregation"]
+        rows = []
+        for repeat, minimum, maximum, mean in ((1, 80, 120, 100), (2, 90, 110, 100)):
+            for aggregation, value in (("min", minimum), ("max", maximum), ("mean", mean)):
+                rows.append(
+                    {
+                        "threads": 4,
+                        "random_percent": 50,
+                        "scope": "random",
+                        "worker_aggregation": aggregation,
+                        "repeat_aggregation": "raw",
+                        "repeat": repeat,
+                        "ops_per_sec": value,
+                    }
+                )
+        grouped = {"none": rows}
+        _add_memory_fairness_rows(grouped, dimensions)
+        raw = [row for row in rows if row.get("worker_aggregation") == "fairness" and row["repeat"] != "*"]
+        self.assertEqual([row["worker_max_min_spread_pct"] for row in raw], [40, 20])
+        self.assertEqual([row["worker_mean_min_gap_pct"] for row in raw], [20, 10])
+        median = next(
+            row
+            for row in rows
+            if row.get("worker_aggregation") == "fairness" and row.get("repeat_aggregation") == "median"
+        )
+        self.assertEqual(median["worker_max_min_spread_pct"], 30)
+        self.assertEqual(median["worker_mean_min_gap_pct"], 15)
+
     def test_web_static_api_is_csp_protected_and_read_only(self):
         self._manifest(self.root / "complete")
         server = make_server("127.0.0.1", 0, self.root)
@@ -1892,7 +1928,25 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"class=parameter-choice", script)
                 self.assertIn(b"Incomplete data:", script)
                 self.assertIn(b"function mountChartBuilder", script)
+                self.assertIn(b"function defaultActorCharts", script)
+                self.assertIn(b"function defaultMemoryCharts", script)
+                self.assertIn(b"function defaultChartScope", script)
+                self.assertIn(b"['actorPairs','in_flight']", script)
+                self.assertIn(b"['actorPairs','star_multiply']", script)
+                self.assertIn(b"metric:'median_msgs_per_sec'", script)
+                self.assertIn(b"chartTitle=scope.title", script)
+                self.assertIn(b"title:facets.map", script)
+                self.assertIn(b"worker_max_min_spread_pct", script)
+                self.assertIn(b"worker_mean_min_gap_pct", script)
                 self.assertIn(b"function mountSingleChart", script)
+                self.assertIn(b"function chartMultiplierDimensions", script)
+                self.assertIn(b"function labelExpandedSeries", script)
+                self.assertIn(b"queried.has(name)", script)
+                self.assertIn(b"varyingFacets", script)
+                self.assertIn(b"matched.map(item=>item.facets", script)
+                self.assertIn(b"indexed.length===1", script)
+                self.assertIn(b"singleProfile:true", script)
+                self.assertIn(b"{...chart,id:nextId++}", script)
                 self.assertIn(b"function expandedSeries", script)
                 self.assertIn(b"Add line row", script)
                 self.assertIn(b"class=query-row", script)

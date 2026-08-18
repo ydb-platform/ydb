@@ -679,17 +679,14 @@ public:
         }
     }
 
-    bool IsResolving() const {
-        return ResolveAttempts > 0;
-    }
-
     void RetryResolve() {
-        if (!IsResolving()) {
+        if (!ResolvingInProgress) {
             Resolve();
         }
     }
 
     void Resolve() {
+        ResolvingInProgress = true;
         AFL_ENSURE(InconsistentTx || IsOlap);
         TableWriteActorSpan = NWilson::TSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(ParentTraceId),
             "WaitForTableResolve", NWilson::EFlags::AUTO_END);
@@ -749,6 +746,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        ResolvingInProgress = false;
         auto& resultSet = ev->Get()->Request->ResultSet;
         YQL_ENSURE(resultSet.size() == 1);
 
@@ -809,12 +807,26 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        ResolvingInProgress = false;
         auto* request = ev->Get()->Request.Get();
 
         if (request->ErrorCount > 0) {
             YDB_LOG_ERROR("Failed to resolve table shards from scheme cache.",
                 {"logPrefix", this->LogPrefix},
                 {"table", TableId});
+            // For inconsistent-tx (streaming) row-table writes there was no attempt
+            // counter here, so a deleted table caused an infinite internal retry loop
+            // inside the actor.  Mirror the OLAP path: after MaxResolveAttempts give
+            // up and surface a SCHEME_ERROR so the session actor can propagate it to
+            // the streaming-query retry policy (which will restart the whole execution).
+            if (ResolveAttempts++ >= MessageSettings.MaxResolveAttempts) {
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::SCHEME_ERROR,
+                    NYql::TIssuesIds::KIKIMR_SCHEME_ERROR,
+                    TStringBuilder()
+                        << "Too many table resolve attempts for table `" << TablePath << "`.");
+                return;
+            }
             PlanResolve();
             return;
         }
@@ -1681,6 +1693,7 @@ private:
     std::optional<NSchemeCache::TSchemeCacheNavigate::TEntry> SchemeEntry;
     TPartitioning::TCPtr Partitioning;
     ui64 ResolveAttempts = 0;
+    bool ResolvingInProgress = false;
 
     IKqpTransactionManagerPtr TxManager;
     bool Closed = false;

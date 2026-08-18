@@ -31,7 +31,7 @@ from yandex.cloud.lockbox.v1.payload_service_pb2_grpc import PayloadServiceStub
 def metadata_query(path):
     headers = {"Metadata-Flavor": "Google"}
     # noinspection HttpUrlsUsage
-    return requests.get(f"http://169.254.169.254{path}", headers=headers)
+    return requests.get(f"http://169.254.169.254{path}", headers=headers, timeout=(30, 60))
 
 
 def discover_folder_id():

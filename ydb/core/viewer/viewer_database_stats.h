@@ -67,6 +67,9 @@ class TJsonDatabaseStats : public TViewerPipeClient {
     NKikimrSysView::TStoragePoolEntry StaticStoragePool;
     std::unordered_map<TStoragePoolId, const NKikimrSysView::TStoragePoolEntry&> StoragePools;
     std::unordered_map<TGroupId, const NKikimrSysView::TGroupEntry&> StorageGroups;
+    // StorageNodesComputed=false is not the same as empty StorageNodes when processing responses,
+    // because storage nodes may be filtered out i.e. by not belonging to the requested database.
+    bool StorageNodesComputed = false;
 
     bool Streaming = false;
     NKikimrViewer::TDatabaseStats Result;
@@ -277,7 +280,8 @@ public:
             }
             Result.SetStorageGroups(StorageGroups.size());
         }
-        if (VSlotsResponse.IsOk() && !StorageGroups.empty() && StorageNodes.empty()) {
+        if (VSlotsResponse.IsOk() && !StorageGroups.empty() && !StorageNodesComputed) {
+            StorageNodesComputed = true;
             std::unordered_set<TNodeId> storageNodes;
             for (const auto& vslot : VSlotsResponse->Record.GetEntries()) {
                 const NKikimrSysView::TVSlotInfo& info = vslot.GetInfo();
@@ -659,6 +663,7 @@ public:
         StoragePools.clear();
         StorageGroups.clear();
         StorageNodes.clear();
+        StorageNodesComputed = false;
         SystemStateResponse.clear();
         NodeStateResponse.clear();
         PDiskStateResponse.clear();

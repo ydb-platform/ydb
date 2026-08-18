@@ -66,12 +66,12 @@ def get_parser(generate_func, extra_cfg_arguments=[]):
     parser_cfg.add_argument(
         '--dynamic-node', action='store_true', help='Indicates that configuration should be generated for dynamic node'
     )
-    parser_cfg.add_argument('--node-broker-port', type=str, help='Node Broker Port to use')
+    parser_cfg.add_argument('--node-broker-port', type=int, help='Node Broker Port to use')
     parser_cfg.add_argument('--cfg-home', type=str, help='Configuration home directory')
     parser_cfg.add_argument('--binaries-home', type=str, help='Binaries home directory')
     parser_cfg.add_argument('--local-binary-path', type=str, help='Path to kikimr binary current host')
     for port in ('grpc-port', 'ic-port', 'mon-port', 'mbus-port', 'sqs-port'):
-        parser_cfg.add_argument('--%s' % port, type=str, help='Port to be used during KiKiMR server start')
+        parser_cfg.add_argument('--%s' % port, type=int, help='Port to be used during KiKiMR server start')
 
     for v in extra_cfg_arguments:
         parser_cfg.add_argument(

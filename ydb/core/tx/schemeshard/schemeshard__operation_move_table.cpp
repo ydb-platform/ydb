@@ -820,8 +820,6 @@ public:
             if (!srcPath->IsTable() && !srcPath->IsColumnTable()) {
                 result->SetError(NKikimrScheme::StatusPreconditionFailed, "Cannot move non-tables");
             }
-<<<<<<< HEAD
-=======
             if (srcPath->IsColumnTable()) {
                 if (srcPath.Parent()->IsOlapStore()) {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed,
@@ -836,7 +834,6 @@ public:
                 }
             }
 
->>>>>>> cfcb48bc0e7 (Disable moving column tables with tiering configured (#50025))
             TPath::TChecker checks = srcPath.Check();
             checks
                 .NotEmpty()

@@ -409,7 +409,25 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         result = session.ExecuteDataQuery(Q_(R"(
             UPSERT INTO `/Root/HnswPrefix` (pk, user, emb) VALUES
                 (1, "user_a", Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
-                (2, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector"));
+                (2, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (3, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (4, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (5, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (6, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (7, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (8, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (9, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (10, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (11, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (12, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (13, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (14, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (15, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (16, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (17, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (18, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (19, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (20, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector"));
         )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
@@ -431,8 +449,9 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             LIMIT 1;
         )"));
 
-        // The first read starts the lazy build. Subsequent reads must use the
-        // cache without allowing the closer row from user_b to escape its key range.
+        // There are more closer out-of-prefix rows than the default efSearch.
+        // A restricted read must use the exact range iterator rather than
+        // assuming Search(k = index size) exhausts the HNSW graph.
         for (ui32 attempt = 0; attempt < 3; ++attempt) {
             auto queryResult = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());

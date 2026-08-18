@@ -187,6 +187,9 @@ TVector<ISubOperation::TPtr> ApplyBuildIndex(TOperationId nextId, const TTxTrans
         // name and settings are needed for the eager posting-table HNSW build.
         TString embeddingColumn;
         if (config.HasVectorIndexKmeansTreeDescription()) {
+            // KMeans tree index keys are defined as [prefix..., embedding].
+            // Keep this extraction under the vector-index type guard so a
+            // future index layout cannot accidentally reuse the convention.
             const auto buildIt = context.SS->IndexBuilds.find(TIndexBuildId(config.GetBuildIndexId()));
             if (buildIt != context.SS->IndexBuilds.end() && !buildIt->second->IndexColumns.empty()) {
                 embeddingColumn = buildIt->second->IndexColumns.back();

@@ -2597,6 +2597,11 @@ private:
     // Populated in EnqueueRowIdResolve, consumed in RowIdResolveResult.
     absl::flat_hash_map<ui64, std::vector<TDocInfoPtr>> RowIdResolveItems;
 
+    // For non-relevance searches: documents awaiting row-id resolution, dispatched
+    // in batches of RowIdResolveBatchSize to avoid issuing massive reads all at once.
+    std::deque<TDocInfoPtr> RowIdResolvePendingQueue;
+    static constexpr size_t RowIdResolveBatchSize = 5000;
+
     // Read infrastructure.
     TReadsState ReadsState;                                // Tracks all in-flight reads
     TReadItemsQueue<TDocInfoPtr> DocsReadingQueue;         // Docs table + main table reads
@@ -2676,6 +2681,7 @@ private:
     //   4. Otherwise -> enqueue main table reads for full row data.
     void FetchDocumentDetails(std::vector<TDocInfoPtr>& docInfos) {
         if (Limit > 0 && ProducedItemsCount + ResultQueue.size() >= static_cast<ui64>(Limit)) {
+            RowIdResolvePendingQueue.clear();
             return;
         }
 
@@ -2709,7 +2715,17 @@ private:
         // (HasPkResolved == true), so re-entry from RowIdResolveResult proceeds
         // straight to the covered check / main-table read.
         if (UseRowIdAsDocId && !docInfos.empty() && !docInfos.front()->HasPkResolved()) {
-            EnqueueRowIdResolve(docInfos);
+            if (!MainTableReader->GetWithRelevance()) {
+                // Non-relevance mode: enqueue docs and resolve in batches to avoid
+                // issuing a single huge read for all matched documents at once.
+                for (auto& doc : docInfos) {
+                    RowIdResolvePendingQueue.emplace_back(std::move(doc));
+                }
+                docInfos.clear();
+                DrainRowIdResolveQueue();
+            } else {
+                EnqueueRowIdResolve(docInfos);
+            }
             return;
         }
 
@@ -3146,7 +3162,7 @@ public:
     }
 
     bool IsFinished() {
-        return (ReadsState.Empty() && !ResolveInProgress && ResultQueue.empty() && TopKQueue.empty()) || (Limit > 0 && ProducedItemsCount >= static_cast<ui64>(Limit));
+        return (ReadsState.Empty() && !ResolveInProgress && ResultQueue.empty() && TopKQueue.empty() && RowIdResolvePendingQueue.empty()) || (Limit > 0 && ProducedItemsCount >= static_cast<ui64>(Limit));
     }
 
     // Send TEvNewAsyncInputDataArrived to the compute actor so it calls
@@ -3445,6 +3461,22 @@ public:
         }
     }
 
+    // Drain RowIdResolvePendingQueue in batches of RowIdResolveBatchSize.
+    void DrainRowIdResolveQueue() {
+        if (RowIdResolvePendingQueue.empty() || !RowIdResolveItems.empty()) {
+            return;
+        }
+
+        size_t count = std::min(RowIdResolvePendingQueue.size(), RowIdResolveBatchSize);
+        std::vector<TDocInfoPtr> batch;
+        batch.reserve(count);
+        for (size_t i = 0; i < count; ++i) {
+            batch.emplace_back(std::move(RowIdResolvePendingQueue.front()));
+            RowIdResolvePendingQueue.pop_front();
+        }
+        EnqueueRowIdResolve(batch);
+    }
+
     // Process unique-index resolve results: match returned rows by __ydb_row_id
     // (the first cell of the impl-table key) to the corresponding docs and
     // assign their primary-key cells from the remaining key columns.  When the
@@ -3487,6 +3519,8 @@ public:
                     "Missing __ydb_row_id " << doc->DocumentNumId << " in unique index (orphan posting entry)");
             }
             FetchDocumentDetails(resolvedDocs);
+            // Dispatch the next batch from the pending queue (non-relevance batching).
+            DrainRowIdResolveQueue();
         }
     }
 

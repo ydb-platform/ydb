@@ -515,11 +515,18 @@ Y_UNIT_TEST_SUITE(TKqpUserFacingTrace) {
         UNIT_ASSERT_C(roundTrip,
             "proxy did not measure the full session round trip");
         auto session = userRoot->FindOne("Session");
-        UNIT_ASSERT_C(session, "KQP session actor span missing");
+        UNIT_ASSERT_C(session,
+            "KQP session actor span missing: " << userUploader->PrintTraces());
         const auto* sessionSpan = FindSpan(*userUploader, "Session");
         UNIT_ASSERT(sessionSpan);
         const auto* roundTripSpan = FindSpan(*userUploader, "KQP session round trip");
         UNIT_ASSERT(roundTripSpan);
+        const auto* rootSpan = FindSpan(*userUploader, "SELECT /Root/table-1");
+        UNIT_ASSERT(rootSpan);
+        UNIT_ASSERT_VALUES_EQUAL(sessionSpan->trace_id(), rootSpan->trace_id());
+        UNIT_ASSERT_VALUES_EQUAL(roundTripSpan->trace_id(), rootSpan->trace_id());
+        UNIT_ASSERT_VALUES_EQUAL(sessionSpan->parent_span_id(), rootSpan->span_id());
+        UNIT_ASSERT_VALUES_EQUAL(roundTripSpan->parent_span_id(), rootSpan->span_id());
         UNIT_ASSERT(roundTripSpan->start_time_unix_nano()
             <= sessionSpan->start_time_unix_nano());
         UNIT_ASSERT(roundTripSpan->end_time_unix_nano()

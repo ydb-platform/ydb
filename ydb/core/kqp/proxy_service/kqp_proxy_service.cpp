@@ -1009,20 +1009,23 @@ public:
             {"targetId", targetId});
         auto status = timerDuration == cancelAfter ? NYql::NDqProto::StatusIds::CANCELLED : NYql::NDqProto::StatusIds::TIMEOUT;
         StartQueryTimeout(requestId, timerDuration, status);
+        TInstant userFacingTraceSentAt;
         if (ev->Get()->Record.HasUserFacingTraceId()) {
             const auto& seed = ev->Get()->GetProxyTraceSeed();
             Y_ABORT_UNLESS(seed);
             const TDuration hopDuration = TMonotonic::Now() - seed->StartedAt;
+            userFacingTraceSentAt = seed->StartTime + hopDuration;
             if (!ev->Get()->Record.HasUserFacingTraceOriginSentAtUs()) {
                 ev->Get()->Record.SetUserFacingTraceOriginSentAtUs(
-                    (seed->StartTime + hopDuration).MicroSeconds());
+                    userFacingTraceSentAt.MicroSeconds());
             }
             auto* hop = ev->Get()->Record.AddProxyRequestHops();
             hop->SetNodeId(SelfId().NodeId());
             hop->SetTargetNodeId(targetId.NodeId());
             hop->SetDurationUs(hopDuration.MicroSeconds());
         }
-        PendingRequests.MarkUserFacingTraceSent(requestId, targetId.NodeId());
+        PendingRequests.MarkUserFacingTraceSent(
+            requestId, targetId.NodeId(), userFacingTraceSentAt);
         Send(targetId, ev->Release().Release(), IEventHandle::FlagTrackDelivery, requestId, std::move(ev->TraceId));
     }
 

@@ -55,11 +55,9 @@ public:
         return {std::move(ParentTraceId), std::move(RootTraceId)};
     }
 
-    void MarkSent(ui32 targetNodeId) {
+    void MarkSent(ui32 targetNodeId, TInstant sentAt) {
         TargetNodeId = targetNodeId;
-        if (Seed) {
-            SentAt = Seed->StartTime + (NActors::TMonotonic::Now() - Seed->StartedAt);
-        }
+        SentAt = sentAt;
     }
 
     const auto& GetSeed() const {
@@ -121,9 +119,9 @@ struct TKqpProxyRequest {
         }
     }
 
-    void MarkUserFacingTraceSent(ui32 targetNodeId) {
+    void MarkUserFacingTraceSent(ui32 targetNodeId, TInstant sentAt) {
         if (UserFacingTrace) {
-            UserFacingTrace->MarkSent(targetNodeId);
+            UserFacingTrace->MarkSent(targetNodeId, sentAt);
         }
     }
 };
@@ -163,9 +161,9 @@ public:
         ptr->SetSessionId(sessionId, dbCounters);
     }
 
-    void MarkUserFacingTraceSent(ui64 requestId, ui32 targetNodeId) {
+    void MarkUserFacingTraceSent(ui64 requestId, ui32 targetNodeId, TInstant sentAt) {
         if (auto* ptr = PendingRequests.FindPtr(requestId)) {
-            ptr->MarkUserFacingTraceSent(targetNodeId);
+            ptr->MarkUserFacingTraceSent(targetNodeId, sentAt);
         }
     }
 

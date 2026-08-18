@@ -116,7 +116,7 @@ std::optional<TExecutionDiagnosticsPolicy> MakeExecutionDiagnosticsPolicy(const 
     if (!queryState || !queryState->UserFacingTrace) {
         return std::nullopt;
     }
-    return queryState->UserFacingTrace->DiagnosticsPolicy;
+    return queryState->UserFacingTrace->GetDiagnosticsPolicy();
 }
 
 class TRequestFail : public yexception {
@@ -355,7 +355,7 @@ public:
             "Cannot send to workload manager: PoolConfig is already resolved");
 
         if (QueryState->UserFacingTrace) {
-            QueryState->UserFacingTrace->AdmissionStartedAt = TInstant::Now();
+            QueryState->UserFacingTrace->StartAdmission();
         }
         Send(NWorkloadManager::MakeServiceId(SelfId().NodeId()), new NWorkloadManager::TEvPlaceRequestIntoPool(
             QueryState->QueryId,
@@ -373,7 +373,7 @@ public:
 
     void ForwardRequest(TEvKqp::TEvQueryRequest::TPtr& ev) {
         if (QueryState->UserFacingTrace) {
-            QueryState->UserFacingTrace->ExecutionDelegated = true;
+            QueryState->UserFacingTrace->MarkExecutionDelegated();
         }
         if (!WorkerId) {
             std::unique_ptr<IActor> workerActor(CreateKqpWorkerActor(SelfId(), SessionId, KqpSettings, Settings,
@@ -690,8 +690,7 @@ public:
                 {"logPrefix", LogPrefix()},
                 {"traceId", TraceId()});
             if (QueryState && QueryState->UserFacingTrace) {
-                QueryState->UserFacingTrace->AdmissionFinishedAt = TInstant::Now();
-                QueryState->UserFacingTrace->AdmissionStatus = Ydb::StatusIds::UNAVAILABLE;
+                QueryState->UserFacingTrace->FinishAdmission(Ydb::StatusIds::UNAVAILABLE);
             }
             ContinueAfterWmAdmission();
             return;
@@ -737,8 +736,8 @@ public:
         }
         QueryState->ContinueTime = TInstant::Now();
         if (QueryState->UserFacingTrace) {
-            QueryState->UserFacingTrace->AdmissionFinishedAt = QueryState->ContinueTime;
-            QueryState->UserFacingTrace->AdmissionStatus = ev->Get()->Status;
+            QueryState->UserFacingTrace->FinishAdmission(
+                ev->Get()->Status, QueryState->ContinueTime);
         }
 
         if (ev->Get()->Status == Ydb::StatusIds::UNSUPPORTED) {
@@ -939,79 +938,31 @@ public:
         if (!QueryState || !QueryState->UserFacingTrace) {
             return;
         }
-        auto& trace = *QueryState->UserFacingTrace;
-        if (trace.ActiveCompileAttempt || trace.OverflowCompileAttempt) {
-            return;
-        }
-        if (trace.CompileAttempts.size() >= MaxCompileAttempts) {
-            trace.OverflowCompileAttempt = TCompileAttemptDiagnostic{.Start = TInstant::Now()};
-            return;
-        }
-        trace.CompileAttempts.push_back({.Start = TInstant::Now()});
-        trace.ActiveCompileAttempt = trace.CompileAttempts.size() - 1;
+        QueryState->UserFacingTrace->BeginCompile();
     }
 
     void MarkCompileCacheHit() {
         if (!QueryState || !QueryState->UserFacingTrace) {
             return;
         }
-        const TInstant now = TInstant::Now();
-        auto& trace = *QueryState->UserFacingTrace;
-        KeepCompileAttempt(trace.CompileAttempts, {
-            .Start = now,
-            .End = now,
-            .FromCache = true,
-            .Status = QueryState->CompileResult->Status,
-        }, trace.CompileAttemptsDropped);
+        QueryState->UserFacingTrace->RecordCompileCacheHit(
+            QueryState->CompileResult->Status);
     }
 
     void MarkCompileEnd(TEvKqp::TEvCompileResponse& response) {
         if (!QueryState || !QueryState->UserFacingTrace) {
             return;
         }
-        auto& trace = *QueryState->UserFacingTrace;
-        if (!trace.ActiveCompileAttempt && !trace.OverflowCompileAttempt) {
-            return;
-        }
-        auto& attempt = trace.ActiveCompileAttempt
-            ? trace.CompileAttempts[*trace.ActiveCompileAttempt]
-            : *trace.OverflowCompileAttempt;
-        attempt.End = TInstant::Now();
-        attempt.FromCache = response.Stats.FromCache;
-        attempt.Status = response.CompileResult->Status;
-        attempt.Dependencies = std::move(response.CompileDiagnostics);
-        attempt.Actor = response.CompileActorDiagnostic;
-        attempt.Partial = !attempt.FromCache && !attempt.Actor;
-        if (trace.OverflowCompileAttempt) {
-            KeepCompileAttempt(trace.CompileAttempts,
-                std::move(*trace.OverflowCompileAttempt), trace.CompileAttemptsDropped);
-            trace.OverflowCompileAttempt.reset();
-        } else {
-            trace.ActiveCompileAttempt.reset();
-        }
+        QueryState->UserFacingTrace->FinishCompile(
+            response.Stats.FromCache, response.CompileResult->Status,
+            std::move(response.CompileDiagnostics), response.CompileActorDiagnostic);
     }
 
     void MarkSplitEnd(const TEvKqp::TEvSplitResponse& response) {
         if (!QueryState || !QueryState->UserFacingTrace) {
             return;
         }
-        auto& trace = *QueryState->UserFacingTrace;
-        if (!trace.ActiveCompileAttempt && !trace.OverflowCompileAttempt) {
-            return;
-        }
-        auto& attempt = trace.ActiveCompileAttempt
-            ? trace.CompileAttempts[*trace.ActiveCompileAttempt]
-            : *trace.OverflowCompileAttempt;
-        attempt.End = TInstant::Now();
-        attempt.Status = response.Status;
-        attempt.Partial = true;
-        if (trace.OverflowCompileAttempt) {
-            KeepCompileAttempt(trace.CompileAttempts,
-                std::move(*trace.OverflowCompileAttempt), trace.CompileAttemptsDropped);
-            trace.OverflowCompileAttempt.reset();
-        } else {
-            trace.ActiveCompileAttempt.reset();
-        }
+        QueryState->UserFacingTrace->FinishSplit(response.Status);
     }
 
     void SendCompileServiceRequest(IEventBase* request) {
@@ -2885,12 +2836,8 @@ public:
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
         if (QueryState->UserFacingTrace) {
-            auto& trace = *QueryState->UserFacingTrace;
-            AccumulateExecutionTraceTotals(trace.ExecutionTraceTotals,
-                ev->ExecutionTraceTotals);
-            AppendExecutionTraceSnapshots(trace.ExecutionTraces,
-                trace.ExecutionTracesDropped, ev->ExecutionTraces,
-                ev->ExecutionTracesDropped, trace.DiagnosticsPolicy.MaxExecutions);
+            QueryState->UserFacingTrace->AddExecutions(ev->ExecutionTraces,
+                ev->ExecutionTraceTotals, ev->ExecutionTracesDropped);
         }
 
         QueryState->QueryStats.LocksBrokenAsBreaker += ev->LocksBrokenAsBreaker;

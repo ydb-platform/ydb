@@ -1,7 +1,7 @@
 #include "source.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/protos/config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
@@ -81,7 +81,7 @@ const NCommon::TPKSortPermutation& TSourceData::GetChunksPKOrder() const {
     // belt-and-suspenders: IsSorted() already implies the flag (OrderByLimitAllowed gates it), kept explicit
     // so the permutation never builds if the two ever diverge.
     if (!GetContext()->GetReadMetadata()->IsSorted() || !HasAppData() ||
-        !AppDataVerified().ColumnShardConfig.GetEnableSysViewOrderByLimitPushdown()) {
+        !AppDataVerified().FeatureFlags.GetEnableSysViewOrderByLimitPushdown()) {
         return *ChunksPKOrder;
     }
     const auto& records = GetPortionAccessor().GetRecordsVerified();
@@ -244,13 +244,11 @@ std::shared_ptr<arrow::Array> TSourceData::BuildArrayAccessor(const ui64 columnI
     if (columnId == NKikimr::NSysView::Schema::PrimaryIndexStats::EntityType::ColumnId) {
         auto builder = NArrow::MakeBuilder(arrow::utf8());
         ForEachChunkInPKOrder(
-            [&](const TColumnRecord& record) {
-                Y_UNUSED(record);
+            [&](const TColumnRecord&) {
                 const TString type = "COL";
                 NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(type.data(), type.size()));
             },
-            [&](const TIndexChunk& index) {
-                Y_UNUSED(index);
+            [&](const TIndexChunk&) {
                 const TString type = "IDX";
                 NArrow::Append<arrow::StringType>(*builder, arrow::util::string_view(type.data(), type.size()));
             });

@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
     Y_UNIT_TEST(StatsSysViewOrderByPKWithLimit) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableColumnShardConfig()->SetEnableSysViewOrderByLimitPushdown(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableSysViewOrderByLimitPushdown(true);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
@@ -418,7 +418,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
     Y_UNIT_TEST(StatsSysViewOrderByPKWithLimitPassthrough) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
-        settings.AppConfig.MutableColumnShardConfig()->SetEnableSysViewOrderByLimitPushdown(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableSysViewOrderByLimitPushdown(true);
         // Cap held portions at 1 so the limit sync point passes portions straight through to KQP as soon as it holds a
         // second portion.
         settings.AppConfig.MutableColumnShardConfig()->MutableLimitSyncPointConfig()->SetSysViewMaxHeldPortions(1);
@@ -477,7 +477,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableColumnShardConfig()->SetEnableSysViewOrderByLimitPushdown(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableSysViewOrderByLimitPushdown(true);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
 
@@ -637,7 +637,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
 
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true).SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-        settings.AppConfig.MutableColumnShardConfig()->SetEnableSysViewOrderByLimitPushdown(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableSysViewOrderByLimitPushdown(true);
         settings.AppConfig.MutableColumnShardConfig()->MutableLimitSyncPointConfig()->SetSysViewMaxHeldPortions(1);
         TKikimrRunner kikimr(settings);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();

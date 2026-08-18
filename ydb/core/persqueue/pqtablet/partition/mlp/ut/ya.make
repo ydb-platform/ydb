@@ -10,7 +10,9 @@ SIZE(MEDIUM)
 #TIMEOUT(30)
 
 SRCS(
+    mlp_child_sync_ut.cpp
     mlp_commit_ut.cpp
+    mlp_consumer_order_ut.cpp
     mlp_consumer_split_ut.cpp
     mlp_consumer_ut.cpp
     mlp_counters_ut.cpp

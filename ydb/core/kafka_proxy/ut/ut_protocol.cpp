@@ -3411,6 +3411,21 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(retry->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
     }
 
+    Y_UNIT_TEST(GetApiVersionsAdvertisesProduceMinZero) {
+        auto supported = GetApiVersions(2);
+        UNIT_ASSERT_VALUES_EQUAL(supported->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        bool foundProduce = false;
+        for (const auto& key : supported->ApiKeys) {
+            if (key.ApiKey == PRODUCE) {
+                foundProduce = true;
+                UNIT_ASSERT_VALUES_EQUAL(key.MinVersion, 0);
+                UNIT_ASSERT_VALUES_EQUAL(key.MaxVersion, 9);
+            }
+        }
+        UNIT_ASSERT(foundProduce);
+    }
+
     Y_UNIT_TEST(MetadataInServerlessScenario) {
         TInsecureTestServer testServer("1", true);
         TKafkaTestClient client(testServer.Port);

@@ -40,7 +40,8 @@ TApiVersionsResponseData::TPtr GetApiVersions(TKafkaVersion requestVersion) {
 
     response->ErrorCode = EKafkaErrors::NONE_ERROR;
 
-    AddApiKey<TProduceRequestData>(response->ApiKeys, PRODUCE, {.MinVersion=3, .MaxVersion=9});
+    // Advertise Produce min=0 (KAFKA-18659): some librdkafka versions treat min>0 as "Produce unsupported".
+    AddApiKey<TProduceRequestData>(response->ApiKeys, PRODUCE, {.MaxVersion=9});
     AddApiKey<TApiVersionsRequestData>(response->ApiKeys, API_VERSIONS, {.MaxVersion=AdvertisedApiVersionsMax});
     AddApiKey<TMetadataRequestData>(response->ApiKeys, METADATA, {.MaxVersion=9});
     AddApiKey<TInitProducerIdRequestData>(response->ApiKeys, INIT_PRODUCER_ID, {.MaxVersion=4});

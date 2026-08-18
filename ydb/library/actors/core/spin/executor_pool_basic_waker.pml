@@ -173,12 +173,12 @@ proctype Waker() {
          * BLOCKING already or are between the claim and that state change. */
         atomic {
             remaining_reductions = reductions;
-            reductions = 0
+            reductions = 0;
+            assert(previous_reductions >= remaining_reductions);
+            taken_tokens_to_sleep = (taken_tokens_to_sleep
+                + previous_reductions) - remaining_reductions;
+            previous_reductions = 0
         };
-        assert(previous_reductions >= remaining_reductions);
-        taken_tokens_to_sleep = (taken_tokens_to_sleep
-            + previous_reductions) - remaining_reductions;
-        previous_reductions = 0;
 
         /* thread_count is the target accepted by the previous waker pass,
          * while active_count is the physical ActiveWorkers size. Claimed and

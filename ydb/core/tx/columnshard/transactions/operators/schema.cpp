@@ -409,7 +409,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             const auto srcInternalPathId = owner.TablesManager.ResolveInternalPathId(srcSchemeShardLocalPathId, false);
             AFL_VERIFY(srcInternalPathId);
             // CopyTablePlanStep persists dst in TableInfoV1 before progress completes. After tablet restart
-            // dst is already in SchemeShardLocalToInternal, so replay must be idempotent (same as CopyTableProgress).
+            // dst is already in GenerationIndex.Live, so replay must be idempotent (same as CopyTableProgress).
             if (const auto dstInternalPathId = owner.TablesManager.ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
                 AFL_VERIFY(*dstInternalPathId == *srcInternalPathId)("src", *srcInternalPathId)("dst", *dstInternalPathId);
             }
@@ -421,7 +421,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
                 break;
             }
             const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
-            // After restart TruncatingLocalToInternal is empty and SchemeShardLocalToInternal is
+            // After restart TruncatingLocalToInternal is empty and GenerationIndex.Live is
             // rebuilt from DB. Re-fence the path (same as MoveTablePropose replay) so writes stay
             // blocked while TRUNCATE is still pending.
             if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {

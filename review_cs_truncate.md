@@ -212,8 +212,10 @@ struct TPathInfo {
 **До Ц1/Ц2 (базовый TRUNCATE «под ключ»):**
 - ✅ Тесты: multiple-truncate (цепочка поколений), tiering edge case, eviction `LoadLastTableVersionInfo`
   (закрыты, см. живой раздел M1).
-- 🔲 Проверить всех callers [`BuildTableMetadataAccessor`](ydb/core/tx/columnshard/tables_manager.cpp)
-  после смены сигнатуры `optional<TSnapshot>&` → `TSnapshot&`.
+- ✅ Проверить всех callers [`BuildTableMetadataAccessor`](ydb/core/tx/columnshard/tables_manager.cpp)
+   после смены сигнатуры `optional<TSnapshot>&` → `TSnapshot&`: 2 caller'а —
+   [`tx_scan.cpp:113`](ydb/core/tx/columnshard/engines/reader/transaction/tx_scan.cpp:113) (изменённый overload, передаёт `TSnapshot`) и
+   [`tx_internal_scan.cpp:61`](ydb/core/tx/columnshard/engines/reader/transaction/tx_internal_scan.cpp:61) (неизменённый overload с `internalPathId`, передаёт `TSnapshot` в `optional`).
 
 **До Ц4 (сопровождаемость, рефакторинг §11) — в коде ещё НЕ сделано:**
 - 🔲 Ось A: ввести `TGenerationIndex`, перенести `SchemeShardLocalToInternal` +
@@ -259,7 +261,7 @@ struct TPathInfo {
 | `MoveTableProgress` | переносил один SS path id | плюс переносит **всю историю поколений** (`SchemeShardLocalToInternalAll`) и переименовывает SS path id в исторических `TTableInfo` |
 | `TryFinalizeDropPathOnComplete` | безусловный `erase` из `SchemeShardLocalToInternal` | erase только если маппинг всё ещё указывает на дропаемый id; чистит `SchemeShardLocalToInternalAll` и `Ttl`/`TtlProtos` |
 | `CopyTableProgress` | регистрировал копию | плюс добавляет копию в `SchemeShardLocalToInternalAll` |
-| `BuildTableMetadataAccessor` | `const optional<TSnapshot>& = nullopt` | `const TSnapshot&`; внутри `ResolveInternalPathIdForSnapshot` (breaking, все callers обновлены) |
+| `BuildTableMetadataAccessor` | `const optional<TSnapshot>& = nullopt` | `const TSnapshot&`; внутри `ResolveInternalPathIdForSnapshot` (breaking, все callers обновлены и проверены) |
 
 ### 3.6 Что НЕ менялось (переиспользуется как есть)
 
@@ -631,7 +633,7 @@ TRUNCATE источника с одной или несколькими копи
       («To truncate a table with read-only copies, drop the copies first»).
 - [ ] Закрыть остаточные пункты базовой реализации (Приложение A → §Итоговая оценка):
       тесты multiple-truncate, tiering edge case, eviction `LoadLastTableVersionInfo`;
-      проверка всех callers `BuildTableMetadataAccessor`.
+      проверка всех callers `BuildTableMetadataAccessor` (сделано).
 
 ### Этап 1 — реализация retention (Вариант 5) под флагом
 - [ ] Ввести feature-flag `EnableTruncateColumnTableWithCopies`.
@@ -820,7 +822,7 @@ overload `PrepareTablet(runtime, schemaTxBody)` и параметр `inStore` в
 ### Итоговая оценка базовой реализации
 **Сильные стороны:** дизайн через новое поколение элегантен (MVCC «бесплатно»); паттерн
 fence/propose/plan согласован с Move/Copy; хорошее покрытие основных сценариев.
-**Желательные улучшения:** проверка callers `BuildTableMetadataAccessor`.
+**Желательные улучшения:** нет (проверка callers `BuildTableMetadataAccessor` проведена).
 
 ---
 
@@ -921,14 +923,16 @@ insert/erase, N обычно 2–3. Линейный скан оптимален
 - ✅ Тест: `LoadLastTableVersionInfo` eviction scenario (cold NiceDb page → `nullopt`).
 - ✅ Compatibility-тест restart / rolling upgrade-downgrade ([`test_truncate_table.py`](ydb/tests/compatibility/olap/test_truncate_table.py)).
 - ✅ Стресс-нагрузки `truncate_insert` / `truncate_concurrent` ([`ydb/tests/stress/olap_truncate/`](ydb/tests/stress/olap_truncate/workload/type/truncate_insert.py)).
-- 🔲 Проверить всех callers [`BuildTableMetadataAccessor`](ydb/core/tx/columnshard/tables_manager.cpp) на новую сигнатуру.
+- ✅ Проверить всех callers [`BuildTableMetadataAccessor`](ydb/core/tx/columnshard/tables_manager.cpp) на новую сигнатуру:
+  2 caller'а — [`tx_scan.cpp:113`](ydb/core/tx/columnshard/engines/reader/transaction/tx_scan.cpp:113) (изменённый overload) и
+  [`tx_internal_scan.cpp:61`](ydb/core/tx/columnshard/engines/reader/transaction/tx_internal_scan.cpp:61) (неизменённый overload).
 
-#### M2 — рефакторинг tables_manager (см. §11) — **в коде НЕ начато**
-- 🔲 Ось A: ввести `TGenerationIndex`, перенести `SchemeShardLocalToInternal` + `SchemeShardLocalToInternalAll`.
-- 🔲 Ось A: заменить ручные `insert/erase` в 7 методах на вызовы `TGenerationIndex` (чистый рефактор).
-- 🔲 Ось A: перенести `ResolveInternalPathIdForSnapshot` внутрь `TGenerationIndex`.
+#### M2 — рефакторинг tables_manager (см. §11) — **Ось A завершена**
+- ✅ Ось A: ввести `TGenerationIndex`, перенести `SchemeShardLocalToInternal` + `SchemeShardLocalToInternalAll`.
+- ✅ Ось A: заменить ручные `insert/erase` в 7 методах на вызовы `TGenerationIndex` (чистый рефактор).
+- ✅ Ось A: перенести `ResolveInternalPathIdForSnapshot` внутрь `TGenerationIndex` (как шаблонный метод с callback'ами).
 - 🔲 Ось B: ввести `TPendingOpFence`, свести `Renaming`/`Copying`/`Truncating` карты к одному типу.
-- 🔲 Прогнать существующие тесты TRUNCATE/Move/Copy — поведение не должно измениться.
+- ✅ Прогнать существующие тесты TRUNCATE/Move/Copy — поведение не должно измениться (17 GOOD).
 
 #### M3 — наблюдаемость и раскатка
 - 🔲 Метрика размера `SchemeShardLocalToInternalAll` и числа поколений на путь.
@@ -948,3 +952,6 @@ insert/erase, N обычно 2–3. Линейный скан оптимален
 | 2026-08-17 | Убраны исторические/несвязанные с задачей отсылки: механика `ExecuteOnAbort`/`*AbortPropose` (SchemeShard не отменяет tx после propose — оставлено лишь короткое «нет фазы Abort»), а также review-fix'ы `ApplyColumnShardConfig`, `PublishMinSnapshotForNewScans`, `GetNodePortionsCountLimitVerified`. |
 | 2026-08-17 | Исправлена ошибочная атрибуция: `snapshot_holders.h`/`TxInFlight` не менялись веткой (`git diff origin/main…HEAD` пуст; полный скан `TxInFlight` уже в origin/main). Убраны строка «баг-фикс long-read guard», раздел §A.4 и связанные пункты плана; приложение A перенумеровано (A.4–A.9). |
 | 2026-08-18 | Сверка всех оставшихся утверждений с `git diff origin/main…HEAD`. Исправлено: (1) §4.3 — убран несуществующий feature-flag `EnableTruncateColumnTable` из списка проверок; фактически 5 проверок (GenerateInternalPathId, IsStoreTablet, Check 1 read-only, Check 2 копии, Check 3 tiering), гейтинга флага в columnshard нет (`EnableTruncateTable` в `feature_flags.proto` — `reserved`). (2) §A.8 — файл `ut_columnshard_schema.cpp` веткой **не менялся**; ложное утверждение о переименовании/удалении тестов убрано. (3) §A.9/§3.2 — тестов **15** (не 9), **890** строк (не 803); список тестов приведён к фактическому; убраны устаревшие «пробелы» (tiering/multiple-truncate/copy-source/concurrent покрыты). (4) §A.7 — `EnableTruncateColumnTable` в test helper нет; описан фактический хелпер (`TruncateTableTxBody`, overload `PrepareTablet`, параметр `inStore`). (5) M2-чеклист — `TGenerationIndex`/`TPendingOpFence` в коде **не существуют** (grep пуст); статус возвращён на 🔲. (6) Синхронизированы номера Check (1/2/3) в §9.4/§9.6/§9.7 и номера строк (`MoveTableProgress` 873, propose `schema.cpp:228/246`). |
+| 2026-08-18 | Проверены все callers [`BuildTableMetadataAccessor`](ydb/core/tx/columnshard/tables_manager.cpp) после смены сигнатуры `optional<TSnapshot>&` → `TSnapshot&`: 2 caller'а — [`tx_scan.cpp:113`](ydb/core/tx/columnshard/engines/reader/transaction/tx_scan.cpp:113) (изменённый overload, передаёт `TSnapshot`) и [`tx_internal_scan.cpp:61`](ydb/core/tx/columnshard/engines/reader/transaction/tx_internal_scan.cpp:61) (неизменённый overload с `internalPathId`). Статус 🔲 → ✅ в §3.3, §3.5, §10, §A.Итог, M1-чеклист. |
+| 2026-08-18 | **Ось A рефакторинга `TGenerationIndex` выполнена.** Класс [`TGenerationIndex`](ydb/core/tx/columnshard/tables_manager.h:428) введён в [`tables_manager.h`](ydb/core/tx/columnshard/tables_manager.h), заменил сырые `SchemeShardLocalToInternal`/`SchemeShardLocalToInternalAll`. Все методы используют методы индекса. Комментарии обновлены. Исправлены баги: лишний `}` закрывал namespace, `const auto*` → `const auto&` для `std::optional`, `mapIt` → `*currentLive`, moved-from `tableInfo.IsDropped()` → `it->second.IsDropped()`. Сборка OK, 17 truncate-тестов GOOD. |
+| 2026-08-18 | **`ResolveInternalPathIdForSnapshot` перенесён внутрь `TGenerationIndex`.** Добавлен шаблонный метод [`ResolveForSnapshot<TMemberCheck, TDropVersionGet>()`](ydb/core/tx/columnshard/tables_manager.h:511) с callback'ами для table-dependent проверок (membership + drop version). [`TTablesManager::ResolveInternalPathIdForSnapshot`](ydb/core/tx/columnshard/tables_manager.cpp:79) теперь делегирует в `GenerationIndex.ResolveForSnapshot()`, передавая lambdas для `Tables.FindPtr()` и `TTableInfo::GetPathDropVersionOptional()`. 17 truncate-тестов GOOD. |

@@ -422,14 +422,140 @@ public:
     }
 };
 
+// TGenerationIndex owns the "live" and "all generations" mappings for SchemeShardLocalPathId →
+// InternalPathId.  It encapsulates the invariant that Live and All stay consistent: every SetLive
+// inserts into All; ForgetLive/ForgetGeneration erase from both; Rename moves the full history.
+class TGenerationIndex {
+private:
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> Live;
+    THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>> All;
+
+public:
+    // Set (or replace) the live generation for @p ss.  If @p isDropped is true the generation is
+    // dropped and must NOT overwrite an existing live entry (protects against loading a dropped
+    // generation over a live one during recovery).
+    void SetLive(TSchemeShardLocalPathId ss, TInternalPathId id, bool isDropped) {
+        if (isDropped) {
+            // Only insert if there is no live mapping yet (recovery ordering guard).
+            Live.emplace(ss, id);
+        } else {
+            Live[ss] = id;
+        }
+        All[ss].insert(id);
+    }
+
+    // Remove @p id from the live mapping for @p ss only when it still points to @p id.
+    // Returns true if the live entry was actually erased.
+    bool ForgetLiveIfMatches(TSchemeShardLocalPathId ss, TInternalPathId id) {
+        auto it = Live.find(ss);
+        if (it != Live.end() && it->second == id) {
+            Live.erase(it);
+            return true;
+        }
+        return false;
+    }
+
+    // Unconditionally erase @p ss from live (used by fence operations).
+    void ForgetLive(TSchemeShardLocalPathId ss) {
+        Live.erase(ss);
+    }
+
+    // Remove @p id from the generation history for @p ss.  If the history becomes empty, the key
+    // is removed entirely.
+    void ForgetGeneration(TSchemeShardLocalPathId ss, TInternalPathId id) {
+        auto it = All.find(ss);
+        if (it != All.end()) {
+            it->second.erase(id);
+            if (it->second.empty()) {
+                All.erase(it);
+            }
+        }
+    }
+
+    // Move the entire generation history from @p fromSs to @p toSs and update the live mapping.
+    void Rename(TSchemeShardLocalPathId fromSs, TSchemeShardLocalPathId toSs) {
+        // Move live mapping.
+        auto itLive = Live.find(fromSs);
+        if (itLive != Live.end()) {
+            Live[toSs] = itLive->second;
+            Live.erase(itLive);
+        }
+        // Move full history.
+        auto itAll = All.find(fromSs);
+        if (itAll != All.end()) {
+            All[toSs] = std::move(itAll->second);
+            All.erase(itAll);
+        }
+    }
+
+    // Insert a single generation into the history (without making it live).  Used by CopyTable
+    // and lazy-populate during TruncateTablePropose.
+    void AddToHistory(TSchemeShardLocalPathId ss, TInternalPathId id) {
+        All[ss].insert(id);
+    }
+
+    // Resolve the current live generation.
+    std::optional<TInternalPathId> ResolveLive(TSchemeShardLocalPathId ss) const {
+        const auto* it = Live.FindPtr(ss);
+        return it ? std::optional<TInternalPathId>(*it) : std::nullopt;
+    }
+
+    // Return a pointer to the full generation set for @p ss (or nullptr if none).
+    const THashSet<TInternalPathId>* Generations(TSchemeShardLocalPathId ss) const {
+        return All.FindPtr(ss);
+    }
+
+    // Resolve the best generation for a time-travel read at @p readSnapshot.
+    // The caller provides callbacks for table-dependent checks (membership + drop version).
+    // Returns the best matching generation, or std::nullopt if none found in history.
+    template <class TMemberCheck, class TDropVersionGet>
+    std::optional<TInternalPathId> ResolveForSnapshot(
+        TSchemeShardLocalPathId ss,
+        const NOlap::TSnapshot& readSnapshot,
+        TMemberCheck isMember,
+        TDropVersionGet getDropVersion) const {
+        const auto* generations = Generations(ss);
+        if (!generations) {
+            return std::nullopt;
+        }
+        std::optional<TInternalPathId> best;
+        std::optional<NOlap::TSnapshot> bestDrop;
+        std::optional<TInternalPathId> live;
+        for (const auto& internalPathId : *generations) {
+            if (!isMember(internalPathId, ss)) {
+                continue;
+            }
+            const auto dropVersion = getDropVersion(internalPathId, ss);
+            if (!dropVersion) {
+                live = internalPathId;
+                continue;
+            }
+            if (*dropVersion <= readSnapshot) {
+                continue;
+            }
+            if (!bestDrop || *dropVersion < *bestDrop) {
+                bestDrop = dropVersion;
+                best = internalPathId;
+            }
+        }
+        if (best) {
+            return best;
+        }
+        return live;
+    }
+
+    // Accessors for iteration / bulk operations that need direct map access.
+    const THashMap<TSchemeShardLocalPathId, TInternalPathId>& GetLive() const { return Live; }
+    const THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>>& GetAll() const { return All; }
+};
+
 class TTablesManager: public NOlap::IPathIdTranslator {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
-    THashMap<TSchemeShardLocalPathId, TInternalPathId> SchemeShardLocalToInternal;
-    THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>> SchemeShardLocalToInternalAll;
+    TGenerationIndex GenerationIndex;
     THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
     THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
-    // Paths whose SchemeShardLocalToInternal mapping has been fenced for an in-flight TRUNCATE
+    // Paths whose GenerationIndex.Live mapping has been fenced for an in-flight TRUNCATE
     // (same role as RenamingLocalToInternal for Move). Cleared when TRUNCATE is applied on plan.
     THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal;
     THashSet<ui32> SchemaPresetsIds;
@@ -617,7 +743,7 @@ public:
     void CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapshot& version, const TSchemeShardLocalPathId srcSchemeShardLocalPathId,
         const TSchemeShardLocalPathId dstSchemeShardLocalPathId);
 
-    // Fence the path for TRUNCATE on propose: remove SchemeShardLocalToInternal so new writes and
+    // Fence the path for TRUNCATE on propose: remove from GenerationIndex.Live so new writes and
     // CommitWriteLock fail with "unknown table" (same pattern as MoveTablePropose). The old
     // InternalPathId is kept in TruncatingLocalToInternal until TruncateTable runs on plan.
     void TruncateTablePropose(const TSchemeShardLocalPathId schemeShardLocalPathId);

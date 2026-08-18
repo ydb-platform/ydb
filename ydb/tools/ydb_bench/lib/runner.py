@@ -1,8 +1,8 @@
 import errno
 import os
+import select
 import shutil
 import signal
-import select
 import subprocess
 import time
 from dataclasses import dataclass

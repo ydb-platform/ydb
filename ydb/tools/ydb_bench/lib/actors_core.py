@@ -361,6 +361,7 @@ def run_benchmark(
                         background_command += ["--groups", ",".join(str(len(group)) for group in background.groups)]
                     background_process = start_background_process(background_command)
                 try:
+                    run_error = None
                     result = run_command(
                         command,
                         environment,
@@ -369,11 +370,18 @@ def run_benchmark(
                         cpu_affinity=placement.cpus,
                         cancel_event=cancel_event,
                     )
+                except BaseException as error:
+                    run_error = error
+                    raise
                 finally:
                     if background_process is not None:
                         background_result = background_process.stop()
-                        atomic_write_text(repetition_directory / "background.stdout.txt", background_result.stdout)
-                        atomic_write_text(repetition_directory / "background.stderr.txt", background_result.stderr)
+                        try:
+                            atomic_write_text(repetition_directory / "background.stdout.txt", background_result.stdout)
+                            atomic_write_text(repetition_directory / "background.stderr.txt", background_result.stderr)
+                        except OSError:
+                            if run_error is None:
+                                raise
             except BenchmarkError as error:
                 failure = str(error)
                 finished_at = _utc_now()

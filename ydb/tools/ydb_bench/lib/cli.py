@@ -319,7 +319,7 @@ def _run(arguments, resource_loader, tool_revision):
                     if not arguments.continue_on_error:
                         raise
                     continue
-                run_record["status"] = "completed"
+                run_record["status"] = profile_manifest.get("status", "completed")
                 run_record["manifest"] = str(relative_directory / "run.json")
                 run_record["summary"] = str(relative_directory / profile_manifest["summary"])
                 store.write()
@@ -349,10 +349,13 @@ def _run(arguments, resource_loader, tool_revision):
         return 1
 
     failed = [record for record in manifest["runs"] if record["status"] == "failed"]
+    unsupported = bool(manifest["runs"]) and all(
+        record["status"] == "unsupported" for record in manifest["runs"]
+    )
     if failed:
         _cancel_unfinished_steps(store, "run completed with failed benchmark profiles")
-    manifest["status"] = "failed" if failed else "completed"
-    manifest["state"] = "failed" if failed else "passed"
+    manifest["status"] = "failed" if failed else "unsupported" if unsupported else "completed"
+    manifest["state"] = "failed" if failed else "unsupported" if unsupported else "passed"
     manifest["finished_at"] = _utc_now()
     if failed:
         manifest["error"] = "{} benchmark profile(s) failed".format(len(failed))

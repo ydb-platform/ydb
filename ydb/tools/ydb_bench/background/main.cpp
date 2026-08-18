@@ -211,19 +211,32 @@ int main(int argc, char** argv) {
         std::vector<TStats> stats(options.Threads);
         std::vector<TSharedLine> lines(options.GroupSizes.size());
         std::vector<std::thread> workers;
+        workers.reserve(options.Threads);
         uint32_t group = 0;
         uint32_t groupStart = 0;
-        for (uint32_t index = 0; index < options.Threads; ++index) {
-            if (options.Mode == "memory-bandwidth") {
-                workers.emplace_back(MemoryWorker, index, std::cref(options), std::ref(ready), std::ref(stats[index]));
-            } else {
-                while (index >= groupStart + options.GroupSizes[group]) {
-                    groupStart += options.GroupSizes[group++];
+        try {
+            for (uint32_t index = 0; index < options.Threads; ++index) {
+                if (options.Mode == "memory-bandwidth") {
+                    workers.emplace_back(MemoryWorker, index, std::cref(options), std::ref(ready), std::ref(stats[index]));
+                } else {
+                    while (index >= groupStart + options.GroupSizes[group]) {
+                        groupStart += options.GroupSizes[group++];
+                    }
+                    workers.emplace_back(CoherenceWorker, index, std::cref(options), std::ref(ready), group,
+                                         index - groupStart,
+                                         std::ref(lines), std::ref(stats[index]));
                 }
-                workers.emplace_back(CoherenceWorker, index, std::cref(options), std::ref(ready), group,
-                                     index - groupStart,
-                                     std::ref(lines), std::ref(stats[index]));
             }
+        } catch (...) {
+            Stop.store(true, std::memory_order_relaxed);
+            for (uint32_t index = static_cast<uint32_t>(workers.size()); index < options.Threads; ++index) {
+                ready.arrive_and_drop();
+            }
+            ready.arrive_and_wait();
+            for (auto& worker : workers) {
+                worker.join();
+            }
+            throw;
         }
         ready.arrive_and_wait();
         const auto started = std::chrono::steady_clock::now();

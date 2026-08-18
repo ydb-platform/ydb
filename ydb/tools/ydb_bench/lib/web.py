@@ -385,11 +385,13 @@ _JS = (
     '  svg+=\'<line class=chart-axis x1="\'+left+\'" y1="\'+(top+plotHeight)+\'" x2="\'+(width-right)+\'" y2="\'+(top+plotHeight)+\'"/'
     '><line class=chart-axis x1="\'+left+\'" y1="\'+top+\'" x2="\'+left+\'" y2="\'+(top+plotHeight)+\'"/><text class=chart-label x="\''
     '+(left+plotWidth/2)+\'" y="\'+(height-5)+\'" text-anchor=middle>\'+esc(xName)+\'</text>\';\n'
-    '  seriesRows.forEach((item,index)=>{const color=colors[(item.colorIndex??index)%colors.length],points=xValues.map(x=>{co'
-    "nst row=item.rows.get(String(x)),y=valueFor(item,row);return Number.isFinite(y)?{x,y,row}:null}).filter(Boolean);svg+='<"
-    'polyline class=chart-line stroke="\'+color+\'" points="\'+points.map(point=>xPos(point.x)+\',\'+yPos(point.y)).join(\' \')+\'"/>'
-    '\';for(const point of points)svg+=\'<circle class=chart-point fill="\'+color+\'" cx="\'+xPos(point.x)+\'" cy="\'+yPos(point.y)+'
-    '\'" r="4"><title>\'+esc(item.label+\'; \'+xName+\'=\'+point.x+\'; \'+(item.metric||metric)+\'=\'+point.y)+\'</title></circle>\'});\n'
+    '  seriesRows.forEach((item,index)=>{const color=colors[(item.colorIndex??index)%colors.length],segments=[];let segment=[]'
+    ';for(const x of xValues){const row=item.rows.get(String(x)),y=valueFor(item,row);if(Number.isFinite(y)){segment.push({x'
+    ',y,row});continue}if(segment.length){segments.push(segment);segment=[]}}if(segment.length)segments.push(segment);for(con'
+    'st points of segments)svg+=\'<polyline class=chart-line stroke="\'+color+\'" points="\'+points.map(point=>xPos(point.x)+'
+    '\',\'+yPos(point.y)).join(\' \')+\'"/>\';for(const point of segments.flat())svg+=\'<circle class=chart-point fill="\'+color+\'"'
+    ' cx="\'+xPos(point.x)+\'" cy="\'+yPos(point.y)+\'" r="4"><title>\'+esc(item.label+\'; \'+xName+\'=\'+point.x+\'; \'+(item.me'
+    'tric||metric)+\'=\'+point.y)+\'</title></circle>\'});\n'
     '  svg+=\'<line class=chart-cursor x1="0" y1="\'+top+\'" x2="0" y2="\'+(top+plotHeight)+\'" visibility=hidden/>\';\n'
     "  return '<div class=chart-surface>'+svg+'</svg><div class=chart-tooltip hidden></div></div>'\n"
     '}\n'
@@ -544,8 +546,8 @@ _JS = (
     "    const xValues=[...union].sort((a,b)=>Number(a)-Number(b));if(!xValues.length){warning.innerHTML='<div class=\"notice"
     " error\">No numeric values are available.</div>';output.innerHTML='';return}\n"
     "    if(common.length<union.size){const coverage=indexed.map(item=>esc(item.label)+': '+sets[indexed.indexOf(item)].size+'"
-    " / '+union.size).join('; ');warning.innerHTML='<div class=notice><strong>Incomplete data:</strong> gaps mark unsupported"
-    " or missing configurations.<div class=coverage>'+coverage+'</div></div>'}els"
+    " / '+union.size).join('; ');warning.innerHTML='<div class=notice><strong>Incomplete data:</strong> missing values are o"
+    "mitted, and internal gaps break chart lines.<div class=coverage>'+coverage+'</div></div>'}els"
     "e warning.innerHTML='<div class=\"notice good\">All selected lines cover '+union.size+' '+esc(state.x)+' values.</div>'"
     ';\n'
     "    if(indexed.length===1)indexed[0].label=indexed[0].metric;const colors=indexed.map((_,index)=>chartColors[index%char"
@@ -1430,6 +1432,10 @@ class RunService:
         elif run["failed"]:
             self._cancel_unfinished(run)
             state, status = "failed", "failed"
+        elif run["store"].manifest["runs"] and all(
+            profile.get("status") == "unsupported" for profile in run["store"].manifest["runs"]
+        ):
+            state, status = "unsupported", "unsupported"
         else:
             # An executor is not allowed to report a completed run with a
             # hidden pending step.  Keep the durable queue terminal even for a
@@ -1753,7 +1759,7 @@ def production_executor(resource_loader, tool_revision):
                         return
                     run["store"].manifest["runs"][-1].update(
                         {
-                            "status": "completed",
+                            "status": profile.get("status", "completed"),
                             "manifest": str(relative / "run.json"),
                             "summary": str(relative / profile["summary"]),
                         }

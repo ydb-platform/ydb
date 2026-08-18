@@ -85,15 +85,15 @@ public:
     }
 
     // Returns true if no blob in the set has the given channel and generation in [fromGen, nextFromGen).
-    // The set is ordered by (generation, step), so only the [fromGen, nextFromGen) slice is scanned.
+    // The set is ordered by (generation, step), so only that slice is scanned: a sentinel
+    // with all other fields zeroed is the smallest possible id of its generation, which
+    // makes lower_bound land on the first blob of each bound.
     bool HasNoBlobsInRange(const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
-        const TLogoBlobID sentinel(0, fromGen, 0, 0, 0, 0);
-        for (auto it = Blobs.lower_bound(sentinel); it != Blobs.end() && it->Generation() < nextFromGen; ++it) {
-            if (it->Channel() == channel) {
-                return false;
-            }
-        }
-        return true;
+        const auto rangeBegin = Blobs.lower_bound(TLogoBlobID(0, fromGen, 0, 0, 0, 0));
+        const auto rangeEnd = Blobs.lower_bound(TLogoBlobID(0, nextFromGen, 0, 0, 0, 0));
+        return !AnyOf(rangeBegin, rangeEnd, [channel](const TLogoBlobID& blobId) {
+            return blobId.Channel() == channel;
+        });
     }
 
     template <class TActor>

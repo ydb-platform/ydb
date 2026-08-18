@@ -176,20 +176,19 @@ void TPartitionSourceManager::TSourceManager::Update(TSchemaChangeInfo&& schemaC
     // GetCommittedSchemaChangeVersion() without waiting for a re-ACK.
     // Keep the same regression guard as SchemaChangeEmitter::Process (prefer writer
     // state when present so a later Update in this batch cannot regress).
-    const auto isNewerThan = [&](const TSourceIdInfo& info) {
-        return !info.LastSchemaChange || schemaChange.Version > info.LastSchemaChange->Version;
-    };
 
     auto copySchemaChange = schemaChange;
     Batch.SchemaChangeEmitter.Process(SourceId, std::move(copySchemaChange));
-    if (InMemory != MemoryStorage().end()) {
-        if (isNewerThan(InMemory->second)) {
-            Batch.SourceIdWriter.RegisterSourceId(SourceId, InMemory->second.Updated(std::move(schemaChange)));
-        }
-    } else if (InWriter != WriteStorage().end()) {
-        if (isNewerThan(InWriter->second)) {
-            Batch.SourceIdWriter.RegisterSourceId(SourceId, InWriter->second.Updated(std::move(schemaChange)));
-        }
+
+    const TSourceIdInfo* info = nullptr;
+    if (InWriter != WriteStorage().end()) {
+        info = &InWriter->second;
+    } else if (InMemory != MemoryStorage().end()) {
+        info = &InMemory->second;
+    }
+
+    if (info && (!info->LastSchemaChange || schemaChange.Version > info->LastSchemaChange->Version)) {
+        Batch.SourceIdWriter.RegisterSourceId(SourceId, info->Updated(std::move(schemaChange)));
     }
 }
 

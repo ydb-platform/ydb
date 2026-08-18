@@ -13,14 +13,13 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
-TConclusionStatus TReadMetadata::Init(
-    const NColumnShard::TColumnShard* owner, const TReadDescription& readDescription, const EReaderClass readerClass) {
-    SetPKRangesFilter(readDescription.PKRangesFilter);
-    InitShardingInfo(readDescription.TableMetadataAccessor);
-    TxId = readDescription.TxId;
-    LockId = readDescription.LockId;
-    auto lockNodeId = readDescription.LockNodeId;
-    LockMode = readDescription.LockMode;
+TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& read, const EReaderClass readerClass) {
+    SetPKRangesFilter(read.PKRangesFilter);
+    InitShardingInfo(read.TableMetadataAccessor);
+    TxId = read.TxId;
+    LockId = read.LockId;
+    auto lockNodeId = read.LockNodeId;
+    LockMode = read.LockMode;
     if (LockId) {
         owner->GetOperationsManager().RegisterLock(*LockId, owner->Generation());
         if (lockNodeId.has_value()) {
@@ -45,27 +44,27 @@ TConclusionStatus TReadMetadata::Init(
     }
 
     ITableMetadataAccessor::TSelectMetadataContext context(
-        owner->GetTablesManager(), owner->GetIndexVerified(), readDescription.Orbit, owner->GetDataLocksManager());
-    SourcesConstructor = readDescription.TableMetadataAccessor->SelectMetadata(context, readDescription, readerClass);
+        owner->GetTablesManager(), owner->GetIndexVerified(), read.Orbit, owner->GetDataLocksManager());
+    SourcesConstructor = read.TableMetadataAccessor->SelectMetadata(context, read, readerClass);
 
     if (!SourcesConstructor) {
-        return TConclusionStatus::Fail("cannot build sources constructor for " + readDescription.TableMetadataAccessor->GetTablePath());
+        return TConclusionStatus::Fail("cannot build sources constructor for " + read.TableMetadataAccessor->GetTablePath());
     }
 
-    SourcesConstructor->InitCursor(readDescription.GetScanCursorVerified());
+    SourcesConstructor->InitCursor(read.GetScanCursorVerified());
 
     {
-        auto customConclusion = DoInitCustom(owner, readDescription);
+        auto customConclusion = DoInitCustom(owner, read);
         if (customConclusion.IsFail()) {
             return customConclusion;
         }
     }
 
-    StatsMode = readDescription.StatsMode;
-    DeduplicationPolicy = readDescription.DeduplicationPolicy;
-    GroupedMemoryLimiterOperator = readDescription.GroupedMemoryLimiterOperator;
+    StatsMode = read.StatsMode;
+    DeduplicationPolicy = read.DeduplicationPolicy;
+    GroupedMemoryLimiterOperator = read.GroupedMemoryLimiterOperator;
 
-    if (readDescription.readConflictingPortions) {
+    if (read.readConflictingPortions) {
         auto& opManager = owner->GetOperationsManager();
         std::vector<TPortionInfo::TConstPtr> conflictingPortions = SourcesConstructor->GetConflictingPortions();
         if (!conflictingPortions.empty()) {
@@ -84,9 +83,8 @@ TConclusionStatus TReadMetadata::Init(
             }
 
             // register the lock in the end, when Init() is successful for sure
-            const TString lockName = TStringBuilder() << "scan:" << readDescription.TxId << ":" << readDescription.ScanId;
             DataLockGuard = owner->GetDataLocksManager()->RegisterLock<NDataLocks::TListPortionsLock>(
-                lockName, conflictingPortions, NDataLocks::ELockCategory::Scan, true);
+                read.GetLockName(), conflictingPortions, NDataLocks::ELockCategory::Scan, true);
         }
     }
     return TConclusionStatus::Success();

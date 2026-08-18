@@ -44,6 +44,11 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         return input;
     }
 
+    /* Only inline join filters if the implementation is a lookup or reverse lookup join */
+    if (join->Props.JoinAlgo != EJoinAlgoType::LookupJoin && join->Props.JoinAlgo != EJoinAlgoType::LookupJoinReverse) {
+        return input;
+    }
+
     for (const auto& f : join->JoinFilters) {
         if (f.MaybeEquiJoinCondition()) {
             return input;

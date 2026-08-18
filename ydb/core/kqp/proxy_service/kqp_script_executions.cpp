@@ -567,7 +567,7 @@ private:
         }
 
         if (const auto& currentOwner = state.GetOperationActorId(); currentOwner != StreamingQueryOperationId) {
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Streaming operation " << StreamingQueryOperationId << " was lost, current operation id: " << currentOwner);
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Streaming operation '" << StreamingQueryOperationId << "' was lost, current operation id: '" << currentOwner << "'");
             return;
         }
 

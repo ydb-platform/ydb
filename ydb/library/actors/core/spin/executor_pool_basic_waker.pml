@@ -313,39 +313,36 @@ proctype Waker() {
         do
         :: activations > 0 && ((thread_count + remaining_reductions)
                 + taken_tokens_to_sleep) > awake_workers ->
-            found = false;
-            i = 0;
-            do
-            :: i < N && !found ->
-                if
-                :: state[i] == SLEEP ->
-                    atomic {
+            atomic {
+                found = false;
+                i = 0;
+                do
+                :: i < N && !found ->
+                    if
+                    :: state[i] == SLEEP ->
                         state[i] = NONE;
                         awake_workers++;
                         sleep_workers--;
                         activations--;
                         found = true
-                    }
-                :: else -> skip
-                fi;
-                i++
-            :: else -> break
-            od;
-            if
-            :: found -> skip
-            :: else -> break
-            fi
+                    :: else -> skip
+                    fi;
+                    i++
+                :: else -> break
+                od;
+                assert(found)
+            }
         :: else -> break
         od;
 
         /* Publish both the remaining reductions and the baseline used to
          * detect claims on the next pass. The baseline is waker-local. */
-        assert((thread_count + remaining_reductions)
-            + taken_tokens_to_sleep >= awake_workers);
-        eligible_sleepers = ((thread_count + remaining_reductions)
-            + taken_tokens_to_sleep) - awake_workers;
-        assert(eligible_sleepers <= sleep_workers);
         atomic {
+            assert((thread_count + remaining_reductions)
+                + taken_tokens_to_sleep >= awake_workers);
+            eligible_sleepers = ((thread_count + remaining_reductions)
+                + taken_tokens_to_sleep) - awake_workers;
+            assert(eligible_sleepers <= sleep_workers);
             reductions = remaining_reductions;
             previous_reductions = remaining_reductions
         };

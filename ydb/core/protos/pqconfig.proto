@@ -58,7 +58,7 @@ message TPQConfig {
     optional bool CheckACL = 9 [default = true];
 
     reserved 10, 11, 12;
-    reserved "SourceIdCleanupPeriodSec", "SourceIdMaxLifetimeSec", SourceIdTotalShardsCount";
+    reserved "SourceIdCleanupPeriodSec", "SourceIdMaxLifetimeSec", "SourceIdTotalShardsCount";
 
     optional NKikimrClient.TKeyValueRequest.ETactic Tactic = 13 [default = MAX_THROUGHPUT];
 

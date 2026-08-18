@@ -6842,7 +6842,6 @@
                 "EnableProtoSourceIdInfo": true,
                 "Enabled": true,
                 "MaxStorageNodePort": 65535,
-                "MetaCacheTimeoutSec": 1,
                 "QuotingConfig": {
                     "EnableQuoting": false
                 },
@@ -7892,7 +7891,6 @@
                 "EnableProtoSourceIdInfo": true,
                 "Enabled": true,
                 "MaxStorageNodePort": 65535,
-                "MetaCacheTimeoutSec": 1,
                 "QuotingConfig": {
                     "EnableQuoting": false
                 },
@@ -8942,7 +8940,6 @@
                 "EnableProtoSourceIdInfo": true,
                 "Enabled": true,
                 "MaxStorageNodePort": 65535,
-                "MetaCacheTimeoutSec": 1,
                 "QuotingConfig": {
                     "EnableQuoting": false
                 },

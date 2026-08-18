@@ -202,6 +202,7 @@ class KikimrConfigGenerator(object):
             enable_nbs=False,
             nbs_database_name="/Root/NBS",
             enable_topic_cloud_events=False,
+            replication_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -459,6 +460,9 @@ class KikimrConfigGenerator(object):
 
         if query_service_config:
             self.yaml_config["query_service_config"] = query_service_config
+
+        if replication_config:
+            self.yaml_config["replication_config"] = replication_config
 
         if scan_grouped_memory_limiter_config:
             self.yaml_config["scan_grouped_memory_limiter_config"] = scan_grouped_memory_limiter_config

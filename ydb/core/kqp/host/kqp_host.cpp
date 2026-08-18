@@ -2118,7 +2118,6 @@ private:
                 if (FederatedQuerySetup->YtGateway) {
                     InitYtProvider(finalizers);
                 }
-                TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
             }
             if (FederatedQuerySetup->PqGatewayFactory) {
                 InitPqProvider(finalizers);
@@ -2133,6 +2132,7 @@ private:
                     return WaitAll(futures);
                 };
             }
+            TypesCtx->StreamLookupJoin = Config->GetEnableDqSourceStreamLookupJoin();
         }
 
         InitPgProvider();

@@ -70,6 +70,8 @@ TConclusion<std::shared_ptr<IChunkedArray>> TDictionaryDenseConstructor::DoDeser
     AFL_VERIFY(meta);
     const ui32 dictionaryBlobSize = meta->DictionaryBlobSize;
     AFL_VERIFY(dictionaryBlobSize >= sizeof(ui32) && dictionaryBlobSize <= originalData.size());
+    AFL_VERIFY(originalData.size() - dictionaryBlobSize == meta->PositionsBlobSize)
+        ("computed", originalData.size() - dictionaryBlobSize)("meta", meta->PositionsBlobSize);
 
     ui32 dictLength;
     memcpy(&dictLength, originalData.data(), sizeof(dictLength));

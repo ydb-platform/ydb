@@ -8,6 +8,8 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 
+#include <ydb/library/actors/core/log.h>
+
 namespace NKikimr::NOlap::NReader::NCommon {
 
 LWTRACE_USING(YDB_CS_DATA_SOURCE);
@@ -235,6 +237,9 @@ private:
                     if (conclusion.IsFail()) {
                         if (auto source = Source.lock()) {
                             source->GetContext()->GetCommonContext()->AbortWithError(conclusion.GetErrorMessage());
+                        } else {
+                            AFL_WARN(NKikimrServices::TX_COLUMNSHARD_SCAN)("error", conclusion.GetErrorMessage())(
+                                "event", "source expired before error could be reported");
                         }
                         return;
                     }

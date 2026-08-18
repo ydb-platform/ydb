@@ -61,8 +61,10 @@ A dictionary blob is:
 ```
 
 `TDictionaryAccessorData` stores the `ui32` size of the dictionary prefix; the
-positions blob occupies the remaining bytes. The dictionary is encoded with the binary-array layout above. The positions frame
-contains this raw payload before frame compression:
+positions blob occupies the remaining bytes. The dictionary is encoded with the
+binary-array layout above.
+
+The positions frame contains this raw payload before frame compression:
 
 ```
 [has_nulls: ui8][validity bitmap when has_nulls][index values]

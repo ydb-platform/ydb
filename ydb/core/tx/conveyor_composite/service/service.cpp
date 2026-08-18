@@ -7,16 +7,41 @@
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
+#include <google/protobuf/util/message_differencer.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_CONVEYOR
 
 namespace NKikimr::NConveyorComposite {
 
+namespace {
+
+bool HasOnlyWorkersCountChanges(const NKikimrConfig::TCompositeConveyorConfig& current,
+    const NKikimrConfig::TCompositeConveyorConfig& candidate, TString& differences) {
+    using TMessageDifferencer = google::protobuf::util::MessageDifferencer;
+    using TWorkersPoolProto = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
+
+    TMessageDifferencer differencer;
+    differencer.set_message_field_comparison(TMessageDifferencer::EQUIVALENT);
+    differencer.set_report_ignores(false);
+    differencer.IgnoreField(
+        TWorkersPoolProto::descriptor()->FindFieldByNumber(TWorkersPoolProto::kWorkersCountFieldNumber));
+    differencer.IgnoreField(
+        TWorkersPoolProto::descriptor()->FindFieldByNumber(TWorkersPoolProto::kDefaultFractionOfThreadsCountFieldNumber));
+    differencer.ReportDifferencesToString(&differences);
+    return differencer.Compare(current, candidate);
+}
+
+}   // namespace
+
 LWTRACE_USING(YDB_CONVEYOR_COMPOSITE_PROVIDER);
 
-TDistributor::TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
+TDistributor::TDistributor(const NConfig::TConfig& config,
+    NKikimrConfig::TCompositeConveyorConfig appliedCompositeConveyorConfig,
+    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
     : Config(config)
     , ConveyorName("COMPOSITE_CONVEYOR")
-    , Counters(ConveyorName, conveyorSignals) {
+    , Counters(ConveyorName, conveyorSignals)
+    , AppliedCompositeConveyorConfig(std::move(appliedCompositeConveyorConfig)) {
 }
 
 TDistributor::~TDistributor() {
@@ -60,20 +85,56 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
     auto& record = ev->Get()->Record;
     const auto& appConfig = record.GetConfig();
 
-    if (appConfig.HasCompositeConveyorConfig()) {
-        LatestCompositeConveyorConfig.emplace();
-        LatestCompositeConveyorConfig->CopyFrom(appConfig.GetCompositeConveyorConfig());
-    } else {
-        LatestCompositeConveyorConfig.reset();
+    if (!appConfig.HasCompositeConveyorConfig()) {
+        ReplyConfigNotification(ev);
+        return;
     }
 
+    const auto& candidateProto = appConfig.GetCompositeConveyorConfig();
     YDB_LOG_INFO("",
         {"name", ConveyorName},
         {"action", "composite_conveyor_config_received"},
-        {"hasConfig", LatestCompositeConveyorConfig.has_value()});
+        {"hasConfig", true});
 
-    auto response = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(record);
+    auto configConclusion = NConfig::TConfig::BuildFromProto(candidateProto);
+    if (configConclusion.IsFail()) {
+        YDB_LOG_ERROR("",
+            {"name", ConveyorName},
+            {"action", "composite_conveyor_config_rejected"},
+            {"error", configConclusion.GetErrorMessage()});
+        ReplyConfigNotification(ev);
+        return;
+    }
+
+    auto desiredConfig = configConclusion.DetachResult();
+    TString differences;
+    if (!HasOnlyWorkersCountChanges(AppliedCompositeConveyorConfig, candidateProto, differences)) {
+        YDB_LOG_WARN("",
+            {"name", ConveyorName},
+            {"action", "composite_conveyor_non_workers_update_ignored"},
+            {"differences", differences});
+        ReplyConfigNotification(ev);
+        return;
+    }
+
+    PendingConfigNotification = std::move(ev);
+    if (Manager->StartWorkersUpdate(desiredConfig)) {
+        CompleteConfigUpdate();
+    }
+}
+
+void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    auto response = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(ev->Get()->Record);
     Send(ev->Sender, response.Release(), NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
+}
+
+void TDistributor::CompleteConfigUpdate() {
+    AFL_VERIFY(PendingConfigNotification);
+    AFL_VERIFY(!Manager->HasWorkersUpdateInProgress());
+
+    AppliedCompositeConveyorConfig = PendingConfigNotification->Get()->GetConfig().GetCompositeConveyorConfig();
+    ReplyConfigNotification(PendingConfigNotification);
+    PendingConfigNotification.Reset();
 }
 
 void TDistributor::HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev) {
@@ -105,6 +166,19 @@ void TDistributor::HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& /*e
         {"name", ConveyorName},
         {"action", "retry_composite_conveyor_config_subscription"});
     SubscribeToCompositeConveyorConfig();
+}
+
+void TDistributor::HandleMain(TEvInternal::TEvWorkerCPULimitUpdated::TPtr& ev) {
+    if (Manager->OnWorkerCPULimitUpdated(*ev->Get())) {
+        CompleteConfigUpdate();
+    }
+    Y_UNUSED(Manager->DrainTasks());
+}
+
+void TDistributor::HandleMain(TEvInternal::TEvWorkerStopped::TPtr& ev) {
+    if (Manager->OnWorkerStopped(*ev->Get())) {
+        CompleteConfigUpdate();
+    }
 }
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {

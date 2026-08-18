@@ -2757,7 +2757,7 @@ TCompositeConveyorInitializer::TCompositeConveyorInitializer(const TKikimrRunCon
 }
 
 void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    const NKikimrConfig::TCompositeConveyorConfig protoConfig = [&]() {
+    NKikimrConfig::TCompositeConveyorConfig protoConfig = [&]() {
         if (Config.HasCompositeConveyorConfig()) {
             return Config.GetCompositeConveyorConfig();
         }
@@ -2856,7 +2856,8 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
     if (serviceConfig.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse composite conveyor config")("action", "default_usage")(
             "error", serviceConfig.GetErrorMessage())("default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString());
-        serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
+        protoConfig = NConveyorComposite::NConfig::TConfig::BuildDefaultProto();
+        serviceConfig = NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig);
     }
     AFL_VERIFY(!serviceConfig.IsFail());
 
@@ -2866,7 +2867,7 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
 
         const auto registerService = [&](const ui32 poolId, bool useBatchPool) {
             auto poolConveyorGroup = conveyorGroup->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
-            auto service = NConveyorComposite::CreateService(*serviceConfig, poolConveyorGroup);
+            auto service = NConveyorComposite::CreateService(*serviceConfig, protoConfig, poolConveyorGroup);
             setup->LocalServices.push_back(std::make_pair(
                 NConveyorComposite::TServiceOperator::MakeServiceId(NodeId, useBatchPool),
                 TActorSetupCmd(service, TMailboxType::HTSwap, poolId)));

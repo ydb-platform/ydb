@@ -2,12 +2,17 @@
 
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 
+#include <algorithm>
+
 namespace NKikimr::NConveyorComposite {
 TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
     : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
     , Counters(counters)
-    , MaxBatchSize(config.GetMaxBatchSize()) {
+    , MaxBatchSize(config.GetMaxBatchSize())
+    , PoolName(poolName)
+    , DistributorId(distributorId)
+    , WorkersPoolId(config.GetWorkersPoolId()) {
     Workers.reserve(WorkersCount);
     for (auto&& i : config.GetLinks()) {
         AFL_VERIFY((ui64)i.GetCategory() < categories.size());
@@ -24,6 +29,108 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
     Counters->AmountCPULimit->Set(0);
     Counters->AvailableWorkersCount->Set(0);
     Counters->WorkersCountLimit->Set(WorkersCount);
+}
+
+void TWorkersPool::RemoveFreeWorker(const ui32 workerIdx) {
+    ActiveWorkersIdx.erase(std::find(ActiveWorkersIdx.begin(), ActiveWorkersIdx.end(), workerIdx));
+    Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+}
+
+void TWorkersPool::UpdateWorkerCPULimit(const ui32 workerIdx, const double newLimit) {
+    AFL_VERIFY(WorkersUpdate);
+
+    auto& worker = Workers[workerIdx];
+    if (!worker.GetRunningTask()) {
+        RemoveFreeWorker(workerIdx);
+    }
+    WorkersUpdate->WorkersWaitingForLimitUpdate.emplace(workerIdx);
+    TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvUpdateWorkerCPULimit>(newLimit));
+}
+
+void TWorkersPool::IncreaseWorkers(const std::vector<double>& desiredCPULimits) {
+    AFL_VERIFY(WorkersUpdate);
+
+    const ui32 oldWorkersCount = Workers.size();
+    AFL_VERIFY(oldWorkersCount < desiredCPULimits.size());
+
+    UpdateWorkerCPULimit(oldWorkersCount - 1, desiredCPULimits[oldWorkersCount - 1]);
+    for (ui32 workerIdx = oldWorkersCount; workerIdx < desiredCPULimits.size(); ++workerIdx) {
+        Workers.emplace_back(std::make_unique<TWorker>(PoolName, desiredCPULimits[workerIdx], DistributorId, workerIdx, WorkersPoolId));
+        ActiveWorkersIdx.emplace_back(workerIdx);
+    }
+    Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+}
+
+void TWorkersPool::DecreaseWorkers(const std::vector<double>& desiredCPULimits) {
+    // first decrease worker phase
+    AFL_VERIFY(WorkersUpdate);
+
+    const ui32 oldWorkersCount = Workers.size();
+    AFL_VERIFY(desiredCPULimits.size() < oldWorkersCount);
+
+    UpdateWorkerCPULimit(desiredCPULimits.size() - 1, desiredCPULimits[desiredCPULimits.size() - 1]);
+    for (ui32 workerIdx = desiredCPULimits.size(); workerIdx < oldWorkersCount; ++workerIdx) {
+        auto& worker = Workers[workerIdx];
+        if (!worker.GetRunningTask()) {
+            RemoveFreeWorker(workerIdx);
+        }
+        WorkersUpdate->WorkersWaitingForStop.emplace(workerIdx);
+        TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvRetireWorker>());
+    }
+}
+
+bool TWorkersPool::StartWorkersUpdate(const std::vector<double>& desiredCPULimits) {
+    AFL_VERIFY(desiredCPULimits.size());
+
+    AFL_VERIFY(!WorkersUpdate);  // Update entrypoint (another states continue)
+    WorkersUpdate.emplace();
+    WorkersUpdate->DesiredWorkersCount = desiredCPULimits.size();
+
+    if (Workers.size() < desiredCPULimits.size()) {
+        IncreaseWorkers(desiredCPULimits);
+    } else if (desiredCPULimits.size() < Workers.size()) {
+        DecreaseWorkers(desiredCPULimits);
+    } else {
+        UpdateWorkerCPULimit(Workers.size() - 1, desiredCPULimits.back());
+    }
+    return TryFinishWorkersUpdate();
+}
+
+bool TWorkersPool::TryFinishWorkersUpdate() {
+    if (!WorkersUpdate || !WorkersUpdate->IsFinished()) {
+        return false;
+    }
+
+    // second decrease worker phase
+    const ui32 desiredWorkersCount = WorkersUpdate->DesiredWorkersCount;
+    if (desiredWorkersCount < Workers.size()) {
+        while (Workers.size() > desiredWorkersCount) {
+            Workers.pop_back();
+        }
+    }
+
+    WorkersCount = desiredWorkersCount;
+    Counters->WorkersCountLimit->Set(WorkersCount);
+    Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+    WorkersUpdate.reset();
+    return true;
+}
+
+bool TWorkersPool::OnWorkerCPULimitUpdated(const TEvInternal::TEvWorkerCPULimitUpdated& ev) {
+    AFL_VERIFY(WorkersUpdate);
+    auto& worker = Workers[ev.WorkerIdx];
+    WorkersUpdate->WorkersWaitingForLimitUpdate.erase(ev.WorkerIdx);
+    if (!worker.GetRunningTask()) {
+        ActiveWorkersIdx.emplace_back(ev.WorkerIdx);
+        Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+    }
+    return TryFinishWorkersUpdate();
+}
+
+bool TWorkersPool::OnWorkerStopped(const TEvInternal::TEvWorkerStopped& ev) {
+    AFL_VERIFY(WorkersUpdate);
+    WorkersUpdate->WorkersWaitingForStop.erase(ev.WorkerIdx);
+    return TryFinishWorkersUpdate();
 }
 
 bool TWorkersPool::HasFreeWorker() const {
@@ -43,9 +150,14 @@ void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch) {
 
 void TWorkersPool::ReleaseWorker(const ui32 workerIdx) {
     AFL_VERIFY(workerIdx < Workers.size());
-    Workers[workerIdx].OnStopTask();
-    ActiveWorkersIdx.emplace_back(workerIdx);
-    Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+    auto& worker = Workers[workerIdx];
+    worker.OnStopTask();
+    const bool waitingForLimitUpdate = WorkersUpdate && WorkersUpdate->WorkersWaitingForLimitUpdate.contains(workerIdx);
+    const bool waitingForStop = WorkersUpdate && WorkersUpdate->WorkersWaitingForStop.contains(workerIdx);
+    if (!waitingForLimitUpdate && !waitingForStop) {
+        ActiveWorkersIdx.emplace_back(workerIdx);
+        Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
+    }
 }
 
 bool TWorkersPool::DrainTasks() {

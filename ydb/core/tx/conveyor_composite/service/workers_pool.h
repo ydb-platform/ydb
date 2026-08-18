@@ -31,13 +31,11 @@ class TWorkersPool {
 private:
     class TWorkerInfo {
         YDB_READONLY(bool, RunningTask, false);
-        YDB_READONLY(TWorker*, Worker, nullptr);
         YDB_READONLY_DEF(NActors::TActorId, WorkerId);
 
     public:
         explicit TWorkerInfo(std::unique_ptr<TWorker>&& worker)
-            : Worker(worker.get())
-            , WorkerId(TActivationContext::Register(worker.release())) {
+            : WorkerId(TActivationContext::Register(worker.release())) {
         }
 
         void OnStartTask() {
@@ -51,6 +49,16 @@ private:
         }
     };
 
+    struct TWorkersUpdateState {
+        ui32 DesiredWorkersCount = 0;
+        THashSet<ui32> WorkersWaitingForLimitUpdate;
+        THashSet<ui32> WorkersWaitingForStop;
+
+        bool IsFinished() const {
+            return WorkersWaitingForLimitUpdate.empty() && WorkersWaitingForStop.empty();
+        }
+    };
+
     YDB_READONLY(ui32, WorkersCount, 0);
     YDB_READONLY(double, MaxWorkerThreads, 0);
     YDB_READONLY(double, AmountCPULimit, 0);
@@ -61,6 +69,16 @@ private:
     TAverageCalcer<TDuration> DeliveringDuration;
     std::deque<TDuration> DeliveryDurations;
     ui64 MaxBatchSize = 30;
+    const TString PoolName;
+    const NActors::TActorId DistributorId;
+    const ui64 WorkersPoolId;
+    std::optional<TWorkersUpdateState> WorkersUpdate;
+
+    void RemoveFreeWorker(const ui32 workerIdx);
+    void UpdateWorkerCPULimit(const ui32 workerIdx, const double newLimit);
+    void IncreaseWorkers(const std::vector<double>& desiredCPULimits);
+    void DecreaseWorkers(const std::vector<double>& desiredCPULimits);
+    bool TryFinishWorkersUpdate();
 
 public:
     static constexpr double Eps = 1e-6;
@@ -92,6 +110,14 @@ public:
     bool HasFreeWorker() const;
     void RunTask(std::vector<TWorkerTask>&& tasksBatch);
     void ReleaseWorker(const ui32 workerIdx);
+
+    bool StartWorkersUpdate(const std::vector<double>& desiredCPULimits);
+    bool OnWorkerCPULimitUpdated(const TEvInternal::TEvWorkerCPULimitUpdated& ev);
+    bool OnWorkerStopped(const TEvInternal::TEvWorkerStopped& ev);
+
+    bool HasWorkersUpdateInProgress() const {
+        return WorkersUpdate.has_value();
+    }
 };
 
 }   // namespace NKikimr::NConveyorComposite

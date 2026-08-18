@@ -12,6 +12,7 @@ using namespace NKikimr::NRawSocket;
 NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
-                                       const NKikimrConfig::TKafkaProxyConfig& config);
+                                       const NKikimrConfig::TKafkaProxyConfig& config,
+                                       std::shared_ptr<NKafka::TInet64SecureStreamSocket::TServerMtlsCreds> serverCreds);
 
 } // namespace NKafka

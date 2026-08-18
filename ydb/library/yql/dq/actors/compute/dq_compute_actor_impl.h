@@ -1904,7 +1904,7 @@ protected:
         const bool hasCheckpoint = sink->Pop(checkpoint);
         if (!dataSize && !hasCheckpoint) {
             if (!sink->IsFinished()) {
-                CA_LOG_D("sink " << outputIndex << ": nothing to send and is not finished");
+                CA_LOG_D("sink " << outputIndex << ": nothing to send and is not finished, consumed watermark: " << hasWatermark);
                 return hasWatermark; // sink is empty and not finished yet
             }
         }
@@ -1921,7 +1921,7 @@ protected:
         }
 
         outputInfo.AsyncOutput->SendData(std::move(dataBatch), dataSize, maybeCheckpoint, outputInfo.Finished);
-        CA_LOG_T("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
+        CA_LOG_T("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier, sent watermark: " << hasWatermark);
 
         return dataSize + checkpointSize + hasWatermark;
     }

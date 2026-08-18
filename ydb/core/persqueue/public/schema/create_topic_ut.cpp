@@ -59,6 +59,9 @@ Y_UNIT_TEST(CreateSharedConsumer) {
     auto setup = CreateSetup("CoreCreateShared");
     auto& runtime = setup->GetRuntime();
     const TString path = "/Root/topic_shared";
+    const TString dlqPath = "/Root/dlq";
+
+    AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(dlqPath)), Ydb::StatusIds::SUCCESS);
 
     auto request = MakeCreateTopicRequest(path);
     request.clear_consumers();

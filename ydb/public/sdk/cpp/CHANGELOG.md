@@ -1,3 +1,5 @@
+* Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.
+
 * Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.
 
 ## v3.21.1

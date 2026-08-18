@@ -120,9 +120,6 @@ def skip_if_unsupported(versions):
     if min(versions) < string_version_to_tuple(MIN_SUPPORTED_VERSION):
         pytest.skip(f"Only available since {MIN_SUPPORTED_VERSION}")
 
-
-<<<<<<< HEAD
-=======
 def create_kafka_streams_topic(driver, topic, consumers):
     try:
         driver.topic_client.drop_topic(topic)
@@ -200,7 +197,6 @@ class KafkaStreamsRuntime:
         ], start_new_session=True)
 
 
->>>>>>> 15e634b3897 (fix kafka proxy (#50202))
 class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -262,8 +258,6 @@ class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
         utils.run_stress_test(duration=20)
 
         utils.drop_topic()
-<<<<<<< HEAD
-=======
 
 
 class TestKafkaTopicMessagesBatchingDisabledRead(CurrentToCurrentVersionFixture):
@@ -408,4 +402,3 @@ class TestKafkaTopicMessagesBatchingDisabledRead(CurrentToCurrentVersionFixture)
             message.decode("utf-8")
             for message in batch_messages
         }
->>>>>>> 15e634b3897 (fix kafka proxy (#50202))

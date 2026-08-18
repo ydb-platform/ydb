@@ -309,7 +309,6 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
         {"responsesSize", Responses.size()});
     const auto now = ctx.Now();
 
-    const auto committedSchemaChange = Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
     for (auto it = PendingSchemaChangeResponses.begin(); it != PendingSchemaChangeResponses.end(); ) {
         auto& pending = *it;
         if (!pending.IsWrite()) {
@@ -318,6 +317,8 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
         }
         const auto& writeResponse = pending.GetWrite();
         const auto& scVersion = writeResponse.Msg.SchemaChangeVersion;
+        // Recompute each iteration: RegisterSourceId below can advance the committed version.
+        const auto committedSchemaChange = Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
         if (!scVersion || *scVersion > committedSchemaChange) {
             ++it;
             continue;

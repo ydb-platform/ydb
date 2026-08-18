@@ -641,6 +641,8 @@ TMaybe<THeartbeat> THeartbeatEmitter::CanEmit() const {
             if (Heartbeats.contains(sourceId) && Heartbeats.at(sourceId).Version > version) {
                 --rest;
             } else {
+                // Early exit: if any source in this bucket hasn't advanced past `version`,
+                // the bucket is still active (rest > 0 regardless of iteration order).
                 break;
             }
         }
@@ -745,6 +747,8 @@ TMaybe<TSchemaChangeInfo> TSchemaChangeEmitter::CanEmit() const {
             if (SchemaChanges.contains(sourceId) && SchemaChanges.at(sourceId).Version > version) {
                 --rest;
             } else {
+                // Early exit: if any source in this bucket hasn't advanced past `version`,
+                // the bucket is still active (rest > 0 regardless of iteration order).
                 break;
             }
         }

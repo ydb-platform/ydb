@@ -47,7 +47,7 @@ void TChangeSender::CreateMissingSenders(const TVector<ui64>& partitionIds) {
     }
 
     for (const auto& [partitionId, sender] : Senders) {
-        ReEnqueueRecords(sender);
+        ReEnqueueRecords(partitionId, sender);
         ProcessBroadcasting(&TChangeSender::RemoveBroadcastPartition, partitionId, sender.Broadcasting);
         if (sender.ActorId) {
             ActorOps->Send(sender.ActorId, new TEvents::TEvPoisonPill());
@@ -325,7 +325,7 @@ void TChangeSender::OnGone(ui64 partitionId) {
         return;
     }
 
-    ReEnqueueRecords(it->second);
+    ReEnqueueRecords(partitionId, it->second);
     if (it->second.Ready) {
         --ReadySenders;
     }
@@ -340,16 +340,25 @@ void TChangeSender::OnGone(ui64 partitionId) {
     PathResolver->Resolve();
 }
 
-void TChangeSender::ReEnqueueRecords(const TSender& sender) {
+void TChangeSender::ReEnqueueRecords(ui64 partitionId, const TSender& sender) {
     for (const auto& record : sender.Pending) {
         Enqueued.insert(ReEnqueue(record));
     }
 
+    TVector<ui64> preparedBroadcasts;
     for (const auto& record : sender.Prepared) {
         if (!record->IsBroadcast()) {
             Enqueued.insert(ReEnqueue(record->GetOrder(), record->GetBody().size()));
             MemUsage -= record->GetBody().size();
+        } else {
+            // Broadcasts held back after a barrier split are not in sender.Broadcasting yet,
+            // but the partition was already removed from PendingPartitions when prepared.
+            // Drop them from the broadcast set so completion cannot stall if the sender is gone.
+            preparedBroadcasts.push_back(record->GetOrder());
         }
+    }
+    if (preparedBroadcasts) {
+        ProcessBroadcasting(&TChangeSender::RemoveBroadcastPartition, partitionId, preparedBroadcasts);
     }
 }
 

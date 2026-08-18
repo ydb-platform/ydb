@@ -187,6 +187,8 @@ void TPartitionSourceManager::TSourceManager::Update(TSchemaChangeInfo&& schemaC
         info = &InMemory->second;
     }
 
+    // ExecRequest rejects schema changes without an explicit in-memory/writer source.
+    Y_DEBUG_ABORT_UNLESS(info);
     if (info && (!info->LastSchemaChange || schemaChange.Version > info->LastSchemaChange->Version)) {
         Batch.SourceIdWriter.RegisterSourceId(SourceId, info->Updated(std::move(schemaChange)));
     }

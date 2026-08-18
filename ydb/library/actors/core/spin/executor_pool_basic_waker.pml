@@ -38,6 +38,7 @@ byte active_count = N;
 byte sleeping_count = 0;
 byte reductions = 0;
 byte activation_credits = 0;
+byte queued_activations = 0;
 bool waker_pending = false;
 bool work_epoch = false;
 
@@ -57,6 +58,7 @@ inline check_safety() {
     assert(sleeping_count <= active_count);
     assert(reductions <= N);
     assert(activation_credits <= MAX_QUEUE);
+    assert(queued_activations <= activation_credits);
 }
 
 proctype Worker(byte id) {
@@ -74,17 +76,28 @@ proctype Worker(byte id) {
         state[id] = BLOCKING;
         request_waker()
 
-        /* Reduction has priority over taking the next activation. */
-        :: atomic {
-            reductions == 0 && activation_credits > 0 ->
-            activation_credits--;
-            state[id] = WORK
-        }
-        :: atomic {
-            reductions == 0 && activation_credits == 0 ->
-            state[id] = SPIN
-        };
-        request_waker()
+        /* Reduction has priority over looking in the activation queue. Once
+         * the worker observes no reduction, the waker may publish one before
+         * the worker completes Pop, SetWork and the credit decrement. */
+        :: reductions == 0 ->
+            if
+            :: atomic {
+                queued_activations > 0 ->
+                queued_activations--
+            };
+                state[id] = WORK;
+                atomic {
+                    activation_credits > 0 ->
+                    activation_credits--
+                }
+            :: queued_activations == 0 && activation_credits > 0 ->
+                /* A producer published a credit but has not pushed yet, or
+                 * another worker popped the corresponding activation. */
+                skip
+            :: activation_credits == 0 ->
+                state[id] = SPIN;
+                request_waker()
+            fi
         fi
 
     /* BLOCKING and SLEEP are parked; only the waker changes them. */
@@ -97,6 +110,7 @@ proctype Producer() {
         activation_credits < MAX_QUEUE ->
         activation_credits++
     };
+        queued_activations++;
         if
         :: sleeping_count > 0 -> request_waker()
         :: else -> skip

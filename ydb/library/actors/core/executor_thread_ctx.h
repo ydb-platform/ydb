@@ -19,7 +19,9 @@ namespace NActors {
         Spin,
         Sleep,
         Work,
-        Blocking
+        Blocking,
+        NeedToBeWaker,
+        Waker
     };
 
     struct TGenericExecutorThreadCtx {
@@ -31,7 +33,19 @@ namespace NActors {
         TThreadParkPad WaitingPad;
 
     private:
-        std::atomic<ui64> WaitingFlag = static_cast<ui64>(EThreadState::None);
+        static constexpr ui64 StateMask = 0xff;
+        static constexpr ui64 ResumeStateShift = 8;
+        static constexpr ui64 InvalidResumeState = 0xff;
+
+        static constexpr ui64 EncodeState(EThreadState state, ui64 resumeState = InvalidResumeState) {
+            return static_cast<ui64>(state) | (resumeState << ResumeStateShift);
+        }
+
+        static constexpr EThreadState DecodeState(ui64 state) {
+            return static_cast<EThreadState>(state & StateMask);
+        }
+
+        std::atomic<ui64> WaitingFlag = EncodeState(EThreadState::None);
 
     public:
         ~TGenericExecutorThreadCtx(); // in executor_thread.cpp
@@ -39,26 +53,82 @@ namespace NActors {
         ui64 StartWakingTs = 0;
 
         ui64 GetStateInt() {
-            return WaitingFlag.load();
+            return static_cast<ui64>(DecodeState(WaitingFlag.load()));
         }
 
     protected:
         template <typename TWaitState>
         TWaitState GetState() {
-            return TWaitState(WaitingFlag.load());
+            return TWaitState(DecodeState(WaitingFlag.load()));
         }
 
         template <typename TWaitState>
         TWaitState ExchangeState(TWaitState state) {
-            return TWaitState(WaitingFlag.exchange(static_cast<ui64>(state)));
+            return TWaitState(DecodeState(WaitingFlag.exchange(EncodeState(static_cast<EThreadState>(state)))));
         }
 
         template <typename TWaitState>
         bool ReplaceState(TWaitState &expected, TWaitState state) {
-            ui64 expectedInt = static_cast<ui64>(expected);
-            bool result = WaitingFlag.compare_exchange_strong(expectedInt, static_cast<ui64>(state));
-            expected = TWaitState(expectedInt);
-            return result;
+            ui64 expectedInt = WaitingFlag.load();
+            while (true) {
+                const EThreadState current = DecodeState(expectedInt);
+                if (current != static_cast<EThreadState>(expected)) {
+                    expected = TWaitState(current);
+                    return false;
+                }
+                if (WaitingFlag.compare_exchange_weak(expectedInt, EncodeState(static_cast<EThreadState>(state)))) {
+                    return true;
+                }
+            }
+        }
+
+        bool ReplaceStateWithResume(EThreadState& expected, EThreadState state, EThreadState resumeState) {
+            ui64 expectedInt = WaitingFlag.load();
+            while (true) {
+                const EThreadState current = DecodeState(expectedInt);
+                if (current != expected) {
+                    expected = current;
+                    return false;
+                }
+                const ui64 desired = EncodeState(state, static_cast<ui64>(resumeState));
+                if (WaitingFlag.compare_exchange_weak(expectedInt, desired)) {
+                    return true;
+                }
+            }
+        }
+
+        bool ReplaceStatePreservingResume(EThreadState& expected, EThreadState state) {
+            ui64 expectedInt = WaitingFlag.load();
+            while (true) {
+                const EThreadState current = DecodeState(expectedInt);
+                if (current != expected) {
+                    expected = current;
+                    return false;
+                }
+                const ui64 desired = static_cast<ui64>(state) | (expectedInt & ~StateMask);
+                if (WaitingFlag.compare_exchange_weak(expectedInt, desired)) {
+                    return true;
+                }
+            }
+        }
+
+        EThreadState GetResumeState() {
+            const ui64 state = WaitingFlag.load();
+            const ui64 resumeState = (state >> ResumeStateShift) & StateMask;
+            Y_ABORT_UNLESS(resumeState != InvalidResumeState);
+            return static_cast<EThreadState>(resumeState);
+        }
+
+        void SetResumeState(EThreadState resumeState) {
+            ui64 state = WaitingFlag.load();
+            while (true) {
+                const EThreadState current = DecodeState(state);
+                Y_ABORT_UNLESS(current == EThreadState::Waker || current == EThreadState::NeedToBeWaker);
+                const ui64 desired = EncodeState(current, static_cast<ui64>(resumeState));
+                if (WaitingFlag.compare_exchange_weak(state, desired)) {
+                    return;
+                }
+            }
         }
 
         template <typename TDerived, typename TWaitState>
@@ -91,14 +161,34 @@ namespace NActors {
 
         bool WakeUp();
 
-        bool StartWakerWait() {
-            EThreadState expected = EThreadState::None;
-            return ReplaceState(expected, EThreadState::Spin);
+        bool StartWaker(EThreadState expected, EThreadState resumeState) {
+            return ReplaceStateWithResume(expected, EThreadState::NeedToBeWaker, resumeState);
         }
 
-        bool StartWakerBlocking() {
-            EThreadState expected = EThreadState::None;
-            return ReplaceState(expected, EThreadState::Blocking);
+        bool BecomeWaker() {
+            EThreadState expected = EThreadState::NeedToBeWaker;
+            return ReplaceStatePreservingResume(expected, EThreadState::Waker);
+        }
+
+        bool RequestAnotherWakerPass() {
+            EThreadState expected = EThreadState::Waker;
+            if (ReplaceStatePreservingResume(expected, EThreadState::NeedToBeWaker)) {
+                return true;
+            }
+            return expected == EThreadState::NeedToBeWaker;
+        }
+
+        EThreadState GetWakerResumeState() {
+            return GetResumeState();
+        }
+
+        void SetWakerResumeState(EThreadState state) {
+            SetResumeState(state);
+        }
+
+        bool RestoreWakerResumeState() {
+            EThreadState expected = EThreadState::NeedToBeWaker;
+            return ReplaceState(expected, GetResumeState());
         }
 
         bool WakeFromWaker() {

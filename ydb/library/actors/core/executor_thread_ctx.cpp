@@ -135,6 +135,8 @@ namespace NActors {
                     }
                     break;
                 case EThreadState::Blocking:
+                case EThreadState::NeedToBeWaker:
+                case EThreadState::Waker:
                     return false;
                 default:
                     Y_ABORT();

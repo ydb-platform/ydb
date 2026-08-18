@@ -182,11 +182,15 @@ namespace NActors {
         std::unique_ptr<TBasicExecutorPoolSanitizer> Sanitizer;
         std::unique_ptr<TWaker> Waker;
 
+        static constexpr i16 InvalidWakerWorkerId = -1;
+        static constexpr ui64 WakerRequestBit = ui64(1) << 63;
+        static constexpr ui64 WakerReductionMask = ~WakerRequestBit;
+
         const bool EnableWaker;
         alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic<i64>> ActivationCredits = 0;
         alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic<i16>> SleepingCount = 0;
         alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic_bool> WakerPending = false;
-        alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<TThreadParkPad> WakerPad;
+        alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic<i16>> WakerWorkerId = InvalidWakerWorkerId;
 
     public:
         struct TSemaphore {
@@ -294,8 +298,10 @@ namespace NActors {
 
         void WakeUpLoop(i16 currentThreadCount);
         bool WakeUpLoopShared();
-        void RequestWaker();
-        void WakerLoop();
+        bool TryRequestWaker(bool requireSleepingWorkers);
+        void RequestWaker(bool persistent);
+        void RunWaker(TWorkerId workerId);
+        void WakerLoop(TWorkerId workerId);
 
     };
 }

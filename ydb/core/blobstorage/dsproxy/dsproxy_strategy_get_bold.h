@@ -71,7 +71,7 @@ public:
 
                         // TODO(cthulhu): Group logCtx, state, info and groupDiskRequests into a context.
 
-                        AddGetRequest(logCtx, groupDiskRequests, state.Id, partIdx, disk,
+                        AddGetRequest(logCtx, groupDiskRequests, info, state.Id, partIdx, disk,
                                 fullPartInterval, "BPG64");
                     }
                 }

@@ -131,6 +131,18 @@ void CorruptVGetResultPayload(TEvBlobStorage::TEvVGetResult& vgetResult,
     vgetResult.SetBlobData(result, TRope(data));
 }
 
+void CorruptVGetResultChecksum(TEvBlobStorage::TEvVGetResult& vgetResult,
+        NKikimrBlobStorage::TQueryResult& result) {
+    UNIT_ASSERT(vgetResult.HasBlob(result));
+    TString data = vgetResult.GetBlobData(result).ConvertToString();
+    UNIT_ASSERT(data.size() > sizeof(ui64));
+    const size_t checksumByte = data.size() - 1;
+    data[checksumByte] = data[checksumByte] ^ 1;
+    result.ClearBufferData();
+    result.ClearPayloadId();
+    vgetResult.SetBlobData(result, TRope(data));
+}
+
 void AssertWholePart(const TTestEnv& env, const TString& encryptedPart, const TString& data) {
     const TString decryptedPart = env.DecryptPart(encryptedPart);
     UNIT_ASSERT(CheckCrcAtTheEnd(TErasureType::CrcModeWholePart, TRope(decryptedPart)));
@@ -173,6 +185,8 @@ Y_UNIT_TEST(PutEightBytesWithoutChecksum) {
     UNIT_ASSERT_VALUES_EQUAL(env.DecryptPart(part), data);
 }
 
+// ------------------ VDisk Writes ------------------
+
 Y_UNIT_TEST(VDiskAcceptsValidWholePartChecksumWhenWriteValidationEnabled) {
     TTestEnv env(TErasureType::CrcModeWholePart);
     env.EnableVDiskChecksumValidation(false, true);
@@ -206,6 +220,29 @@ Y_UNIT_TEST(VDiskDoesNotValidateCrcModeNoneOnWrite) {
     UNIT_ASSERT_VALUES_EQUAL(env.Write(GenData(16_KB, 4))->Get()->Status, NKikimrProto::OK);
     UNIT_ASSERT(corrupted);
 }
+
+Y_UNIT_TEST(VDiskAcceptsVMultiPutWithCrcModeNoneWhenWriteValidationEnabled) {
+    TTestEnv env(TErasureType::CrcModeNone);
+    env.EnableVDiskChecksumValidation(false, true);
+    const TString data = GenData(64, 9);
+    const TLogoBlobID fullId = TLogoBlobID::Make(123, 1, 1, 0, data.size(), 0, TErasureType::CrcModeNone);
+    const TLogoBlobID partId(fullId, 1);
+
+    auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(env.GroupInfo->GetVDiskId(0),
+        TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
+    multiPut->AddVPut(partId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
+
+    env.Env.WithQueueId(env.GroupInfo->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog,
+            [&](TActorId queueId) {
+        const TActorId edge = env.Env.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
+        env.Env.Runtime->Send(new IEventHandle(queueId, edge, multiPut.release()), queueId.NodeId());
+        const auto result = env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVMultiPutResult>(edge, false);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetItems(0).GetStatus(), NKikimrProto::OK);
+    });
+}
+
+// ------------------ VDisk Reads ------------------
 
 Y_UNIT_TEST(VDiskRejectsCorruptedWholePartChecksumWhenReadValidationEnabled) {
     TTestEnv env(TErasureType::CrcModeWholePart);
@@ -248,6 +285,8 @@ Y_UNIT_TEST(VDiskDoesNotValidateCrcModeNoneOnRead) {
     UNIT_ASSERT_VALUES_EQUAL(env.ReadPart(), NKikimrProto::OK);
 }
 
+// ------------------ Substring Reads ------------------
+
 Y_UNIT_TEST(VDiskDoesNotValidatePartialWholePartRead) {
     TTestEnv env(TErasureType::CrcModeWholePart);
     bool corrupted = false;
@@ -256,36 +295,6 @@ Y_UNIT_TEST(VDiskDoesNotValidatePartialWholePartRead) {
     UNIT_ASSERT(corrupted);
     env.EnableVDiskChecksumValidation(true, false);
     UNIT_ASSERT_VALUES_EQUAL(env.ReadPart(10, 32), NKikimrProto::OK);
-}
-
-Y_UNIT_TEST(VDiskAcceptsVMultiPutWithCrcModeNoneWhenWriteValidationEnabled) {
-    TTestEnv env(TErasureType::CrcModeNone);
-    env.EnableVDiskChecksumValidation(false, true);
-    const TString data = GenData(64, 9);
-    const TLogoBlobID fullId = TLogoBlobID::Make(123, 1, 1, 0, data.size(), 0, TErasureType::CrcModeNone);
-    const TLogoBlobID partId(fullId, 1);
-
-    auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(env.GroupInfo->GetVDiskId(0),
-        TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::TabletLog, false);
-    multiPut->AddVPut(partId, TRcBuf(data), nullptr, nullptr, NWilson::TTraceId());
-
-    env.Env.WithQueueId(env.GroupInfo->GetVDiskId(0), NKikimrBlobStorage::EVDiskQueueId::PutTabletLog,
-            [&](TActorId queueId) {
-        const TActorId edge = env.Env.Runtime->AllocateEdgeActor(queueId.NodeId(), __FILE__, __LINE__);
-        env.Env.Runtime->Send(new IEventHandle(queueId, edge, multiPut.release()), queueId.NodeId());
-        const auto result = env.Env.WaitForEdgeActorEvent<TEvBlobStorage::TEvVMultiPutResult>(edge, false);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetStatus(), NKikimrProto::OK);
-        UNIT_ASSERT_VALUES_EQUAL(result->Get()->Record.GetItems(0).GetStatus(), NKikimrProto::OK);
-    });
-}
-
-Y_UNIT_TEST(DsProxyReadsWholePartChecksumBlob) {
-    TTestEnv env(TErasureType::CrcModeWholePart);
-    const TString data = GenData(16_KB, 9);
-    UNIT_ASSERT_VALUES_EQUAL(env.Write(data)->Get()->Status, NKikimrProto::OK);
-    const auto result = env.ReadFromDsProxy();
-    UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
-    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data);
 }
 
 Y_UNIT_TEST(DsProxyReadsSubstringOfWholePartChecksumBlob) {
@@ -297,9 +306,21 @@ Y_UNIT_TEST(DsProxyReadsSubstringOfWholePartChecksumBlob) {
     UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data.substr(23, 41));
 }
 
-Y_UNIT_TEST(DsProxyAcceptsCorruptedFullPartVGetWithoutTransportChecksum) {
+// ------------------ DsProxy ------------------
+
+Y_UNIT_TEST(DsProxyReadsWholePartChecksumBlob) {
     TTestEnv env(TErasureType::CrcModeWholePart);
-    UNIT_ASSERT_VALUES_EQUAL(env.Write(GenData(16_KB, 10))->Get()->Status, NKikimrProto::OK);
+    const TString data = GenData(16_KB, 9);
+    UNIT_ASSERT_VALUES_EQUAL(env.Write(data)->Get()->Status, NKikimrProto::OK);
+    const auto result = env.ReadFromDsProxy();
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data);
+}
+
+Y_UNIT_TEST(DsProxyRejectsInvalidVGetChecksum) {
+    TTestEnv env(TErasureType::CrcModeWholePart);
+    const TString data = GenData(16_KB, 10);
+    UNIT_ASSERT_VALUES_EQUAL(env.Write(data)->Get()->Status, NKikimrProto::OK);
 
     bool corrupted = false;
     env.Env.Runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev) {
@@ -307,7 +328,9 @@ Y_UNIT_TEST(DsProxyAcceptsCorruptedFullPartVGetWithoutTransportChecksum) {
             auto* vget = ev->Get<TEvBlobStorage::TEvVGetResult>();
             auto* queryResult = vget->Record.MutableResult(0);
             UNIT_ASSERT_VALUES_EQUAL(queryResult->GetStatus(), NKikimrProto::OK);
-            CorruptVGetResultPayload(*vget, *queryResult);
+            const TLogoBlobID partId = LogoBlobIDFromLogoBlobID(queryResult->GetBlobID());
+            UNIT_ASSERT_VALUES_EQUAL(vget->GetBlobData(*queryResult).size(), env.GroupInfo->Type.PartSize(partId));
+            CorruptVGetResultChecksum(*vget, *queryResult);
             corrupted = true;
         }
         return true;
@@ -315,8 +338,8 @@ Y_UNIT_TEST(DsProxyAcceptsCorruptedFullPartVGetWithoutTransportChecksum) {
 
     const auto result = env.ReadFromDsProxy();
     UNIT_ASSERT(corrupted);
-    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Status, NKikimrProto::OK);
-    UNIT_ASSERT_VALUES_UNEQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), GenData(16_KB, 10));
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::ERROR, result->Get()->ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::ERROR);
 }
 
 Y_UNIT_TEST(DsProxyAcceptsCorruptedFullPartVGetWithCrcModeNone) {

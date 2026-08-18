@@ -149,7 +149,7 @@ public:
                                     TIntervalSet<i32> unrequestedInterval(partInterval);
                                     unrequestedInterval.Subtract(disk.DiskParts[partIdx].Requested);
                                     if (!unrequestedInterval.IsEmpty()) {
-                                        AddGetRequest(logCtx, groupDiskRequests, state.Id, partIdx, disk,
+                                        AddGetRequest(logCtx, groupDiskRequests, info, state.Id, partIdx, disk,
                                                 unrequestedInterval, "BPG46");
                                     }
                                 }
@@ -267,7 +267,7 @@ public:
                             //
                             //                actually consider that we dont need to prove anything if we can
                             //                read the data
-                            AddGetRequest(logCtx, groupDiskRequests, state.Id, partIdx, disk,
+                            AddGetRequest(logCtx, groupDiskRequests, info, state.Id, partIdx, disk,
                                     partIntervals, "BPG47");
                         }
                     }

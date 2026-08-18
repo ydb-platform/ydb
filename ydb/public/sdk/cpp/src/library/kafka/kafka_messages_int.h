@@ -178,6 +178,9 @@ inline void EnsureArrayAllocationFits(TKafkaReadable& readable, TKafkaInt32 leng
     }
 }
 
+ui32 ReadTaggedFieldsCount(TKafkaReadable& readable);
+void SkipTaggedField(TKafkaReadable& readable, ui32 size);
+
 
 inline IOutputStream& operator <<(IOutputStream& out, const TKafkaUuid& /*value*/) {
     return out << "---";
@@ -750,9 +753,19 @@ inline void WriteTag(TKafkaWritable& writable, TKafkaInt16 version, const typena
 }
 
 template<typename Meta>
-inline void ReadTag(TKafkaReadable& readable, TKafkaInt16 version, typename Meta::Type& value) {
+inline void ReadTag(TKafkaReadable& readable, TKafkaInt16 version, ui32 size, typename Meta::Type& value) {
     if constexpr (!VersionNone<Meta::TaggedVersions.Min, Meta::TaggedVersions.Max>()) {
+        if (static_cast<size_t>(size) > readable.left()) {
+            ythrow yexception() << "tagged field " << Meta::Name << " had invalid length " << size;
+        }
+        const size_t end = readable.position() + static_cast<size_t>(size);
         TypeStrategy<Meta, typename Meta::Type>::DoRead(readable, version, value);
+        if (readable.position() > end) {
+            ythrow yexception() << "tagged field " << Meta::Name << " overran declared length " << size;
+        }
+        readable.skip(end - readable.position());
+    } else {
+        SkipTaggedField(readable, size);
     }
 }
 

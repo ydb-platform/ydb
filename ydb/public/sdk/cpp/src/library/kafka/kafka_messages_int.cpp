@@ -81,6 +81,26 @@ void TKafkaReadable::checkEof(size_t length) {
     }
 }
 
+namespace NPrivate {
+
+ui32 ReadTaggedFieldsCount(TKafkaReadable& readable) {
+    const ui32 count = readable.readUnsignedVarint<ui32>();
+    constexpr size_t kMinTaggedFieldBytes = 2;
+    if (count > 0 && static_cast<size_t>(count) > readable.left() / kMinTaggedFieldBytes) {
+        ythrow yexception() << "tagged fields count " << count << " exceeds remaining bytes";
+    }
+    return count;
+}
+
+void SkipTaggedField(TKafkaReadable& readable, ui32 size) {
+    if (static_cast<size_t>(size) > readable.left()) {
+        ythrow yexception() << "tagged field had invalid length " << size;
+    }
+    readable.skip(size);
+}
+
+} // namespace NPrivate
+
 char Hex(const unsigned char c) {
     return c < 10 ? '0' + c : 'A' + c - 10;
 }

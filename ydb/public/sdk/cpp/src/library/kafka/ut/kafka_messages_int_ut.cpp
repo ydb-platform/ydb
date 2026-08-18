@@ -202,7 +202,7 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
         ui32 size = readable.readUnsignedVarint<ui32>();
         UNIT_ASSERT_EQUAL(size, sizeof(TKafkaInt8));
 
-        NKafka::NPrivate::ReadTag<Meta_TKafkaInt8>(readable, 11, result);
+        NKafka::NPrivate::ReadTag<Meta_TKafkaInt8>(readable, 11, size, result);
         UNIT_ASSERT_EQUAL(result, value);
     }
 
@@ -248,7 +248,7 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
         ui32 size = readable.readUnsignedVarint<ui32>();
         UNIT_ASSERT_EQUAL(size, value->size() + NKafka::NPrivate::SizeOfUnsignedVarint(value->size() + 1));
 
-        NKafka::NPrivate::ReadTag<Meta_TKafkaString>(readable, 11, result);
+        NKafka::NPrivate::ReadTag<Meta_TKafkaString>(readable, 11, size, result);
         UNIT_ASSERT_EQUAL(result, value);
     }
 
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
             + NKafka::NPrivate::SizeOfUnsignedVarint(value.size())
             + NKafka::NPrivate::SizeOfUnsignedVarint(v.length() + 1));
 
-        NKafka::NPrivate::ReadTag<Meta_TKafkaArray>(readable, 11, result);
+        NKafka::NPrivate::ReadTag<Meta_TKafkaArray>(readable, 11, size, result);
         UNIT_ASSERT_EQUAL(result, value);
     }
 
@@ -351,7 +351,7 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
         UNIT_ASSERT_EQUAL(size, value->size()
             + NKafka::NPrivate::SizeOfUnsignedVarint(value->size() + 1));
 
-        NKafka::NPrivate::ReadTag<Meta_TKafkaBytes>(readable, 11, result);
+        NKafka::NPrivate::ReadTag<Meta_TKafkaBytes>(readable, 11, size, result);
         UNIT_ASSERT_EQUAL(*result, *value);
     }
 
@@ -507,6 +507,64 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(readable.take(0), yexception, "unexpected end of stream");
         UNIT_ASSERT_EXCEPTION_CONTAINS(readable.skip(1), yexception, "unexpected end of stream");
         UNIT_ASSERT_EXCEPTION_CONTAINS(readable.Bytes(1), yexception, "unexpected end of stream");
+    }
+
+    Y_UNIT_TEST(ReadTaggedFieldsCount_AcceptsZero) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        writable.writeUnsignedVarint<ui32>(0);
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(NKafka::NPrivate::ReadTaggedFieldsCount(readable), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(readable.left(), 0u);
+    }
+
+    Y_UNIT_TEST(ReadTaggedFieldsCount_AcceptsCountFittingRemaining) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        writable.writeUnsignedVarint<ui32>(1);
+        writable.writeUnsignedVarint<ui32>(0);
+        writable.writeUnsignedVarint<ui32>(0);
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        UNIT_ASSERT_VALUES_EQUAL(NKafka::NPrivate::ReadTaggedFieldsCount(readable), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(readable.left(), 2u);
+    }
+
+    Y_UNIT_TEST(ReadTaggedFieldsCount_RejectsCountLargerThanRemaining) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        writable.writeUnsignedVarint<ui32>(1'000'000);
+        writable.writeUnsignedVarint<ui32>(0);
+        writable.writeUnsignedVarint<ui32>(0);
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            NKafka::NPrivate::ReadTaggedFieldsCount(readable),
+            yexception,
+            "tagged fields count");
+    }
+
+    Y_UNIT_TEST(SkipTaggedField_SkipsDeclaredSize) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        const char payload[] = {'a', 'b', 'c', 'd'};
+        writable.write(payload, sizeof(payload));
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        NKafka::NPrivate::SkipTaggedField(readable, 2);
+        UNIT_ASSERT_VALUES_EQUAL(readable.left(), 2u);
+        UNIT_ASSERT_VALUES_EQUAL(readable.take(0), 'c');
+    }
+
+    Y_UNIT_TEST(SkipTaggedField_RejectsSizeLargerThanRemaining) {
+        TBuffer buf("ab", 2);
+        TKafkaReadable readable(buf);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            NKafka::NPrivate::SkipTaggedField(readable, 3),
+            yexception,
+            "tagged field had invalid length");
+        UNIT_ASSERT_VALUES_EQUAL(readable.left(), 2u);
     }
 }
 

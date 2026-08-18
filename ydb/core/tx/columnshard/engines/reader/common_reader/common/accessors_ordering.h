@@ -42,10 +42,10 @@ public:
         return std::move(Finish);
     }
 
-    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const bool Conflicting)
+    TDataSourceConstructor(TReplaceKeyAdapter&& start, TReplaceKeyAdapter&& finish, const bool conflicting)
         : Start(std::move(start))
         , Finish(std::move(finish))
-        , Conflicting(Conflicting)
+        , Conflicting(conflicting)
     {
     }
 

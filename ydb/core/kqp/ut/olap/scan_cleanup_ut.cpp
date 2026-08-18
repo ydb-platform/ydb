@@ -16,6 +16,13 @@ namespace {
 using TPortionAccessorsCache = NGeneralCache::TServiceOperator<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>;
 using TEvAskPortionAccessors = NGeneralCache::NPublic::TEvents<NOlap::NGeneralCache::TPortionsMetadataCachePolicy>::TEvAskData;
 
+void SleepUntil(TTestActorRuntime& runtime, const TInstant deadline) {
+    const auto now = runtime.GetCurrentTime();
+    if (deadline > now) {
+        runtime.SimulateSleep(deadline - now);
+    }
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
@@ -164,10 +171,10 @@ Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
         // The registry floor lags real time by the promotion and clock skew margins, so the portions stay
         // uncollectable until the clock moves past them for reasons that have nothing to do with the lock.
         // Wait that out first, otherwise the lock proves nothing.
-        runtime.SimulateSleep(compactedAt + TDuration::Seconds(10) - runtime.GetCurrentTime());
+        SleepUntil(runtime, compactedAt + TDuration::Seconds(10));
 
         // 6. Cleanup happens, after the scan takes the portion for reading, but before the scan actually reads it.
-        // Cleanup collects the second portion (with key 500), but leaves the first one, because the scan tool a lock for it.
+        // Cleanup collects the second portion (with key 500), but leaves the first one, because the scan took a lock for it.
         {
             const i64 cleanupsBefore = csController->GetCleaningFinishedCounter().Val();
             csController->EnableBackground(NYDBTest::ICSController::EBackground::Cleanup);
@@ -302,7 +309,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScanCleanup) {
         }
 
         // The registry floor lags real time by the promotion and clock skew margins.
-        runtime.SimulateSleep(compactedAt + TDuration::Seconds(10) - runtime.GetCurrentTime());
+        SleepUntil(runtime, compactedAt + TDuration::Seconds(10));
 
         // 5. Cleanup runs before tx1 reads. Nobody holds a scan lock, so both originals can be collected.
         {

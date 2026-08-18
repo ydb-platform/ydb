@@ -51,17 +51,19 @@ constexpr TStringBuf SdkStubWast = R"(
 )";
 
 //! Intentionally never destroyed: a WAVM teardown at exit races the harness.
+//! Shared-owned like in a compute actor, so materialization registers a keep-alive
+//! on the handle and the measured cost matches production.
 TQueryCompartmentHandle& QueryCompartment() {
-    static auto* handle = [] {
+    static auto* handle = new TQueryCompartmentHandlePtr([] {
         const auto objectCode = CompileModuleObjectCode(SdkStubWast, EBytecodeFormat::HumanReadable);
-        auto* h = new TQueryCompartmentHandle();
+        auto h = std::make_shared<TQueryCompartmentHandle>();
         h->Compartment = CreateEmptyImage();
         h->Compartment->AddSdk(
             MakeModuleBytecode(SdkStubWast, objectCode, EBytecodeFormat::HumanReadable));
         h->Generation = 1;
         return h;
-    }();
-    return *handle;
+    }());
+    return **handle;
 }
 
 TString MakeBlob(size_t size) {

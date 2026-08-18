@@ -338,7 +338,8 @@ TEST_F(TWebAssemblyTest, AllocationRegistryOwnerOutlivesLiveAllocations)
 
     constexpr ui64 generation = 99;
     auto& registry = TWasmAllocationRegistry::Instance();
-    registry.Register(host, compartment.get(), offset, size, generation, compartment);
+    registry.RetainOwner(generation, compartment);
+    registry.Register(host, compartment.get(), offset, size, generation);
     ASSERT_EQ(registry.CountGeneration(generation), 1u);
 
     std::weak_ptr<IWebAssemblyCompartment> weak = compartment;

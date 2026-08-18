@@ -23,21 +23,24 @@ class TWasmAllocationRegistry {
 public:
     static TWasmAllocationRegistry& Instance();
 
-    //! |owner| keeps the compartment alive; pass the query compartment handle.
-    //! Only the first registration of a generation stores it.
     void Register(
         void* hostPtr,
         IWebAssemblyCompartment* compartment,
         uintptr_t offset,
         size_t size,
-        ui64 generation,
-        std::shared_ptr<void> owner = nullptr);
+        ui64 generation);
 
     //! If |hostPtr| is registered, FreeBytes and erase; returns true.
     //! Unknown pointer → false (caller may use UdfFreeWithSize).
     //! For a generation whose owner is released, erase without FreeBytes (the
     //! whole compartment is about to go) and drop the owner on the last one.
     bool TryFree(void* hostPtr);
+
+    //! Keep |owner| (the query compartment handle) alive for |generation|. Called
+    //! once per acquire, not per value: ownership belongs to the query scope, and
+    //! taking a reference per materialized string would only add atomics to the
+    //! hot path. Without it values simply get no keep-alive.
+    void RetainOwner(ui64 generation, std::shared_ptr<void> owner);
 
     //! The query scope no longer needs the compartment. Live allocations keep it
     //! alive until their last TryFree; with none left the owner is dropped here.

@@ -4,7 +4,6 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
-#include <util/string/builder.h>
 #include <util/system/env.h>
 #include <util/system/spinlock.h>
 
@@ -20,11 +19,14 @@ bool IsWasmStringDebugEnabled() {
     return enabled;
 }
 
-void WasmStringDebug(const TString& message) {
-    if (IsWasmStringDebugEnabled()) {
-        Cerr << "[WasmString] " << message << Endl;
-    }
-}
+//! Register / TryFree run once per materialized string, so the message must not
+//! be built unless logging is actually on.
+#define WASM_STRING_DEBUG(args)                                 \
+    do {                                                        \
+        if (IsWasmStringDebugEnabled()) {                       \
+            Cerr << "[WasmString] " << args << Endl;             \
+        }                                                       \
+    } while (false)
 
 struct TAllocationRecord {
     IWebAssemblyCompartment* Compartment = nullptr;
@@ -52,15 +54,13 @@ public:
         IWebAssemblyCompartment* compartment,
         uintptr_t offset,
         size_t size,
-        ui64 generation,
-        std::shared_ptr<void> owner)
+        ui64 generation)
     {
         if (!hostPtr || !compartment || offset == 0) {
             return;
         }
         with_lock (Lock_) {
-            WasmStringDebug(TStringBuilder()
-                << "Register: host=" << hostPtr << " offset=" << offset
+            WASM_STRING_DEBUG("Register: host=" << hostPtr << " offset=" << offset
                 << " size=" << size << " generation=" << generation);
             OrphanedHosts_.erase(hostPtr);
             Allocations_[hostPtr] = TAllocationRecord{
@@ -70,11 +70,7 @@ public:
                 .Generation = generation,
             };
             if (generation != 0) {
-                auto& generationRecord = Generations_[generation];
-                ++generationRecord.LiveCount;
-                if (owner && !generationRecord.Owner) {
-                    generationRecord.Owner = std::move(owner);
-                }
+                ++Generations_[generation].LiveCount;
             }
         }
     }
@@ -93,7 +89,7 @@ public:
             with_lock (Lock_) {
                 // Compartment already torn down for this ptr — swallow free.
                 if (OrphanedHosts_.erase(hostPtr)) {
-                    WasmStringDebug("TryFree: destination=orphaned (no FreeBytes)");
+                    WASM_STRING_DEBUG("TryFree: destination=orphaned (no FreeBytes)");
                     return true;
                 }
                 auto it = Allocations_.find(hostPtr);
@@ -113,9 +109,9 @@ public:
                     // No point returning bytes to a guest allocator that is
                     // about to be destroyed along with its linear memory.
                     doFree = !generationRecord.OwnerReleased;
-                    // The keep-alive is only needed while something points into
-                    // linear memory; the query scope holds its own reference.
-                    if (generationRecord.LiveCount == 0) {
+                    // Last value of a generation nobody waits for any more: this
+                    // free is what finally destroys the compartment.
+                    if (generationRecord.OwnerReleased && generationRecord.LiveCount == 0) {
                         releasedOwner = std::move(generationRecord.Owner);
                         Generations_.erase(generationIt);
                     }
@@ -126,13 +122,11 @@ public:
         }
 
         if (!doFree) {
-            WasmStringDebug(TStringBuilder()
-                << "TryFree: destination=swallowed (owner released)"
+            WASM_STRING_DEBUG("TryFree: destination=swallowed (owner released)"
                 << " offset=" << record.Offset
                 << " generation=" << record.Generation);
         } else {
-            WasmStringDebug(TStringBuilder()
-                << "TryFree: destination=FreeBytes"
+            WASM_STRING_DEBUG("TryFree: destination=FreeBytes"
                 << " offset=" << record.Offset
                 << " size=" << record.Size
                 << " generation=" << record.Generation);
@@ -140,14 +134,22 @@ public:
                 record.Compartment->FreeBytes(record.Offset);
             } catch (...) {
                 // Never propagate from free paths used by UnRef/dtors.
-                WasmStringDebug(TStringBuilder()
-                    << "TryFree: FreeBytes failed"
+                WASM_STRING_DEBUG("TryFree: FreeBytes failed"
                     << " offset=" << record.Offset
                     << " size=" << record.Size
                     << " generation=" << record.Generation);
             }
         }
         return true;
+    }
+
+    void RetainOwner(ui64 generation, std::shared_ptr<void> owner) {
+        if (generation == 0 || !owner) {
+            return;
+        }
+        with_lock (Lock_) {
+            Generations_[generation].Owner = std::move(owner);
+        }
     }
 
     void ReleaseOwner(ui64 generation) {
@@ -166,8 +168,7 @@ public:
                 Generations_.erase(it);
             } else {
                 it->second.OwnerReleased = true;
-                WasmStringDebug(TStringBuilder()
-                    << "ReleaseOwner: generation=" << generation
+                WASM_STRING_DEBUG("ReleaseOwner: generation=" << generation
                     << " outliving values=" << it->second.LiveCount);
             }
         }
@@ -197,8 +198,7 @@ public:
                 Generations_.erase(it);
             }
             if (!hostPtrs.empty()) {
-                WasmStringDebug(TStringBuilder()
-                    << "ForgetGeneration: generation=" << generation
+                WASM_STRING_DEBUG("ForgetGeneration: generation=" << generation
                     << " orphaned=" << hostPtrs.size());
             }
         }
@@ -238,15 +238,18 @@ void TWasmAllocationRegistry::Register(
     IWebAssemblyCompartment* compartment,
     uintptr_t offset,
     size_t size,
-    ui64 generation,
-    std::shared_ptr<void> owner)
+    ui64 generation)
 {
     TWasmAllocationRegistryImpl::Instance().Register(
-        hostPtr, compartment, offset, size, generation, std::move(owner));
+        hostPtr, compartment, offset, size, generation);
 }
 
 bool TWasmAllocationRegistry::TryFree(void* hostPtr) {
     return TWasmAllocationRegistryImpl::Instance().TryFree(hostPtr);
+}
+
+void TWasmAllocationRegistry::RetainOwner(ui64 generation, std::shared_ptr<void> owner) {
+    TWasmAllocationRegistryImpl::Instance().RetainOwner(generation, std::move(owner));
 }
 
 void TWasmAllocationRegistry::ReleaseOwner(ui64 generation) {

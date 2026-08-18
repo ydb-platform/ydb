@@ -21,8 +21,7 @@ using EAbiValueType = NYdb::NUdfStore::NAbi::EValueType;
 TUnboxedValuePod TWasmStringValue::Make(
     TStringRef data,
     IWebAssemblyCompartment* compartment,
-    ui64 generation,
-    std::shared_ptr<void> owner)
+    ui64 generation)
 {
     if (!compartment) {
         ythrow yexception() << "TWasmStringValue::Make: compartment is null";
@@ -41,7 +40,7 @@ TUnboxedValuePod TWasmStringValue::Make(
 
     const uintptr_t offset = buffer.Offset();
     TWasmAllocationRegistry::Instance().Register(
-        header, compartment, offset, allocBytes, generation, std::move(owner));
+        header, compartment, offset, allocBytes, generation);
     buffer.Release();
 
     // ConstructInPlace starts at one reference while a freshly built pod must
@@ -73,11 +72,7 @@ TUnboxedValuePod TWasmStringValue::MakePreferWasm(TStringRef data)
     }
 
     TPreferWasmStats::Instance().OnMaterializedInWasm();
-    return Make(
-        data,
-        handle->Compartment.get(),
-        handle->Generation,
-        handle->shared_from_this());
+    return Make(data, handle->Compartment.get(), handle->Generation);
 }
 
 bool TWasmStringValue::TryGetResidentOffset(

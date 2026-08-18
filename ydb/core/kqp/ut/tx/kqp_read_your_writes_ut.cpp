@@ -1159,6 +1159,156 @@ Y_UNIT_TEST(UpdateBasedOnEarlierUpdatedRowAfterCommit_ReadCommitted) {
     tester.Execute();
 }
 
+// ============================================================================
+// Index scenarios (row tables only — OLAP does not support secondary indexes)
+// ============================================================================
+
+// After inserting a row, a lookup by secondary index in the same transaction must find it.
+class TInsertThenSelectByIndex : public TTableDataModificationTester {
+    TTxSettings TxSettings_;
+public:
+    TInsertThenSelectByIndex(TTxSettings txSettings)
+        : TxSettings_(txSettings)
+    {
+        SetFillTables(false);
+    }
+protected:
+    void DoExecute() override {
+        auto client = Kikimr->GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");
+        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
+        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[1u;"A"]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+};
+
+Y_UNIT_TEST(InsertThenSelectByIndex_Serializable) {
+    TInsertThenSelectByIndex tester(TTxSettings::SerializableRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(InsertThenSelectByIndex_Snapshot) {
+    TInsertThenSelectByIndex tester(TTxSettings::SnapshotRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(InsertThenSelectByIndex_ReadCommitted) {
+    TInsertThenSelectByIndex tester(TTxSettings::ReadCommittedRW());
+    tester.Execute();
+}
+
+// After updating an indexed column, the old index value must be gone and the new one visible.
+class TUpdateIndexedColumnThenSelectByIndex : public TTableDataModificationTester {
+    TTxSettings TxSettings_;
+public:
+    TUpdateIndexedColumnThenSelectByIndex(TTxSettings txSettings)
+        : TxSettings_(txSettings)
+    {
+        SetFillTables(false);
+    }
+protected:
+    void DoExecute() override {
+        auto client = Kikimr->GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "old_val");
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"(
+            UPDATE Test2 SET Comment = "new_val" WHERE Group = 1u AND Name = "A";
+        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "new_val";
+        )", TTxControl::Tx(*tx)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[1u;"A"]])", FormatResultSetYson(result.GetResultSet(0)));
+        tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "old_val";
+        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+};
+
+Y_UNIT_TEST(UpdateIndexedColumnThenSelectByIndex_Serializable) {
+    TUpdateIndexedColumnThenSelectByIndex tester(TTxSettings::SerializableRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(UpdateIndexedColumnThenSelectByIndex_Snapshot) {
+    TUpdateIndexedColumnThenSelectByIndex tester(TTxSettings::SnapshotRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(UpdateIndexedColumnThenSelectByIndex_ReadCommitted) {
+    TUpdateIndexedColumnThenSelectByIndex tester(TTxSettings::ReadCommittedRW());
+    tester.Execute();
+}
+
+// After deleting a row, a lookup by secondary index in the same transaction must return nothing.
+class TDeleteThenSelectByIndex : public TTableDataModificationTester {
+    TTxSettings TxSettings_;
+public:
+    TDeleteThenSelectByIndex(TTxSettings txSettings)
+        : TxSettings_(txSettings)
+    {
+        SetFillTables(false);
+    }
+protected:
+    void DoExecute() override {
+        auto client = Kikimr->GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        result = session.ExecuteQuery(R"(
+            DELETE FROM Test2 WHERE Group = 1u AND Name = "A";
+        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
+        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+};
+
+Y_UNIT_TEST(DeleteThenSelectByIndex_Serializable) {
+    TDeleteThenSelectByIndex tester(TTxSettings::SerializableRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(DeleteThenSelectByIndex_Snapshot) {
+    TDeleteThenSelectByIndex tester(TTxSettings::SnapshotRW());
+    tester.Execute();
+}
+
+Y_UNIT_TEST(DeleteThenSelectByIndex_ReadCommitted) {
+    TDeleteThenSelectByIndex tester(TTxSettings::ReadCommittedRW());
+    tester.Execute();
+}
+
 } // Y_UNIT_TEST_SUITE
 
 } // namespace NKqp

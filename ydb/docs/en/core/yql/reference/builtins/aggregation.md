@@ -4,11 +4,13 @@
 
 ### Signature
 
+
 ```yql
 COUNT(*)->Uint64
 COUNT(T)->Uint64
 COUNT(T?)->Uint64
 ```
+
 
 Counting the number of rows in a row or columnar table (if `*` or constant is specified as the argument) or non-empty values in a table column (if the column name is specified as an argument).
 
@@ -16,13 +18,16 @@ Like other aggregate functions, it can be combined with [GROUP BY](../syntax/sel
 
 ### Examples
 
+
 ```yql
 SELECT COUNT(*) FROM my_table;
 ```
 
+
 ```yql
 SELECT key, COUNT(value) FROM my_table GROUP BY key;
 ```
+
 
 {% if select_statement != "SELECT STREAM" %}
 
@@ -36,6 +41,7 @@ SELECT COUNT(DISTINCT value) FROM my_table;
 
 ### Signature
 
+
 ```yql
 MIN(T?)->T?
 MIN(T)->T?
@@ -43,19 +49,23 @@ MAX(T?)->T?
 MAX(T)->T?
 ```
 
+
 Minimum or maximum value.
 
 As an argument, you may use an arbitrary computable expression with a result that allows value comparison.
 
 ### Examples
 
+
 ```yql
 SELECT MIN(value), MAX(value) FROM my_table;
 ```
 
+
 ## SUM {#sum}
 
 ### Signature
+
 
 ```yql
 SUM(Unsigned?)->Uint64?
@@ -64,25 +74,30 @@ SUM(Interval?)->Interval?
 SUM(Decimal(N, M)?)->Decimal(35, M)?
 ```
 
+
 Sum of the numbers.
 
 As an argument, you may use an arbitrary computable expression with a numeric result or type `Interval`.
 
 Integers are automatically expanded to 64 bits to reduce the risk of overflow.
 
+
 ```yql
 SELECT SUM(value) FROM my_table;
 ```
 
+
 ## AVG {#avg}
 
 ### Signature
+
 
 ```yql
 AVG(Double?)->Double?
 AVG(Interval?)->Interval?
 AVG(Decimal(N, M)?)->Decimal(N, M)?
 ```
+
 
 Arithmetic average.
 
@@ -92,17 +107,21 @@ Integer values and time intervals are automatically converted to Double.
 
 ### Examples
 
+
 ```yql
 SELECT AVG(value) FROM my_table;
 ```
+
 
 ## COUNT_IF {#count-if}
 
 ### Signature
 
+
 ```yql
 COUNT_IF(Bool?)->Uint64?
 ```
+
 
 Number of rows for which the expression specified as the argument is true (the expression's calculation result is true).
 
@@ -112,17 +131,20 @@ The function *does not* do the implicit type casting to Boolean for strings and 
 
 ### Examples
 
+
 ```yql
 SELECT
   COUNT_IF(value % 2 == 1) AS odd_count
 FROM my_table;
 ```
 
+
 {% if select_statement != "SELECT STREAM" %}
 
 {% note info %}
 
 To count distinct values in rows meeting the condition, unlike other aggregate functions, you can't use the modifier [DISTINCT](../syntax/select/group-by.md#distinct) because arguments contain no values. To get such a result, use a query like this:
+
 
 ```yql
 SELECT
@@ -138,6 +160,7 @@ FROM my_table;
 
 ### Signature
 
+
 ```yql
 SUM_IF(Unsigned?, Bool?)->Uint64?
 SUM_IF(Signed?, Bool?)->Int64?
@@ -146,11 +169,13 @@ SUM_IF(Interval?, Bool?)->Interval?
 AVG_IF(Double?, Bool?)->Double?
 ```
 
+
 Sum or arithmetic average, but only for the rows that satisfy the condition passed by the second argument.
 
 Therefore, `SUM_IF(value, condition)` is a slightly shorter notation for `SUM(IF(condition, value))`, same for `AVG`. The argument's data type expansion is similar to the same-name functions without a suffix.
 
 ### Examples
+
 
 ```yql
 SELECT
@@ -159,7 +184,9 @@ SELECT
 FROM my_table;
 ```
 
+
 When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` containing a value and a predicate is passed as the first [AGGREGATE_BY](#aggregate-by) argument.
+
 
 ```yql
 $sum_if_factory = AggregationFactory("SUM_IF");
@@ -171,14 +198,17 @@ SELECT
 FROM my_table;
 ```
 
+
 ## SOME {#some}
 
 ### Signature
+
 
 ```yql
 SOME(T?)->T?
 SOME(T)->T?
 ```
+
 
 Get the value for an expression specified as an argument, for one of the table rows. Gives no guarantee of which row is used. It's similar to the [any()](https://clickhouse.com/docs/en/sql-reference/aggregate-functions/reference/any/) function in ClickHouse.
 
@@ -186,11 +216,13 @@ Because of no guarantee, `SOME` is computationally cheaper than [MIN / MAX](#min
 
 ### Examples
 
+
 ```yql
 SELECT
   SOME(value)
 FROM my_table;
 ```
+
 
 {% note alert %}
 
@@ -202,11 +234,13 @@ When the aggregate function `SOME` is called multiple times, it's **not** guaran
 
 ### Signature
 
+
 ```yql
 CountDistinctEstimate(T)->Uint64?
 HyperLogLog(T)->Uint64?
 HLL(T)->Uint64?
 ```
+
 
 Approximating the number of unique values using the [HyperLogLog](https://en.wikipedia.org/wiki/HyperLogLog) algorithm. Logically, it does the same thing as [COUNT(DISTINCT ...)](#count), but runs much faster at the cost of some error.
 
@@ -221,11 +255,13 @@ All the three functions are aliases at the moment, but `CountDistinctEstimate` m
 
 ### Examples
 
+
 ```yql
 SELECT
   CountDistinctEstimate(my_column)
 FROM my_table;
 ```
+
 
 ```yql
 SELECT
@@ -233,9 +269,11 @@ SELECT
 FROM my_table;
 ```
 
+
 ## AGGREGATE_LIST {#agg-list}
 
 ### Signature
+
 
 ```yql
 AGGREGATE_LIST(T? [, limit:Uint64])->List<T>
@@ -243,6 +281,7 @@ AGGREGATE_LIST(T [, limit:Uint64])->List<T>
 AGGREGATE_LIST_DISTINCT(T? [, limit:Uint64])->List<T>
 AGGREGATE_LIST_DISTINCT(T [, limit:Uint64])->List<T>
 ```
+
 
 Get all column values as a list. When combined with `DISTINCT,` it returns only distinct values. The optional second parameter sets the maximum number of values to be returned. A zero limit value means unlimited.
 
@@ -256,6 +295,7 @@ For example, you can combine it with `DISTINCT` and the function [String::JoinFr
 
 ### Examples
 
+
 ```yql
 SELECT
    AGGREGATE_LIST( region ),
@@ -266,12 +306,14 @@ SELECT
 FROM users
 ```
 
+
 ```yql
 -- An equivalent of GROUP_CONCAT in MySQL
 SELECT
     String::JoinFromList(CAST(AGGREGATE_LIST(region, 2) AS List<String>), ",")
 FROM users
 ```
+
 
 These functions also have a short notation: `AGG_LIST` and `AGG_LIST_DISTINCT`.
 
@@ -285,6 +327,7 @@ Execution is **NOT** lazy, so when you use it, be sure that the list has a reaso
 
 ### Signature
 
+
 ```yql
 MAX_BY(T1?, T2)->T1?
 MAX_BY(T1, T2)->T1?
@@ -294,6 +337,7 @@ MIN_BY(T1?, T2)->T1?
 MIN_BY(T1, T2)->T1?
 MIN_BY(T1, T2, limit:Uint64)->List<T1>?
 ```
+
 
 Return the value of the first argument for the table row where the second argument is minimum/maximum.
 
@@ -316,12 +360,14 @@ When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` con
 
 ### Examples
 
+
 ```yql
 SELECT
   MIN_BY(value, LENGTH(value)),
   MAX_BY(value, key, 100)
 FROM my_table;
 ```
+
 
 ```yql
 $min_by_factory = AggregationFactory("MIN_BY");
@@ -333,9 +379,11 @@ SELECT
 FROM my_table;
 ```
 
+
 ## TOP and BOTTOM {#top-bottom}
 
 ### Signature
+
 
 ```yql
 TOP(T?, limit:Uint32)->List<T>
@@ -344,9 +392,11 @@ BOTTOM(T?, limit:Uint32)->List<T>
 BOTTOM(T, limit:Uint32)->List<T>
 ```
 
+
 Return a list of the maximum/minimum values of an expression. The first argument is an expression, the second argument limits the number of items.
 
 ### Examples
+
 
 ```yql
 SELECT
@@ -354,6 +404,7 @@ SELECT
     BOTTOM(value, 3)
 FROM my_table;
 ```
+
 
 ```yql
 $top_factory = AggregationFactory("TOP", 3);
@@ -365,14 +416,17 @@ SELECT
 FROM my_table;
 ```
 
+
 ## TOP_BY and BOTTOM_BY {#top-bottom-by}
 
 ### Signature
+
 
 ```yql
 TOP_BY(T1, T2, limit:Uint32)->List<T1>
 BOTTOM_BY(T1, T2, limit:Uint32)->List<T1>
 ```
+
 
 Return a list of values of the first argument for the rows containing the maximum/minimum values of the second argument. The third argument limits the number of items in the list.
 
@@ -380,12 +434,14 @@ When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` con
 
 ### Examples
 
+
 ```yql
 SELECT
     TOP_BY(value, LENGTH(value), 3),
     BOTTOM_BY(value, key, 3)
 FROM my_table;
 ```
+
 
 ```yql
 $top_by_factory = AggregationFactory("TOP_BY", 3);
@@ -397,14 +453,17 @@ SELECT
 FROM my_table;
 ```
 
+
 ## TOPFREQ and MODE {#topfreq-mode}
 
 ### Signature
+
 
 ```yql
 TOPFREQ(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
 MODE(T [, num:Uint32 [, bufSize:Uint32]])->List<Struct<Frequency:Uint64, Value:T>>
 ```
+
 
 Getting an **approximate** list of the most common values in a column with an estimation of their count. Returns a list of structures with two fields:
 
@@ -420,6 +479,7 @@ Optional arguments:
 
 ### Examples
 
+
 ```yql
 SELECT
     MODE(my_column),
@@ -427,9 +487,11 @@ SELECT
 FROM my_table;
 ```
 
+
 ## STDDEV and VARIANCE {#stddev-variance}
 
 ### Signature
+
 
 ```yql
 STDDEV(Double?)->Double?
@@ -445,6 +507,7 @@ VARPOP(Double?)->Double?
 VARIANCE_SAMPLE(Double?)->Double?
 ```
 
+
 Standard deviation and variance in a column. Those functions use a [single-pass parallel algorithm](https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Parallel_algorithm), whose result may differ from the more common methods requiring two passes through the data.
 
 By default, the sample variance and standard deviation are calculated. Several write methods are available:
@@ -458,6 +521,7 @@ If all the values passed are `NULL`, it returns `NULL`.
 
 ### Examples
 
+
 ```yql
 SELECT
   STDDEV(numeric_column),
@@ -465,9 +529,11 @@ SELECT
 FROM my_table;
 ```
 
+
 ## CORRELATION and COVARIANCE {#correlation-covariance}
 
 ### Signature
+
 
 ```yql
 CORRELATION(Double?, Double?)->Double?
@@ -475,6 +541,7 @@ COVARIANCE(Double?, Double?)->Double?
 COVARIANCE_SAMPLE(Double?, Double?)->Double?
 COVARIANCE_POPULATION(Double?, Double?)->Double?
 ```
+
 
 Correlation and covariance between two columns.
 
@@ -486,12 +553,14 @@ When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` con
 
 ### Examples
 
+
 ```yql
 SELECT
   CORRELATION(numeric_column, another_numeric_column),
   COVARIANCE(numeric_column, another_numeric_column)
 FROM my_table;
 ```
+
 
 ```yql
 $corr_factory = AggregationFactory("CORRELATION");
@@ -501,9 +570,11 @@ SELECT
 FROM my_table;
 ```
 
+
 ## PERCENTILE and MEDIAN {#percentile-median}
 
 ### Signature
+
 
 ```yql
 PERCENTILE(T, Double)->T
@@ -517,6 +588,7 @@ MEDIAN(T, [ Struct<name1:Double, ...> ])->Struct<name1:T, ...>
 MEDIAN(T, [ List<Double> ])->List<T>
 ```
 
+
 Calculating percentiles using the amortized version of the [TDigest](https://github.com/tdunning/t-digest) algorithm. `MEDIAN(x)` without the second argument is an alias for `PERCENTILE(x, 0.5)`.
 `MEDIAN` with two arguments is fully equivalent to `PERCENTILE`.
 
@@ -528,6 +600,7 @@ Percentile values must be in the range from 0.0 to 1.0 inclusive.
 
 ### Examples
 
+
 ```yql
 SELECT
     MEDIAN(numeric_column),
@@ -538,9 +611,11 @@ SELECT
 FROM my_table;
 ```
 
+
 ## HISTOGRAM {#histogram}
 
 ### Signature
+
 
 ```yql
 HISTOGRAM(Double?)->HistogramStruct?
@@ -548,6 +623,7 @@ HISTOGRAM(Double?, weight:Double)->HistogramStruct?
 HISTOGRAM(Double?, intervals:Uint32)->HistogramStruct?
 HISTOGRAM(Double?, weight:Double, intervals:Uint32)->HistogramStruct?
 ```
+
 
 In the signature descriptions, `HistogramStruct` refers to the result of the aggregate function, which is a structure of a specific kind.
 
@@ -573,6 +649,7 @@ If you pass two arguments, the meaning of the second argument is determined by i
 
 Various modifications of the algorithm are available:
 
+
 ```yql
 AdaptiveDistanceHistogram
 AdaptiveWeightHistogram
@@ -581,9 +658,11 @@ BlockWeightHistogram
 BlockWardHistogram
 ```
 
+
 By default, `HISTOGRAM` is a synonym for `AdaptiveWardHistogram`. Both functions are equivalent and interchangeable in all contexts.
 
 The Distance, Weight, and Ward algorithms differ in the formulas that combine two points into one:
+
 
 ```c++
 TWeightedValue CalcDistanceQuality(const TWeightedValue& left, const TWeightedValue& right) {
@@ -602,6 +681,7 @@ TWeightedValue CalcWardQuality(const TWeightedValue& left, const TWeightedValue&
     return TWeightedValue(N1 * N2 / (N1 + N2) * (mu1 - mu2) * (mu1 - mu2), left.first);
 }
 ```
+
 
 Difference between Adaptive and Block:
 
@@ -627,11 +707,13 @@ When you use [aggregation factories](basic.md#aggregationfactory), a `Tuple` con
 
 ### Examples
 
+
 ```yql
 SELECT
     HISTOGRAM(numeric_column)
 FROM my_table;
 ```
+
 
 ```yql
 SELECT
@@ -642,6 +724,7 @@ SELECT
 FROM my_table;
 ```
 
+
 ```yql
 $hist_factory = AggregationFactory("HISTOGRAM");
 
@@ -650,11 +733,13 @@ SELECT
 FROM my_table;
 ```
 
+
 ## LinearHistogram, LogarithmicHistogram, and LogHistogram {#linearhistogram}
 
 Plotting a histogram based on an explicitly specified fixed bucket scale.
 
 ### Signature
+
 
 ```yql
 LinearHistogram(Double?)->HistogramStruct?
@@ -665,6 +750,7 @@ LogarithmicHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->
 LogHistogram(Double?)->HistogramStruct?
 LogHistogram(Double? [, logBase:Double [, min:Double [, max:Double]]])->HistogramStruct?
 ```
+
 
 Arguments:
 
@@ -679,15 +765,18 @@ If the spread of input values is uncontrollably large, we recommend that you spe
 
 ### Examples
 
+
 ```yql
 SELECT
     LogarithmicHistogram(numeric_column, 2)
 FROM my_table;
 ```
 
+
 ## CDF (cumulative distribution function) {#histogramcdf}
 
 The suffix `CDF` can be appended to each type of Histogram function to build a cumulative distribution function. The constructs
+
 
 ```yql
 SELECT
@@ -695,7 +784,9 @@ SELECT
 FROM my_table;
 ```
 
+
 and
+
 
 ```yql
 SELECT
@@ -703,17 +794,20 @@ SELECT
 FROM my_table;
 ```
 
+
 are fully equivalent.
 
 ## BOOL_AND, BOOL_OR and BOOL_XOR {#bool-and-or-xor}
 
 ### Signature
 
+
 ```yql
 BOOL_AND(Bool?)->Bool?
 BOOL_OR(Bool?)->Bool?
 BOOL_XOR(Bool?)->Bool?
 ```
+
 
 Apply the relevant logical operation  (`AND`/`OR`/`XOR`) to all values in a Boolean column or expression.
 
@@ -742,6 +836,7 @@ To skip `NULL` values during aggregation, use the `MIN`/`MAX` or `BIT_AND`/`BIT_
 
 ### Examples
 
+
 ```yql
 $data = [
     <|nonNull: true, nonFalse: true, nonTrue: NULL, anyVal: true|>,
@@ -765,17 +860,20 @@ SELECT
 FROM AS_TABLE($data);
 ```
 
+
 ## BIT_AND, BIT_OR and BIT_XOR {#bit-and-or-xor}
 
 Apply the relevant bitwise operation to all values of a numeric column or expression.
 
 ### Examples
 
+
 ```yql
 SELECT
     BIT_XOR(unsigned_numeric_value)
 FROM my_table;
 ```
+
 
 {% if feature_window_functions %}
 
@@ -801,6 +899,7 @@ Applying an [aggregation factory](basic.md#aggregationfactory) to all values of 
 2. Factory.
 
 ### Examples
+
 
 ```yql
 $count_factory = AggregationFactory("COUNT");

@@ -38,7 +38,7 @@ void IDataSource::StartProcessing(const std::shared_ptr<NCommon::IDataSource>& s
     const auto& commonContext = *GetContext()->GetCommonContext();
     auto sourceCopy = sourcePtr;
     auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
-    NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+    commonContext.SendTaskToExecute(task);
 }
 
 void IDataSource::InitializeProcessing(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) {
@@ -71,7 +71,7 @@ void IDataSource::ContinueCursor(const std::shared_ptr<NCommon::IDataSource>& so
         const auto& commonContext = *GetContext()->GetCommonContext();
         auto sourceCopy = sourcePtr;
         auto task = std::make_shared<TStepAction>(std::move(sourceCopy), std::move(cursor), commonContext.GetScanActorId(), true);
-        NConveyorComposite::TScanServiceOperator::SendTaskToExecute(task, commonContext.GetConveyorProcessId());
+        commonContext.SendTaskToExecute(task);
     } else {
         YDB_LOG_WARN("",
             {"sourceIdx", GetSourceIdx()},

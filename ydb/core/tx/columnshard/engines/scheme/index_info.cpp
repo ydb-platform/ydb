@@ -498,8 +498,9 @@ bool TIndexInfo::ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>
     AFL_VERIFY(checkRecordsCount == recordsCount)("index_id", indexId)("sum", checkRecordsCount)("portion", recordsCount);
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
+    const i64 maxBlobSize = opStorage->GetBlobSplitSettings().GetMaxBlobSize();
     for (auto&& chunk : chunks) {
-        if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
+        if ((i64)chunk->GetPackedSize() > maxBlobSize) {
             // The chunk does not fit the target storage: the caller rebuilds the index via AppendIndex, which
             // can split it (or drops it if it still cannot fit).
             auto indexMeta = GetIndexOptional(indexId);
@@ -508,7 +509,7 @@ bool TIndexInfo::ReuseIndexChunks(std::vector<std::shared_ptr<IPortionDataChunk>
                 {"index_id", indexId},
                 {"index_name", indexMeta.HasObject() ? indexMeta->GetIndexName() : TString{}},
                 {"packed_size", chunk->GetPackedSize()},
-                {"limit", opStorage->GetBlobSplitSettings().GetMaxBlobSize()});
+                {"limit", maxBlobSize});
             return false;
         }
     }

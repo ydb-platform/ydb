@@ -3767,9 +3767,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         constexpr char inputTopic[] = "streamingQueryMultiOutputInvalidInputTopic";
         constexpr char outputTopic[] = "streamingQueryMultiOutputInvalidOutputTopic";
         constexpr char pqSource[] = "pqSourceName";
+        constexpr char otherPqSource[] = "otherPqSourceName";
         CreateTopic(inputTopic);
         CreateTopic(outputTopic);
         CreatePqSource(pqSource);
+        CreatePqSource(otherPqSource);
 
         constexpr char rowTable[] = "rowSink";
         constexpr char columnTable[] = "columnSink";
@@ -3817,17 +3819,6 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 "output_topic"_a = outputTopic
             ), EStatus::GENERIC_ERROR, TStringBuilder() << "Write mode '" << to_lower(TString(mode)) << "' is not supported for external entities");
         }
-
-        ExecQuery(fmt::format(R"(
-            CREATE STREAMING QUERY `streamingQuery` AS
-            DO BEGIN
-                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}`;
-                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}`;
-            END DO;)",
-            "pq_source"_a = pqSource,
-            "input_topic"_a = inputTopic,
-            "output_topic"_a = outputTopic
-        ), EStatus::UNSUPPORTED, "Save state of query is not supported for queries with intermediate writes");
 
         for (const auto& table : {rowTable, columnTable}) {
             for (const auto& mode : {"INSERT", "REPLACE"}) {

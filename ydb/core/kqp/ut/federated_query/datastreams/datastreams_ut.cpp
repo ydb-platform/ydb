@@ -1026,16 +1026,54 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
     }
 
+    Y_UNIT_TEST_F(MultipleWriteIntoTopicsDisabled, TStreamingTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
+
+        auto& config = SetupAppConfig();
+        config.MutableFeatureFlags()->SetEnableTopicsSqlIoOperations(true);
+
+        constexpr char inputTopic[] = "multipleWriteIntoTopicsDisabledInputTopicName";
+        constexpr char outputTopic[] = "multipleWriteIntoTopicsDisabledOutputTopicName";
+        CreateTopic(inputTopic, std::nullopt, /* local */ true);
+        CreateTopic(outputTopic, std::nullopt, /* local */ true);
+        CreateTopic(inputTopic);
+        CreateTopic(outputTopic);
+
+        constexpr char pqSource[] = "pqSourceName";
+        CreatePqSource(pqSource);
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{output_topic}` SELECT * FROM `{input_topic}` WITH (STREAMING = "TRUE");
+                INSERT INTO `{output_topic}` SELECT * FROM `{input_topic}` WITH (STREAMING = "TRUE");
+            )",
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), EStatus::GENERIC_ERROR, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for object: db.[/Root/" << outputTopic);
+
+        ExecQuery(fmt::format(R"(
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}` WITH (STREAMING = "TRUE");
+                INSERT INTO `{pq_source}`.`{output_topic}` SELECT * FROM `{pq_source}`.`{input_topic}` WITH (STREAMING = "TRUE");
+            )",
+            "pq_source"_a = pqSource,
+            "input_topic"_a = inputTopic,
+            "output_topic"_a = outputTopic
+        ), EStatus::GENERIC_ERROR, TStringBuilder() << "Multiple writes into same topic or external object is not supported. Found multiple write operations for object: /Root/" << pqSource << ".[" << outputTopic);
+    }
+
     Y_UNIT_TEST_F(ScalarFederativeWriting, TStreamingTestFixture) {
         constexpr char firstOutputTopic[] = "replicatedWritingOutputTopicName1";
         constexpr char secondOutputTopic[] = "replicatedWritingOutputTopicName2";
-        constexpr char pqSource[] = "pqSourceName";
+        constexpr char pqSource1[] = "pqSourceName1";
+        constexpr char pqSource2[] = "pqSourceName2";
         CreateTopic(firstOutputTopic);
         CreateTopic(secondOutputTopic);
-        CreatePqSource(pqSource);
+        CreatePqSource(pqSource1);
+        CreatePqSource(pqSource2);
 
-        constexpr char solomonSink[] = "solomonSinkName";
-        CreateSolomonSource(solomonSink);
+        constexpr char solomonSink1[] = "solomonSinkName1";
+        constexpr char solomonSink2[] = "solomonSinkName2";
+        CreateSolomonSource(solomonSink1);
+        CreateSolomonSource(solomonSink2);
 
         const TSolomonLocation soLocation = {
             .ProjectId = "cloudId1",
@@ -1045,28 +1083,30 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         };
         CleanupSolomon(soLocation);
         ExecQuery(fmt::format(R"(
-            INSERT INTO `{pq_source}`.`{output_topic1}` SELECT "TestData1";
-            INSERT INTO `{pq_source}`.`{output_topic2}` SELECT "TestData2" AS Data;
-            INSERT INTO `{pq_source}`.`{output_topic2}`(Data) VALUES ("TestData2");
+            INSERT INTO `{pq_source1}`.`{output_topic1}` SELECT "TestData1";
+            INSERT INTO `{pq_source1}`.`{output_topic2}` SELECT "TestData2" AS Data;
+            INSERT INTO `{pq_source2}`.`{output_topic2}`(Data) VALUES ("TestData2");
 
-            INSERT INTO `{solomon_sink}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
+            INSERT INTO `{solomon_sink1}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
             SELECT
                 13333 AS value,
                 "test-insert" AS sensor,
                 Timestamp("2025-03-12T14:40:39Z") AS ts;
 
-            INSERT INTO `{solomon_sink}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
+            INSERT INTO `{solomon_sink2}`.`{solomon_project}/{solomon_folder}/{solomon_service}`
                 (value, sensor, ts)
             VALUES
                 (23333, "test-insert-2", Timestamp("2025-03-12T14:40:39Z"));)",
-            "pq_source"_a = pqSource,
+            "pq_source1"_a = pqSource1,
+            "pq_source2"_a = pqSource2,
             "output_topic1"_a = firstOutputTopic,
             "output_topic2"_a = secondOutputTopic,
-            "solomon_sink"_a = solomonSink,
+            "solomon_sink1"_a = solomonSink1,
+            "solomon_sink2"_a = solomonSink2,
             "solomon_project"_a = soLocation.ProjectId,
             "solomon_folder"_a = soLocation.FolderId,
             "solomon_service"_a = soLocation.Service
-        ), EStatus::SUCCESS, "", AstChecker(2, 5));
+        ), EStatus::SUCCESS, "", AstChecker(1, 5));
 
         ReadTopicMessage(firstOutputTopic, "TestData1");
         ReadTopicMessages(secondOutputTopic, {"TestData2", "TestData2"});
@@ -2262,6 +2302,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             }
         }
     }
+
     Y_UNIT_TEST_F(ForbidYqlSysColumnsRejectsSystemMetadataInStreamingMode, TStreamingTestFixture) {
         auto& config = SetupAppConfig();
         config.MutableQueryServiceConfig()->MutableStreamingQueries()->SetForbidYqlSysColumnsAndSystemMetadata(true);

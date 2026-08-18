@@ -10,6 +10,8 @@
 
 #include <library/cpp/yson/node/node_io.h>
 
+#include <atomic>
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -165,6 +167,125 @@ void SendQueryMetric(TTestEnv& env, ui32 nodeIdx, const TString& database,
     auto& actorSystem = *env.GetServer().GetRuntime()->GetActorSystem(nodeIdx);
     actorSystem.Send(MakeSysViewServiceID(actorSystem.NodeId), metric.release());
 }
+
+enum class EIntervalMetricsRequestFaultAction {
+    Undelivered,
+    Drop,
+};
+
+class TIntervalMetricsRequestFaultActor
+    : public NActors::TActorBootstrapped<TIntervalMetricsRequestFaultActor>
+{
+public:
+    TIntervalMetricsRequestFaultActor(
+        TActorId originalService,
+        ui64 queryHash,
+        EIntervalMetricsRequestFaultAction action,
+        ui32 failureCount,
+        std::shared_ptr<std::atomic_bool> injected)
+        : OriginalService(originalService)
+        , QueryHash(queryHash)
+        , Action(action)
+        , FailureCount(failureCount)
+        , Injected(std::move(injected))
+    {}
+
+    void Bootstrap() {
+        Become(&TThis::StateWork);
+    }
+
+private:
+    void StateWork(TAutoPtr<IEventHandle>& event) {
+        if (event->GetTypeRewrite() == TEvents::TEvPoison::EventType) {
+            PassAway();
+            return;
+        }
+
+        if (!Injected->load() &&
+            event->GetTypeRewrite() ==
+                TEvSysView::TEvGetIntervalMetricsRequest::EventType)
+        {
+            const auto& metrics = event
+                ->Get<TEvSysView::TEvGetIntervalMetricsRequest>()
+                ->Record.GetMetrics();
+            bool containsQuery = false;
+            for (ui64 hash : metrics) {
+                containsQuery = containsQuery || hash == QueryHash;
+            }
+
+            if (containsQuery && !Injected->exchange(true)) {
+                if (Action == EIntervalMetricsRequestFaultAction::Undelivered) {
+                    for (ui32 i = 0; i < FailureCount; ++i) {
+                        Send(event->Sender,
+                            new TEvents::TEvUndelivered(
+                                event->GetTypeRewrite(),
+                                TEvents::TEvUndelivered::Disconnected),
+                            0,
+                            event->Cookie);
+                    }
+                }
+                return;
+            }
+        }
+
+        TActivationContext::Send(event->Forward(OriginalService));
+    }
+
+private:
+    const TActorId OriginalService;
+    const ui64 QueryHash;
+    const EIntervalMetricsRequestFaultAction Action;
+    const ui32 FailureCount;
+    const std::shared_ptr<std::atomic_bool> Injected;
+};
+
+class TIntervalMetricsRequestFault {
+public:
+    using EAction = EIntervalMetricsRequestFaultAction;
+
+    TIntervalMetricsRequestFault(
+        NActors::TTestActorRuntime& runtime,
+        ui32 targetNodeIdx,
+        ui64 queryHash,
+        EAction action,
+        ui32 failureCount = 1)
+        : ActorSystem(*runtime.GetActorSystem(targetNodeIdx))
+        , ServiceId(MakeSysViewServiceID(ActorSystem.NodeId))
+        , OriginalService(ActorSystem.LookupLocalService(ServiceId))
+        , Injected(std::make_shared<std::atomic_bool>(false))
+    {
+        UNIT_ASSERT_C(OriginalService,
+            "SysViewService is not registered on node " << ActorSystem.NodeId);
+        Proxy = ActorSystem.Register(new TIntervalMetricsRequestFaultActor(
+            OriginalService, queryHash, action, failureCount, Injected));
+        UNIT_ASSERT_VALUES_EQUAL(
+            ActorSystem.RegisterLocalService(ServiceId, Proxy), OriginalService);
+    }
+
+    ~TIntervalMetricsRequestFault() {
+        Restore();
+    }
+
+    bool WasInjected() const {
+        return Injected->load();
+    }
+
+    void Restore() {
+        if (!Proxy) {
+            return;
+        }
+        ActorSystem.RegisterLocalService(ServiceId, OriginalService);
+        ActorSystem.Send(Proxy, new TEvents::TEvPoison());
+        Proxy = {};
+    }
+
+private:
+    NActors::TActorSystem& ActorSystem;
+    const TActorId ServiceId;
+    const TActorId OriginalService;
+    const std::shared_ptr<std::atomic_bool> Injected;
+    TActorId Proxy;
+};
 
 ui64 ReadUint64(NQuery::TQueryClient& client, const TString& query, bool optional = false) {
     auto result = client.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -2644,13 +2765,10 @@ Y_UNIT_TEST_SUITE(SystemView) {
         constexpr ui64 queryHash = 91'001;
 
         auto& runtime = *env.GetServer().GetRuntime();
-        auto& failedActorSystem = *runtime.GetActorSystem(failedNodeIdx);
-        const ui32 failedNodeId = failedActorSystem.NodeId;
-        failedActorSystem.Send(
-            MakeSysViewServiceID(failedNodeId),
-            new TEvSysView::TEvSetNextIntervalMetricsRequestFault(
-                TEvSysView::TEvSetNextIntervalMetricsRequestFault::EAction::Undelivered,
-                /* failureCount */ 2));
+        TIntervalMetricsRequestFault fault(
+            runtime, failedNodeIdx, queryHash,
+            TIntervalMetricsRequestFault::EAction::Undelivered,
+            /* failureCount */ 2);
 
         const ui64 endTimeMs = TInstant::Now().MilliSeconds();
         SendQueryMetric(env, goodNodeIdx, database, queryHash,
@@ -2659,6 +2777,13 @@ Y_UNIT_TEST_SUITE(SystemView) {
         SendQueryMetric(env, failedNodeIdx, database, queryHash,
             "synthetic-delivery", /* cpuTimeUs */ 20,
             /* durationMs */ 1, /* readRows */ 0, endTimeMs);
+
+        WaitFor(TDuration::Seconds(20), "delivery failure injection",
+            [&](TString& error) {
+                error = "metrics request to the selected node was not observed";
+                return fault.WasInjected();
+            });
+        fault.Restore();
 
         TDriver driver(TDriverConfig()
             .SetEndpoint(env.GetEndpoint())
@@ -2711,17 +2836,22 @@ Y_UNIT_TEST_SUITE(SystemView) {
         const TString queryText = "synthetic-timeout";
 
         auto& runtime = *env.GetServer().GetRuntime();
-        auto& droppedActorSystem = *runtime.GetActorSystem(tenantNodes[1]);
-        droppedActorSystem.Send(
-            MakeSysViewServiceID(droppedActorSystem.NodeId),
-            new TEvSysView::TEvSetNextIntervalMetricsRequestFault(
-                TEvSysView::TEvSetNextIntervalMetricsRequestFault::EAction::Drop));
+        TIntervalMetricsRequestFault fault(
+            runtime, tenantNodes[1], queryHash,
+            TIntervalMetricsRequestFault::EAction::Drop);
 
         const ui64 endTimeMs = TInstant::Now().MilliSeconds();
         SendQueryMetric(env, tenantNodes[0], database, queryHash, queryText,
             /* cpuTimeUs */ 10, /* durationMs */ 1, /* readRows */ 0, endTimeMs);
         SendQueryMetric(env, tenantNodes[1], database, queryHash, queryText,
             /* cpuTimeUs */ 20, /* durationMs */ 1, /* readRows */ 0, endTimeMs);
+
+        WaitFor(TDuration::Seconds(20), "timeout injection",
+            [&](TString& error) {
+                error = "metrics request to the selected node was not observed";
+                return fault.WasInjected();
+            });
+        fault.Restore();
 
         TDriver driver(TDriverConfig()
             .SetEndpoint(env.GetEndpoint())

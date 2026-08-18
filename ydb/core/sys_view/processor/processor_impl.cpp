@@ -1,6 +1,6 @@
 #include "processor_impl.h"
 
-#include <ydb/core/sys_view/common/query_metrics_retention.h>
+#include "query_metrics_retention.h"
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 
@@ -80,9 +80,11 @@ void TSysViewProcessor::PersistIntervalEnd(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_IntervalEnd, ToString(intervalEndUs));
 }
 
-void TSysViewProcessor::PersistLastMergedQueryMetricsIntervalEnd(NIceDb::TNiceDb& db) {
+void TSysViewProcessor::PersistLastMergedQueryMetricsIntervalEnd(
+    NIceDb::TNiceDb& db, TInstant intervalEnd)
+{
     PersistSysParam(db, Schema::SysParam_LastMergedQueryMetricsIntervalEnd,
-        ToString(LastMergedQueryMetricsIntervalEnd.MicroSeconds()));
+        ToString(intervalEnd.MicroSeconds()));
 }
 
 void TSysViewProcessor::PersistMetricsOneHourEvictBeforeHourEnd(
@@ -296,7 +298,9 @@ void TSysViewProcessor::EnforceMetricsOneHourByteLimit(
     UpdateMetricsOneHourRetentionCounters(plan.RetainedBytes, 0);
 }
 
-void TSysViewProcessor::LogQueryMetricsCoverage(TInstant hourEnd, ui32 persistedHourMetrics) const {
+void TSysViewProcessor::UpdateAndLogQueryMetricsCoverage(
+    TInstant hourEnd, ui32 persistedHourMetrics)
+{
     ui64 receivedCpuTimeUs = 0;
     for (const auto& [_, metrics] : QueryMetrics) {
         receivedCpuTimeUs += metrics.Metrics.GetCpuTimeUs().GetSum();
@@ -309,6 +313,28 @@ void TSysViewProcessor::LogQueryMetricsCoverage(TInstant hourEnd, ui32 persisted
     for (const auto& [_, node] : NodesInFlight) {
         timedOutNodes += !node.Hashes.empty();
     }
+
+    auto& counters = Executor()->GetCounters()->Simple();
+    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_TOTAL_CPU_TIME_US]
+        .Set(QueryMetricsCoverage.TotalCpuTimeUs);
+    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_NODE_RETAINED_CPU_TIME_US]
+        .Set(QueryMetricsCoverage.NodeRetainedCpuTimeUs);
+    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_PROCESSOR_RETAINED_CPU_TIME_US]
+        .Set(QueryMetricsCoverage.ProcessorRetainedCpuTimeUs);
+    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_RECEIVED_CPU_TIME_US]
+        .Set(receivedCpuTimeUs);
+    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_SUMMARY_NODES]
+        .Set(QueryMetricsCoverage.SummaryNodes);
+    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_COVERAGE_KNOWN_NODES]
+        .Set(QueryMetricsCoverage.Nodes);
+    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_REQUESTED_NODES]
+        .Set(QueryMetricsCoverage.RequestedNodes);
+    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_RESPONDED_NODES]
+        .Set(QueryMetricsCoverage.RespondedNodes);
+    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_FAILED_NODES]
+        .Set(QueryMetricsCoverage.FailedNodes);
+    counters[COUNTER_QUERY_METRICS_LAST_INTERVAL_TIMED_OUT_NODES]
+        .Set(timedOutNodes);
 
     SVLOG_D("[" << TabletID() << "] Persist hour query metrics: "
         << "hour end# " << hourEnd
@@ -323,10 +349,7 @@ void TSysViewProcessor::LogQueryMetricsCoverage(TInstant hourEnd, ui32 persisted
         << ", total cpu us# " << QueryMetricsCoverage.TotalCpuTimeUs
         << ", node retained cpu us# " << QueryMetricsCoverage.NodeRetainedCpuTimeUs
         << ", processor retained cpu us# " << QueryMetricsCoverage.ProcessorRetainedCpuTimeUs
-        << ", received cpu us# " << receivedCpuTimeUs
-        << ", completed queries# " << QueryMetricsCoverage.CompletedQueries
-        << ", rejected queries# " << QueryMetricsCoverage.RejectedQueries
-        << ", evicted hashes# " << QueryMetricsCoverage.EvictedHashes);
+        << ", received cpu us# " << receivedCpuTimeUs);
 }
 
 void TSysViewProcessor::FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db) {
@@ -346,9 +369,10 @@ void TSysViewProcessor::FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db) {
     EnforceMetricsOneHourByteLimit(db, hourEnd);
 
     LastMergedQueryMetricsIntervalEnd = IntervalEnd;
-    PersistLastMergedQueryMetricsIntervalEnd(db);
+    PersistLastMergedQueryMetricsIntervalEnd(
+        db, LastMergedQueryMetricsIntervalEnd);
 
-    LogQueryMetricsCoverage(hourEnd, persistedHourMetrics);
+    UpdateAndLogQueryMetricsCoverage(hourEnd, persistedHourMetrics);
 }
 
 void TSysViewProcessor::PersistQueryResults(NIceDb::TNiceDb& db) {

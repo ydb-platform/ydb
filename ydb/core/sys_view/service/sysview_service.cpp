@@ -210,7 +210,6 @@ public:
         EProcessorMode processorMode)
         : Config(std::move(config))
         , HasExternalCounters(hasExternalCounters)
-        , TestMode(processorMode == EProcessorMode::FAST)
         , TotalInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 5 : 60))
         , CollectInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 3 : 30))
         , SendInterval(TDuration::Seconds(processorMode == EProcessorMode::FAST ? 2 : 20))
@@ -287,7 +286,6 @@ public:
             hFunc(TEvSysView::TEvSendDbCountersResponse, Handle);
             hFunc(TEvSysView::TEvSendDbLabeledCountersResponse, Handle);
             hFunc(TEvSysView::TEvGetIntervalMetricsRequest, Handle);
-            hFunc(TEvSysView::TEvSetNextIntervalMetricsRequestFault, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
@@ -380,9 +378,6 @@ private:
         log.Metrics.Report.FillSummary(*record.MutableMetrics());
         record.SetQueryMetricsTotalCpuTimeUs(log.Metrics.Report.GetTotalCpuTimeUs());
         record.SetQueryMetricsRetainedCpuTimeUs(log.Metrics.Report.GetRetainedCpuTimeUs());
-        record.SetQueryMetricsCompletedQueries(log.Metrics.Report.GetCompletedQueries());
-        record.SetQueryMetricsRejectedQueries(log.Metrics.Report.GetRejectedQueries());
-        record.SetQueryMetricsEvictedHashes(log.Metrics.Report.GetEvictedHashes());
         log.TopByDuration.Report.FillSummary(*record.MutableTopByDuration());
         log.TopByReadBytes.Report.FillSummary(*record.MutableTopByReadBytes());
         log.TopByCpuTime.Report.FillSummary(*record.MutableTopByCpuTime());
@@ -607,21 +602,6 @@ private:
     }
 
     void Handle(TEvSysView::TEvGetIntervalMetricsRequest::TPtr& ev) {
-        if (TestMode && DropNextIntervalMetricsRequest) {
-            DropNextIntervalMetricsRequest = false;
-            return;
-        }
-        if (TestMode && FailNextIntervalMetricsRequestCount) {
-            for (ui32 i = 0; i < FailNextIntervalMetricsRequestCount; ++i) {
-                Send(ev->Sender,
-                    new TEvents::TEvUndelivered(
-                        ev->GetTypeRewrite(), TEvents::TEvUndelivered::Disconnected),
-                    0, ev->Cookie);
-            }
-            FailNextIntervalMetricsRequestCount = 0;
-            return;
-        }
-
         auto response = MakeHolder<TEvSysView::TEvGetIntervalMetricsResponse>();
 
         if (!AppData()->FeatureFlags.GetEnablePersistentQueryStats()) {
@@ -675,19 +655,6 @@ private:
             << ", texts count# " << response->Record.QueryTextsSize());
 
         Send(ev->Sender, std::move(response), 0, ev->Cookie);
-    }
-
-    void Handle(TEvSysView::TEvSetNextIntervalMetricsRequestFault::TPtr& ev) {
-        if (TestMode) {
-            using EAction = TEvSysView::TEvSetNextIntervalMetricsRequestFault::EAction;
-            if (ev->Get()->Action == EAction::Drop) {
-                DropNextIntervalMetricsRequest = true;
-                FailNextIntervalMetricsRequestCount = 0;
-            } else {
-                DropNextIntervalMetricsRequest = false;
-                FailNextIntervalMetricsRequestCount = ev->Get()->FailureCount;
-            }
-        }
     }
 
     void Handle(TEvPrivate::TEvProcessCounters::TPtr&) {
@@ -1035,9 +1002,6 @@ private:
 private:
     TExtCountersConfig Config;
     const bool HasExternalCounters;
-    const bool TestMode;
-    bool DropNextIntervalMetricsRequest = false;
-    ui32 FailNextIntervalMetricsRequestCount = 0;
     const TDuration TotalInterval;
     const TDuration CollectInterval;
     const TDuration SendInterval;

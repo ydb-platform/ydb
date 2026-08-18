@@ -8,6 +8,7 @@ SRCS(
     check_dlq_topics_ut.cpp
     create_topic_ut.cpp
     describe_operation_ut.cpp
+    dlq_acl_ut.cpp
     schema_ops_ut.cpp
     validation_ut.cpp
 )
@@ -16,6 +17,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/persqueue/events
     ydb/core/persqueue/public
+    ydb/core/testlib
     ydb/core/testlib/actors
     ydb/core/testlib/grpc_request
     ydb/library/aclib

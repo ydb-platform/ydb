@@ -25,5 +25,6 @@ constexpr TStringBuf SkipJsonErrors = "SkipJsonErrors";
 constexpr TStringBuf StreamingTopicRead = "StreamingTopicRead";
 constexpr TStringBuf PartitionsBalancingIdleTimeoutUsSetting = "PartitionsBalancingIdleTimeoutUs";
 constexpr TStringBuf UserSchemaColumnsSetting = "UserSchemaColumns";
+constexpr TStringBuf UsedPartitionPredicateSetting = "UsedPartitionPredicate";
 
 } // namespace NYql

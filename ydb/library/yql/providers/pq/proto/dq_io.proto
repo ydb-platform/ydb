@@ -119,6 +119,7 @@ message TDqPqTopicSource {
     bool StopAtCurrentEndOffsets = 32;
     TOffsetPredicate OffsetPredicate = 33;
     TWriteTimePredicate WriteTimePredicate = 34;
+    bool UsedPartitionPredicate = 35;
 }
 
 message TDqPqTopicSink {

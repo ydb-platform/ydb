@@ -1,6 +1,7 @@
 #include "yql_pq_dq_transform.h"
 
 #include <ydb/library/yql/providers/pq/common/pq_partitions.h>
+#include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
 #include <yql/essentials/minikql/mkql_node.h>
@@ -35,23 +36,45 @@ public:
                 }
 
                 if (callable.GetInput(6).GetStaticType()->IsVoid()) {
-                    const auto watermarkSettingsNode = AS_VALUE(TListLiteral, callable.GetInput(5));
-                    const auto watermarkSettings = TConstArrayRef<TRuntimeNode>(watermarkSettingsNode->GetItems(), watermarkSettingsNode->GetItemsCount());
-
+                    // Prefer the serialized TDqPqTopicSource injected by TKqpPqTopicResolver
+                    // via TaskParams["pq_topic_source"].  It contains per-cluster
+                    // PartitionsCount values that were already refreshed via DescribeTopic at
+                    // every (re)start, so the watermark partition list is always up-to-date.
+                    //
+                    // Fall back to the compile-time FederatedClusters atoms in arg[5] only
+                    // when the key is absent (e.g. non-KQP path, DQ gateway, unit tests).
                     std::vector<TPartitionKey> federatedClusters;
-                    for (ui32 i = 0; i + 2 <= watermarkSettings.size(); i += 2) {
-                        const auto  name = AS_VALUE(TDataLiteral, watermarkSettings[i + 0])->AsValue().AsStringRef();
-                        const auto value = AS_VALUE(TDataLiteral, watermarkSettings[i + 1])->AsValue().AsStringRef();
 
-                        if ("FederatedClusters" == std::string_view{name}) {
-                            TVector<TString> federatedClustersStr;
-                            Split(value.data(), ",", federatedClustersStr);
+                    if (const auto it = TaskParams.find("pq_topic_source"); it != TaskParams.end()) {
+                        // Fast path: use the already-patched TDqPqTopicSource.
+                        NYql::NPq::NProto::TDqPqTopicSource topicSource;
+                        if (topicSource.ParseFromString(it->second)) {
+                            for (const auto& fc : topicSource.GetFederatedClusters()) {
+                                federatedClusters.push_back(TPartitionKey{
+                                    .Cluster    = fc.GetName(),
+                                    .PartitionId = fc.GetPartitionsCount(),
+                                });
+                            }
+                        }
+                    } else {
+                        // Fallback: decode compile-time atoms from watermark settings arg[5].
+                        const auto watermarkSettingsNode = AS_VALUE(TListLiteral, callable.GetInput(5));
+                        const auto watermarkSettings = TConstArrayRef<TRuntimeNode>(watermarkSettingsNode->GetItems(), watermarkSettingsNode->GetItemsCount());
 
-                            for (const auto& federatedClusterStr : federatedClustersStr) {
-                                TPartitionKey federatedCluster;
-                                TStringStream ss(federatedClusterStr);
-                                ss >> federatedCluster;
-                                federatedClusters.push_back(federatedCluster);
+                        for (ui32 i = 0; i + 2 <= watermarkSettings.size(); i += 2) {
+                            const auto  name = AS_VALUE(TDataLiteral, watermarkSettings[i + 0])->AsValue().AsStringRef();
+                            const auto value = AS_VALUE(TDataLiteral, watermarkSettings[i + 1])->AsValue().AsStringRef();
+
+                            if ("FederatedClusters" == std::string_view{name}) {
+                                TVector<TString> federatedClustersStr;
+                                Split(value.data(), ",", federatedClustersStr);
+
+                                for (const auto& federatedClusterStr : federatedClustersStr) {
+                                    TPartitionKey federatedCluster;
+                                    TStringStream ss(federatedClusterStr);
+                                    ss >> federatedCluster;
+                                    federatedClusters.push_back(federatedCluster);
+                                }
                             }
                         }
                     }

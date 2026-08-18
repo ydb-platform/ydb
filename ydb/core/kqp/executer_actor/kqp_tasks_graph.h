@@ -415,6 +415,8 @@ public:
     TVector<TString> GetStageIntrospection(const NYql::NDq::TStageId& stageId) const;
     TString DumpToString() const;
 
+    void FillExternalSourceSecureParams(THashMap<TString, TString>& secureParams, const NKqpProto::TKqpPhyStage& stage) const;
+
 private:
     void FillStages();
 
@@ -501,5 +503,15 @@ private:
     std::unique_ptr<TMaxTasksGraph> MaxTasksGraph;
     const bool UseKqpTasksGraphV2;
 };
+
+// Patches a saved physical graph to rescale PQ source stages.
+// The new task count per source stage is computed the same way as CountReadTasksFromSource()
+// (proportional to StageCost, bounded by cluster size and partition count).
+// Cascades through downstream Map-connected stages. Rebuilds channels and redistributes
+// ReadRanges (PQ partition params) among the new source tasks round-robin.
+// Must be called before RestoreTasksGraphInfo().
+void PatchQueryPhysicalGraphForRescaling(
+    NKikimrKqp::TQueryPhysicalGraph& graph,
+    const TVector<NKikimrKqp::TKqpNodeResources>& resourceSnapshot);
 
 } // namespace NKikimr::NKqp

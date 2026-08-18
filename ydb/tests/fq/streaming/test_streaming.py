@@ -2240,3 +2240,78 @@ FROM `{table_name}`"""
         second_node = list(kikimr.cluster.nodes.values())[1]
         second_ydb_client = YdbClient.from_driver_config(database=kikimr.endpoint.database, endpoint=f"grpc://{second_node.host}:{second_node.port}", enable_discovery=False)
         check_issues("Lease expired", client=second_ydb_client)
+
+    @pytest.mark.parametrize("local_topics", [True, False])
+    def test_restart_query_after_partition_increase(
+        self: StreamingTestBase,
+        kikimr: Kikimr,
+        entity_name: Callable[[str], str],
+        local_topics: bool,
+    ) -> None:
+        inp, out, endpoint = self.get_io_names(
+            kikimr,
+            f"test_restart_after_part_inc{local_topics!s:.1}",
+            local_topics,
+            entity_name,
+            partitions_count=1,
+        )
+        def total_pq_read_actor_count() -> int:
+            return sum(
+                self.get_actor_count(kikimr, node_id, "DQ_PQ_READ_ACTOR")
+                for node_id in kikimr.cluster.nodes
+            )
+
+        name = f"test_restart_after_part_inc_{local_topics!s:.1}"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                $in = SELECT value FROM {inp}
+                WITH (
+                    FORMAT="json_each_row",
+                    SCHEMA=(value String NOT NULL))
+                WHERE value LIKE "%data%";
+                INSERT INTO {out} SELECT value FROM $in;
+            END DO;'''
+
+        path = f"/Root/{name}"
+        kikimr.ydb_client.query(sql.format(query_name=name, inp=inp, out=out))
+        self.wait_completed_checkpoints(kikimr, path)
+
+        count_after_create = total_pq_read_actor_count()
+        assert count_after_create == 1, (
+            f"Expected exactly 1 DQ_PQ_READ_ACTOR after CREATE, got {count_after_create}"
+        )
+
+        # Stop the query before altering the topic partition count
+        logger.debug(f"stopping query {name}")
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = FALSE);")
+        time.sleep(0.5)
+
+        logger.debug(f"altering topic {self.input_topic} partition count to 20")
+        self.get_ydb_client(kikimr, local_topics).driver.topic_client.alter_topic(
+            self.input_topic, set_min_active_partitions=20
+        )
+
+        logger.debug(f"restarting query {name} without recompilation")
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{name}` SET (RUN = TRUE);")
+        self.wait_completed_checkpoints(kikimr, path, timeout=30)
+
+        # Write data with random partition keys so messages land on different partitions
+        message_count = 20
+        for _ in range(message_count):
+            self.write_stream(
+                ['{"value": "my_data"}'],
+                topic_path=None,
+                partition_key=''.join(random.choices(string.digits, k=8)),
+                endpoint=endpoint,
+            )
+        
+        count_after_alter = total_pq_read_actor_count()
+        assert count_after_alter > 1, (
+            f"Expected more than 1 DQ_PQ_READ_ACTOR after ALTER, got {count_after_alter}"
+        )
+
+        expected_data = ["my_data" for _ in range(message_count)]
+        assert self.read_stream(message_count, topic_path=self.output_topic, endpoint=endpoint) == expected_data
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{name}`;")

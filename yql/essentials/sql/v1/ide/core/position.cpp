@@ -1,14 +1,14 @@
 #include "position.h"
 
-namespace NSQLComplete {
+namespace NSQLPureAST {
 
 bool operator<(const TPosition& lhs, const TPosition& rhs) {
     return std::tie(lhs.Line, lhs.Column) < std::tie(rhs.Line, rhs.Column);
 }
 
-} // namespace NSQLComplete
+} // namespace NSQLPureAST
 
 template <>
-void Out<NSQLComplete::TPosition>(IOutputStream& out, const NSQLComplete::TPosition& value) {
+void Out<NSQLPureAST::TPosition>(IOutputStream& out, const NSQLPureAST::TPosition& value) {
     out << value.Line << ":" << value.Column;
 }

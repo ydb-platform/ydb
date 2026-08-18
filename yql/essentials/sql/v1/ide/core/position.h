@@ -3,7 +3,7 @@
 #include <util/generic/hash.h>
 #include <util/stream/output.h>
 
-namespace NSQLComplete {
+namespace NSQLPureAST {
 
 struct TPosition {
     ui32 Line = 0;
@@ -13,11 +13,11 @@ struct TPosition {
     friend bool operator<(const TPosition& lhs, const TPosition& rhs);
 };
 
-} // namespace NSQLComplete
+} // namespace NSQLPureAST
 
 template <>
-struct THash<NSQLComplete::TPosition> {
-    size_t operator()(const NSQLComplete::TPosition& x) const {
+struct THash<NSQLPureAST::TPosition> {
+    size_t operator()(const NSQLPureAST::TPosition& x) const {
         return THash<std::tuple<ui32, ui32>>()(std::tie(x.Line, x.Column));
     }
 };

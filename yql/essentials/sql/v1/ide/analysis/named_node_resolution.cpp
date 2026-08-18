@@ -1,11 +1,11 @@
-#include "named_node_resolution.h"
+#include <yql/essentials/sql/v1/ide/analysis/named_node_resolution.h>
 
 #include "parse_tree.h"
 
 #include <util/generic/algorithm.h>
 #include <util/generic/ptr.h>
 
-namespace NSQLComplete {
+namespace NSQLPureAST {
 
 namespace {
 
@@ -216,15 +216,15 @@ TMaybe<TNamedNodeRef> GetNamedNodeRef(SQLv1::Bind_parameterContext* ctx) {
     return Nothing();
 }
 
-TNamedNodes::TPtr ResolveNamedNodes(TParsedInput input, const TEnvironment& env) {
+TNamedNodes::TPtr ResolveNamedNodes(IParseTree::TPtr input, const TEnvironment& env) {
     TNamedNodes* names = new TNamedNodes();
-    TVisitor(names, &env).visit(input.ParseTree->Root());
+    TVisitor(names, &env).visit(input->Root());
     return THolder(names);
 }
 
-} // namespace NSQLComplete
+} // namespace NSQLPureAST
 
 template <>
-void Out<NSQLComplete::TNamedNodeRef>(IOutputStream& out, const NSQLComplete::TNamedNodeRef& value) {
+void Out<NSQLPureAST::TNamedNodeRef>(IOutputStream& out, const NSQLPureAST::TNamedNodeRef& value) {
     out << value.Position << ":" << value.Name;
 }

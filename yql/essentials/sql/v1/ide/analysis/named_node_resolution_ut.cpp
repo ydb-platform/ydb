@@ -1,13 +1,13 @@
-#include "named_node_resolution.h"
-#include "parser.h"
+#include <yql/essentials/sql/v1/ide/analysis/named_node_resolution.h>
 
-#include <yql/essentials/sql/v1/ide/completion/core/input.h>
+#include <yql/essentials/sql/v1/ide/pure_ast/parser.h>
+
 #include <yql/essentials/utils/string/trim_indent.h>
 
 #include <library/cpp/yson/node/node.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-using namespace NSQLComplete;
+using namespace NSQLPureAST;
 using NYql::TrimIndent;
 
 Y_UNIT_TEST_SUITE(NamedNodeTests) {
@@ -17,7 +17,7 @@ void Test(TString query, TString expected) {
     expected = TrimIndent(expected + '\n');
 
     auto parser = MakeParser(/* isAnsiLexer = */ false);
-    auto nodes = ResolveNamedNodes(parser->Parse(SharpedInput(query)), {});
+    auto nodes = ResolveNamedNodes(parser->Parse(query), {});
 
     TStringStream stream;
     nodes->Dump(stream);

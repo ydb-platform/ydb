@@ -1,11 +1,6 @@
 #include "parse_tree.h"
 
-#include <yql/essentials/sql/v1/ide/completion/syntax/format.h>
-
-#include <util/system/yassert.h>
-#include <util/generic/maybe.h>
-
-namespace NSQLComplete {
+namespace NSQLPureAST {
 
 TMaybe<std::string> GetName(SQLv1::Bind_parameterContext* ctx) {
     if (ctx == nullptr) {
@@ -39,4 +34,4 @@ TPosition GetPosition(SQLv1::Bind_parameterContext* ctx) {
     };
 }
 
-} // namespace NSQLComplete
+} // namespace NSQLPureAST

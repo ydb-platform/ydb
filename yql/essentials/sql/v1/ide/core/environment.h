@@ -5,7 +5,7 @@
 #include <util/generic/string.h>
 #include <util/generic/hash.h>
 
-namespace NSQLComplete {
+namespace NSQLPureAST {
 
 struct TEnvironment {
     // Given `{ "$x": "{ "Data": "foo" }" }`,
@@ -13,4 +13,4 @@ struct TEnvironment {
     THashMap<TString, NYT::TNode> Parameters;
 };
 
-} // namespace NSQLComplete
+} // namespace NSQLPureAST

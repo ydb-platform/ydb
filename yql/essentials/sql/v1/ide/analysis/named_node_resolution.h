@@ -1,9 +1,8 @@
 #pragma once
 
-#include "input.h"
-
-#include <yql/essentials/sql/v1/ide/completion/core/environment.h>
-#include <yql/essentials/sql/v1/ide/completion/core/position.h>
+#include <yql/essentials/sql/v1/ide/core/environment.h>
+#include <yql/essentials/sql/v1/ide/core/position.h>
+#include <yql/essentials/sql/v1/ide/pure_ast/parse_tree.h>
 
 #include <library/cpp/yson/node/node.h>
 
@@ -12,7 +11,7 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
-namespace NSQLComplete {
+namespace NSQLPureAST {
 
 using TNamedNode = std::variant<
     SQLv1::ExprContext*,
@@ -39,14 +38,14 @@ public:
 
 TMaybe<TNamedNodeRef> GetNamedNodeRef(SQLv1::Bind_parameterContext* ctx);
 
-INamedNodes::TPtr ResolveNamedNodes(TParsedInput input, const TEnvironment& env);
+INamedNodes::TPtr ResolveNamedNodes(IParseTree::TPtr input, const TEnvironment& env);
 
-} // namespace NSQLComplete
+} // namespace NSQLPureAST
 
 template <>
-struct THash<NSQLComplete::TNamedNodeRef> {
-    inline size_t operator()(const NSQLComplete::TNamedNodeRef& x) const {
-        return THash<std::tuple<TString, NSQLComplete::TPosition>>()(
+struct THash<NSQLPureAST::TNamedNodeRef> {
+    inline size_t operator()(const NSQLPureAST::TNamedNodeRef& x) const {
+        return THash<std::tuple<TString, NSQLPureAST::TPosition>>()(
             std::tie(x.Name, x.Position));
     }
 };

@@ -1,11 +1,11 @@
 #pragma once
 
-#include "named_node_resolution.h"
-#include "parse_tree.h"
+#include <yql/essentials/sql/v1/ide/analysis/named_node_resolution.h>
 
-#include <yql/essentials/sql/v1/ide/completion/core/environment.h>
+#include <yql/essentials/sql/v1/ide/core/environment.h>
+#include <yql/essentials/sql/v1/ide/pure_ast/parse_tree.h>
 
-namespace NSQLComplete {
+namespace NSQLPureAST {
 
 using TIdentifier = TString;
 
@@ -22,4 +22,4 @@ NYT::TNode Evaluate(SQLv1::Bind_parameterContext* ctx, const INamedNodes& nodes)
 
 TPartialValue PartiallyEvaluate(antlr4::ParserRuleContext* ctx, const INamedNodes& nodes);
 
-} // namespace NSQLComplete
+} // namespace NSQLPureAST

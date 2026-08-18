@@ -1,13 +1,13 @@
-#include "evaluate.h"
+#include <yql/essentials/sql/v1/ide/analysis/evaluate.h>
 
-#include <yql/essentials/sql/v1/ide/completion/syntax/format.h>
+#include <yql/essentials/sql/v1/ide/core/format.h>
 
 #include <contrib/libs/re2/re2/re2.h>
 
 #include <util/generic/hash_set.h>
 #include <util/generic/scope.h>
 
-namespace NSQLComplete {
+namespace NSQLPureAST {
 
 namespace {
 
@@ -252,4 +252,4 @@ TPartialValue PartiallyEvaluate(antlr4::ParserRuleContext* ctx, const INamedNode
     return EvaluateG(ctx, nodes);
 }
 
-} // namespace NSQLComplete
+} // namespace NSQLPureAST

@@ -43,6 +43,8 @@ public:
         double DefaultQueryLoad = 0.1;
         bool Strict = true;
         bool EnableLoadReservations = false;
+        // Only an initial value, a non zero cpu number from a load measurement wins
+        ui64 CpuNumber = 0;
     };
 
     struct TCpuQuotaResponse {

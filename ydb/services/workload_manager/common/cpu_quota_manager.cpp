@@ -53,6 +53,9 @@ void TCpuQuotaManager::UpdateSettings(const TSettings& settings) {
     if (Settings.DefaultQueryLoad <= 0.0) {
         Settings.DefaultQueryLoad = previous.DefaultQueryLoad;
     }
+    if (Settings.CpuNumber) {
+        CpuNumber = Settings.CpuNumber;
+    }
 
     // While reservations were in charge the legacy counter kept drifting up unused, so it has
     // to be reseeded, otherwise switching back would stall admission until the drift decays

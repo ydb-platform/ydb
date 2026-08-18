@@ -78,7 +78,6 @@ namespace NKikimr {
     }
 
     // DbsController tablet (exactly one per domain in default state storage group)
-    // TODO This is a dummy value, actual value is yet to be approved
     inline ui64 MakeDbsControllerID() {
         return MakeTabletID(false, 0x2004);
     }

@@ -460,11 +460,16 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
     Y_UNIT_TEST(SetKafkaBatchBaseOffset) {
         const TKafkaRecordBatch expected = MakeRecordBatch(ECompressionType::ZSTD);
         TString batchBytes = WriteKafkaRecordBatch(expected);
+        const TString originalBytes = batchBytes;
 
         UNIT_ASSERT(SetKafkaBatchBaseOffset(batchBytes, 123));
 
         const TKafkaRecordBatch parsed = ReadKafkaRecordBatch(batchBytes);
         UNIT_ASSERT_VALUES_EQUAL(parsed.BaseOffset, 123);
+        const size_t baseOffsetSize = sizeof(TKafkaRecordBatch::BaseOffsetMeta::Type);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TString(batchBytes.data() + baseOffsetSize, batchBytes.size() - baseOffsetSize),
+            TString(originalBytes.data() + baseOffsetSize, originalBytes.size() - baseOffsetSize));
         UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(parsed.Records[0].OffsetDelta, 0);
         UNIT_ASSERT_VALUES_EQUAL(parsed.Records[1].OffsetDelta, 1);
@@ -472,6 +477,18 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
         UNIT_ASSERT(KafkaBytesEqual(parsed.Records[0].Value, expected.Records[0].Value));
         UNIT_ASSERT(KafkaBytesEqual(parsed.Records[1].Key, expected.Records[1].Key));
         UNIT_ASSERT(KafkaBytesEqual(parsed.Records[1].Value, expected.Records[1].Value));
+    }
+
+    Y_UNIT_TEST(SetKafkaBatchBaseOffsetIgnoresLegacyAndMalformedBatch) {
+        TString legacyBytes = KafkaLegacyProducerBatchBytes(1, ECompressionType::NONE);
+        const TString originalLegacyBytes = legacyBytes;
+        UNIT_ASSERT(!SetKafkaBatchBaseOffset(legacyBytes, 123));
+        UNIT_ASSERT_VALUES_EQUAL(legacyBytes, originalLegacyBytes);
+
+        TString malformedBytes = "short";
+        const TString originalMalformedBytes = malformedBytes;
+        UNIT_ASSERT(!SetKafkaBatchBaseOffset(malformedBytes, 123));
+        UNIT_ASSERT_VALUES_EQUAL(malformedBytes, originalMalformedBytes);
     }
 
     Y_UNIT_TEST(ReadKafkaBatchHeader) {

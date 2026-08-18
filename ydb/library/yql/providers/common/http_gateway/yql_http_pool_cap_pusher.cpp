@@ -1,26 +1,26 @@
-#include "kqp_http_pool_cap_pusher.h"
+#include "yql_http_pool_cap_pusher.h"
 
-#include "log.h"
-
-#include <ydb/core/base/appdata.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <yql/essentials/utils/log/log.h>
+
+#include <util/string/builder.h>
 
 #include <numeric>
 
-namespace NKikimr::NKqp::NScheduler {
+namespace NYql {
 
 namespace {
 
 class THttpPoolCapPusher : public NActors::TActorBootstrapped<THttpPoolCapPusher> {
 public:
     THttpPoolCapPusher(
-        TComputeSchedulerPtr scheduler,
-        NYql::IHTTPGateway::TWeakPtr gateway,
+        TPoolSharesProvider provider,
+        IHTTPGateway::TWeakPtr gateway,
         TDuration period,
         size_t maxHandlers,
         double minDefaultFraction)
-        : Scheduler(std::move(scheduler))
+        : Provider(std::move(provider))
         , Gateway(std::move(gateway))
         , Period(period)
         , MaxHandlers(maxHandlers)
@@ -42,7 +42,7 @@ private:
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         if (auto gw = Gateway.lock()) {
             THashMap<TString, size_t> caps;
-            for (const auto& [poolId, share] : Scheduler->GetPoolShares()) {
+            for (const auto& [poolId, share] : Provider()) {
                 const size_t raw = static_cast<size_t>(MaxHandlers * share);
                 caps[poolId] = share > 0.0 ? std::max<size_t>(raw, 1) : 0;
             }
@@ -50,24 +50,24 @@ private:
                 [](size_t acc, const auto& kv) { return acc + kv.second; });
             const size_t defaultFloor = static_cast<size_t>(MaxHandlers * MinDefaultFraction);
             const size_t defaultCap = std::max(defaultFloor, MaxHandlers > scheduledCapsSum ? MaxHandlers - scheduledCapsSum : 0);
-            caps[NYql::IHTTPGateway::DefaultPoolId] = defaultCap;
+            caps[IHTTPGateway::DefaultPoolId] = defaultCap;
 
             TStringBuilder log;
             log << "HttpPoolCapPusher tick: maxHandlers=" << MaxHandlers << " caps:";
             for (const auto& [poolId, cap] : caps) {
                 log << " [" << poolId << "]=" << cap;
             }
-            LOG_D(log);
+            YQL_LOG(DEBUG) << log;
 
             gw->UpdatePoolCaps(std::move(caps));
         } else {
-            LOG_D("HttpPoolCapPusher tick: gateway is gone");
+            YQL_LOG(DEBUG) << "HttpPoolCapPusher tick: gateway is gone";
         }
         Schedule(Period, new NActors::TEvents::TEvWakeup());
     }
 
-    const TComputeSchedulerPtr Scheduler;
-    const NYql::IHTTPGateway::TWeakPtr Gateway;
+    const TPoolSharesProvider Provider;
+    const IHTTPGateway::TWeakPtr Gateway;
     const TDuration Period;
     const size_t MaxHandlers;
     const double MinDefaultFraction;
@@ -76,32 +76,13 @@ private:
 } // namespace
 
 NActors::IActor* CreateHttpPoolCapPusher(
-    TComputeSchedulerPtr scheduler,
-    NYql::IHTTPGateway::TWeakPtr gateway,
+    TPoolSharesProvider provider,
+    IHTTPGateway::TWeakPtr gateway,
     TDuration period,
     size_t maxHandlers,
     double minDefaultFraction)
 {
-    return new THttpPoolCapPusher(std::move(scheduler), std::move(gateway), period, maxHandlers, minDefaultFraction);
+    return new THttpPoolCapPusher(std::move(provider), std::move(gateway), period, maxHandlers, minDefaultFraction);
 }
 
-void RegisterHttpPoolCapPusherIfNeeded(NActors::TActorSystem* actorSystem, NYql::IHTTPGateway::TPtr gateway) {
-    if (!actorSystem || !gateway) {
-        return;
-    }
-    auto* appData = NKikimr::AppData(actorSystem);
-    if (!appData || !appData->KqpComputeScheduler) {
-        return;
-    }
-    // TODO: read PoolCapsPushPeriodMs / MinDefaultPoolShare from THttpGatewayConfig;
-    // MaxHandlers should match IHTTPGateway config (MaxInFlightCount).
-    actorSystem->Register(CreateHttpPoolCapPusher(
-        appData->KqpComputeScheduler,
-        gateway,
-        TDuration::MilliSeconds(500),
-        1024,
-        0.1));
-    LOG_I("HttpPoolCapPusher registered");
-}
-
-} // namespace NKikimr::NKqp::NScheduler
+} // namespace NYql

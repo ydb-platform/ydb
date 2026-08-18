@@ -37,7 +37,6 @@ SRCS(
 
     scheduler/kqp_compute_scheduler_service.cpp
     scheduler/kqp_dq_scheduler_context.cpp
-    scheduler/kqp_http_pool_cap_pusher.cpp
     scheduler/kqp_schedulable_actor.cpp
     scheduler/kqp_schedulable_read.cpp
     scheduler/kqp_schedulable_task.cpp

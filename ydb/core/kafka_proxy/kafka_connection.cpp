@@ -971,6 +971,7 @@ protected:
 
                         TKafkaReadable readable(*Request->Buffer);
                         readable.SetAllowCompressed(AppData()->FeatureFlags.GetEnableTopicMessagesBatching());
+                        readable.SetMaxArrayBytes(static_cast<size_t>(Context->Config.GetMaxMessageSize()));
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);

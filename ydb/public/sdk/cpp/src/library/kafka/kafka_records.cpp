@@ -148,8 +148,12 @@ TString SerializeRecordBatchRecords(
 
 // The returned entries keep TKafkaBytes views into `buffer`, so the caller must
 // keep `buffer` alive for as long as the entries are used.
-std::vector<TKafkaRecordBatchV0> ReadLegacyRecordEntries(const TBuffer& buffer, TKafkaVersion magic) {
-    TKafkaReadable readable(buffer);
+std::vector<TKafkaRecordBatchV0> ReadLegacyRecordEntries(
+    const TBuffer& buffer,
+    TKafkaVersion magic,
+    const TKafkaReadable& limitsFrom)
+{
+    TKafkaReadable readable(buffer, limitsFrom);
     std::vector<TKafkaRecordBatchV0> entries;
 
     while (readable.left() > 0) {
@@ -242,7 +246,7 @@ void ForEachLegacyRecordBatch(
             TStringBuf(value.data(), value.size()),
             compressionType);
         TBuffer innerBuffer(decompressed.data(), decompressed.size());
-        const std::vector<TKafkaRecordBatchV0> innerEntries = ReadLegacyRecordEntries(innerBuffer, magic);
+        const std::vector<TKafkaRecordBatchV0> innerEntries = ReadLegacyRecordEntries(innerBuffer, magic, recordsReadable);
         consumer.OnCompressed(entry, compressionType, innerEntries);
     }
 }
@@ -645,7 +649,9 @@ void TKafkaRecordBatch::Read(TKafkaReadable& _readable, TKafkaVersion _version) 
         const TString decompressed = DecompressRecordBatchPayload(
             TStringBuf(compressed.data(), compressed.size()), CompressionType());
         TBuffer buffer(decompressed.data(), decompressed.size());
-        TKafkaReadable recordsReadable(buffer);
+        TKafkaReadable recordsReadable(buffer, _readable);
+        NPrivate::EnsureArrayAllocationFits<RecordsMeta::ItemTypeDesc>(
+            recordsReadable, recordsCount, sizeof(TKafkaRecord), RecordsMeta::Name);
         Records.resize(recordsCount);
         using ItemStrategy = NPrivate::TypeStrategy<
             RecordsMeta,
@@ -894,7 +900,7 @@ void NPrivate::ReadLegacyRecordBatch(
 {
     const auto data = readable.Bytes(length);
     TBuffer buffer(data.data(), data.size());
-    TKafkaReadable recordsReadable(buffer);
+    TKafkaReadable recordsReadable(buffer, readable);
 
     batch = {};
     batch.Magic = 2;
@@ -924,7 +930,7 @@ TKafkaBatchHeader ReadLegacyRecordBatchHeader(
 {
     const auto data = readable.Bytes(length);
     TBuffer buffer(data.data(), data.size());
-    TKafkaReadable recordsReadable(buffer);
+    TKafkaReadable recordsReadable(buffer, readable);
 
     // Legacy batches (magic 0/1) do not have a v2 RecordBatch header on wire.
     // BaseSequence, ProducerId, Crc, etc. stay at ctor defaults.

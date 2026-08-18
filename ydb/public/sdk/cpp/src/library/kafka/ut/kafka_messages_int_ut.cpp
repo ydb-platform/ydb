@@ -85,6 +85,27 @@ static_assert(Meta_TKafkaArray::About[0] != '\0');
 static_assert(Meta_TKafkaArray::NullableVersions.Min == 5);
 static_assert(Meta_TKafkaArray::FlexibleVersions.Min == 7);
 
+struct Meta_TKafkaInt32Array {
+    using Type = std::vector<TKafkaInt32>;
+    using TypeDesc = NKafka::NPrivate::TKafkaArrayDesc;
+    using ItemType = TKafkaInt32;
+    using ItemTypeDesc = NKafka::NPrivate::TKafkaIntDesc;
+
+    static constexpr const char* Name = "value";
+    static constexpr const char* About = "The test field.";
+    static constexpr const TKafkaInt32 Tag = 31;
+
+    static constexpr TKafkaVersions PresentVersions{3, 97};
+    static constexpr TKafkaVersions TaggedVersions{11, 17};
+    static constexpr TKafkaVersions NullableVersions{5, 19};
+    static constexpr TKafkaVersions FlexibleVersions{7, Max<TKafkaVersion>()};
+};
+
+static_assert(Meta_TKafkaInt32Array::Tag == 31);
+static_assert(Meta_TKafkaInt32Array::About[0] != '\0');
+static_assert(Meta_TKafkaInt32Array::NullableVersions.Min == 5);
+static_assert(Meta_TKafkaInt32Array::FlexibleVersions.Min == 7);
+
 struct Meta_TKafkaBytes {
     using Type = TKafkaBytes;
     using TypeDesc = NKafka::NPrivate::TKafkaBytesDesc;
@@ -125,6 +146,25 @@ static_assert(Meta_TKafkaFloat64::Tag == 31);
 static_assert(Meta_TKafkaFloat64::About[0] != '\0');
 static_assert(Meta_TKafkaFloat64::NullableVersions.Min == 5);
 static_assert(Meta_TKafkaFloat64::FlexibleVersions.Min == 7);
+
+struct Meta_TKafkaBytesHolder {
+    using Type = TKafkaBytesHolder;
+    using TypeDesc = NKafka::NPrivate::TKafkaBytesDesc;
+
+    static constexpr const char* Name = "value";
+    static constexpr const char* About = "The test field.";
+    static constexpr const TKafkaInt32 Tag = 31;
+
+    static constexpr TKafkaVersions PresentVersions{3, 97};
+    static constexpr TKafkaVersions TaggedVersions{11, 17};
+    static constexpr TKafkaVersions NullableVersions{5, 19};
+    static constexpr TKafkaVersions FlexibleVersions{7, Max<TKafkaVersion>()};
+};
+
+static_assert(Meta_TKafkaBytesHolder::Tag == 31);
+static_assert(Meta_TKafkaBytesHolder::About[0] != '\0');
+static_assert(Meta_TKafkaBytesHolder::NullableVersions.Min == 5);
+static_assert(Meta_TKafkaBytesHolder::FlexibleVersions.Min == 7);
 
 Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
     Y_UNIT_TEST(TKafkaInt8_NotPresentVersion) {
@@ -237,6 +277,16 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
         UNIT_ASSERT_EQUAL(result, value);
     }
 
+    Y_UNIT_TEST(TKafkaInt32Array_PresentVersion_NotTaggedVersion) {
+        SIMPLE_HEAD(TKafkaInt32Array, (std::vector<TKafkaInt32>{1, 2, 3}));
+
+        NKafka::NPrivate::Write<Meta_TKafkaInt32Array>(collector, writable, 3, value);
+        NKafka::NPrivate::Read<Meta_TKafkaInt32Array>(readable, 3, result);
+
+        UNIT_ASSERT_EQUAL(collector.NumTaggedFields, 0u);
+        UNIT_ASSERT_EQUAL(result, value);
+    }
+
     Y_UNIT_TEST(TKafkaArray_PresentVersion_TaggedVersion) {
         TString v = "some value";
         SIMPLE_HEAD(TKafkaArray, { v });
@@ -327,6 +377,112 @@ Y_UNIT_TEST_SUITE(KafkaMessagesInt) {
         for (size_t i = 0; i < sizeof(reference); ++i) {
             UNIT_ASSERT_EQUAL(*(sb.GetFrontBuffer().data() + i), (char)reference[i]);
         }
+    }
+
+    Y_UNIT_TEST(TKafkaArray_RejectsLengthLargerThanRemaining) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        const TKafkaInt32 length = 2147483647;
+        writable << length;
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        Meta_TKafkaArray::Type result;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            NKafka::NPrivate::Read<Meta_TKafkaArray>(readable, 3, result),
+            yexception,
+            "had invalid length");
+        UNIT_ASSERT(result.empty());
+    }
+
+    Y_UNIT_TEST(TKafkaArray_RejectsCompactLengthLargerThanRemaining) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        writable.writeUnsignedVarint<ui32>(2147483647u + 1u);
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        Meta_TKafkaArray::Type result;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            NKafka::NPrivate::Read<Meta_TKafkaArray>(readable, 7, result),
+            yexception,
+            "had invalid length");
+        UNIT_ASSERT(result.empty());
+    }
+
+    Y_UNIT_TEST(TKafkaArray_RejectsFixedLengthLargerThanRemainingBytes) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        const TKafkaInt32 length = 3;
+        writable << length;
+        writable << TKafkaInt32(0);
+        writable << TKafkaInt32(0);
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        Meta_TKafkaInt32Array::Type result;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            NKafka::NPrivate::Read<Meta_TKafkaInt32Array>(readable, 3, result),
+            yexception,
+            "had invalid length");
+        UNIT_ASSERT(result.empty());
+    }
+
+    Y_UNIT_TEST(TKafkaArray_RejectsAllocationLargerThanMaxArrayBytes) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        const TKafkaInt32 length = 2;
+        writable << length;
+        const char pad[2] = {};
+        writable.write(pad, sizeof(pad));
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        readable.SetMaxArrayBytes(sizeof(TKafkaString));
+        Meta_TKafkaArray::Type result;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            NKafka::NPrivate::Read<Meta_TKafkaArray>(readable, 3, result),
+            yexception,
+            "had invalid length");
+        UNIT_ASSERT(result.empty());
+    }
+
+    Y_UNIT_TEST(TKafkaBytes_RejectsLengthLargerThanRemaining) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        const TKafkaInt32 length = 2147483647;
+        writable << length;
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        Meta_TKafkaBytes::Type result;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            NKafka::NPrivate::Read<Meta_TKafkaBytes>(readable, 3, result),
+            yexception,
+            "had invalid length");
+    }
+
+    Y_UNIT_TEST(TKafkaBytesHolder_RejectsLengthLargerThanRemaining) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        const TKafkaInt32 length = 2147483647;
+        writable << length;
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        Meta_TKafkaBytesHolder::Type result;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            NKafka::NPrivate::Read<Meta_TKafkaBytesHolder>(readable, 3, result),
+            yexception,
+            "had invalid length");
+    }
+
+    Y_UNIT_TEST(TKafkaString_RejectsLengthLargerThanRemaining) {
+        TKafkaWriteBuffer sb(BUFFER_SIZE);
+        TKafkaWritable writable(sb);
+        const TKafkaInt16 length = 100;
+        writable << length;
+
+        TKafkaReadable readable(sb.GetFrontBuffer());
+        Meta_TKafkaString::Type result;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            NKafka::NPrivate::Read<Meta_TKafkaString>(readable, 3, result),
+            yexception,
+            "had invalid length");
     }
 }
 

@@ -12,6 +12,7 @@
 | `md5/` | UDF с libc (MD5) | `["sdk"]` |
 | `add/` | Минимальный UDF без libs | `[]` |
 | `throw/` | Host `ThrowException` + wasm call stack | `["sdk"]` |
+| `oob/` | WAVM OOB / null+offset / bad ref traps + `describeException` call stack | `[]` |
 | `prefix/` | Objects + TypeConfig (`Prefix::Apply`) | `["sdk"]` + PEERDIR `object_framework` |
 | `ctx/` | Shared ctx + filters (`Ctx::New` / `CountRow` / `CountPositive` / `Snapshot`) | `["sdk"]` + PEERDIR `object_framework` |
 
@@ -25,6 +26,7 @@ ya make --target-platform=clang20-emscripten-wasm64 --build profile \
   ydb/tests/functional/udf_store/examples/md5 \
   ydb/tests/functional/udf_store/examples/add \
   ydb/tests/functional/udf_store/examples/throw \
+  ydb/tests/functional/udf_store/examples/oob \
   ydb/tests/functional/udf_store/examples/prefix \
   ydb/tests/functional/udf_store/examples/ctx
 ```

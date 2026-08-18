@@ -51,6 +51,9 @@ message TProgram {
 
         bool HasWatermarkGenerator = 17;
         optional uint64 WatermarkGeneratorIdleTimeoutUs = 18;
+        repeated string WasmUdfModules = 19;
+        // Column / Member names that flow into WASM UDF string args (1-copy MakePreferWasm).
+        repeated string WasmUdfStringColumns = 20;
     }
 
     uint32 RuntimeVersion = 1;

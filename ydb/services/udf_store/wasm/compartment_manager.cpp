@@ -4,6 +4,8 @@
 #include "registry_helpers.h"
 #include "types.h"
 
+#include <ydb/library/wasm/api/allocation_registry.h>
+
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/yexception.h>
@@ -13,6 +15,12 @@
 #include <string>
 
 namespace NKikimr::NUdfStore::NWasm {
+
+TQueryCompartmentHandle::~TQueryCompartmentHandle() {
+    if (Generation != 0) {
+        NYdb::NWasm::TWasmAllocationRegistry::Instance().ForgetGeneration(Generation);
+    }
+}
 
 namespace {
 
@@ -95,7 +103,7 @@ TQueryCompartmentHandlePtr TWasmCompartmentManager::Acquire(
         }
     }
 
-    auto handle = std::make_unique<TQueryCompartmentHandle>();
+    auto handle = std::make_shared<TQueryCompartmentHandle>();
     handle->Generation = NextCompartmentGeneration();
     // CreateRegistryCompartment clones SDK from CreateImageFromSdk cache ("env");
     // only then do we AddPrecompiledModule the UDF (e.g. Md5).

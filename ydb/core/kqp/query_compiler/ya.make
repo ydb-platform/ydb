@@ -4,6 +4,7 @@ SRCS(
     kqp_mkql_compiler.cpp
     kqp_olap_compiler.cpp
     kqp_query_compiler.cpp
+    kqp_wasm_string_columns.cpp
 )
 
 PEERDIR(

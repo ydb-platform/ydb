@@ -2161,6 +2161,10 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                             // TODO: should we setup Database and PoolId for settings?
                             FillScanTaskLockTxId(*sourceSettings);
                             sourceSettings->ClearSnapshot();
+                            const auto& restoredStage = stageInfo.Meta.GetStage(stageId);
+                            for (const auto& columnName : restoredStage.GetProgram().GetSettings().GetWasmUdfStringColumns()) {
+                                sourceSettings->AddWasmUdfStringColumns(columnName);
+                            }
                         } else if (settings.Is<NKikimrKqp::TKqpFullTextSourceSettings>()) {
                             auto* sourceSettings = newInput.Meta.FullTextSourceSettings = GetMeta().Allocate<NKikimrKqp::TKqpFullTextSourceSettings>();
                             // TODO: should we setup Database and PoolId for settings?
@@ -3044,6 +3048,10 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
                 *protoColumn->MutableTypeInfo() = *columnType.TypeInfo;
             }
             protoColumn->SetName(column.Name);
+        }
+
+        for (const auto& columnName : stage.GetProgram().GetSettings().GetWasmUdfStringColumns()) {
+            settings->AddWasmUdfStringColumns(columnName);
         }
 
         if (GetMeta().CheckDuplicateRows) {

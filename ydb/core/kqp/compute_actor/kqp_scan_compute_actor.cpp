@@ -337,8 +337,24 @@ void TKqpScanComputeActor::DoBootstrap() {
     };
     TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
 
-    ComputeCtx.AddTableScan(0, Meta, GetStatsMode(), &TaskRunner->GetTypeEnv());
+    ComputeCtx.AddTableScan(0, Meta, GetStatsMode(), &TaskRunner->GetTypeEnv(),
+        THashSet<TString>(
+            GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns().begin(),
+            GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns().end()));
     ScanData = &ComputeCtx.GetTableScan(0);
+
+    if (GetTask().GetProgram().GetSettings().WasmUdfStringColumnsSize() > 0) {
+        TStringBuilder columns;
+        for (const auto& name : GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns()) {
+            if (!columns.empty()) {
+                columns << ",";
+            }
+            columns << name;
+        }
+        YDB_LOG_DEBUG("Applied WasmUdfStringColumns for scan",
+            {"logPrefix", this->LogPrefix},
+            {"columns", columns});
+    }
 
     ScanData->TaskId = GetTask().GetId();
     ScanData->TableReader = CreateKqpTableReader(*ScanData, *ComputeCtx.StartTs, *ComputeCtx.InputsConsumed);

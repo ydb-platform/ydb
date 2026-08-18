@@ -200,7 +200,7 @@ Shared context: один модуль линкует `object_framework`, пер�
 6. Резолвит экспорты в map `"ModuleName::Export" → void*` (`MakeExportKey`) — для plain это YQL-имя, для objects — create/call/destroy.
 7. Выставляет `Generation` (monotonic) на handle — TypeConfig callable пересоздаёт объекты при смене generation.
 
-Результат — `TQueryCompartmentHandle` (compartment + Exports + Generation). Владелец — `TQueryCompartmentScope`.
+Результат — `TQueryCompartmentHandle` (compartment + Exports + Generation) под `std::shared_ptr`. Основной владелец — `TQueryCompartmentScope`, но резидентные строки держат свою ссылку через `TWasmAllocationRegistry` (см. «Время жизни резидентной строки»), поэтому compartment живёт до последнего значения в linear memory.
 
 ### TLS
 
@@ -218,16 +218,78 @@ Shared context: один модуль линкует `object_framework`, пер�
 ## 8. Связка с KQP
 
 1. **Compile / predictor** (`kqp_predictor`): обходит план, на `TCoUdf` ставит `HasUdf` и собирает имена модулей.
-2. Модули пишутся в **KQP** `TKqpPhyStage.WasmUdfModules` (не в DQ `TProgram::TSettings`).
-3. При сериализации task (`SerializeTaskToProto`) список кладётся в `TaskParams["_WasmUdfModules"]` (newline-separated).
-4. **Compute actor** / **literal executer**:
+2. **Резолвер string-колонок** (`kqp_wasm_string_columns`) для каждого стейджа отдельно ведёт аргументы `Apply(Udf, …)` назад к физическим колонкам чтения этого же стейджа (`KqpRowsSourceSettings::Columns` у источника, `KqpWideRead*::Columns` у чтения внутри программы). Прослеживаются только шаги, сохраняющие сам буфер: `Member` физического row, аргументы `ExpandMap` / `WideMap` по индексу, AutoMap-развёртка (`Map` / `FlatMap` / `IfPresent`), `Just` / `Unwrap` / `Coalesce`; всё остальное — fail-closed.
+3. Колонки попадают в `WasmUdfStringColumns` **только если стейдж содержит и чтение, и UDF**: буфер в линейной памяти WASM не переживает канал между стейджами, поэтому cross-stage пометки бессмысленны.
+4. Модули пишутся в **KQP** `TKqpPhyStage.WasmUdfModules`; string columns остаются в `TProgram::TSettings.WasmUdfStringColumns` и копируются в scan/source settings.
+5. При сериализации task (`SerializeTaskToProto`) список модулей кладётся в `TaskParams["_WasmUdfModules"]` (newline-separated).
+6. **Compute actor** / **literal executer**:
    - CA читает `TaskParams`; literal — напрямую `stage.GetWasmUdfModules()`;
    - `TQueryCompartmentScope(modules)` → `FilterLoadedWasmUdfModules` (только каталог) → `Acquire`;
+   - на init scan: `ApplyWasmUdfStringColumns` → `PreferWasm` только для имён из settings;
    - на обработке событий / DoExecute: `MakeTlsGuard()` → TLS guard;
    - при ошибке Acquire — `ErrorFromIssue` / failure state **до** `SetTaskRunner`.
-5. Исполнение UDF → `TWasmUdfFunction::Run` / `TWasmConfiguredCallable::Run` читает TLS query compartment.
+7. Материализация scan: marked string → `MakePreferWasm` (1-copy cell→WASM); остальные large strings → host `MakeString`. Если колонка всё же уйдёт в WASM UDF при false negative — `FillAbiStringArg` сделает `CopyIntoCompartment`.
+8. Исполнение UDF → `TWasmUdfFunction::Run` / `TWasmConfiguredCallable::Run` читает TLS query compartment.
 
 Ошибка Acquire до появления task stats раньше маскировалась `AFL_ENSURE(stats.GetTasks().size() == 1)` в `kqp_executer_stats.cpp`; пустые Tasks при early failure теперь пропускаются, чтобы клиент видел исходный issue.
+
+**Переключатель:** `TableServiceConfig.EnableWasmUdfResidentStringColumns` (default true, инвалидирует compile cache) — кластерный дефолт; на сессию переопределяется `PRAGMA ydb.EnableWasmUdfResidentStringColumns = "false"`. Выключение оставляет host-строку и `CopyIntoCompartment` на каждый вызов — это baseline для замеров и путь отката.
+
+**Наблюдаемость:** `TPreferWasmStats` (`wasm/prefer_wasm_stats.h`) считает помеченные колонки, материализации в WASM, `CopyIntoCompartment` / reuse resident и fallback без compartment. `FallbackNoCompartment > 0` означает, что колонки помечены для стейджа без query compartment, то есть чтение и UDF всё-таки разъехались по разным task — планирование сломано.
+
+**Что реально экономится.** Замеры (`wasm/benchmark`, циклы на строку-колонку):
+
+| Операция | Стоимость |
+|---|---|
+| Гостевой вызов `malloc` + `free` через экспорты wasm | ~233 цикла на пару |
+| Поиск экспорта по имени | ~70 циклов |
+| Host-строка (`MakeString`, 4 KB) | ~170 циклов |
+| Копия 4 KB в linear memory | ~326 циклов |
+| `MakePreferWasm` (4 KB: гостевой malloc + копия + регистрация) | ~950 циклов |
+| Переиспользование резидентных байт в аргументе | ~38 циклов |
+
+Полная стоимость значения (материализация плюс вызовы UDF), host против resident:
+
+| Размер / вызовов | Host | Resident |
+|---|---|---|
+| 4 KB × 1 | 874 | 1004 |
+| 16 KB × 1 | 1158 | 1218 |
+| 32 KB × 1 | 3842 | 2497 |
+| 64 KB × 1 | 7196 | 3989 |
+| 256 KB × 1 | 25.3K | 13.5K |
+| 4 KB × 2 | 1193 | 1121 |
+| 64 KB × 4 | 17.8K | 4282 |
+
+При одном вызове UDF на значение точка безубыточности лежит между 16 и 32 KB: ниже неё лишняя работа `MakePreferWasm` (регистрация в `TWasmAllocationRegistry` под локом) дороже сэкономленной копии, выше — resident выигрывает в 1.8–1.9 раза. При двух вызовах resident впереди уже на 4 KB, при четырёх на 64 KB — в 4 раза.
+
+**Цена host→guest вызова.** Изначально пара `malloc`/`free` стоила 126K циклов, и это перекрывало любую экономию на копиях. Причина не в WAVM: страховка от переполнения стека (`CheckStackDepth` → `CheckFreeStackSpace`) запрашивала границы стека на входе в каждую гостевую функцию, а `TCurrentThreadLimits` вызывает `pthread_getattr_np`, который на главном потоке парсит `/proc/self/maps` (strace показывал ровно два `openat` на итерацию). Границы фиксированы на всё время жизни потока, поэтому теперь они кэшируются в `thread_local` (`engine/compartment.cpp`), и пара `malloc`/`free` стоит 233 цикла вместо 126K. Сам запрос границ: 49K циклов на главном потоке против 393 на pthread (`Part_StackBoundsQuery_*`) — то есть на actor-потоках сервера, где реально исполняются UDF, экономия составляет ~390 циклов на гостевой вызов (вызов подешевел примерно в 4 раза), а не 19 мкс.
+
+**Что видно на живом кластере.** `bench_prefer_wasm.sh` (`ParseBlob::parse_blob` над колонкой, один вызов на строку, медиана 15 чередующихся прогонов) даёт разницу в пределах шума: 1024 × 64 KB — −2.2% wall / −0.7% cpu, 256 × 256 KB — −1.3% wall / −0.8% cpu; знак между повторами меняется. Профиль запроса объясняет, почему: ~60% сэмплов приходится на 200-байтовый JIT-цикл самого wasm-UDF (побайтовый xor 64 KB) и ещё ~25% на один горячий цикл хоста, так что подготовка аргумента теряется в фоне. Собрать в SQL профиль «несколько вызовов на значение», где выигрыш и появляется, повторением одного и того же вызова нельзя — YQL схлопывает идентичные `Apply(Udf, …)` в один (4 одинаковых вызова стоят +5% к одному, а не ×4); нужен стейдж, где колонка уходит в **разные** UDF.
+
+Как перемерить:
+
+```bash
+./ya make -r ydb/services/udf_store/wasm/benchmark && ./ydb/services/udf_store/wasm/benchmark/benchmark
+./ya make -tA ydb/services/udf_store/ut -F '*PreferWasmString*'   # инвариант «1 копия вместо 2» на счётчиках
+# A/B на живом кластере через PRAGMA; режимы чередуются, чтобы прогрев не смещал результат
+ROWS=1024 BLOB_SIZE=65536 RUNS=15 SKIP_SEED=1 \
+    ydb/tests/functional/udf_store/examples/parse_blob/bench_prefer_wasm.sh
+```
+
+**Время жизни резидентной строки:** `Make` отдаёт pod с нулевым refcount (конвенция MiniKQL `MakeString`), поэтому владелец доводит счётчик до нуля на UnRef и буфер освобождается сразу после строки, а не копится в linear memory до конца запроса.
+
+Опасность в том, что у резидентной строки в linear memory лежит и сам refcount-заголовок: если compartment уничтожить раньше значения, `TStringValue::TData::UnRef` читает `Refs_` из размапленной памяти и нода падает по SIGSEGV. Так и падал `COUNT(DISTINCT ParseBlob::blob_head(blob))` при `PreferWasm = true`: `TKqpComputeActor::Terminate` звал `DoTerminateImpl()` (снос task runner и графа, где `DISTINCT`-состояние держит значения) **после** `PassAway()`, то есть уже после деструктора актора вместе с его `TQueryCompartmentScope`. Исправление двойное:
+
+- `dq_compute_actor_impl.h`: `DoTerminateImpl()` вызывается до `PassAway()` — граф сносится, пока актор и его scope живы;
+- shared-владение: `TWasmAllocationRegistry::Register` принимает keep-alive `shared_ptr` на handle и держит его, пока у generation есть живые аллокации. `~TQueryCompartmentScope` вызывает `ReleaseOwner(Generation)`: если значений уже нет — compartment уничтожается сразу, если есть — generation помечается `OwnerReleased`, `FreeBytes` для оставшихся значений пропускается (возвращать байты гостевому аллокатору перед сносом памяти незачем), а последний `TryFree` роняет keep-alive и compartment. Keep-alive всегда отпускается **вне** локов реестра: деструктор handle сам заходит в `ForgetGeneration`, и под локом это давало дедлок.
+
+Итог: любое значение может пережить свой scope, и порядок сноса больше не важен для корректности. Регрессии закрыты тестами `TPreferWasmStringTest::ResidentValueOutlivesQueryScope` и `AllocationRegistryOwnerOutlivesLiveAllocations`.
+
+**Второй путь освобождения — LLVM codegen.** `TStringValue::TData::UnRef` спрашивает `UdfTryFreeExternalString` (наша сильная реализация ходит в реестр), но JIT-код MiniKQL этот метод не вызывает: `UnRefUnboxed` инкрементит счётчик инлайном и на нуле зовёт `DeleteString` (`mkql_computation_node_codegen.cpp`), который отдавал байты прямо в `UdfFreeWithSize`. То есть резидентная строка, последняя ссылка на которую умирала внутри скомпилированного графа (а это обычный случай: `TFromFlowWrapper::Fetch_`), уходила аллокатору MiniKQL, который эту память не выделял, — `VERIFY failed: Double free at: 0x...` и падение ноды. Теперь `DeleteString` повторяет порядок `UnRef`: сначала хук, потом `UdfFreeWithSize`. Тест `TPreferWasmStringTest::CodegenDeleteStringReachesRegistry` зовёт `DeleteString` напрямую и без исправления воспроизводит тот же abort.
+
+Практический вывод для новых типов «внешней» памяти под значения MiniKQL: путей освобождения два (интерпретируемый `UnRef` и `DeleteString` из codegen), и хук нужен в обоих.
+
+**Ограничения:** резолвер не различает wasm- и native-UDF (каталог модулей известен только в рантайме), поэтому в стейдже с обоими видами колонка native-UDF тоже может быть помечена — это лишняя запись в WASM, но не ошибка. Неотслеживаемые формы (literals / computed / join / результаты других UDF) дают false negative с корректным fallback через host + copy. Blocks path и lazy holder — вне скоупа.
 
 ## 9. Host ABI и calling convention
 
@@ -276,6 +338,7 @@ Unload WASM: при delete/replace вызывается `NKqp::IDynamicFunctionR
 |---|---|---|
 | Минимальный WAT без libc | `[]` | Empty image + host; без wasm-malloc в RuntimeLibrary |
 | throw (`Throw::fail`) | `["sdk"]` | host `ThrowException` + call stack |
+| oob (`Oob::crash` / `bad_index` / `null_deref` / `bad_ref`) | `[]` | WAVM OOB / null+offset / poison-ref traps + call stack |
 | md5 | `["sdk"]` | полный emscripten sdk как env |
 | with_helpers | `["sdk", "helpers"]` | sdk + промежуточная библиотека + модуль |
 | prefix (objects) | `["sdk"]` | TypeConfig + `object_framework` PEERDIR |

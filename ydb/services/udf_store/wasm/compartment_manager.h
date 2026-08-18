@@ -13,15 +13,23 @@
 
 namespace NKikimr::NUdfStore::NWasm {
 
-struct TQueryCompartmentHandle : public TNonCopyable {
+// Shared rather than unique: a string materialized into linear memory keeps its
+// refcount header there, so the compartment has to outlive every such value even
+// if the query scope that acquired it is already gone (see TWasmAllocationRegistry).
+struct TQueryCompartmentHandle
+    : public TNonCopyable
+    , public std::enable_shared_from_this<TQueryCompartmentHandle>
+{
     std::unique_ptr<NYdb::NWasm::IWebAssemblyCompartment> Compartment;
     // Key: "ModuleName::ExportName" (YQL name or create/call/destroy export)
     THashMap<TString, void*> Exports;
     // Monotonic id for this acquire; TypeConfig callables recreate objects on change.
     ui64 Generation = 0;
+
+    ~TQueryCompartmentHandle();
 };
 
-using TQueryCompartmentHandlePtr = std::unique_ptr<TQueryCompartmentHandle>;
+using TQueryCompartmentHandlePtr = std::shared_ptr<TQueryCompartmentHandle>;
 
 class TWasmCompartmentManager {
 public:

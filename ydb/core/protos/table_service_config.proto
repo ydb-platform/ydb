@@ -566,4 +566,9 @@ message TTableServiceConfig {
 
     // Prune key columns
     optional bool EnablePruneKeyColumns = 144 [default = false];
+
+    // Materialize string columns feeding wasm UDF args straight into the query
+    // compartment's linear memory (one copy instead of host string + copy per call).
+    // Turn off to measure or to fall back to the plain host string path.
+    optional bool EnableWasmUdfResidentStringColumns = 145 [default = true, (InvalidateCompileCache) = true];
 };

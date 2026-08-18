@@ -1,8 +1,12 @@
 #pragma once
+
 #include "kqp_compute.h"
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <ydb/core/tablet_flat/flat_table_column.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
+
+#include <util/generic/hash_set.h>
+#include <util/generic/string.h>
 
 namespace NKikimrTxDataShard {
     class TKqpTransaction_TScanTaskMeta;
@@ -33,6 +37,9 @@ public:
     }
 
     TScanDataColumnsMeta(const NKikimrTxDataShard::TKqpTransaction_TScanTaskMeta& meta, const TTypeEnvironment* typeEnv = nullptr);
+
+    //! Mark ResultColumns/Columns PreferWasm when name is listed in WasmUdfStringColumns settings.
+    void ApplyWasmUdfStringColumns(const THashSet<TString>& wasmUdfStringColumns);
 };
 
 class TScanDataMetaFull: public TScanDataColumnsMeta, public TScanDataMeta {

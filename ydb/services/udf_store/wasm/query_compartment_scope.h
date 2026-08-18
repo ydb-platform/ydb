@@ -3,6 +3,8 @@
 #include "compartment_manager.h"
 #include "module_catalog.h"
 
+#include <ydb/library/wasm/api/allocation_registry.h>
+
 #include <util/generic/strbuf.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -25,16 +27,6 @@ inline TVector<TString> ParseWasmUdfModulesTaskParam(TStringBuf data) {
     return modules;
 }
 
-template <typename TRepeatedString>
-inline TVector<TString> WasmUdfModulesFromRepeated(const TRepeatedString& repeated) {
-    TVector<TString> modules;
-    modules.reserve(repeated.size());
-    for (const auto& module : repeated) {
-        modules.push_back(module);
-    }
-    return modules;
-}
-
 //! Keep only module names registered in the WASM catalog.
 //! Stage predictor records every TCoUdf module (String, Knn, ...);
 //! native UDFs must not trigger Acquire / ResolveModules.
@@ -52,14 +44,36 @@ inline TVector<TString> FilterLoadedWasmUdfModules(
     return result;
 }
 
-// Owns a per-query compartment. Install it as the current TLS compartment only
+template <typename TRepeatedString>
+inline TVector<TString> WasmUdfModulesFromRepeated(const TRepeatedString& repeated) {
+    TVector<TString> modules;
+    modules.reserve(repeated.size());
+    for (const auto& module : repeated) {
+        modules.push_back(module);
+    }
+    return FilterLoadedWasmUdfModules(modules);
+}
+
+// Holds a per-query compartment. Install it as the current TLS compartment only
 // for the duration of a TLS guard (actor event / task run).
+//
+// The scope is not the sole owner: strings materialized into linear memory are
+// destroyed by whoever holds the last reference to them, which can happen after
+// the scope is gone (a compute actor is destroyed before its task runner tears
+// the computation graph down). Those values keep the compartment alive through
+// TWasmAllocationRegistry.
 class TQueryCompartmentScope : public TNonCopyable {
 public:
     explicit TQueryCompartmentScope(const TVector<TString>& modules) {
         const auto loaded = FilterLoadedWasmUdfModules(modules);
         if (!loaded.empty()) {
             Handle_ = GetWasmCompartmentManager().Acquire(loaded);
+        }
+    }
+
+    ~TQueryCompartmentScope() {
+        if (Handle_) {
+            NYdb::NWasm::TWasmAllocationRegistry::Instance().ReleaseOwner(Handle_->Generation);
         }
     }
 

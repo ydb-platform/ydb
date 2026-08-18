@@ -4,6 +4,7 @@
 #include "invocation_context.h"
 #include "registry_helpers.h"
 #include "udf_function.h"
+#include "wasm_string.h"
 
 #include <ydb/library/wasm/api/compartment.h>
 #include <ydb/library/wasm/api/data_transfer.h>
@@ -255,12 +256,8 @@ TUnboxedValue TWasmConfiguredCallable::Run(
                         value.Data.Boolean = arg.Get<bool>() ? 1 : 0;
                         break;
                     case EUdfValueType::String: {
-                        const TStringBuf string = arg.AsStringRef();
-                        stringGuards.push_back(CopyIntoCompartment(string, compartment));
-                        value.Type = EAbiValueType::String;
-                        value.Length = static_cast<ui32>(string.size());
-                        value.Data.String = std::bit_cast<char*>(
-                            stringGuards.back().GetCopiedOffset());
+                        TWasmStringValue::FillAbiStringArg(
+                            compartment, arg, value, stringGuards.emplace_back());
                         break;
                     }
                     case EUdfValueType::Null:

@@ -73,6 +73,7 @@ PEERDIR(
     yql/essentials/minikql/comp_nodes
     yql/essentials/utils
     ydb/core/kqp/common/result_set_format
+    ydb/services/udf_store/wasm
 )
 
 YQL_LAST_ABI_VERSION()

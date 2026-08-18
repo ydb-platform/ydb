@@ -945,6 +945,10 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         ReplyError(ctx, w.GetCookie(), errorCode, TStringBuilder() << ss << " (WriteResponses)");
     }
 
+    for (const auto& w : PendingSchemaChangeResponses) {
+        ReplyError(ctx, w.GetCookie(), errorCode, TStringBuilder() << ss << " (PendingSchemaChangeResponses)");
+    }
+
     for (const auto& ri : ReadInfo) {
         ReplyError(ctx, ri.second.Destination, errorCode,
             TStringBuilder() << ss << " (ReadInfo) cookie " << ri.first);

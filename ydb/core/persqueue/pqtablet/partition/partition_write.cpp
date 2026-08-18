@@ -409,9 +409,16 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                     SourceIdStorage.RegisterSourceId(s, it->second.Updated(
                         seqNo, offset, CurrentTimestamp, THeartbeat{*hbVersion, writeResponse.Msg.Data}, producerEpoch));
                 } else if (const auto& scVersion = writeResponse.Msg.SchemaChangeVersion) {
-                    // Persist LastSchemaChange without bumping SeqNo until the write is actually ACKed.
-                    SourceIdStorage.RegisterSourceId(s, it->second.Updated(
-                        TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data}));
+                    const auto committed = Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
+                    if (*scVersion > committed) {
+                        // Persist LastSchemaChange without bumping SeqNo until the write is actually ACKed.
+                        SourceIdStorage.RegisterSourceId(s, it->second.Updated(
+                            TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data}));
+                    } else {
+                        SourceIdStorage.RegisterSourceId(s, it->second.Updated(
+                            seqNo, offset, CurrentTimestamp,
+                            TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data}, producerEpoch));
+                    }
                 } else {
                     SourceIdStorage.RegisterSourceId(s, it->second.Updated(
                         seqNo, offset, CurrentTimestamp, producerEpoch));
@@ -427,15 +434,6 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                     PendingSchemaChangeResponses.emplace_back(std::move(response));
                     Responses.pop_front();
                     continue;
-                }
-
-                if (!already && partNo + 1 == totalParts) {
-                    it = SourceIdStorage.GetInMemorySourceIds().find(s);
-                    if (it != SourceIdStorage.GetInMemorySourceIds().end()) {
-                        SourceIdStorage.RegisterSourceId(s, it->second.Updated(
-                            seqNo, offset, CurrentTimestamp,
-                            TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data}, producerEpoch));
-                    }
                 }
             }
 
@@ -2056,6 +2054,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
                 .External = false,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
+                .SchemaChangeVersion = std::nullopt, // emitted as regular data for consumers
             }, std::nullopt};
 
             WriteInflightSize += schemaChange->Data.size();

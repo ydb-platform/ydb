@@ -368,6 +368,8 @@ def plan_background_load(mode, topology, foreground_cpus, foreground_threads):
                 mode,
                 "{} requires an explicit foreground affinity".format(mode),
             )
+        if mode == "coherence-all-numa" and len([cpus for _, cpus in topology.numa_nodes if cpus]) < 2:
+            return _background_unsupported(mode, "coherence-all-numa requires at least two NUMA nodes")
         workers = max(0, len(cores) - foreground_threads)
         if workers < 1:
             return _background_unsupported(mode, "no estimated physical-core capacity remains")

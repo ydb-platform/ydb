@@ -47,6 +47,7 @@ from ydb.tools.ydb_bench.lib.topology import (
     discover_topology,
     parse_cpu_list,
     plan_affinity,
+    plan_background_load,
     topology_record,
 )
 from ydb.tools.ydb_bench.lib.import_results import export_archive, import_archive
@@ -1434,6 +1435,26 @@ class YdbBenchTest(unittest.TestCase):
             for mode, cpus in expected.items():
                 with self.subTest(mode=mode):
                     self.assertEqual(plan_affinity(mode, topology, 3).cpus, cpus)
+
+    def test_unpinned_all_numa_background_requires_multiple_numa_nodes(self):
+        single_node = CpuTopology(
+            allowed_cpus=(0, 1, 2, 3),
+            numa_nodes=((0, (0, 1, 2, 3)),),
+            chiplets=((0, (0, 1, 2, 3)),),
+            physical_cores=((0,), (1,), (2,), (3,)),
+        )
+        unsupported = plan_background_load("coherence-all-numa", single_node, None, 1)
+        self.assertFalse(unsupported.supported)
+        self.assertIn("at least two NUMA nodes", unsupported.reason)
+
+        two_nodes = replace(
+            single_node,
+            numa_nodes=((0, (0, 1)), (1, (2, 3))),
+            chiplets=((0, (0, 1)), (1, (2, 3))),
+        )
+        supported = plan_background_load("coherence-all-numa", two_nodes, None, 1)
+        self.assertTrue(supported.supported)
+        self.assertEqual(supported.workers, 2)
 
     def test_unavailable_affinity_mode_is_reported_not_guessed(self):
         topology = CpuTopology(

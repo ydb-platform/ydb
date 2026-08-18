@@ -414,6 +414,14 @@ def test_viewer_sysinfo_tabletinfo_node_id_forbidden_for_strict_database_token(
         )
         _assert_status(mon_base_url_with_extra_sids_control, allowed_path, 'database@builtin', 200)
 
+        # Requests with any foreign nodes in the list must be rejected.
+        mixed_list_path = _build_endpoint_path(
+             ep,
+             with_database_cgi=True,
+             extra_params={'node_id': f'{tenant_node_id},{foreign_node_id}'},
+             database=tenant_database,
+         )
+         _assert_status(mon_base_url_with_extra_sids_control, mixed_list_path, 'database@builtin', 403)
 
 # /viewer/tabletinfo may skip the node_id scope check in the base class,
 # so this handler handles the node_id scope check by itself.

@@ -47,6 +47,7 @@ from ydb.tools.ydb_bench.lib.topology import (
     discover_topology,
     parse_cpu_list,
     plan_affinity,
+    plan_background_load,
     topology_record,
 )
 from ydb.tools.ydb_bench.lib.import_results import export_archive, import_archive
@@ -1435,6 +1436,26 @@ class YdbBenchTest(unittest.TestCase):
                 with self.subTest(mode=mode):
                     self.assertEqual(plan_affinity(mode, topology, 3).cpus, cpus)
 
+    def test_unpinned_all_numa_background_requires_multiple_numa_nodes(self):
+        single_node = CpuTopology(
+            allowed_cpus=(0, 1, 2, 3),
+            numa_nodes=((0, (0, 1, 2, 3)),),
+            chiplets=((0, (0, 1, 2, 3)),),
+            physical_cores=((0,), (1,), (2,), (3,)),
+        )
+        unsupported = plan_background_load("coherence-all-numa", single_node, None, 1)
+        self.assertFalse(unsupported.supported)
+        self.assertIn("at least two NUMA nodes", unsupported.reason)
+
+        two_nodes = replace(
+            single_node,
+            numa_nodes=((0, (0, 1)), (1, (2, 3))),
+            chiplets=((0, (0, 1)), (1, (2, 3))),
+        )
+        supported = plan_background_load("coherence-all-numa", two_nodes, None, 1)
+        self.assertTrue(supported.supported)
+        self.assertEqual(supported.workers, 2)
+
     def test_unavailable_affinity_mode_is_reported_not_guessed(self):
         topology = CpuTopology(
             allowed_cpus=(0, 1),
@@ -1446,7 +1467,7 @@ class YdbBenchTest(unittest.TestCase):
         self.assertFalse(placement.supported)
         self.assertIn("spread-numa", placement.reason)
 
-    def test_run_fails_when_all_affinity_modes_are_unsupported(self):
+    def test_run_skips_when_all_affinity_modes_are_unsupported(self):
         script = self._script("exit 99")
         output = self.root / "unsupported-output"
         output.mkdir()
@@ -1469,8 +1490,8 @@ class YdbBenchTest(unittest.TestCase):
 
         with mock.patch.object(actors_core, "discover_topology", return_value=topology), mock.patch.object(
             os, "sched_setaffinity", create=True
-        ), self.assertRaisesRegex(BenchmarkError, "none of the selected affinity modes is supported"):
-            run_actors_core(
+        ):
+            result = run_actors_core(
                 self._binary(script),
                 configuration,
                 output,
@@ -1478,13 +1499,17 @@ class YdbBenchTest(unittest.TestCase):
             )
 
         manifest = json.loads((output / "run.json").read_text())
-        self.assertEqual(manifest["status"], "failed")
-        self.assertEqual(manifest["state"], "failed")
+        self.assertEqual(result["status"], "unsupported")
+        self.assertEqual(manifest["status"], "unsupported")
+        self.assertEqual(manifest["state"], "unsupported")
         self.assertIn("finished_at", manifest)
-        self.assertIn("spread-numa-pack-chiplet", manifest["error"])
+        self.assertIn("unsupported", manifest["error"])
         self.assertEqual(manifest["runs"], [])
         self.assertEqual(manifest["affinity"][0]["status"], "unsupported")
-        self.assertFalse((output / "summary.csv").exists())
+        self.assertTrue((output / "summary.csv").exists())
+        self.assertEqual(manifest["summary"], "summary.csv")
+        self.assertEqual(manifest["repetitions"], "repetitions.csv")
+        self.assertEqual(manifest["summary_rows"], 0)
 
 
 class WebTest(unittest.TestCase):
@@ -1927,6 +1952,9 @@ class WebTest(unittest.TestCase):
                 self.assertIn(b"function parameterCases", script)
                 self.assertIn(b"class=parameter-choice", script)
                 self.assertIn(b"Incomplete data:", script)
+                self.assertIn(b"internal gaps break chart lines", script)
+                self.assertIn(b"segments.push(segment)", script)
+                self.assertIn(b"for(const points of segments)", script)
                 self.assertIn(b"function mountChartBuilder", script)
                 self.assertIn(b"function defaultActorCharts", script)
                 self.assertIn(b"function defaultMemoryCharts", script)

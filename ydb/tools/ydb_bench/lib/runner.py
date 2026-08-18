@@ -1,5 +1,6 @@
 import errno
 import os
+import select
 import shutil
 import signal
 import subprocess
@@ -21,6 +22,26 @@ class CommandResult:
     duration_seconds: float
     timed_out: bool = False
     interrupted: bool = False
+
+
+class BackgroundProcess:
+    def __init__(self, command, process, started_at, started_monotonic):
+        self.command = tuple(command)
+        self.process = process
+        self.started_at = started_at
+        self.started_monotonic = started_monotonic
+
+    def stop(self, grace_seconds=2.0):
+        stdout, stderr = _stop_process_group(self.process, signal.SIGINT, grace_seconds)
+        return CommandResult(
+            command=self.command,
+            stdout=stdout,
+            stderr=stderr,
+            exit_code=self.process.returncode,
+            started_at=self.started_at,
+            finished_at=_utc_now(),
+            duration_seconds=time.monotonic() - self.started_monotonic,
+        )
 
 
 def _utc_now():
@@ -68,6 +89,36 @@ def _command_with_affinity(command, cpu_affinity):
     # deadlock when run_command is called by the web service's worker thread.
     cpu_list = ",".join(str(cpu) for cpu in affinity)
     return (taskset, "--cpu-list", cpu_list) + command
+
+
+def start_background_process(command, ready_timeout=10.0):
+    command = tuple(str(part) for part in command)
+    started_at = _utc_now()
+    started_monotonic = time.monotonic()
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            start_new_session=True,
+        )
+    except OSError as error:
+        raise BenchmarkError("cannot start background load: {}".format(error)) from error
+    ready, _, _ = select.select([process.stdout], [], [], ready_timeout)
+    if not ready:
+        stdout, stderr = _stop_process_group(process, signal.SIGTERM, 2.0)
+        raise BenchmarkError(
+            "background load did not become ready{}".format(": " + stderr.strip() if stderr.strip() else "")
+        )
+    line = process.stdout.readline().strip()
+    if line != "READY":
+        stdout, stderr = _stop_process_group(process, signal.SIGTERM, 2.0)
+        details = "\n".join(part for part in (line, stdout.strip(), stderr.strip()) if part)
+        raise BenchmarkError("background load failed before READY: {}".format(details or process.returncode))
+    return BackgroundProcess(command, process, started_at, started_monotonic)
 
 
 def run_command(

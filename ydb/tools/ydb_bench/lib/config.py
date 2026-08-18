@@ -16,7 +16,14 @@ from ydb.tools.ydb_bench.lib.topology import AFFINITY_MODES
 PROFILE_NAME_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
 _PROFILE_NAME_RE = re.compile(PROFILE_NAME_PATTERN)
 _COMMON_REQUIRED_FIELDS = ("threads", "duration", "repetitions", "affinity")
-_COMMON_OPTIONAL_FIELDS = ("timeout",)
+BACKGROUND_LOAD_MODES = (
+    "none",
+    "memory-bandwidth",
+    "coherence-chiplet",
+    "coherence-numa",
+    "coherence-all-numa",
+)
+_COMMON_OPTIONAL_FIELDS = ("timeout", "background-load")
 
 
 class _UniqueKeyLoader(yaml.SafeLoader):
@@ -104,6 +111,14 @@ def _profile_schema(benchmark):
                 "exclusiveMinimum": 0,
                 "description": "Per-process timeout in seconds; computed automatically when omitted.",
             },
+            "background-load": {
+                "type": "array",
+                "items": {"enum": list(BACKGROUND_LOAD_MODES)},
+                "minItems": 1,
+                "uniqueItems": True,
+                "default": ["none"],
+                "description": "Additional workload placed on unused physical cores.",
+            },
         },
     }
 
@@ -147,6 +162,7 @@ class RunStep:
     benchmark: str
     profile: str
     affinity: str
+    background_load: str
     threads: int
     case: int
     parameters: object
@@ -162,8 +178,8 @@ class RunPlan:
     step_ids: object
 
 
-def _step_key(benchmark, profile, affinity, threads, case, repeat):
-    return benchmark, profile, affinity, threads, case, repeat
+def _step_key(benchmark, profile, affinity, background_load, threads, case, repeat):
+    return benchmark, profile, affinity, background_load, threads, case, repeat
 
 
 def build_run_plan(loaded_config):
@@ -172,33 +188,44 @@ def build_run_plan(loaded_config):
     step_ids = {}
     for configuration in loaded_config.runs:
         for affinity in configuration.affinity_modes:
-            for case_index, case in enumerate(configuration.benchmark.process_cases(configuration), 1):
-                threads = case["threads"]
-                for repeat in range(1, configuration.repetitions + 1):
-                    step_id = "{:04d}-{}-{}-{}-t{:03d}-c{:03d}-r{:03d}".format(
-                        len(steps) + 1,
-                        configuration.benchmark.name,
-                        configuration.profile,
-                        affinity,
-                        threads,
-                        case_index,
-                        repeat,
-                    )
-                    step = RunStep(
-                        step_id,
-                        configuration.benchmark.name,
-                        configuration.profile,
-                        affinity,
-                        threads,
-                        case_index,
-                        case["parameters"],
-                        repeat,
-                        configuration,
-                    )
-                    steps.append(step)
-                    step_ids[
-                        _step_key(step.benchmark, step.profile, step.affinity, step.threads, step.case, step.repeat)
-                    ] = step.id
+            for background_load in configuration.background_load_modes:
+                for case_index, case in enumerate(configuration.benchmark.process_cases(configuration), 1):
+                    threads = case["threads"]
+                    for repeat in range(1, configuration.repetitions + 1):
+                        step_id = "{:04d}-{}-{}-{}-{}-t{:03d}-c{:03d}-r{:03d}".format(
+                            len(steps) + 1,
+                            configuration.benchmark.name,
+                            configuration.profile,
+                            affinity,
+                            background_load,
+                            threads,
+                            case_index,
+                            repeat,
+                        )
+                        step = RunStep(
+                            step_id,
+                            configuration.benchmark.name,
+                            configuration.profile,
+                            affinity,
+                            background_load,
+                            threads,
+                            case_index,
+                            case["parameters"],
+                            repeat,
+                            configuration,
+                        )
+                        steps.append(step)
+                        step_ids[
+                            _step_key(
+                                step.benchmark,
+                                step.profile,
+                                step.affinity,
+                                step.background_load,
+                                step.threads,
+                                step.case,
+                                step.repeat,
+                            )
+                        ] = step.id
     return RunPlan(loaded_config.path, loaded_config.sha256, tuple(steps), MappingProxyType(step_ids))
 
 
@@ -237,6 +264,17 @@ def _affinity_modes(value, location):
     if any(not isinstance(mode, str) for mode in value):
         _config_error(location, "must contain only affinity mode names")
     invalid = sorted(set(value) - set(AFFINITY_MODES))
+    if invalid:
+        _config_error(location, "contains unknown modes: {}".format(", ".join(invalid)))
+    if len(set(value)) != len(value):
+        _config_error(location, "must not contain duplicate values")
+    return tuple(value)
+
+
+def _background_load_modes(value, location):
+    if not isinstance(value, list) or not value or not all(isinstance(mode, str) for mode in value):
+        _config_error(location, "must be a non-empty array of background load modes")
+    invalid = sorted(set(value) - set(BACKGROUND_LOAD_MODES))
     if invalid:
         _config_error(location, "contains unknown modes: {}".format(", ".join(invalid)))
     if len(set(value)) != len(value):
@@ -296,6 +334,9 @@ def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
     duration = _positive_integer(value["duration"], location + ".duration")
     repetitions = _positive_integer(value["repetitions"], location + ".repetitions")
     affinity = _affinity_modes(value["affinity"], location + ".affinity")
+    background_load = _background_load_modes(
+        value.get("background-load", ["none"]), location + ".background-load"
+    )
     timeout_explicit = "timeout" in value
     timeout = _timeout(
         value["timeout"] if timeout_explicit else benchmark.process_measurement_count(parameters) * duration * 3 + 30,
@@ -311,6 +352,7 @@ def _parse_profile(benchmark, profile_name, value, perf_enabled, perf_frequency)
         timeout_seconds=timeout,
         timeout_explicit=timeout_explicit,
         affinity_modes=affinity,
+        background_load_modes=background_load,
         perf_enabled=perf_enabled,
         perf_frequency=perf_frequency,
     )

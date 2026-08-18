@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse
 
 from ydb.tools.ydb_bench.benchmarks import BENCHMARKS
 from ydb.tools.ydb_bench.lib.common import BenchmarkError, BenchmarkInterrupted, atomic_write_json, atomic_write_text
-from ydb.tools.ydb_bench.lib.config import build_run_plan, load_config
+from ydb.tools.ydb_bench.lib.config import BACKGROUND_LOAD_MODES, build_run_plan, load_config
 from ydb.tools.ydb_bench.lib.results import ResultStore, load_manifest
 from ydb.tools.ydb_bench.lib.actors_core import run_benchmark
 from ydb.tools.ydb_bench.lib.common import extract_executable
@@ -171,7 +171,8 @@ _JS = (
     "const profile of entries){lines.push('  '+profile.name+':');lines.push('    threads: '+yamlArray(profile.threads));for(c"
     "onst parameter of benchmark.parameters)lines.push('    '+parameter.name+': '+yamlArray(profile.parameters[parameter.name"
     "]||parameter.default));lines.push('    duration: '+profile.duration);lines.push('    repetitions: '+profile.repetitions)"
-    ";lines.push('    affinity: '+yamlArray(profile.affinity));if(profile.timeout!==null&&profile.timeout!==undefined&&profil"
+    ";lines.push('    affinity: '+yamlArray(profile.affinity));lines.push('    background-load: '+yamlArray(profile.background_"
+    "load||['none']));if(profile.timeout!==null&&profile.timeout!==undefined&&profil"
     "e.timeout!=='')lines.push('    timeout: '+profile.timeout)}}return lines.join('\\n')+'\\n'}\n"
     "async function syncEditor(){try{const value=await api('/api/editor-config',jsonOptions({yaml:editor.yaml,perf:editor.per"
     'f}));editor.model=value;editor.error=null;if(!editor.selected&&value.profiles.length)editor.selected=value.profiles[0].k'
@@ -182,7 +183,7 @@ _JS = (
     'function planSummary(){const profiles=editor.model?.profiles||[];let count=0,seconds=0;for(const profile of profiles){co'
     'nst benchmark=editor.model.benchmarks.find(item=>item.name===profile.benchmark),cases=(benchmark?.parameters||[]).filter'
     '(item=>item.matrix).reduce((total,item)=>total*(profile.parameters[item.name]?.length||1),1),processes=profile.affinity.'
-    'length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {cou'
+    "length*(profile.background_load||['none']).length*profile.threads.length*profile.repetitions*cases;count+=processes;seconds+=processes*profile.duration}return {cou"
     'nt,seconds}}\n'
     "function editorControls(){return '<div class=toolbar><button id=validate>Validate</button><button id=download-yaml>Downl"
     "oad YAML</button><button id=save-host>Save YAML on host</button><label><input id=perf type=checkbox '+(editor.perf?'chec"
@@ -197,9 +198,9 @@ _JS = (
     "  if(editor.model&&document.querySelector('.profile-list')){\n"
     '    const queue=[];\n'
     '    for(const profile of editor.model.profiles){const benchmark=editor.model.benchmarks.find(item=>item.name===profile.b'
-    'enchmark);for(const affinity of profile.affinity)for(const threads of profile.threads)for(const parameters of parameterC'
+    "enchmark);for(const affinity of profile.affinity)for(const backgroundLoad of (profile.background_load||['none']))for(const threads of profile.threads)for(const parameters of parameterC"
     "ases(benchmark,profile))for(let repeat=1;repeat<=profile.repetitions;repeat++)queue.push(profile.benchmark+' / '+profile"
-    ".name+' / '+affinity+' / '+threads+' threads'+(parameters.length?' / '+parameters.join(', '):'')+' / repeat '+repeat)}\n"
+    ".name+' / '+affinity+' / '+backgroundLoad+' / '+threads+' threads'+(parameters.length?' / '+parameters.join(', '):'')+' / repeat '+repeat)}\n"
     "    message.insertAdjacentHTML('beforebegin','<details class=card><summary>Expected queue ('+queue.length+' processes)</"
     "summary><ol>'+queue.map(item=>'<li><code>'+esc(item)+'</code></li>').join('')+'</ol></details>');\n"
     '  }\n'
@@ -248,7 +249,10 @@ _JS = (
     ".duration)+field('repetitions','Repetitions',profile.repetitions)+'</div><div class=field><label>Affinity modes</label><"
     'div class=checkboxes>\'+editor.model.affinity_modes.map(mode=>\'<label><input class=affinity type=checkbox value="\'+esc(mo'
     'de)+\'" \'+(profile.affinity.includes(mode)?\'checked\':\'\')+\'> \'+esc(mode)+\'</label>\').join(\'\')+\'</div></div><div class=tool'
-    "bar><button class=danger id=delete-profile>Delete profile</button></div>'\n"
+    "bar><div class=field><label>Background load</label><div class=checkboxes>'+editor.model.background_load_modes.map(mode=>"
+    "'<label><input class=background-load type=checkbox value=\"'+esc(mode)+'\" '+((profile.background_load||['none']).inclu"
+    "des(mode)?'checked':'')+'> '+esc(mode)+'</label>').join('')+'</div></div><button class=danger id=delete-profile>Delete pro"
+    "file</button></div>'\n"
     '}\n'
     'function arrayField(value,minimum=1){\n'
     "  const parts=value.split(',').map(part=>part.trim()).filter(Boolean),values=[],seen=new Set;\n"
@@ -281,18 +285,20 @@ _JS = (
     "raw=document.querySelector('#parameter-'+index)?.value||parameter.default.join(', ');item.parameters[parameter.name]=par"
     "ameter.type==='integer'?arrayField(raw,parameter.minimum??1):raw.split(',').map(value=>value.trim()).filter(Boolean)});i"
     "tem.duration=Number(document.querySelector('#duration').value);item.repetitions=Number(document.querySelector('#repetiti"
-    "ons').value);item.affinity=[...document.querySelectorAll('.affinity:checked')].map(input=>input.value)});editor.selected"
-    "=benchmarkName+'/'+name;if(!event?.target?.classList.contains('affinity')&&!event?.target?.classList.contains('parameter"
+    "ons').value);item.affinity=[...document.querySelectorAll('.affinity:checked')].map(input=>input.value);item.background_l"
+    "oad=[...document.querySelectorAll('.background-load:checked')].map(input=>input.value);if(!item.background_load.length)"
+    "throw Error('Select at least one background load mode.')} );editor.selected"
+    "=benchmarkName+'/'+name;if(!event?.target?.classList.contains('affinity')&&!event?.target?.classList.contains('background-load')&&!event?.target?.classList.contains('parameter"
     "-choice'))renderNew()}catch(error){document.querySelector('#editor-message').innerHTML=displayError(error)}};for(const i"
     "nput of document.querySelectorAll('#benchmark,#profile-name,#threads,[id^=parameter-],.parameter-choice,#duration,#repet"
-    "itions,.affinity'))input.onchange=update;document.querySelector('#delete-profile').onclick=()=>{editor.model.profiles=ed"
+    "itions,.affinity,.background-load'))input.onchange=update;document.querySelector('#delete-profile').onclick=()=>{editor.model.profiles=ed"
     'itor.model.profiles.filter(item=>item.key!==profile.key);editor.selected=editor.model.profiles[0]?.key||null;editor.yaml'
     '=serializeConfig(editor.model);saveDraft();renderNew()}}\n'
     "function addProfile(){const selectedBenchmark=document.querySelector('#add-benchmark')?.value;const benchmark=editor.mod"
     "el.benchmarks.find(item=>item.name===selectedBenchmark)||editor.model.benchmarks[0];let suffix=1,name='profile';while((e"
     "ditor.model.profiles||[]).some(item=>item.benchmark===benchmark.name&&item.name===name))name='profile-'+suffix++;editor."
     "model.profiles.push({key:benchmark.name+'/'+name,benchmark:benchmark.name,name,threads:[1],parameters:Object.fromEntries"
-    "(benchmark.parameters.map(item=>[item.name,item.default])),duration:3,repetitions:1,timeout:null,affinity:['none']});edi"
+    "(benchmark.parameters.map(item=>[item.name,item.default])),duration:3,repetitions:1,timeout:null,affinity:['none'],background_load:['none']});edi"
     "tor.selected=benchmark.name+'/'+name;editor.yaml=serializeConfig(editor.model);saveDraft();renderNew()}\n"
     "async function renderNew(tab){clearRefresh();if(tab)sessionStorage.setItem('ydb-bench-editor-tab',tab);tab=sessionStorag"
     "e.getItem('ydb-bench-editor-tab')||'builder';await syncEditor();const summary=planSummary();let content='<h1 class=page-"
@@ -379,11 +385,13 @@ _JS = (
     '  svg+=\'<line class=chart-axis x1="\'+left+\'" y1="\'+(top+plotHeight)+\'" x2="\'+(width-right)+\'" y2="\'+(top+plotHeight)+\'"/'
     '><line class=chart-axis x1="\'+left+\'" y1="\'+top+\'" x2="\'+left+\'" y2="\'+(top+plotHeight)+\'"/><text class=chart-label x="\''
     '+(left+plotWidth/2)+\'" y="\'+(height-5)+\'" text-anchor=middle>\'+esc(xName)+\'</text>\';\n'
-    '  seriesRows.forEach((item,index)=>{const color=colors[(item.colorIndex??index)%colors.length],points=xValues.map(x=>{co'
-    "nst row=item.rows.get(String(x)),y=valueFor(item,row);return Number.isFinite(y)?{x,y,row}:null}).filter(Boolean);svg+='<"
-    'polyline class=chart-line stroke="\'+color+\'" points="\'+points.map(point=>xPos(point.x)+\',\'+yPos(point.y)).join(\' \')+\'"/>'
-    '\';for(const point of points)svg+=\'<circle class=chart-point fill="\'+color+\'" cx="\'+xPos(point.x)+\'" cy="\'+yPos(point.y)+'
-    '\'" r="4"><title>\'+esc(item.label+\'; \'+xName+\'=\'+point.x+\'; \'+(item.metric||metric)+\'=\'+point.y)+\'</title></circle>\'});\n'
+    '  seriesRows.forEach((item,index)=>{const color=colors[(item.colorIndex??index)%colors.length],segments=[];let segment=[]'
+    ';for(const x of xValues){const row=item.rows.get(String(x)),y=valueFor(item,row);if(Number.isFinite(y)){segment.push({x'
+    ',y,row});continue}if(segment.length){segments.push(segment);segment=[]}}if(segment.length)segments.push(segment);for(con'
+    'st points of segments)svg+=\'<polyline class=chart-line stroke="\'+color+\'" points="\'+points.map(point=>xPos(point.x)+'
+    '\',\'+yPos(point.y)).join(\' \')+\'"/>\';for(const point of segments.flat())svg+=\'<circle class=chart-point fill="\'+color+\'"'
+    ' cx="\'+xPos(point.x)+\'" cy="\'+yPos(point.y)+\'" r="4"><title>\'+esc(item.label+\'; \'+xName+\'=\'+point.x+\'; \'+(item.me'
+    'tric||metric)+\'=\'+point.y)+\'</title></circle>\'});\n'
     '  svg+=\'<line class=chart-cursor x1="0" y1="\'+top+\'" x2="0" y2="\'+(top+plotHeight)+\'" visibility=hidden/>\';\n'
     "  return '<div class=chart-surface>'+svg+'</svg><div class=chart-tooltip hidden></div></div>'\n"
     '}\n'
@@ -535,12 +543,12 @@ _JS = (
     '    const sets=indexed.map(item=>new Set([...item.rows].filter(([,row])=>Number.isFinite(Number(row[item.metric]))).map('
     '([x])=>x))),common=[...sets[0]].filter(value=>sets.every(set=>set.has(value))).sort((a,b)=>Number(a)-Number(b)),union=ne'
     'w Set(sets.flatMap(set=>[...set]));\n'
-    '    if(!common.length){warning.innerHTML=\'<div class="notice error">The selected lines have no common \'+esc(state.x)+\' v'
-    "alues for these filters.</div>';output.innerHTML='';return}\n"
-    "    if(common.length<union.size){const coverage=indexed.map(item=>esc(item.label)+': '+common.length+' / '+item.rows.siz"
-    "e).join('; ');warning.innerHTML='<div class=notice><strong>Incomplete data:</strong> showing the intersection of '+commo"
-    "n.length+' common '+esc(state.x)+' values ('+esc(common.join(', '))+').<div class=coverage>'+coverage+'</div></div>'}els"
-    'e warning.innerHTML=\'<div class="notice good">All selected lines share \'+common.length+\' \'+esc(state.x)+\' values.</div>\''
+    "    const xValues=[...union].sort((a,b)=>Number(a)-Number(b));if(!xValues.length){warning.innerHTML='<div class=\"notice"
+    " error\">No numeric values are available.</div>';output.innerHTML='';return}\n"
+    "    if(common.length<union.size){const coverage=indexed.map(item=>esc(item.label)+': '+sets[indexed.indexOf(item)].size+'"
+    " / '+union.size).join('; ');warning.innerHTML='<div class=notice><strong>Incomplete data:</strong> missing values are o"
+    "mitted, and internal gaps break chart lines.<div class=coverage>'+coverage+'</div></div>'}els"
+    "e warning.innerHTML='<div class=\"notice good\">All selected lines cover '+union.size+' '+esc(state.x)+' values.</div>'"
     ';\n'
     "    if(indexed.length===1)indexed[0].label=indexed[0].metric;const colors=indexed.map((_,index)=>chartColors[index%char"
     "tColors.length]);const legend=indexed.length===1?'':'<div class=chart-legend>'+i"
@@ -548,8 +556,8 @@ _JS = (
     "span>').join('')+'</div>';\n"
     "    const metricTitle=selectedMetrics.join(', '),chartTitle=scope.title?metricTitle+' — '+scope.title:metricTitle;output."
     'innerHTML=legend+\'<section class=chart-panel data-metric="combined"><h3>\'+esc(chartTitle)+\'</h3>\'+svgChart(\'combined\',s'
-    'tate.x,common,indexed,colors)+\'</section>\';bindChartTooltips(out'
-    "put,state.x,common,indexed,['combined'],colors)\n"
+    'tate.x,xValues,indexed,colors)+\'</section>\';bindChartTooltips(out'
+    "put,state.x,xValues,indexed,['combined'],colors)\n"
     '  }\n'
     '  render()\n'
     '}\n'
@@ -902,12 +910,14 @@ def editor_model(loaded, output):
                 "repetitions": configuration.repetitions,
                 "timeout": configuration.timeout_seconds if configuration.timeout_explicit else None,
                 "affinity": list(configuration.affinity_modes),
+                "background_load": list(configuration.background_load_modes),
             }
         )
     return {
         "output": str(Path(output).resolve()),
         "benchmarks": benchmark_catalog(),
         "affinity_modes": list(AFFINITY_MODES),
+        "background_load_modes": list(BACKGROUND_LOAD_MODES),
         "profiles": profiles,
     }
 
@@ -1236,6 +1246,7 @@ class RunService:
                 "benchmark": s.benchmark,
                 "profile": s.profile,
                 "affinity": s.affinity,
+                "background_load": s.background_load,
                 "threads": s.threads,
                 "case": s.case,
                 "parameters": s.parameters,
@@ -1251,6 +1262,7 @@ class RunService:
                 "output": str(self.output),
                 "benchmarks": benchmark_catalog(),
                 "affinity_modes": list(AFFINITY_MODES),
+                "background_load_modes": list(BACKGROUND_LOAD_MODES),
                 "profiles": [],
             }
         loaded = self._load(yaml_text, perf)
@@ -1420,6 +1432,10 @@ class RunService:
         elif run["failed"]:
             self._cancel_unfinished(run)
             state, status = "failed", "failed"
+        elif run["store"].manifest["runs"] and all(
+            profile.get("status") == "unsupported" for profile in run["store"].manifest["runs"]
+        ):
+            state, status = "unsupported", "unsupported"
         else:
             # An executor is not allowed to report a completed run with a
             # hidden pending step.  Keep the durable queue terminal even for a
@@ -1645,6 +1661,9 @@ def production_executor(resource_loader, tool_revision):
             raise BenchmarkError("the benchmark executable resource loader is not configured")
         with tempfile.TemporaryDirectory(prefix="ydb-bench-web-") as work:
             binaries = {}
+            background_binary = None
+            if any("none" != mode for config in run["loaded"].runs for mode in config.background_load_modes):
+                background_binary = extract_executable(resource_loader("background_load"), work, "background_load")
             for configuration in run["loaded"].runs:
                 resource_name = configuration.benchmark.resource_name
                 if resource_name not in binaries:
@@ -1678,6 +1697,7 @@ def production_executor(resource_loader, tool_revision):
                                 if step["benchmark"] == configuration.benchmark.name
                                 and step["profile"] == configuration.profile
                                 and step["affinity"] == item["affinity"]
+                                and step.get("background_load", "none") == item.get("background_load", "none")
                                 and step["threads"] == item["threads"]
                                 and step["case"] == item["case"]
                                 and step["repeat"] == item["repeat"]
@@ -1695,6 +1715,7 @@ def production_executor(resource_loader, tool_revision):
                         work_dir_hint=work,
                         event_sink=event,
                         cancel_event=cancelled,
+                        background_binary=background_binary,
                     )
                 except BenchmarkInterrupted:
                     with run["lock"]:
@@ -1738,7 +1759,7 @@ def production_executor(resource_loader, tool_revision):
                         return
                     run["store"].manifest["runs"][-1].update(
                         {
-                            "status": "completed",
+                            "status": profile.get("status", "completed"),
                             "manifest": str(relative / "run.json"),
                             "summary": str(relative / profile["summary"]),
                         }

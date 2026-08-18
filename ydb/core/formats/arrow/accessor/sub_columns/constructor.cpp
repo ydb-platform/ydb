@@ -8,6 +8,19 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
+namespace {
+
+TConclusionStatus ValidateSettings(const TSettings& settings) {
+    if (!settings.IsDenseEncodingVersionSupported()) {
+        return TConclusionStatus::Fail(
+            TStringBuilder{} << "unsupported dense encoding version " << settings.GetDenseEncodingVersionResolved()
+                             << "; maximum supported version is " << GetMaxDenseEncodingVersion());
+    }
+    return TConclusionStatus::Success();
+}
+
+}   // namespace
+
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(const TChunkConstructionData& externalInfo) const {
     AFL_VERIFY(externalInfo.GetDefaultValue() == nullptr);
     return std::make_shared<TSubColumnsArray>(externalInfo.GetColumnType(), externalInfo.GetRecordsCount(), Settings);
@@ -15,6 +28,9 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstructDefault(con
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoDeserializeFromString(
     const TString& originalData, const TChunkConstructionData& externalInfo) const {
+    if (auto conclusion = ValidateSettings(Settings); conclusion.IsFail()) {
+        return conclusion;
+    }
     auto headerConclusion = TSubColumnsHeader::ReadHeader(originalData, externalInfo);
     if (headerConclusion.IsFail()) {
         return headerConclusion;
@@ -107,6 +123,9 @@ TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContain
 
 TConclusion<std::shared_ptr<TSubColumnsPartialArray>> TConstructor::BuildPartialReader(
     const TString& originalData, const TChunkConstructionData& externalInfo, const TSettings& settings) {
+    if (auto conclusion = ValidateSettings(settings); conclusion.IsFail()) {
+        return conclusion;
+    }
     auto headerConclusion = TSubColumnsHeader::ReadHeader(originalData, externalInfo);
     if (headerConclusion.IsFail()) {
         return headerConclusion;

@@ -122,13 +122,18 @@ public:
         return PartialArray;
     }
 
-    void InitPartialReader(const TString& blob) {
+    TConclusionStatus InitPartialReader(const TString& blob) {
         AFL_VERIFY(!!HeaderRange);
         AFL_VERIFY(!PartialArray);
         HeaderRange = std::nullopt;
-        PartialArray = NArrow::NAccessor::NSubColumns::TConstructor::BuildPartialReader(blob, ChunkExternalInfo, Settings).DetachResult();
+        auto conclusion = NArrow::NAccessor::NSubColumns::TConstructor::BuildPartialReader(blob, ChunkExternalInfo, Settings);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+        PartialArray = conclusion.DetachResult();
         //        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("columns", PartialArray->GetHeader().GetColumnStats().DebugJson().GetStringRobust())(
         //            "others", PartialArray->GetHeader().GetOtherStats().DebugJson().GetStringRobust());
+        return TConclusionStatus::Success();
     }
 
     void InitPartialReader(const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& accessor) {
@@ -188,7 +193,7 @@ private:
         return subColumnsAccessor->GetSettings();
     }
 
-    virtual void DoOnDataCollected(TFetchingResultContext& context) override {
+    virtual TConclusionStatus DoOnDataCollected(TFetchingResultContext& context) override {
         if (NeedToAddResource) {
             NArrow::NAccessor::TCompositeChunkedArray::TBuilder compositeBuilder(ChunkExternalInfo.GetColumnType());
             for (auto&& i : ColumnChunks) {
@@ -208,6 +213,7 @@ private:
                 pos += i.GetRecordsCount();
             }
         }
+        return TConclusionStatus::Success();
     }
 
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
@@ -225,7 +231,13 @@ private:
                 const auto fullHeader = NArrow::NAccessor::NSubColumns::TConstructor::GetFullHeaderSize(blob);
                 if (!fullHeader.IsFail() && *fullHeader <= blob.size()) {
                     i.SetSavedBlob(Default<TString>());
-                    i.InitPartialReader(blob);
+                    auto conclusion = i.InitPartialReader(blob);
+                    if (conclusion.IsFail()) {
+                        if (auto source = Source.lock()) {
+                            source->GetContext()->GetCommonContext()->AbortWithError(conclusion.GetErrorMessage());
+                        }
+                        return;
+                    }
                     i.InitReading(reading, SubColumns);
                     const auto headerDuration = TInstant::Now() - headerStart;
                     if (auto source = Source.lock()) {

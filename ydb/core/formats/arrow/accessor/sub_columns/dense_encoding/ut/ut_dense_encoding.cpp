@@ -78,6 +78,14 @@ Y_UNIT_TEST_SUITE(DenseEncoding) {
         }
     }
 
+    Y_UNIT_TEST(UnsupportedDenseEncodingVersion) {
+        NKikimrArrowAccessorProto::TConstructor::TSubColumns::TSettings proto;
+        proto.SetDenseEncodingVersion(GetMaxDenseEncodingVersion() + 1);
+        TSettings settings;
+        UNIT_ASSERT(settings.DeserializeFromProto(proto));
+        UNIT_ASSERT(!settings.IsDenseEncodingVersionSupported());
+    }
+
     void CheckBinaryArrayRoundTrip(const arrow::BinaryArray& array, const std::shared_ptr<arrow::util::Codec>& codec) {
         const TString blob = SerializeBinaryArray(array, codec);
         auto restored = DeserializeBinaryArray(blob, array.length(), codec);

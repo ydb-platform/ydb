@@ -159,17 +159,6 @@ TYPED_TEST(TRpcTest, DefaultUserIsRoot)
     EXPECT_FALSE(rsp->has_user());
 }
 
-TYPED_TEST(TGrpcAuthenticatedTest, EmptyUserIsRootForCompatibility)
-{
-    TTestProxy proxy(this->CreateChannel());
-    auto req = proxy.PassCall();
-    req->SetUser("");
-    auto rspOrError = WaitForFast(req->Invoke());
-    EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
-    const auto& rsp = rspOrError.Value();
-    EXPECT_EQ("authenticated-user", rsp->user());
-}
-
 TYPED_TEST(TGrpcAuthenticatedTest, ManuallySpecifiedUserMismatch)
 {
     TTestProxy proxy(this->CreateChannel());

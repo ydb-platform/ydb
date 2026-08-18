@@ -3462,9 +3462,8 @@ public:
     }
 
     // Drain RowIdResolvePendingQueue in batches of RowIdResolveBatchSize.
-    // Called when new docs are enqueued and when a previous batch finishes resolving.
     void DrainRowIdResolveQueue() {
-        if (RowIdResolvePendingQueue.empty()) {
+        if (RowIdResolvePendingQueue.empty() || !RowIdResolveItems.empty()) {
             return;
         }
 

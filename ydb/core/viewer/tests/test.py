@@ -690,6 +690,31 @@ class TestViewer(object):
         return result
 
     @classmethod
+    def normalize_result_database_stats(cls, result):
+        if 'status_code' in result:
+            return result
+        return {
+            'DatabaseNodes': result.get('DatabaseNodes'),
+            'StorageGroups': result.get('StorageGroups'),
+            'StorageNodes': result.get('StorageNodes'),
+            'Problems': sorted(result.get('Problems') or []),
+        }
+
+    @classmethod
+    def get_viewer_database_stats_ready(cls, database):
+        tries = 15
+        last = {}
+        while tries > 0:
+            last = cls.get_viewer("/viewer/database_stats", {'database': database})
+            if 'status_code' not in last and last.get('StorageGroups', 0) > 0:
+                return last
+            tries -= 1
+            time.sleep(1)
+        assert last.get('StorageGroups', 0) > 0, \
+            "StorageGroups was not populated in /viewer/database_stats response after 15 retries: %s" % last
+        return last
+
+    @classmethod
     def normalize_result_transfer_describe(cls, result):
         cls.delete_keys_recursively(result, ['stats'])
         return result
@@ -994,6 +1019,19 @@ class TestViewer(object):
     def test_viewer_healthcheck(cls):
         result = cls.get_viewer_db_normalized("/viewer/healthcheck")
         result = cls.normalize_result_healthcheck(result)
+        return result
+
+    @classmethod
+    def test_viewer_database_stats(cls):
+        result = {
+            'no-database': cls.normalize_result_database_stats(
+                cls.call_viewer("/viewer/database_stats"),
+            ),
+        }
+        for name in (cls.dedicated_db, cls.shared_db, cls.serverless_db):
+            result[name] = cls.normalize_result_database_stats(
+                cls.get_viewer_database_stats_ready(name),
+            )
         return result
 
     @classmethod

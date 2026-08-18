@@ -6,6 +6,7 @@
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/msgbus.pb.h>
+#include <ydb/core/protos/pqdata_mlp.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -68,6 +69,19 @@ THolder<TEvKeyValue::TEvResponse> MakeEmptySnapshotResponse(ui64 cookie) {
     response->Record.AddReadResult()->SetStatus(NKikimrProto::NODATA);
     response->Record.AddReadRangeResult()->SetStatus(NKikimrProto::NODATA);
     return response;
+}
+
+THolder<TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId> MakeUpdateExternal(ui32 partitionId) {
+    auto ev = MakeHolder<TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId>();
+    ev->Record.SetConsumer(kConsumer);
+    ev->Record.SetPartitionId(partitionId);
+    auto* update = ev->Record.MutableUpdate();
+    update->SetParentPartitionId(1);
+    update->SetGeneration(1);
+    update->SetConsumerGeneration(1);
+    update->SetStep(1);
+    update->SetMode(NKikimrPQ::READ_WITH_KEEP_ORDER_BLACKLIST);
+    return ev;
 }
 
 struct TCapturedForward {
@@ -275,5 +289,46 @@ Y_UNIT_TEST(MlpRequestsWaitForConfigThenDeliver) {
 }
 
 } // Y_UNIT_TEST_SUITE(TMLPTabletQueueTests)
+
+Y_UNIT_TEST_SUITE(TMLPPartitionQueueTests) {
+
+Y_UNIT_TEST(UpdateExternalWaitsForConsumerThenForwards) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    PQTabletPrepare({.partitions = 1, .AddDefaultConsumer = false}, TVector<TConsumerPreparationParameters>{}, *tc.Runtime, tc.TabletId, tc.Edge);
+
+    ui32 updateExternalSeen = 0;
+    bool dropAfterQueue = false;
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::EventType) {
+            ++updateExternalSeen;
+            if (dropAfterQueue) {
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+        }
+        return TTestActorRuntime::EEventAction::PROCESS;
+    });
+
+    tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, MakeUpdateExternal(0).Release(), 0, GetPipeConfigWithRetries());
+    auto earlyError = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(TDuration::MilliSeconds(200));
+    UNIT_ASSERT_C(!earlyError, "UpdateExternal must wait for the MLP consumer instead of Consumer does not exist");
+    const ui32 beforeCreate = updateExternalSeen;
+    dropAfterQueue = true;
+
+    PrepareMlpTablet(tc);
+
+    for (int i = 0; i < 50 && updateExternalSeen <= beforeCreate; ++i) {
+        tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+    }
+    UNIT_ASSERT_GT(updateExternalSeen, beforeCreate);
+
+    auto lateError = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(TDuration::MilliSeconds(200));
+    UNIT_ASSERT_C(!lateError, "Queued UpdateExternal must be forwarded after the consumer is created");
+}
+
+} // Y_UNIT_TEST_SUITE(TMLPPartitionQueueTests)
 
 } // namespace NKikimr::NPQ::NMLP

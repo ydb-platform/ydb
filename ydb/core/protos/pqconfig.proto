@@ -42,6 +42,7 @@ message TPartitionTxMeta {
 message TPQConfig {
     optional uint32 ACLRetryTimeoutSec = 1 [default = 300];
     reserved 2;
+    reserved "BalancerMetadataRetryTimeoutSec";
     optional uint32 MaxBlobsPerLevel = 3 [default = 64]; // will produce 8mb blobs at last level
                                                          //32 => 1mb blobs at last level
     optional uint32 MaxBlobSize = 4 [default = 8388608]; //8mb
@@ -49,15 +50,15 @@ message TPQConfig {
 
     optional bool Enabled = 6 [default = true]; // Enable PQ proxies
 
-    optional uint32 MetaCacheTimeoutSec = 7 [default = 30, deprecated = true];
+    reserved 7;
+    reserved "MetaCacheTimeoutSec";
 
     optional uint32 MaxReadCookies = 8 [default = 100000];
 
     optional bool CheckACL = 9 [default = true];
 
-    reserved 10;
-    reserved 11;
-    reserved 12;
+    reserved 10, 11, 12;
+    reserved "SourceIdCleanupPeriodSec", "SourceIdMaxLifetimeSec", SourceIdTotalShardsCount";
 
     optional NKikimrClient.TKeyValueRequest.ETactic Tactic = 13 [default = MAX_THROUGHPUT];
 
@@ -179,11 +180,12 @@ message TPQConfig {
     optional TClientServiceType DefaultClientServiceType = 40;
     optional bool DisallowDefaultClientServiceType = 43 [default = false];
 
-    optional uint32 MetaCacheRefreshIntervalMilliSeconds = 41 [default = 10000, deprecated = true]; // DEPRECATED
-    optional bool MetaCacheSkipVersionCheck = 42 [default = false, deprecated = true]; // DEPRECATED
+    reserved 41, 42;
+    reserved "MetaCacheRefreshIntervalMilliSeconds", "MetaCacheSkipVersionCheck";
 
     repeated string NonChargeableUser = 44;
     reserved 45;
+    reserved "LbCommunalDatabase";
 
     message TPQDiscoveryConfig {
         optional uint32 CacheRefreshIntervalMilliSeconds = 1 [default = 10000];
@@ -198,9 +200,8 @@ message TPQConfig {
 
     optional uint32 MaxStorageNodePort = 50 [default = 19001];
     optional uint32 MaxStorageNodeId = 53 [default = 999];
-    reserved "MoveTopicActorConfig";
-
     reserved 51;
+    reserved "MoveTopicActorConfig";
 
     optional uint64 BalancerWakeupIntervalSec = 54 [default = 30];
     optional uint64 BalancerStatsWakeupIntervalSec = 55 [default = 5];

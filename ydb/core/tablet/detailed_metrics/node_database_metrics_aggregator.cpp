@@ -13,6 +13,9 @@ namespace NKikimr {
 
 namespace {
 
+/**
+ * Process-wide as there's only two TCA per node: leader and follower. Finer granularity will not buy anything.
+ */
 TMutex& Lock() {
     static TMutex lock;
     return lock;
@@ -321,6 +324,13 @@ public:
         TabletToTableMap.erase(mapIt);
     }
 
+    /**
+     * Deliberately takes no lock: it only recomputes counter VALUES over state private
+     * to this instance
+     *
+     * This stops being safe once something reads these values concurrently with this
+     * recalculation
+     */
     void RecalculateAllCounters() override {
         for (auto& [_, entry] : Tables) {
             if (entry.TableBucket) {

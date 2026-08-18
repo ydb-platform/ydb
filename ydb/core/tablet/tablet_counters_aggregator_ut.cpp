@@ -15,6 +15,7 @@
 #include <ydb/library/actors/core/mon.h>
 
 #include <util/generic/array_size.h>
+#include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 
 namespace NKikimr {
@@ -1085,6 +1086,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
     constexpr ui32 LEVEL_TABLE = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable;
     constexpr ui32 LEVEL_PARTITION = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition;
+    constexpr ui32 LEVEL_DISABLED = NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelDisabled;
 
     // The only tablet type with a detailed metrics counter set is DataShard, and
     // GetDetailedMetricsCounterNames() allow-lists this Executor counter name (it is
@@ -1114,14 +1116,16 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
      */
     class TFakeSchemeCache : public TActor<TFakeSchemeCache> {
     public:
-        explicit TFakeSchemeCache(ui32* requestCounter)
+        TFakeSchemeCache(ui32* requestCounter, THashSet<TPathId>* watchedPathIds)
             : TActor(&TThis::StateWork)
             , RequestCounter(requestCounter)
+            , WatchedPathIds(watchedPathIds)
         {}
 
         STATEFN(StateWork) {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySet, Handle);
+                hFunc(TEvTxProxySchemeCache::TEvWatchPathId, Handle);
                 default:
                     break;
             }
@@ -1141,8 +1145,13 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
             Send(ev->Sender, new TEvTxProxySchemeCache::TEvNavigateKeySetResult(navigate));
         }
 
+        void Handle(TEvTxProxySchemeCache::TEvWatchPathId::TPtr& ev) {
+            WatchedPathIds->insert(ev->Get()->PathId);
+        }
+
     private:
         ui32* const RequestCounter;
+        THashSet<TPathId>* const WatchedPathIds;
     };
 
     ////////////////////////////////////////////
@@ -1163,7 +1172,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
             Runtime.RegisterService(
                 MakeSchemeCacheID(),
-                Runtime.Register(new TFakeSchemeCache(&NavigateRequests))
+                Runtime.Register(new TFakeSchemeCache(&NavigateRequests, &WatchedPathIds))
             );
 
             LeaderAggregatorId = Runtime.Register(CreateTabletCountersAggregator(false));
@@ -1193,6 +1202,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         TActorId FollowerAggregatorId;
 
         ui32 NavigateRequests = 0;
+        THashSet<TPathId> WatchedPathIds;
     };
 
     ////////////////////////////////////////////
@@ -1226,6 +1236,10 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         TFakeTablet& SetSimple(EExecutorSimpleCounter counter, ui64 value) {
             ExecutorCounters->Simple()[counter].Set(value);
             return *this;
+        }
+
+        void SetMetricsLevel(ui32 metricsLevel) {
+            MetricsLevel = metricsLevel;
         }
 
         void SendTableInfo(TEnv& env) {
@@ -1277,7 +1291,7 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
 
         const ui64 TabletId;
         const ui32 FollowerId;
-        const ui32 MetricsLevel;
+        ui32 MetricsLevel;
 
         TIntrusivePtr<TEvTabletCounters::TInFlightCookie> CounterEventsInFlight;
 
@@ -1604,6 +1618,166 @@ Y_UNIT_TEST_SUITE(TTabletCountersAggregatorDetailedMetrics) {
         UNIT_ASSERT(!executorCounters->FindNamedCounter("sensor", "SUM(" + UNLISTED_EXECUTOR_COUNTER + ")"));
         UNIT_ASSERT(!executorCounters->FindNamedCounter("sensor", "MAX(" + UNLISTED_EXECUTOR_COUNTER + ")"));
         UNIT_ASSERT(!executorCounters->FindCounter(UNLISTED_EXECUTOR_COUNTER));
+    }
+
+    /**
+     * Verify that when a Table level table's level drops to Disabled, the bucket it
+     * published is withdrawn, not just frozen in place.
+     */
+    Y_UNIT_TEST(TableLevelDisabledDropsTheBucket) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader1(1000, 0, LEVEL_TABLE);
+        TFakeTablet leader2(2000, 0, LEVEL_TABLE);
+
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader1.SendUpdate(env);
+        leader2.SendUpdate(env);
+        ReportCounters(env, {&leader1, &leader2});
+
+        UNIT_ASSERT(FindTableBucketCounters(env));
+
+        leader1.SetMetricsLevel(LEVEL_DISABLED);
+        leader1.SendTableInfo(env);
+        leader2.SetMetricsLevel(LEVEL_DISABLED);
+        leader2.SendTableInfo(env);
+        ReportCounters(env, {&leader1, &leader2});
+
+        UNIT_ASSERT(!FindTableBucketCounters(env));
+        UNIT_ASSERT(!FindRawGroup(env)->FindSubgroup("database", DATABASE_PATH));
+    }
+
+    /**
+     * Same as above for a Partition level table: both leaves must be withdrawn.
+     */
+    Y_UNIT_TEST(PartitionLevelDisabledDropsTheLeaves) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader.SendUpdate(env);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&leader, &follower});
+
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 1));
+
+        leader.SetMetricsLevel(LEVEL_DISABLED);
+        leader.SendTableInfo(env);
+        follower.SetMetricsLevel(LEVEL_DISABLED);
+        follower.SendTableInfo(env);
+        ReportCounters(env, {&leader, &follower});
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+    }
+
+    /**
+     * Verify that disabling one follower's level withdraws only its own leaf, not the
+     * sibling follower's -- the withdraw is per tablet+follower, not per table.
+     */
+    Y_UNIT_TEST(PartitionLevelDisabledDropsOnlyTheDisabledFollower) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet follower1(1000, 1, LEVEL_PARTITION);
+        TFakeTablet follower2(1000, 2, LEVEL_PARTITION);
+
+        follower1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        follower1.SendUpdate(env);
+        follower2.SendUpdate(env);
+        ReportCounters(env, {&follower1, &follower2});
+
+        follower1.SetMetricsLevel(LEVEL_DISABLED);
+        follower1.SendTableInfo(env);
+        ReportCounters(env, {&follower1, &follower2});
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 2), "SUM", ALLOWED_EXECUTOR_COUNTER), 2u);
+    }
+
+    /**
+     * Verify that the follower actor gets its OWN db watcher and registers its own
+     * watch, even though EnableDbCounters (the leader-only db counters feature) is off
+     * in TEnv -- detailed metrics alone must be enough to create the watcher.
+     */
+    Y_UNIT_TEST(FollowerActorWatchesItsDetailedMetricsDatabase) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&follower});
+
+        UNIT_ASSERT(env.WatchedPathIds.contains(TENANT_PATH_ID));
+    }
+
+    /**
+     * Verify that the follower actor's own TEvRemoveDatabase drops its own leaves (and
+     * the leader's TEvRemoveDatabase drops the leader's).
+     */
+    Y_UNIT_TEST(RemoveDatabaseDropsFollowerLeaves) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader.SendUpdate(env);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&leader, &follower});
+
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(FindLeafCounters(env, 1000, 1));
+
+        env.Runtime.Send(new IEventHandle(env.LeaderAggregatorId, env.Edge,
+            new TEvTabletCounters::TEvRemoveDatabase(DATABASE_PATH, TENANT_PATH_ID)));
+        env.Runtime.Send(new IEventHandle(env.FollowerAggregatorId, env.Edge,
+            new TEvTabletCounters::TEvRemoveDatabase(DATABASE_PATH, TENANT_PATH_ID)));
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 1));
+
+        auto rawGroup = FindRawGroup(env);
+        UNIT_ASSERT(rawGroup);
+        UNIT_ASSERT(!rawGroup->FindSubgroup("database", DATABASE_PATH));
+    }
+
+    /**
+     * Pin that the two actors are independently notified rather than accidentally
+     * coupled: TEvRemoveDatabase sent to the leader alone must not touch the follower.
+     */
+    Y_UNIT_TEST(RemoveDatabaseOnlyReachesItsOwnRole) {
+        TEnv env(true /* detailedMetricsEnabled */);
+
+        TFakeTablet leader(1000, 0, LEVEL_PARTITION);
+        TFakeTablet follower(1000, 1, LEVEL_PARTITION);
+
+        leader.SetSimple(DB_UNIQUE_ROWS_TOTAL, 1);
+        follower.SetSimple(DB_UNIQUE_ROWS_TOTAL, 2);
+
+        leader.SendUpdate(env);
+        follower.SendUpdate(env);
+        ReportCounters(env, {&leader, &follower});
+
+        env.Runtime.Send(new IEventHandle(env.LeaderAggregatorId, env.Edge,
+            new TEvTabletCounters::TEvRemoveDatabase(DATABASE_PATH, TENANT_PATH_ID)));
+        env.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        UNIT_ASSERT(!FindLeafCounters(env, 1000, 0));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetCounterValue(FindLeafCounters(env, 1000, 1), "SUM", ALLOWED_EXECUTOR_COUNTER), 2u);
     }
 }
 

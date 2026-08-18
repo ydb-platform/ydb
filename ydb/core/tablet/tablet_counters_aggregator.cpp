@@ -105,20 +105,18 @@ static_assert(static_cast<ui32>(TDetailedMetricsSettings::MetricsLevelTable) ==
 static_assert(static_cast<ui32>(TDetailedMetricsSettings::MetricsLevelPartition) ==
     NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelPartition);
 
-std::optional<EDetailedMetricsLevel> GetDetailedMetricsLevel(ui32 rawLevel) {
-    const auto level = static_cast<EDetailedMetricsLevel>(rawLevel);
-
+bool IsCollectedMetricsLevel(EDetailedMetricsLevel level) {
     switch (level) {
         case TDetailedMetricsSettings::MetricsLevelTable:
         case TDetailedMetricsSettings::MetricsLevelPartition:
-            return level;
+            return true;
 
         case TDetailedMetricsSettings::MetricsLevelUnspecified:
         case TDetailedMetricsSettings::MetricsLevelDisabled:
-            return std::nullopt;
+            return false;
     }
 
-    return std::nullopt;
+    return false;
 }
 
 ::NMonitoring::TDynamicCounterPtr GetDetailedMetricsRawGroup(
@@ -146,11 +144,12 @@ class TTabletMon {
 public:
     //
     TTabletMon(::NMonitoring::TDynamicCounterPtr counters, bool isFollower, TActorId dbWatcherActorId,
-            bool detailedMetricsEnabled, const TActorContext& ctx)
+            bool dbCountersEnabled, bool detailedMetricsEnabled, const TActorContext& ctx)
         : Counters(GetServiceCounters(counters, isFollower ? "followers" : "tablets"))
         , AllTypes(MakeIntrusive<TTabletCountersForTabletType>(Counters.Get(), "type", "all"))
         , IsFollower(isFollower)
         , DbWatcherActorId(dbWatcherActorId)
+        , DbCountersEnabled(dbCountersEnabled)
         , DetailedMetricsEnabled(detailedMetricsEnabled)
     {
         if (!IsFollower) {
@@ -167,7 +166,17 @@ public:
             return;
         }
 
-        auto& db = DetailedMetricsByPathId[msg.TenantPathId];
+        // Register a watch the first time this database is seen, so the detailed
+        // metrics of its tables are reclaimed on database removal even when the
+        // (leader-only) db counters feature is off. TDbWatcherActor dedupes by path
+        // id (sys_view/service/db_counters.cpp), so the "inserted" check here is not
+        // load-bearing for correctness, only for cutting one event every 5s per tablet.
+        auto [itDb, inserted] = DetailedMetricsByPathId.try_emplace(msg.TenantPathId);
+        if (inserted && DbWatcherActorId) {
+            ctx.Send(DbWatcherActorId, new NSysView::TEvSysView::TEvWatchDatabase(msg.TenantPathId));
+        }
+
+        auto& db = itDb->second;
         db.TabletContributions[msg.TabletID][msg.FollowerId] = TDetailedMetricsTableInfo{
             .TableId = msg.TableId,
             .TablePath = msg.TablePath,
@@ -225,8 +234,13 @@ public:
             return;
         }
 
-        const auto level = GetDetailedMetricsLevel(static_cast<ui32>(table->MetricsLevel));
-        if (!level) {
+        if (!IsCollectedMetricsLevel(table->MetricsLevel)) {
+            // The table stopped collecting: withdraw what this tablet published before
+            // the level dropped
+            if (db.Aggregator) {
+                db.Aggregator->ForgetTablet(tabletId, followerId);
+            }
+
             YDB_LOG_TRACE_CTX(ctx, "Skipping the detailed metrics of the table",
                 {"tabletId", tabletId},
                 {"tablePath", table->TablePath},
@@ -284,7 +298,7 @@ public:
             typeCounters->Apply(tabletId, executorCounters, appCounters, tabletType);
         }
         //
-        if (!IsFollower && DbWatcherActorId && tenantPathId) {
+        if (!IsFollower && DbCountersEnabled && tenantPathId) {
             auto dbCounters = GetDbCounters(tenantPathId, ctx);
             if (dbCounters) {
                 auto* limitedAppCounters = GetOrAddLimitedAppCounters(tabletType);
@@ -1015,15 +1029,17 @@ public:
 
     class TTabletsDbWatcherCallback : public NKikimr::NSysView::TDbWatcherCallback {
         TActorSystem* ActorSystem = {};
+        bool Follower = false;
 
     public:
-        explicit TTabletsDbWatcherCallback(TActorSystem* actorSystem)
+        TTabletsDbWatcherCallback(TActorSystem* actorSystem, bool follower)
             : ActorSystem(actorSystem)
+            , Follower(follower)
         {}
 
         void OnDatabaseRemoved(const TString& dbPath, TPathId pathId) override {
             auto evRemove = MakeHolder<TEvTabletCounters::TEvRemoveDatabase>(dbPath, pathId);
-            auto aggregator = MakeTabletCountersAggregatorID(ActorSystem->NodeId, false);
+            auto aggregator = MakeTabletCountersAggregatorID(ActorSystem->NodeId, Follower);
             ActorSystem->Send(aggregator, evRemove.Release());
         }
     };
@@ -1090,6 +1106,12 @@ private:
         if (db.DatabasePathRequestedAt && db.DatabasePathRequestedAt + DATABASE_PATH_RESOLVE_TIMEOUT > now) {
             return;
         }
+
+        if (db.DatabasePathRequestedAt) {
+            YDB_LOG_WARN_CTX(ctx, "Retrying the database path resolve of the detailed metrics: no reply to the previous request",
+                {"pathId", tenantPathId.ToString()});
+        }
+
         db.DatabasePathRequestedAt = now;
 
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
@@ -1196,6 +1218,7 @@ private:
     TLabeledCountersByTabletTypeAndGroup LabeledCountersByTabletTypeAndGroup;
     TQuietTabletCounters QuietTabletCounters;
 
+    bool DbCountersEnabled = false;
     bool DetailedMetricsEnabled = false;
 
     ::NMonitoring::TDynamicCounterPtr DetailedMetricsGroup;
@@ -1275,13 +1298,20 @@ TTabletCountersAggregatorActor::Bootstrap(const TActorContext &ctx) {
     TAppData* appData = AppData(ctx);
     Y_ABORT_UNLESS(!TabletMon);
 
-    if (AppData(ctx)->FeatureFlags.GetEnableDbCounters() && !Follower) {
-        auto callback = MakeIntrusive<TTabletMon::TTabletsDbWatcherCallback>(ctx.ActorSystem());
+    // GetEnableDbCounters gates the leader-only per-database "tablets" counters (a
+    // SysView feature); the watcher actor itself is also needed by the detailed
+    // metrics of EITHER role, so the two features no longer share DbWatcherActorId as
+    // a single implicit feature gate (see the DbCountersEnabled member of TTabletMon).
+    const bool dbCountersEnabled = appData->FeatureFlags.GetEnableDbCounters() && !Follower;
+    const bool detailedMetricsEnabled = appData->FeatureFlags.GetEnableDataShardDetailedMetrics();
+
+    if (dbCountersEnabled || detailedMetricsEnabled) {
+        auto callback = MakeIntrusive<TTabletMon::TTabletsDbWatcherCallback>(ctx.ActorSystem(), Follower);
         DbWatcherActorId = ctx.Register(NSysView::CreateDbWatcherActor(callback));
     }
 
     TabletMon = new TTabletMon(appData->Counters, Follower, DbWatcherActorId,
-        appData->FeatureFlags.GetEnableDataShardDetailedMetrics(), ctx);
+        dbCountersEnabled, detailedMetricsEnabled, ctx);
     auto mon = appData->Mon;
     if (mon) {
         if (!Follower)

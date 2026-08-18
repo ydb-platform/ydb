@@ -177,11 +177,6 @@ proctype Worker(byte id) {
             state[id] = NEED_TO_BE_WAKER;
             atomic { waker_pending = true }
 
-        :: suggested_thread_count != thread_count ->
-            resume_state[id] = NONE;
-            state[id] = NEED_TO_BE_WAKER;
-            atomic { waker_pending = true }
-
         :: reductions == 0 && suggested_thread_count == thread_count &&
                 queued_activations > 0 ->
             atomic {
@@ -629,9 +624,18 @@ proctype Controller() {
         };
 
         try_request_waker(owner, i, notified, false);
+        /* Do not publish another target until the waker has observed this
+         * one. This makes a lost resize request observable independently of
+         * later controller updates. */
+        thread_count == suggested_thread_count;
         round++
     :: else -> break
     od
+}
+
+ltl live_resize_reconciles {
+    [] ((suggested_thread_count != thread_count) ->
+        <> (suggested_thread_count == thread_count))
 }
 
 init {

@@ -236,8 +236,7 @@ protected:
 
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
         // First step of stream lookup join with DQ external sources (not kqp tables)
-        TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx,
-                Config->FeatureFlags.GetEnableDqSourceStreamLookupJoinLocalLookups() ? DqLookupSourceFromKqlReadTableRanges : nullptr);
+        TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx, DqLookupSourceFromKqlReadTableRanges);
         DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

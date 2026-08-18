@@ -572,28 +572,29 @@ private:
 
 class TKikimrDqIntegration : public NYql::TDqIntegrationBase {
 public:
-    explicit TKikimrDqIntegration(const TString& token)
-    : Token(token)
+    explicit TKikimrDqIntegration(TIntrusivePtr<TKikimrSessionContext> sessionCtx)
+    : SessionCtx(std::move(sessionCtx))
     {
     }
 
 private:
 
     void FillLookupSourceSettings(const TExprNode& node, ::google::protobuf::Any& protoSettings, TString& sourceType) override {
+        YQL_ENSURE(SessionCtx->Config().FeatureFlags.GetEnableDqSourceStreamLookupJoinLocalLookups(), "streamlookup() JOIN local table lookups are disabled. Please contact your system administrator to enable it");
         const TDqLookupSourceWrap wrap(&node);
         const auto settings = wrap.Settings().Cast<TCoAtomList>();
         const auto& path = settings.Item(0).StringValue();
 
         NKqpProto::TDqSourceKikimrLookupSource source;
         source.SetPath(path);
-        source.SetToken(Token);
+        source.SetToken(SessionCtx->GetUserToken() ? SessionCtx->GetUserToken()->SerializeAsString() : "");
 
         // preserve source description for read actor
         protoSettings.PackFrom(source);
         sourceType = KikimrProviderName;
     }
 
-    const TString Token;
+    TIntrusivePtr<TKikimrSessionContext> SessionCtx;
 };
 
 class TKikimrDataSource : public TDataProviderBase {
@@ -633,7 +634,7 @@ public:
     }
 
     bool Initialize(TExprContext& ctx) override {
-        KikimrDqIntegration = MakeHolder<TKikimrDqIntegration>(SessionCtx->GetUserToken() ? SessionCtx->GetUserToken()->SerializeAsString() : "");
+        KikimrDqIntegration = MakeHolder<TKikimrDqIntegration>(SessionCtx);
 
         TString defaultToken;
         if (auto credential = Types.Credentials->FindCredential(TString("default_") + KikimrProviderName)) {

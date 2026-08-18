@@ -1765,7 +1765,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "output_topic"_a = outputTopicName
         ),
         WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
-        WithFeatureFlag ? "" : "Error: DqCnStreamLookup: RightInput: Expected TDqLookupSourceWrap, but got");
+        WithFeatureFlag ? "" : "local table lookups are disabled. Please contact your system administrator to enable it");
         if (!WithFeatureFlag) {
             return;
         }

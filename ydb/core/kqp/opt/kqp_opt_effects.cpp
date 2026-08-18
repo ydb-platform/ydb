@@ -160,6 +160,7 @@ TDqStage RebuildReturningPureStageWithSink(TExprNode::TPtr& returning, TExprBase
 }
 
 bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
+    const TKqpOptimizeContext& kqpCtx,
     TMaybeNode<TExprBase>& effect, const i64 order)
 {
     const i64 priority = 0;
@@ -233,26 +234,108 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
     auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
         .Output(dqUnion.Output())
         .Done();
-    auto stageInput = Build<TDqStage>(ctx, node.Pos())
-        .Inputs()
-            .Add(mapCn)
-            .Build()
-        .Program()
-            .Args({rowArgument})
-            .Body<TCoToFlow>()
-                .Input(rowArgument)
-                .Build()
-            .Build()
-        .Outputs<TDqStageOutputsList>()
-            .Add(sink)
-            .Build()
-        .Settings().Build()
-        .Done();
 
-    effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-        .Stage(stageInput.Ptr())
-        .SinkIndex().Build("0")
-        .Done();
+    const bool enableCsWriteAffinity = kqpCtx.Config->EnableCsWriteAffinity.Get().GetOrElse(true);
+
+    // Stage 4: Affinity marker for sink settings
+    //
+    // At optimization time, ShardIdToNodeId is NOT available. Therefore, we cannot
+    // populate TargetShardIds or ExpectedNodeId here. Instead:
+    //   - The EnableCsWriteAffinity flag is already in TKqpPhyTx (Stage 1),
+    //     accessible in TasksGraph at runtime.
+    //   - The sink mode "fill_table" identifies this as a CTAS sink.
+    //   - In TasksGraph (Stage 5), the combination of EnableCsWriteAffinity +
+    //     fill_table mode triggers multi-task creation with proper shard-to-node
+    //     mapping, populating TargetShardIds and ExpectedNodeId per task.
+    //
+    // No changes to sink settings are needed at this stage.
+
+    if (enableCsWriteAffinity) {
+        // Per-node write affinity: WriteActor (sink) is extracted into a separate
+        // TDqStage so it can be independently parallelized (M tasks, one per node
+        // hosting column shards) and assigned via node affinity.
+        //
+        //   Transform Stage (mapCn -> ToFlow)         — 1 task (arbitrary node)
+        //       | TDqCnBroadcast                       — all rows sent to every Sink task
+        //   Sink Stage (ToFlow -> DqSink -> TKqpDirectWriteActor)  — M tasks, pinned to shard nodes
+        //
+        // Each Sink task receives all rows but only writes to its assigned shards
+        // (filtered by TargetShardIds in TShardedWriteController::FlushSerializer).
+        //
+        // Broadcast (not Map) is used so that the Sink Stage can have a different,
+        // independent task count (M) from the Transform Stage (1).  With Map the two
+        // stages would be forced into the same copy-group with equal task counts.
+        auto transformStage = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(mapCn)
+                .Build()
+            .Program()
+                .Args({rowArgument})
+                .Body<TCoToFlow>()
+                    .Input(rowArgument)
+                    .Build()
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        // TDqCnBroadcast: sends all rows from the (single) Transform task to every
+        // Sink task.  This allows M Sink tasks while the Transform stage has 1 task.
+        auto sinkInput = Build<TDqCnBroadcast>(ctx, node.Pos())
+            .Output<TDqOutput>()
+                .Stage(transformStage)
+                .Index().Build("0")
+                .Build()
+            .Done();
+
+        // Distinct argument node for the sink stage lambda (must not be shared
+        // with the transform stage lambda).
+        const auto sinkRowArgument = Build<TCoArgument>(ctx, node.Pos())
+            .Name("sinkRow")
+            .Done();
+
+        auto sinkStage = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(sinkInput)
+                .Build()
+            .Program()
+                .Args({sinkRowArgument})
+                .Body<TCoToFlow>()
+                    .Input(sinkRowArgument)
+                    .Build()
+                .Build()
+            .Outputs<TDqStageOutputsList>()
+                .Add(sink)
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+            .Stage(sinkStage.Ptr())
+            .SinkIndex().Build("0")
+            .Done();
+    } else {
+        // Original behavior: transform program and sink in a single stage.
+        auto stageInput = Build<TDqStage>(ctx, node.Pos())
+            .Inputs()
+                .Add(mapCn)
+                .Build()
+            .Program()
+                .Args({rowArgument})
+                .Body<TCoToFlow>()
+                    .Input(rowArgument)
+                    .Build()
+                .Build()
+            .Outputs<TDqStageOutputsList>()
+                .Add(sink)
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        effect = Build<TKqpSinkEffect>(ctx, node.Pos())
+            .Stage(stageInput.Ptr())
+            .SinkIndex().Build("0")
+            .Done();
+    }
 
     return true;
 }
@@ -608,7 +691,7 @@ bool BuildEffects(const TVector<TExprBase>& effects, TExprNode::TPtr& returning,
         if (effect.Maybe<TKqlFillTable>()) {
             const auto maybeFillTable = effect.Maybe<TKqlFillTable>();
             AFL_ENSURE(maybeFillTable);
-            if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, newEffect, builtEffects.size())) {
+            if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, kqpCtx, newEffect, builtEffects.size())) {
                 return false;
             }
         } else if (effect.Maybe<TKqlTableEffect>()) {

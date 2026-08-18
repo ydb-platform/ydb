@@ -456,6 +456,7 @@ public:
         const ui64 lockNodeId,
         const bool inconsistentTx,
         const bool isOlap,
+        THashSet<ui64> targetShardIds,
         TVector<NScheme::TTypeInfo> keyColumnTypes,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
@@ -486,6 +487,7 @@ public:
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .Inconsistent = InconsistentTx,
+                .TargetShardIds = std::move(targetShardIds),
             },
             Alloc);
 
@@ -2906,6 +2908,14 @@ public:
                 keyColumnTypes.push_back(typeInfoMod.TypeInfo);
             }
 
+            THashSet<ui64> targetShardIds;
+            if (Settings.GetTargetShardIds().size() > 0) {
+                targetShardIds.insert(Settings.GetTargetShardIds().begin(), Settings.GetTargetShardIds().end());
+                YDB_LOG_INFO("CsWriteAffinity: DirectWriteActor initialized with shard affinity",
+                    {"logPrefix", this->LogPrefix},
+                    {"targetShardCount", targetShardIds.size()},
+                    {"expectedNodeId", Settings.GetExpectedNodeId()});
+            }
             WriteTableActor = new TKqpTableWriteActor(
                 this,
                 Settings.GetDatabase(),
@@ -2915,6 +2925,7 @@ public:
                 Settings.GetLockNodeId(),
                 Settings.GetInconsistentTx(),
                 Settings.GetIsOlap(),
+                std::move(targetShardIds),
                 std::move(keyColumnTypes),
                 Alloc,
                 GetOptionalMvccSnapshot(Settings),
@@ -2922,7 +2933,8 @@ public:
                 nullptr,
                 TActorId{},
                 Counters,
-                UserCtx);
+                UserCtx
+            );
             // Set initial QuerySpanId for direct write actor
             WriteTableActor->SetCurrentQuerySpanId(Settings.GetQuerySpanId());
 
@@ -3591,6 +3603,7 @@ public:
             LockNodeId,
             InconsistentTx,
             settings.IsOlap,
+            {},
             std::move(keyColumnTypes),
             Alloc,
             settings.TransactionSettings.MvccSnapshot,

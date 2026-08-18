@@ -315,6 +315,27 @@ protected:
                 // TODO: make sure we don't miss any shards
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.IsDatashard() && !stageInfo.Meta.IsOlap());
                 // Y_DEBUG_ABORT_UNLESS(!stageInfo.Meta.ShardKey);
+
+                // CsWriteAffinity: For CTAS (fill_table) sink stages with EnableCsWriteAffinity,
+                // the target column table's shards are NOT automatically added to shardIds above
+                // (because they are sinks, not scan sources). We add them here so they get
+                // resolved to nodes via the shard resolver, enabling per-node M-task creation
+                // in CountComputeTasks and ColumnShardHashV1 shuffle routing.
+                if (stageInfo.Meta.ShardKey
+                        && stageInfo.Meta.Tx.Body->EnableCsWriteAffinity()) {
+                    for (const auto& sink : stage.GetSinks()) {
+                        if (sink.HasInternalSink()
+                                && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
+                            NKikimrKqp::TKqpTableSinkSettings sinkSettings;
+                            if (sink.GetInternalSink().GetSettings().UnpackTo(&sinkSettings)
+                                    && sinkSettings.GetType() == NKikimrKqp::TKqpTableSinkSettings::MODE_FILL) {
+                                for (const auto& partition : stageInfo.Meta.ShardKey->GetPartitions()) {
+                                    shardIds.insert(partition.ShardId);
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 

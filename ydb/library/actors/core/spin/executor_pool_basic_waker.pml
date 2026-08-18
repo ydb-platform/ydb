@@ -120,23 +120,16 @@ proctype Producer() {
 }
 
 proctype Controller() {
-    byte next;
-
     do
+    :: true -> check_safety()
     :: true ->
-        if
-        :: next = 1
-        :: next = N
-        fi;
-        if
-        :: atomic {
-            next != suggested_thread_count ->
-            suggested_thread_count = next
+        atomic {
+            if
+            :: suggested_thread_count == 1 -> suggested_thread_count = N
+            :: suggested_thread_count == N -> suggested_thread_count = 1
+            fi
         };
-            request_waker()
-        :: else -> skip
-        fi;
-        check_safety()
+        request_waker()
     od
 }
 

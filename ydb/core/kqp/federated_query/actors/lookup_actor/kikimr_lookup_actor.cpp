@@ -416,10 +416,20 @@ namespace {
             }
         }
 
-        void FinalizeSession(TSessionState::TPtr state) {
+        void FinalizeSession(TSessionState::TPtr session) {
+            if (auto sender = session->Sender) {
+                session->Sender = {};
+                Y_DEBUG_ABORT_UNLESS(InflightCreateSessions > 0);
+                --InflightCreateSessions;
+                // Retries are handled inside lookup actor
+                TIssues issues;
+                issues.AddIssue(TIssue("Session attach terminated with unknown status"));
+                Send(sender, new TEvSessionError(Ydb::StatusIds::UNDETERMINED, std::move(issues)));
+                TryEnqueueWaiting();
+            }
             YDB_LOG_DEBUG("FinalizeSession",
-                    {"sessionId", state->SessionId});
-            state->SessionId.clear();
+                    {"sessionId", session->SessionId});
+            session->SessionId.clear();
         }
 
         void CleanupStreamProcessor(TSessionState::TPtr& session) {
@@ -455,6 +465,7 @@ namespace {
         private:
         std::deque<NActors::TActorId> WaitingQueue;
         TVector<TSessionState::TPtr> ReadySessions;
+        // when entry removed from BusySessions or InflightCreateSessions decremented, we should call TryEnqueueWaiting() or directly create/reuse session
         std::unordered_map<TString, TSessionState::TPtr> BusySessions;
         ui64 InflightCreateSessions = 0;
     };

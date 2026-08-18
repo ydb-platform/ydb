@@ -2121,25 +2121,20 @@ private:
     TPipeline& Pipeline;
 };
 
-async<bool> TPipeline::WaitForSnapshot(const TRowVersion& snapshot) {
+async<void> TPipeline::WaitForSnapshot(const TRowVersion& snapshot) {
     TRowVersion unreadableEdge = GetUnreadableEdge();
     if (snapshot < unreadableEdge) {
-        co_return true;
-    }
-
-    if (!CheckInflightLimit()) {
-        co_return false;
+        co_return;
     }
 
     const ui64 waitStep = snapshot.Step;
     if (!Self->WaitPlanStep(waitStep) && snapshot < (unreadableEdge = GetUnreadableEdge())) {
         // Async MediatorTimeCastEntry update, active current queue and return
         ActivateWaitingTxOps(unreadableEdge, Self->ActorContext());
-        co_return true;
+        co_return;
     }
 
     co_await TWaitForSnapshotAwaiter(*this, snapshot);
-    co_return true;
 }
 
 void TPipeline::ActivateWaitingTxOps(TRowVersion edge, const TActorContext& ctx) {

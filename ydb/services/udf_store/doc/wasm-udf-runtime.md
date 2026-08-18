@@ -25,7 +25,7 @@ flowchart TD
   ModAOT --> Load["TWasmArtifactLoadActor<br/>читать artifact + libs"]
   Load --> Catalog["TWasmModuleCatalog<br/>Register artifact"]
   Load --> FR["FunctionRegistry<br/>wasm:md5 → TWasmSoModule"]
-  FR --> Compile["KQP compile<br/>WasmUdfModules в settings"]
+  FR --> Compile["KQP compile<br/>WasmUdfModules → TKqpPhyStage"]
   Compile --> CA["ComputeActor / LiteralExecuter<br/>TQueryCompartmentScope::Acquire"]
   CA --> Run["TWasmUdfFunction::Run<br/>TLS query compartment"]
 ```
@@ -211,23 +211,23 @@ Shared context: один модуль линкует `object_framework`, пер�
 | `TCurrentQueryCompartmentGuard` / `GetCurrentQueryCompartment()` | query handle с Exports (нужен `TWasmUdfFunction::Run`) |
 | `TCurrentCompartmentGuard` / `GetCurrentCompartment()` (NYdb::NWasm) | WAVM compartment для PtrFromVM / host ThrowException |
 
-`TQueryCompartmentScope::Activate()` ставит query TLS; внутри `Run` дополнительно ставится NYdb compartment guard.
+`TQueryCompartmentScope::MakeTlsGuard()` ставит query TLS; внутри `Run` дополнительно ставится NYdb compartment guard.
 
 ---
 
 ## 8. Связка с KQP
 
-1. **Compile / predictor** (`kqp_predictor`): обходит план, на `TCoUdf` собирает имена модулей в `WasmUdfModules`.
-2. Модули попадают в `TProgram::TSettings` задачи.
-3. **Compute actor** (`kqp_pure_compute_actor`, `kqp_scan_compute_actor`) и **literal executer**:
-   - в bootstrap: `TQueryCompartmentScope(settings)` → `Acquire`;
-   - на выполнение событий / DoExecute: `Activate()` → TLS guard;
+1. **Compile / predictor** (`kqp_predictor`): обходит план, на `TCoUdf` ставит `HasUdf` и собирает имена модулей.
+2. Модули пишутся в **KQP** `TKqpPhyStage.WasmUdfModules` (не в DQ `TProgram::TSettings`).
+3. При сериализации task (`SerializeTaskToProto`) список кладётся в `TaskParams["_WasmUdfModules"]` (newline-separated).
+4. **Compute actor** / **literal executer**:
+   - CA читает `TaskParams`; literal — напрямую `stage.GetWasmUdfModules()`;
+   - `TQueryCompartmentScope(modules)` → `FilterLoadedWasmUdfModules` (только каталог) → `Acquire`;
+   - на обработке событий / DoExecute: `MakeTlsGuard()` → TLS guard;
    - при ошибке Acquire — `ErrorFromIssue` / failure state **до** `SetTaskRunner`.
-4. Исполнение UDF → `TWasmUdfFunction::Run` или `TWasmConfiguredCallable::Run` читает TLS query compartment и вызывает export.
+5. Исполнение UDF → `TWasmUdfFunction::Run` / `TWasmConfiguredCallable::Run` читает TLS query compartment.
 
 Ошибка Acquire до появления task stats раньше маскировалась `AFL_ENSURE(stats.GetTasks().size() == 1)` в `kqp_executer_stats.cpp`; пустые Tasks при early failure теперь пропускаются, чтобы клиент видел исходный issue.
-
----
 
 ## 9. Host ABI и calling convention
 

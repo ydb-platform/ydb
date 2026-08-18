@@ -12,7 +12,7 @@ Create a DNS record for the new FQDN that points to the same server. The new FQD
     ydb [global options...] admin cluster config fetch > config.yaml
     ```
 
-1. In `config.yaml`, change the `host` value in the existing `hosts` list entry for the target node, without changing the other entries or their order.
+1. In `config.yaml`, locate the existing `hosts` list entry for the target node and change only its `host` value. Do not delete the node entry and create a new one elsewhere — this would change the node's position in the configuration and break the update.
 
     For example, for node `1`, replace `node-1.example.com` with `node-1-new.example.com`:
 

@@ -499,21 +499,22 @@ namespace NActors {
             }
             AtomicSet(ThreadCount, activeThreadCount);
 
-            const auto countSearchingWorkers = [&] {
-                i16 count = 0;
-                for (i16 workerId : Waker->ActiveWorkers) {
-                    if (Threads[workerId].GetState<EThreadState>() == EThreadState::None) {
-                        ++count;
-                    }
-                }
-                return count;
-            };
-
             const i64 previousActivationCredits = ActivationCredits.load(std::memory_order_acquire);
-            i64 budget = Max<i64>(previousActivationCredits - countSearchingWorkers(), 0);
+            i64 budget = previousActivationCredits;
             i16 newlySleeping = 0;
 
             for (i16 workerId : Waker->ActiveWorkers) {
+                const EThreadState state = Threads[workerId].GetState<EThreadState>();
+                if (state == EThreadState::None) {
+                    if (budget > 0) {
+                        --budget;
+                    }
+                    continue;
+                }
+                if (state != EThreadState::Spin) {
+                    continue;
+                }
+
                 EThreadState expected = EThreadState::Spin;
                 if (budget > 0) {
                     if (Threads[workerId].ReplaceState(expected, EThreadState::None)) {

@@ -1,0 +1,78 @@
+---
+description: "CI test pipeline & GitHub Actions: PR-check, test_ya, platform traps, multi-branch — read CI_PIPELINE.md first"
+globs:
+  - ".github/docs/CI_PIPELINE.md"
+  - ".github/docs/CI_PLATFORM.md"
+  - ".github/workflows/pr_check.yml"
+  - ".github/workflows/run_tests.yml"
+  - ".github/workflows/run_and_debug_tests.yml"
+  - ".github/workflows/postcommit*.yml"
+  - ".github/workflows/regression_*.yml"
+  - ".github/workflows/regression_whitelist_run.yml"
+  - ".github/workflows/build_and_test_ya.yml"
+  - ".github/actions/test_ya/**"
+  - ".github/actions/build_and_test_ya/**"
+  - ".github/actions/ya_ci_core_build_test/**"
+  - ".github/actions/s3cmd/**"
+  - ".github/scripts/tests/**"
+  - ".github/config/muted_ya*.txt"
+  - ".github/workflows/automerge_pr.yaml"
+  - ".github/workflows/rebase.yml"
+  - "ydb/ci/rightlib/automerge.py"
+alwaysApply: false
+---
+
+# CI Testing Skill (router)
+
+**Do not duplicate pipeline details here.** Read canonical docs first:
+
+| Doc | When |
+|-----|------|
+| [`.github/docs/CI_PIPELINE.md`](../../.github/docs/CI_PIPELINE.md) | Workflows, action stack, PR-check, test_ya, config, maintenance checklist |
+| [`.github/docs/CI_PLATFORM.md`](../../.github/docs/CI_PLATFORM.md) | GitHub traps (#36673, #44180), multi-branch, security principles |
+
+## Stack (one line)
+
+`workflow → build_and_test_ya → test_ya → ya make → transform_build_results → statuses / S3 / upload_tests_results`
+
+Workflows call **`build_and_test_ya`**, not `test_ya` directly. Mute **enforcement** = `muted_ya.txt` in `test_ya`; mute **decisions** = analytics skill + `mute_rules.md`.
+
+## Agent rules
+
+1. **Structural CI change** → update `CI_PIPELINE.md` (same PR). Platform/security/multi-branch → also `CI_PLATFORM.md`.
+2. **New `job_name` in upload** → update analytics `ARCHITECTURE.md` + SQL `job_name` filters.
+3. **Shared action API change** → complete multi-branch checklist in `CI_PLATFORM.md`.
+4. **Secrets/tokens** → follow `CI_PLATFORM.md` § Secrets & tokens; never log or expose `secrets.*`.
+5. **Before changing events** → re-read [GitHub Actions docs](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows); cite section in PR.
+6. **Minimal diff** — one layer per PR (gate / orchestrator / test_ya / script).
+
+## Pitfalls (quick reference)
+
+Full table in `CI_PLATFORM.md`. Highest-impact:
+
+| Mistake | Fix |
+|---------|-----|
+| Trust stale `merge_commit_sha` | Re-fetch PR API; see [#36673](https://github.com/ydb-platform/ydb/issues/36673) |
+| Change workflow on `main`; break stable PRs | `pull_request_target` always uses **main** YAML |
+| `test_ya` without YDB setup step | `setup_ci_ydb_service_account_key_file_credentials` required for upload |
+| Rely on hourly cron exactly once | In-job polling — `automerge_pr.yaml` ([#44180](https://github.com/ydb-platform/ydb/pull/44180)) |
+| Introduce untrusted execution or remote code in CI/build | See security principles in `CI_PLATFORM.md` |
+| Log or echo `secrets.*` / put credentials in `vars` | `CI_PLATFORM.md` § Secrets & tokens |
+
+## Debug PR-check
+
+```bash
+gh run list --repo ydb-platform/ydb --workflow pr_check.yml --limit 5
+gh run view <RUN_ID> --repo ydb-platform/ydb
+gh pr checks <N> --repo ydb-platform/ydb
+```
+
+S3 index in PR comment → `ya-test.html`, fail_summary. Live test data → **analytics skill** (`job_name = 'PR-check'`).
+
+## Cross-links
+
+| Topic | Where |
+|-------|--------|
+| YDB marts, regressions, YQL | `.cursor/rules/analytics.mdc` |
+| Mute automation | `.github/config/mute_rules.md` |
+| Build bloat | `ydb/ci/build_bloat/` |

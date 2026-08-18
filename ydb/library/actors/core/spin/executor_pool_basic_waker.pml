@@ -13,7 +13,9 @@
  *  - a local activation budget which does not reserve queue items;
  *  - preservation of the elected worker's intended post-waker state;
  *  - dynamic thread-count changes, including claimed and unclaimed
- *    reduction tokens overtaken by a later resize.
+ *    reduction tokens overtaken by a later resize;
+ *  - a waker-request bit packed with the reduction count, which delegates a
+ *    missed resize request to the next worker entering the idle path.
  *
  * Abstracted away:
  *  - SleepingStack order (sleeping membership is sufficient here);
@@ -36,6 +38,8 @@
 #define WAKER 6
 
 #define INVALID_WAKER N
+#define REDUCTION_WAKER_BIT 4
+#define REDUCTION_COUNT_MASK (REDUCTION_WAKER_BIT - 1)
 
 byte state[N];
 
@@ -63,6 +67,17 @@ bool waker_pending = false;
  * interval which is allowed to mutate the persistent waker data. */
 byte waker_passes = 0;
 
+/* A worker owns these scratch variables only while waker_passes == 1.
+ * Keeping one global set models the single logical waker instance even when
+ * its worker owner changes, and avoids multiplying private waker state by N. */
+byte waker_i = 0;
+byte waker_budget = 0;
+byte waker_final = NONE;
+byte waker_desired = N;
+byte waker_delta = 0;
+byte waker_converted = 0;
+bool waker_found = false;
+
 inline check_local_safety() {
     atomic {
         assert(waker_worker_id <= INVALID_WAKER);
@@ -74,7 +89,8 @@ inline check_local_safety() {
         assert(thread_count >= 1 && thread_count <= N);
         assert(suggested_thread_count >= 1 &&
             suggested_thread_count <= N);
-        assert(reductions <= N);
+        assert((reductions & REDUCTION_COUNT_MASK) <= N);
+        assert(reductions < 2 * REDUCTION_WAKER_BIT);
         assert(claimed_reductions <= N);
         assert(cancelled_claimed_reductions <= claimed_reductions);
         assert(activation_credits <= MAX_QUEUE);
@@ -91,15 +107,19 @@ inline check_local_safety() {
 /* Publish the final state of the worker which has already released the waker
  * index. A producer may concurrently change WAKER to NEED_TO_BE_WAKER; in
  * that case the caller must return to election instead of publishing final. */
-inline publish_waker_final(id, final, published) {
+inline publish_waker_final(id, final) {
     atomic {
         if
-        :: state[id] == WAKER ->
+        :: state[id] == WAKER &&
+                (reductions & REDUCTION_WAKER_BIT) ->
+            reductions = reductions & REDUCTION_COUNT_MASK;
             resume_state[id] = final;
-            state[id] = final;
-            published = true
-        :: state[id] == NEED_TO_BE_WAKER ->
-            published = false
+            state[id] = NEED_TO_BE_WAKER
+        :: state[id] == WAKER &&
+                !(reductions & REDUCTION_WAKER_BIT) ->
+            resume_state[id] = final;
+            state[id] = final
+        :: state[id] == NEED_TO_BE_WAKER -> skip
         fi
     }
 }
@@ -150,15 +170,7 @@ inline try_request_waker(owner, candidate, notified, require_sleepers) {
 
 proctype Worker(byte id) {
     byte owner;
-    byte i;
-    byte budget;
-    byte final;
-    byte desired;
-    byte delta;
-    byte converted;
     bool done;
-    bool found;
-    bool published;
 
     do
     :: state[id] == WORK ->
@@ -166,10 +178,21 @@ proctype Worker(byte id) {
 
     :: state[id] == NONE ->
         if
+        /* The controller could not find an existing waker or a parked
+         * candidate. The first idle worker clears only the request bit and
+         * enters election, preserving any numeric reduction count. */
+        :: atomic {
+            reductions & REDUCTION_WAKER_BIT ->
+            reductions = reductions & REDUCTION_COUNT_MASK
+        };
+            resume_state[id] = NONE;
+            state[id] = NEED_TO_BE_WAKER;
+            atomic { waker_pending = true }
+
         /* A reduction claim and its ownership accounting are one abstract
          * operation. Publishing BLOCKING remains a separate transition. */
         :: atomic {
-            reductions > 0 ->
+            reductions > 0 && reductions < REDUCTION_WAKER_BIT ->
             reductions--;
             claimed_reductions++
         };
@@ -256,92 +279,100 @@ proctype Worker(byte id) {
         atomic {
             assert(waker_passes == 0);
             waker_passes = 1;
-            waker_pending = false
+            waker_pending = false;
+            if
+            :: reductions & REDUCTION_WAKER_BIT ->
+                reductions = reductions & REDUCTION_COUNT_MASK
+            :: else -> skip
+            fi
         };
 
         /* Reconcile the latest target. Sleeping identities are symmetric:
          * sleeping_count is derived from thread_count and awake_workers, and
          * any SLEEP worker may represent an eligible sleeping slot. */
-        desired = suggested_thread_count;
+        waker_desired = suggested_thread_count;
         atomic {
             if
-            :: desired < thread_count ->
-                delta = thread_count - desired;
+            :: waker_desired < thread_count ->
+                waker_delta = thread_count - waker_desired;
                 if
-                :: sleeping_count < delta -> converted = sleeping_count
-                :: else -> converted = delta
+                :: sleeping_count < waker_delta ->
+                    waker_converted = sleeping_count
+                :: else -> waker_converted = waker_delta
                 fi;
-                delta = delta - converted;
-                assert(reductions + delta <= N);
-                reductions = reductions + delta;
-                thread_count = desired
+                waker_delta = waker_delta - waker_converted;
+                assert(reductions + waker_delta <= N);
+                reductions = reductions + waker_delta;
+                thread_count = waker_desired
 
-            :: desired > thread_count ->
-                delta = desired - thread_count;
+            :: waker_desired > thread_count ->
+                waker_delta = waker_desired - thread_count;
                 if
-                :: reductions < delta -> converted = reductions
-                :: else -> converted = delta
+                :: reductions < waker_delta -> waker_converted = reductions
+                :: else -> waker_converted = waker_delta
                 fi;
-                reductions = reductions - converted;
-                delta = delta - converted;
+                reductions = reductions - waker_converted;
+                waker_delta = waker_delta - waker_converted;
                 assert(claimed_reductions >= cancelled_claimed_reductions);
                 if
-                :: claimed_reductions - cancelled_claimed_reductions < delta ->
-                    converted = claimed_reductions -
+                :: claimed_reductions - cancelled_claimed_reductions <
+                        waker_delta ->
+                    waker_converted = claimed_reductions -
                         cancelled_claimed_reductions
-                :: else -> converted = delta
+                :: else -> waker_converted = waker_delta
                 fi;
-                assert(cancelled_claimed_reductions + converted <= N);
+                assert(cancelled_claimed_reductions + waker_converted <= N);
                 cancelled_claimed_reductions =
-                    cancelled_claimed_reductions + converted;
-                delta = delta - converted;
-                thread_count = desired
+                    cancelled_claimed_reductions + waker_converted;
+                waker_delta = waker_delta - waker_converted;
+                thread_count = waker_desired
 
             :: else -> skip
             fi;
             sleeping_count = 0;
-            delta = 0;
-            converted = 0
+            waker_delta = 0;
+            waker_converted = 0
         };
 
-        budget = activation_credits;
+        waker_budget = activation_credits;
 
         /* Account for workers which are already searching before changing
          * SPIN/BLOCKING states. The budget is local and never reserves the
          * corresponding queue item. */
-        i = 0;
+        waker_i = 0;
         do
-        :: i < N ->
+        :: waker_i < N ->
             if
-            :: i != id && state[i] == NONE && budget > 0 -> budget--
+            :: waker_i != id && state[waker_i] == NONE &&
+                    waker_budget > 0 -> waker_budget--
             :: else -> skip
             fi;
-            i++
+            waker_i++
         :: else -> break
         od;
 
-        i = 0;
+        waker_i = 0;
         do
-        :: i < N ->
+        :: waker_i < N ->
             if
-            :: i != id && state[i] == SPIN ->
+            :: waker_i != id && state[waker_i] == SPIN ->
                 if
-                :: budget > 0 ->
+                :: waker_budget > 0 ->
                     atomic {
                         if
-                        :: state[i] == SPIN ->
-                            resume_state[i] = NONE;
-                            state[i] = NONE;
-                            budget--
+                        :: state[waker_i] == SPIN ->
+                            resume_state[waker_i] = NONE;
+                            state[waker_i] = NONE;
+                            waker_budget--
                         :: else -> skip
                         fi
                     }
-                :: budget == 0 ->
+                :: waker_budget == 0 ->
                     atomic {
                         if
-                        :: state[i] == SPIN ->
-                            resume_state[i] = SLEEP;
-                            state[i] = SLEEP;
+                        :: state[waker_i] == SPIN ->
+                            resume_state[waker_i] = SLEEP;
+                            state[waker_i] = SLEEP;
                             assert(awake_workers > 0);
                             awake_workers--;
                             sleep_workers++
@@ -350,30 +381,30 @@ proctype Worker(byte id) {
                     }
                 fi
 
-            :: i != id && state[i] == BLOCKING ->
+            :: waker_i != id && state[waker_i] == BLOCKING ->
                 if
-                :: cancelled_claimed_reductions > 0 && budget > 0 ->
+                :: cancelled_claimed_reductions > 0 && waker_budget > 0 ->
                     atomic {
                         if
-                        :: state[i] == BLOCKING ->
+                        :: state[waker_i] == BLOCKING ->
                             assert(claimed_reductions > 0);
                             claimed_reductions--;
                             cancelled_claimed_reductions--;
-                            resume_state[i] = NONE;
-                            state[i] = NONE;
-                            budget--
+                            resume_state[waker_i] = NONE;
+                            state[waker_i] = NONE;
+                            waker_budget--
                         :: else -> skip
                         fi
                     }
-                :: cancelled_claimed_reductions > 0 && budget == 0 ->
+                :: cancelled_claimed_reductions > 0 && waker_budget == 0 ->
                     atomic {
                         if
-                        :: state[i] == BLOCKING ->
+                        :: state[waker_i] == BLOCKING ->
                             assert(claimed_reductions > 0);
                             claimed_reductions--;
                             cancelled_claimed_reductions--;
-                            resume_state[i] = SLEEP;
-                            state[i] = SLEEP;
+                            resume_state[waker_i] = SLEEP;
+                            state[waker_i] = SLEEP;
                             assert(awake_workers > 0);
                             awake_workers--;
                             sleep_workers++
@@ -383,11 +414,11 @@ proctype Worker(byte id) {
                 :: cancelled_claimed_reductions == 0 ->
                     atomic {
                         if
-                        :: state[i] == BLOCKING ->
+                        :: state[waker_i] == BLOCKING ->
                             assert(claimed_reductions > 0);
                             claimed_reductions--;
-                            resume_state[i] = SLEEP;
-                            state[i] = SLEEP;
+                            resume_state[waker_i] = SLEEP;
+                            state[waker_i] = SLEEP;
                             assert(awake_workers > 0);
                             awake_workers--;
                             sleep_workers++
@@ -397,7 +428,7 @@ proctype Worker(byte id) {
                 fi
             :: else -> skip
             fi;
-            i++
+            waker_i++
         :: else -> break
         od;
 
@@ -405,32 +436,32 @@ proctype Worker(byte id) {
          * worker temporarily in NEED_TO_BE_WAKER remains counted and will be
          * resolved by either this owner or the next owner. */
         do
-        :: budget > 0 && thread_count > awake_workers ->
-            found = false;
-            i = 0;
+        :: waker_budget > 0 && thread_count > awake_workers ->
+            waker_found = false;
+            waker_i = 0;
             atomic {
                 do
-                :: i < N && !found ->
+                :: waker_i < N && !waker_found ->
                     if
-                    :: i != id && state[i] == SLEEP ->
-                        state[i] = NONE;
-                        resume_state[i] = NONE;
+                    :: waker_i != id && state[waker_i] == SLEEP ->
+                        state[waker_i] = NONE;
+                        resume_state[waker_i] = NONE;
                         assert(sleep_workers > 0);
                         sleep_workers--;
                         awake_workers++;
-                        budget--;
-                        found = true
+                        waker_budget--;
+                        waker_found = true
                     :: else -> skip
                     fi;
-                    i++
+                    waker_i++
                 :: else -> break
                 od
             };
             if
-            :: found -> skip
+            :: waker_found -> skip
             /* The eligible sleeper is the current owner or a worker which is
              * temporarily participating in election. */
-            :: !found -> break
+            :: !waker_found -> break
             fi
         :: else -> break
         od;
@@ -441,47 +472,47 @@ proctype Worker(byte id) {
         :: resume_state[id] == BLOCKING ->
             assert(claimed_reductions > 0);
             if
-            :: cancelled_claimed_reductions > 0 && budget > 0 ->
+            :: cancelled_claimed_reductions > 0 && waker_budget > 0 ->
                 atomic {
                     claimed_reductions--;
                     cancelled_claimed_reductions--
                 };
-                final = NONE;
-                budget--
-            :: cancelled_claimed_reductions > 0 && budget == 0 ->
+                waker_final = NONE;
+                waker_budget--
+            :: cancelled_claimed_reductions > 0 && waker_budget == 0 ->
                 atomic {
                     claimed_reductions--;
                     cancelled_claimed_reductions--
                 };
-                final = SLEEP
+                waker_final = SLEEP
             :: cancelled_claimed_reductions == 0 ->
                 claimed_reductions--;
-                final = SLEEP
+                waker_final = SLEEP
             fi
-        :: resume_state[id] != BLOCKING && budget > 0 ->
-            final = NONE;
-            budget--
-        :: resume_state[id] != BLOCKING && budget == 0 ->
+        :: resume_state[id] != BLOCKING && waker_budget > 0 ->
+            waker_final = NONE;
+            waker_budget--
+        :: resume_state[id] != BLOCKING && waker_budget == 0 ->
             if
             :: resume_state[id] == NONE || resume_state[id] == WORK ->
-                final = NONE
-            :: else -> final = SLEEP
+                waker_final = NONE
+            :: else -> waker_final = SLEEP
             fi
         fi;
 
         atomic {
             if
-            :: resume_state[id] == SLEEP && final != SLEEP ->
+            :: resume_state[id] == SLEEP && waker_final != SLEEP ->
                 assert(sleep_workers > 0);
                 sleep_workers--;
                 awake_workers++
-            :: resume_state[id] != SLEEP && final == SLEEP ->
+            :: resume_state[id] != SLEEP && waker_final == SLEEP ->
                 assert(awake_workers > 0);
                 awake_workers--;
                 sleep_workers++
             :: else -> skip
             fi;
-            resume_state[id] = final;
+            resume_state[id] = waker_final;
             if
             :: thread_count > awake_workers ->
                 sleeping_count = thread_count - awake_workers
@@ -505,8 +536,10 @@ proctype Worker(byte id) {
                 assert(waker_worker_id == id);
                 waker_worker_id = INVALID_WAKER
             };
-            published = false;
-            publish_waker_final(id, final, published)
+            /* waker_final is shared scratch and may already belong to the
+             * next owner. The retiring owner published its own final value
+             * to resume_state[id] before releasing waker_worker_id. */
+            publish_waker_final(id, resume_state[id])
         fi;
 
         check_local_safety()
@@ -624,6 +657,25 @@ proctype Controller() {
         };
 
         try_request_waker(owner, i, notified, false);
+        if
+        /* No owner or parked candidate was stable during the scan. Preserve
+         * the reduction count and publish a bit which the next idle worker
+         * will consume before trying to block. */
+        :: !notified ->
+            atomic {
+                if
+                :: waker_worker_id == INVALID_WAKER ->
+                    reductions = reductions | REDUCTION_WAKER_BIT
+                :: else -> skip
+                fi
+            };
+            /* A worker may have become parked between the first scan and
+             * publishing the request bit. Scan again for both grow and
+             * shrink; the bit keeps the request durable if this scan also
+             * races with waker completion. */
+            try_request_waker(owner, i, notified, false)
+        :: else -> skip
+        fi;
         /* Do not publish another target until the waker has observed this
          * one. This makes a lost resize request observable independently of
          * later controller updates. */

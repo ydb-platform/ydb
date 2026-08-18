@@ -873,34 +873,38 @@ public:
     )
 
     void Handle(TEvYdbCompute::TEvSynchronizeRequest::TPtr& ev) {
-        const TString& cloudId = ev->Get()->CloudId;
+       // const TString& cloudId = ev->Get()->CloudId;
         const TString& scope = ev->Get()->Scope;
         if (!ComputeConfig.GetYdb().GetSynchronizationService().GetEnable()) {
             Send(ev->Sender, new TEvYdbCompute::TEvSynchronizeResponse{scope}, 0, ev->Cookie);
             return;
         }
 
-        const NFq::NConfig::TYdbStorageConfig& connectionConfig = ev->Get()->ConnectionConfig;
-        const NFq::NConfig::TWorkloadManagerConfig& workloadManagerConfig = ev->Get()->WorkloadManagerConfig;
-        auto it = Cache.find(scope);
-        if (it == Cache.end()) {
-            auto& item = Cache[scope];
-            item.Status = EScopeStatus::IN_PROGRESS;
-            item.Requests.push_back(ev);
-            Register(new TSynchronizeScopeActor{SelfId(), cloudId, scope, CommonConfig, ComputeConfig, connectionConfig, workloadManagerConfig, Signer, YqSharedResources, CredentialsProviderFactory,  Counters.Counters});
-            return;
-        }
+        // const NFq::NConfig::TYdbStorageConfig& connectionConfig = ev->Get()->ConnectionConfig;
+        // const NFq::NConfig::TWorkloadManagerConfig& workloadManagerConfig = ev->Get()->WorkloadManagerConfig;
+        // auto it = Cache.find(scope);
+        // if (it == Cache.end()) {
+        //     auto& item = Cache[scope];
+        //     item.Status = EScopeStatus::IN_PROGRESS;
+        //     item.Requests.push_back(ev);
+        //     Cerr << "new TSynchronizeScopeActor" << Endl;
+        //     Register(new TSynchronizeScopeActor{SelfId(), cloudId, scope, CommonConfig, ComputeConfig, connectionConfig, workloadManagerConfig, Signer, YqSharedResources, CredentialsProviderFactory,  Counters.Counters});
+        //     return;
+        // }
 
-        switch (it->second.Status) {
-            case EScopeStatus::SYNCHRONIZED: {
-                Send(ev->Sender, new TEvYdbCompute::TEvSynchronizeResponse{scope}, 0, ev->Cookie);
-                break;
-            }
-            case EScopeStatus::IN_PROGRESS: {
-                it->second.Requests.push_back(ev);
-                break;
-            }
-        }
+        
+        // switch (it->second.Status) {
+        //     case EScopeStatus::SYNCHRONIZED: {
+        //         Cerr << "SYNCHRONIZED" << Endl;
+        //         Send(ev->Sender, new TEvYdbCompute::TEvSynchronizeResponse{scope}, 0, ev->Cookie);
+        //         break;
+        //     }
+        //     case EScopeStatus::IN_PROGRESS: {
+        //         Cerr << "IN_PROGRESS" << Endl;
+        //         it->second.Requests.push_back(ev);
+        //         break;
+        //     }
+        // }
     }
 
     void Handle(TEvYdbCompute::TEvSynchronizeResponse::TPtr& ev) {

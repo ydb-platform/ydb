@@ -65,6 +65,8 @@ class AbstractTestCmsStateStorageRestarts(AbstractLocalClusterTest):
         for tablet_id in tablet_ids:
             client.tablet_kill(tablet_id)
 
+        wait_tablets_are_active(client, tablet_ids, timeout_seconds=120)
+
         for partition_id, tablet_id in enumerate(tablet_ids):
             resp = kv_client.kv_write(table_path, partition_id, "key", utils.value_for("key", tablet_id))
             assert_that(resp.operation.status, StatusIds.SUCCESS)
@@ -72,7 +74,7 @@ class AbstractTestCmsStateStorageRestarts(AbstractLocalClusterTest):
         for node in restart_nodes:
             self.cluster.nodes[node].start()
 
-        wait_tablets_are_active(self.cluster.client, tablet_ids)
+        wait_tablets_are_active(self.cluster.client, tablet_ids, timeout_seconds=180)
 
 
 class TestCmsStateStorageRestartsBlockMax(AbstractTestCmsStateStorageRestarts):

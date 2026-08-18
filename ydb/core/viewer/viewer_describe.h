@@ -146,7 +146,9 @@ public:
                     {"database", Database},
                     {"pathId", Params.Get("path_id")},
                     {"schemeShardId", Params.Get("schemeshard_id")});
-                ReplyAndPassAway(GETHTTPACCESSDENIED("text/html", "<html><body><h1>403 Forbidden</h1></body></html>"), "Access denied");
+                ReplyAndPassAway(
+                    GETHTTPACCESSDENIED("text/plain", "`path_id` and `schemeshard_id` require monitoring access level"),
+                    "Access denied");
                 return;
             }
         }

@@ -363,7 +363,8 @@ def test_viewer_describe_path_id_forbidden_for_strict_database_token(
             _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 200)
             _assert_status(mon_base_url_with_extra_sids_control, path, 'monitoring@builtin', 200)
 
-        # schemeshard_id alone without path_id: handler gives 403 for strict database users and rejects other with 400
+        # schemeshard_id alone without path_id: handler gives 403 for users below monitoring level
+        # and rejects monitoring+ with 400 (missing path_id)
         path = _build_endpoint_path(
             ep,
             with_database_cgi=True,
@@ -372,6 +373,7 @@ def test_viewer_describe_path_id_forbidden_for_strict_database_token(
         )
         _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 403)
         _assert_status(mon_base_url_with_extra_sids_control, path, 'viewer@builtin', 403)
+        _assert_status(mon_base_url_with_extra_sids_control, path, 'monitoring@builtin', 400)
         _assert_status(mon_base_url_with_extra_sids_control, path, 'root@builtin', 400)
 
 

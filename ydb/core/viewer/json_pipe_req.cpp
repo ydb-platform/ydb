@@ -1024,7 +1024,7 @@ bool TViewerPipeClient::IsDatabaseRequest() const {
 }
 
 bool TViewerPipeClient::IsStrictDatabaseOnlyRequest() {
-    if (!StrictDatabaseOnlyRequest) {
+    if (!StrictDatabaseOnlyRequest.has_value()) {
         StrictDatabaseOnlyRequest = IsStrictDatabaseOnlyToken(AppData(), GetRequest().GetUserTokenObject());
     }
     return *StrictDatabaseOnlyRequest;

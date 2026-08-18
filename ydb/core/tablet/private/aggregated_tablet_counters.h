@@ -48,7 +48,7 @@ public:
      * @note The layout of the counter set is a property of the tablet type,
      *       so it is defined once and for all by the very first reporting tablet.
      */
-    void Initialize(const TTabletCountersBase* counters);
+    void Initialize(const TTabletCountersBase* counters, const THashSet<TString>* nameFilter = nullptr);
 
     /**
      * Add the counters of a single tablet to the aggregate.

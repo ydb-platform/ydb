@@ -88,6 +88,11 @@ protected:
     virtual std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> DoBuildIndexImpl(
         TChunkedBatchReader& reader, const ui32 recordsCount, const std::optional<ui64> chunkSizeLimit) const override;
 
+    std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> BuildIndexNewSizing(
+        TChunkedBatchReader& reader, const ui32 recordsCount, const std::optional<ui64> chunkSizeLimit, const ui64 clampBits) const;
+    std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> BuildIndexOldSizing(
+        TChunkedBatchReader& reader, const ui32 recordsCount, const std::optional<ui64> chunkSizeLimit, const ui64 clampBits) const;
+
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
         AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
         AFL_VERIFY(proto.HasBloomNGrammFilter());

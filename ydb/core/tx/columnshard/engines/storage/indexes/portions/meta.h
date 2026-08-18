@@ -61,4 +61,28 @@ public:
         const bool inheritPortionStorage, const TReadDataExtractorContainer& extractor);
 };
 
+// Groups pre-collected source chunks ((chunk, recordsCount) pairs) into consecutive batches of at most
+// maxRecordsPerChunk records and emits one index chunk per batch built by buildChunkData(chunks, begin, end,
+// batchRecords). Shared by indexes that split an oversized payload by record subranges; the scan applies
+// every produced chunk to its own record range.
+template <class TChunks, class TBuildChunkData>
+std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> BuildIndexChunksBatched(
+    const ui32 indexId, const TChunks& chunks, const ui32 maxRecordsPerChunk, const TBuildChunkData& buildChunkData) {
+    std::vector<std::shared_ptr<NChunks::TPortionIndexChunk>> result;
+    ui32 chunkIdx = 0;
+    for (ui32 pos = 0; pos < chunks.size();) {
+        ui32 batchRecords = chunks[pos].second;
+        ui32 end = pos + 1;
+        while (end < chunks.size() && batchRecords + chunks[end].second <= maxRecordsPerChunk) {
+            batchRecords += chunks[end].second;
+            ++end;
+        }
+        TString indexData = buildChunkData(chunks, pos, end, batchRecords);
+        result.emplace_back(
+            std::make_shared<NChunks::TPortionIndexChunk>(TChunkAddress(indexId, chunkIdx++), batchRecords, indexData.size(), indexData));
+        pos = end;
+    }
+    return result;
+}
+
 }   // namespace NKikimr::NOlap::NIndexes

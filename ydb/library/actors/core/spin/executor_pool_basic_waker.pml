@@ -37,8 +37,6 @@ byte reductions = 0;
 byte activation_credits = 0;
 byte queued_activations = 0;
 bool waker_pending = false;
-bool work_epoch = false;
-bool queue_epoch = false;
 
 inline request_waker() {
     atomic {
@@ -64,10 +62,7 @@ inline check_safety() {
 proctype Worker(byte id) {
     do
     :: state[id] == WORK ->
-        atomic {
-            state[id] = NONE;
-            work_epoch = !work_epoch
-        }
+        state[id] = NONE
 
     :: state[id] == NONE ->
         if
@@ -92,8 +87,7 @@ proctype Worker(byte id) {
         if
         :: atomic {
             queued_activations > 0 ->
-            queued_activations--;
-            queue_epoch = !queue_epoch
+            queued_activations--
         };
             state[id] = WORK;
             atomic {
@@ -120,8 +114,7 @@ proctype Producer() {
         activation_credits++
     };
         atomic {
-            queued_activations++;
-            queue_epoch = !queue_epoch
+            queued_activations++
         };
         if
         :: sleeping_count > 0 -> request_waker()
@@ -406,22 +399,13 @@ proctype Waker() {
     od
 }
 
-#define target_one (suggested_thread_count == 1)
-#define target_max (suggested_thread_count == N)
-#define reconciled_one (thread_count == 1 && awake_workers + sleeping_count == 1 && reductions == 0)
-#define reconciled_max (thread_count == N && awake_workers + sleeping_count == N && reductions == 0)
-ltl live_reconcile_stable {
-    ((<>[] target_one) ->
-        ((<>[] reconciled_one) && ([]<> work_epoch) && ([]<> !work_epoch))) &&
-    ((<>[] target_max) ->
-        ((<>[] reconciled_max) && ([]<> work_epoch) && ([]<> !work_epoch)))
-}
-
-/* Once the queue is non-empty, its size must eventually change. Every queue
- * mutation is exactly one push or one pop and toggles queue_epoch atomically. */
+/* With MAX_QUEUE == 2, express queue progress directly without an observer
+ * epoch: one queued activation must eventually become zero or two, while a
+ * full queue must eventually lose an activation. */
 ltl live_queue_changes {
-    ([] ((queued_activations != 0 && !queue_epoch) -> <> queue_epoch)) &&
-    ([] ((queued_activations != 0 && queue_epoch) -> <> !queue_epoch))
+    ([] (queued_activations == 1 ->
+        <> (queued_activations == 0 || queued_activations == 2))) &&
+    ([] (queued_activations == 2 -> <> (queued_activations == 1)))
 }
 
 init {

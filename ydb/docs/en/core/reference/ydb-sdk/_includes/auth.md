@@ -96,7 +96,7 @@ You can click the methods below to go to the source code of the relevant example
   | Service Account Key | [ydb::ServiceAccountCredentials](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-ycloud-serviceaccount.rs) |
   | Static Credentials | [ydb::StaticCredentialsAuth](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-static-credentials.rs) |
   | Determined by environment variables | [ydb::FromEnvCredentials](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-ycloud-serviceaccount.rs) |
-  | Executing an external command | [ydb::CommandLineCredentials](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-yc-cmdline.rs) (for example, for authorization using an [IAM token](https://cloud.yandex.ru/docs/iam/concepts/authorization/iam-token) {{ yandex-cloud }} from a developer's computer ```ydb::CommandLineCredentials.from_cmd("yc iam create-token")```) |
+  | Executing an external command | [ydb::CommandLineCredentials](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/auth-yc-cmdline.rs) (for example, for authorization using an [IAM token](https://yandex.cloud/en/docs/iam/concepts/authorization/iam-token) {{ yandex-cloud }} from a developer's computer ```ydb::CommandLineCredentials.from_cmd("yc iam create-token")```) |
 
 - PHP
 

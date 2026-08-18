@@ -8,8 +8,8 @@
  *  - workers preferring a reduction request over taking an activation;
  *  - independent infinite producers keeping the queue bounded by MAX_QUEUE;
  *  - None -> Blocking -> Sleep and immediate parking;
- *  - waker-local ActiveMask and sleeping-stack membership;
- *  - SleepingCount containing active sleeping workers only;
+ *  - SleepingStack abstracted as the set of all workers in Sleep;
+ *  - SleepingCount as the number of sleepers currently eligible for wakeup;
  *  - coalesced RequestWaker notifications.
  *
  * Abstracted away:
@@ -28,9 +28,6 @@
 #define BLOCKING 4
 
 byte state[N];
-bool active_mask[N];
-bool in_sleeping_stack[N];
-bool counted_sleeping[N];
 
 byte suggested_thread_count = N;
 byte thread_count = N;
@@ -154,6 +151,8 @@ proctype Waker() {
     byte taken_tokens_to_wakeup;
     byte previous_sleeping_count;
     byte activations;
+    byte sleep_workers;
+    byte non_sleep_workers;
     bool found;
 
     do
@@ -181,8 +180,9 @@ proctype Waker() {
         };
 
         /* thread_count is the target accepted by the previous waker pass,
-         * while active_count is the physical ActiveWorkers size. Claimed and
-         * unclaimed reduction tokens account for their temporary difference. */
+         * while active_count is the number of worker slots still eligible to
+         * execute. Claimed and unclaimed reduction tokens account for their
+         * temporary difference. */
         if
         :: desired > thread_count ->
             delta = desired - thread_count;
@@ -202,26 +202,26 @@ proctype Waker() {
             remaining_reductions = remaining_reductions - converted;
             delta = delta - converted;
 
-            /* Any growth left after cancelling reductions must reactivate a
-             * concrete inactive sleeper. Reactivation does not unpark it. */
+            /* Sleeping workers are symmetric. Growth only increases the
+             * number of sleepers eligible for wakeup; no worker identity has
+             * to be added to a separate active set. */
+            sleep_workers = 0;
             i = 0;
             do
-            :: i < N && delta > 0 ->
+            :: i < N ->
                 if
-                :: !active_mask[i] && in_sleeping_stack[i] && state[i] == SLEEP ->
-                    atomic {
-                        active_mask[i] = true;
-                        active_count++;
-                        counted_sleeping[i] = true;
-                        previous_sleeping_count++;
-                        delta--
-                    }
+                :: state[i] == SLEEP -> sleep_workers++
                 :: else -> skip
                 fi;
                 i++
             :: else -> break
             od;
-            assert(delta == 0)
+            atomic {
+                assert(sleep_workers >= previous_sleeping_count + delta);
+                previous_sleeping_count = previous_sleeping_count + delta;
+                active_count = active_count + delta;
+                delta = 0
+            }
 
         :: desired < thread_count ->
             delta = thread_count - desired;
@@ -232,6 +232,18 @@ proctype Waker() {
             taken_tokens_to_wakeup = taken_tokens_to_wakeup - converted;
             taken_tokens_to_sleep = taken_tokens_to_sleep + converted;
             delta = delta - converted;
+
+            /* Retire already sleeping slots before asking an awake worker to
+             * claim a new reduction token. */
+            if
+            :: previous_sleeping_count < delta -> converted = previous_sleeping_count
+            :: else -> converted = delta
+            fi;
+            atomic {
+                previous_sleeping_count = previous_sleeping_count - converted;
+                active_count = active_count - converted;
+                delta = delta - converted
+            };
             remaining_reductions = remaining_reductions + delta
 
         :: else -> skip
@@ -247,13 +259,13 @@ proctype Waker() {
         do
         :: i < N ->
             if
-            :: active_mask[i] && state[i] == NONE ->
+            :: state[i] == NONE ->
                 if
                 :: activations > 0 -> activations--
                 :: else -> skip
                 fi
 
-            :: active_mask[i] && state[i] == SPIN ->
+            :: state[i] == SPIN ->
                 if
                 :: activations > 0 ->
                     atomic {
@@ -270,8 +282,6 @@ proctype Waker() {
                         if
                         :: state[i] == SPIN ->
                             state[i] = SLEEP;
-                            in_sleeping_stack[i] = true;
-                            counted_sleeping[i] = true;
                             previous_sleeping_count++
                         :: else ->
                             assert(state[i] == NONE || state[i] == WORK)
@@ -279,7 +289,7 @@ proctype Waker() {
                     }
                 fi
 
-            :: active_mask[i] && state[i] == BLOCKING ->
+            :: state[i] == BLOCKING ->
                 if
                 :: taken_tokens_to_wakeup > 0 ->
                     if
@@ -292,8 +302,6 @@ proctype Waker() {
                     :: activations == 0 ->
                         atomic {
                             state[i] = SLEEP;
-                            in_sleeping_stack[i] = true;
-                            counted_sleeping[i] = true;
                             previous_sleeping_count++;
                             taken_tokens_to_wakeup--
                         }
@@ -303,9 +311,6 @@ proctype Waker() {
                     assert(taken_tokens_to_sleep > 0);
                     atomic {
                         state[i] = SLEEP;
-                        in_sleeping_stack[i] = true;
-                        counted_sleeping[i] = false;
-                        active_mask[i] = false;
                         active_count--;
                         taken_tokens_to_sleep--
                     }
@@ -317,9 +322,8 @@ proctype Waker() {
         :: else -> break
         od;
 
-        /* Only the waker mutates SLEEP. Waking therefore needs no CAS, but it
-         * must update stack membership, the local count and activation budget
-         * together with the state transition. */
+        /* Only the waker mutates SLEEP. Any sleeping worker may consume an
+         * eligible sleeping slot because worker identities are symmetric. */
         i = 0;
         do
         :: activations > 0 && previous_sleeping_count > 0 ->
@@ -328,11 +332,9 @@ proctype Waker() {
             do
             :: i < N && !found ->
                 if
-                :: active_mask[i] && in_sleeping_stack[i] && state[i] == SLEEP ->
+                :: state[i] == SLEEP ->
                     atomic {
                         state[i] = NONE;
-                        in_sleeping_stack[i] = false;
-                        counted_sleeping[i] = false;
                         previous_sleeping_count--;
                         activations--;
                         found = true
@@ -368,19 +370,20 @@ proctype Waker() {
          */
 
         check_safety();
+        sleep_workers = 0;
+        non_sleep_workers = 0;
         i = 0;
         do
         :: i < N ->
-            assert(!counted_sleeping[i]
-                || (active_mask[i] && state[i] == SLEEP));
-            assert(active_mask[i] || state[i] == SLEEP);
             if
-            :: !active_mask[i] -> assert(in_sleeping_stack[i])
-            :: else -> skip
+            :: state[i] == SLEEP -> sleep_workers++
+            :: else -> non_sleep_workers++
             fi;
             i++
         :: else -> break
-        od
+        od;
+        assert(previous_sleeping_count <= sleep_workers);
+        assert(active_count == non_sleep_workers + previous_sleeping_count)
     od
 }
 
@@ -401,7 +404,6 @@ init {
         do
         :: i < N ->
             state[i] = WORK;
-            active_mask[i] = true;
             run Worker(i);
             i++
         :: else -> break

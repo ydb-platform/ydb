@@ -579,13 +579,11 @@ void TBlobManager::OnGCStartOnComplete(const std::optional<TGenStep>& genStep) {
 }
 
 bool TBlobManager::HasNoBlobsInRange(const ui32 channel, const ui32 fromGen, const ui32 nextFromGen) const {
-    const auto hasNoBlobsInRange = [&](const TTabletsByBlob& blobs) {
-        return FindIf(blobs, [&](const auto& item) {
-            const TLogoBlobID& logoBlobId = item.first.GetLogoBlobId();
-            return logoBlobId.Channel() == channel && logoBlobId.Generation() >= fromGen && logoBlobId.Generation() < nextFromGen;
-        }) == blobs.end();
+    const auto inRange = [&](const auto& blob) {
+        const TLogoBlobID& logoBlobId = blob.first.GetLogoBlobId();
+        return logoBlobId.Channel() == channel && logoBlobId.Generation() >= fromGen && logoBlobId.Generation() < nextFromGen;
     };
-    return hasNoBlobsInRange(BlobsToDelete) && hasNoBlobsInRange(BlobsToDeleteDelayed) &&
+    return !AnyOf(BlobsToDelete, inRange) && !AnyOf(BlobsToDeleteDelayed, inRange) &&
            BlobsToKeep.HasNoBlobsInRange(channel, fromGen, nextFromGen);
 }
 

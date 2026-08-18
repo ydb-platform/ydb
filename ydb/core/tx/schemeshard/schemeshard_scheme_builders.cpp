@@ -58,9 +58,6 @@ bool BuildCreateTableQuery(
     }
 
     description.ClearCdcStreams();
-    for (auto& index : *description.MutableTableIndexes()) {
-        index.ClearIndexImplTableDescriptions();
-    }
 
     NSysView::TCreateTableFormatter formatter;
     auto result = formatter.Format(tablePath, tablePath, description, false, {}, {});
@@ -70,6 +67,9 @@ bool BuildCreateTableQuery(
     }
 
     query = result.ExtractOut();
+    if (const auto alterTablePos = query.find("\nALTER TABLE "); alterTablePos != TString::npos) {
+        query.resize(alterTablePos);
+    }
     return true;
 }
 

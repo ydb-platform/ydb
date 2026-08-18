@@ -1662,6 +1662,77 @@ partitioning_settings {
         block.Stop();
     }
 
+    Y_UNIT_TEST(ShouldCarryCreateTableQueryForGeneratedColumnWithGlobalIndex) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        ui64 txId = 100;
+        TestCreateIndexedTable(Runtime(), ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "a"   Type: "Int32"  }
+              Columns { Name: "b"   Type: "Int32"  }
+              Columns {
+                Name: "sum"
+                Type: "Int32"
+                DefaultFromExpression {
+                  ExprText: "a + b"
+                  Stored: true
+                  DependencyColumnNames: ["a", "b"]
+                }
+              }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "ByA"
+              KeyColumnNames: ["a"]
+              IndexImplTableDescriptions: [ {
+                PartitionConfig {
+                  PartitioningPolicy {
+                    MinPartitionsCount: 10
+                    SplitByLoadSettings: {
+                      Enabled: true
+                    }
+                  }
+                }
+              } ]
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> block(Runtime(), [](auto& ev) {
+            NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+            UNIT_ASSERT(schemeTx.ParseFromString(ev.Get()->Get()->GetTxBody()));
+            if (!schemeTx.HasBackup()) {
+                return false;
+            }
+
+            const auto& backup = schemeTx.GetBackup();
+            UNIT_ASSERT(backup.HasCreateTableQuery());
+            const auto& query = backup.GetCreateTableQuery();
+            UNIT_ASSERT_STRING_CONTAINS(query, "GENERATED ALWAYS AS (a + b) STORED");
+            UNIT_ASSERT_STRING_CONTAINS(query, "INDEX `ByA` GLOBAL SYNC ON (`a`)");
+            UNIT_ASSERT_C(!query.Contains("ALTER TABLE"), query);
+            return true;
+        });
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        Runtime().WaitFor("backup task is sent to datashards", [&]{ return block.size() >= 1; });
+        block.Stop();
+    }
+
     Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {
         const TTablesWithAttrs tables{
             {

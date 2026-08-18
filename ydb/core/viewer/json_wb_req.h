@@ -50,13 +50,13 @@ public:
         if (TBase::NeedToRedirect()) {
             return;
         }
+        std::vector<TNodeId> nodeIds = GetNodeIdsFromParams();
         if (TBase::IsStrictDatabaseOnlyRequest()) {
-            if (TBase::DenyRequestIfNodesAreOutOfDatabase(GetNodeIdsFromParams())) {
+            if (TBase::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId>(nodeIds.data(), nodeIds.size()))) {
                 return;
             }
         }
 
-        std::vector<TNodeId> nodeIds = GetNodeIdsFromParams();
         if (!nodeIds.empty()) {
             if (TBase::RequestSettings.FilterNodeIds.empty()) {
                 TBase::RequestSettings.FilterNodeIds = nodeIds;

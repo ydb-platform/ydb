@@ -3,8 +3,6 @@ PROTOC_FATAL_WARNINGS()
 
 EXCLUDE_TAGS(GO_PROTO)
 
-PY_NAMESPACE(ydb.yc.priv.operation)
-
 GRPC()
 SRCS(
     operation.proto

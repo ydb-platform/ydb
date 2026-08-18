@@ -2949,7 +2949,8 @@ message TColumnShardConfig {
 
     optional TFlowControlConfig FlowControl = 74;
 
-    // Keep off until the whole fleet can read multi-chunk indexes (two-phase rollout).
+    // Enable splitting large secondary indexes into several chunks fitting the storage blob limit instead of
+    // dropping them.
     optional bool EnableLargeIndexes = 75 [default = false];
 }
 

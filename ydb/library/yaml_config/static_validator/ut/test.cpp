@@ -493,6 +493,58 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
 
     }
 
+    Y_UNIT_TEST(InterconnectSessionExecutor) {
+        auto validator = TMapBuilder()
+            .Field("actor_system_config", ActorSystemConfigBuilder())
+            .CreateValidator();
+        auto makeManualConfig = [](TStringBuf actorSystemFields) {
+            return ::TStringBuilder()
+                << "actor_system_config:\n"
+                << actorSystemFields
+                << "  scheduler:\n"
+                << "    progress_threshold: 10000\n"
+                << "    resolution: 64\n"
+                << "    spin_threshold: 0\n";
+        };
+
+        UNIT_ASSERT(Valid(validator.Validate(makeManualConfig(
+            "  executor:\n"
+            "  - name: System\n"
+            "    threads: 1\n"
+            "    type: BASIC\n"
+            "  - name: ICSession0\n"
+            "    threads: 1\n"
+            "    placement: 0\n"
+            "    type: BASIC\n"
+            "  - name: ICSession1\n"
+            "    threads: 1\n"
+            "    placement: 1\n"
+            "    type: BASIC\n"
+            "  sys_executor: 0\n"
+            "  use_shared_threads: false\n"
+            "  interconnect_session_executor: [1, 2]\n"))));
+
+        UNIT_ASSERT(!validator.Validate(makeManualConfig(
+            "  executor:\n"
+            "  - name: System\n"
+            "    threads: 1\n"
+            "    type: BASIC\n"
+            "  interconnect_session_executor: [1]\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(makeManualConfig(
+            "  executor:\n"
+            "  - name: System\n"
+            "    threads: 1\n"
+            "    type: BASIC\n"
+            "  interconnect_session_executor: [0, 0]\n")).Ok());
+
+        UNIT_ASSERT(!validator.Validate(
+            "actor_system_config:\n"
+            "  use_auto_config: true\n"
+            "  node_type: STORAGE\n"
+            "  cpu_count: 4\n"
+            "  interconnect_session_executor: [0]\n").Ok());
+    }
 }
 
 } // namesapce NKikimr

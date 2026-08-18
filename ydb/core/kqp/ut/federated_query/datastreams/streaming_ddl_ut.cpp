@@ -4834,8 +4834,14 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
                 PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT Data || "1" FROM `{pq_source}`.`{input_topic}` LIMIT 1
-            END DO;
+            END DO;)",
+            "query_name"_a = queryNameLimit,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
 
+        ExecQuery(fmt::format(R"(
             CREATE STREAMING QUERY `{query_name}2` AS
             DO BEGIN
                 PRAGMA ydb.DisableCheckpoints = "TRUE";

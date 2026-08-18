@@ -631,6 +631,14 @@ def test_storage_groups():
     }))
 
 
+def test_viewer_groups_with_invalid_database():
+    # Test that the endpoint doesn't crash when provided with an invalid database
+    result = call_viewer("/viewer/groups", {
+        'database': '/invalid_database_name_that_does_not_exist',
+    })
+    return result
+
+
 def test_viewer_sysinfo():
     result = get_viewer_normalized("/viewer/sysinfo")
     return result

@@ -848,6 +848,7 @@ struct TExternalSource {
     NKikimrSchemeOp::TAuth DataSourceAuth;
     NKikimrSchemeOp::TExternalDataSourceProperties Properties;
     TKikimrTableMetadataPtr UnderlyingExternalSourceMetadata;
+    ui64 WriteOperations = 0;
 };
 
 enum EMetaSerializationType : ui64 {

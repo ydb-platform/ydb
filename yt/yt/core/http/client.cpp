@@ -204,8 +204,8 @@ private:
                 return action();
             } catch (const std::exception& ex) {
                 THROW_ERROR_EXCEPTION("HTTP request failed")
-                    << TErrorAttribute("url", SanitizeUrl(url))
-                    << ex;
+                    .With("url", SanitizeUrl(url))
+                    .With(ex);
             }
         })
             .AsyncVia(Invoker_)

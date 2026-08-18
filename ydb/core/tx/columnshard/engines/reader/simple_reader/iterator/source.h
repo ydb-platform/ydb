@@ -432,6 +432,8 @@ private:
     YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
     const ui32 LastSourceIdx;
     const ui64 LastSourceRecordsCount;
+    const ui64 LastDeprecatedPortionId;
+    const std::optional<ui64> LastPortionIdOptional;
 
     void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override {
         const ui32 recordsCount = GetStageData().GetTable().GetRecordsCountActualVerified();
@@ -540,6 +542,14 @@ public:
         return LastSourceRecordsCount;
     }
 
+    ui64 GetLastDeprecatedPortionId() const {
+        return LastDeprecatedPortionId;
+    }
+
+    const std::optional<ui64>& GetLastPortionIdOptional() const {
+        return LastPortionIdOptional;
+    }
+
     virtual TString GetEntityStorageId(const ui32 /*entityId*/) const override {
         AFL_VERIFY(false);
         return "";
@@ -609,10 +619,12 @@ public:
     TAggregationDataSource(
         std::vector<std::shared_ptr<NCommon::IDataSource>>&& sources, const std::shared_ptr<NCommon::TSpecialReadContext>& context)
         : TBase(EType::SimpleAggregation, sources.back()->GetSourceIdx(), context, TSnapshot::Zero(), TSnapshot::Zero(),
-              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetSourceIdx())
+              CalcInputRecordsCount(sources), std::nullopt, false, sources.back()->GetDeprecatedPortionId())
         , Sources(std::move(sources))
         , LastSourceIdx(Sources.back()->GetSourceIdx())
         , LastSourceRecordsCount(Sources.back()->GetRecordsCount())
+        , LastDeprecatedPortionId(Sources.back()->GetDeprecatedPortionId())
+        , LastPortionIdOptional(Sources.back()->GetPortionIdOptional())
     {
         AFL_VERIFY(Sources.size());
     }

@@ -82,8 +82,8 @@ void ThrowUnsupportedClientFeature(int featureId, TStringBuf featureName)
     THROW_ERROR_EXCEPTION(
         NRpc::EErrorCode::UnsupportedClientFeature,
         "Client does not support the feature requested by server")
-        << TErrorAttribute("feature_id", featureId)
-        << TErrorAttribute("feature_name", featureName);
+        .With("feature_id", featureId)
+        .With("feature_name", featureName);
 }
 
 } // namespace NDetail

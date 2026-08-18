@@ -355,7 +355,7 @@ private:
             NTracing::TTraceContextGuard traceContextGuard(request->TraceContext);
 
             request->Promise.Set(TError(NYT::EErrorCode::Canceled, "Throttled request canceled")
-                << error);
+                .With(error));
 
             // NB(coteeq): Weak ref will break cycle "promise -> this -> request -> promise"
             auto this_ = weakThis.Lock();

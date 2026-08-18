@@ -3110,6 +3110,8 @@ NUdf::TUnboxedValuePod THolderFactory::CreateDirectArrayHolder(ui64 size, NUdf::
         return GetEmptyContainerLazy();
     }
 
+    MKQL_ENSURE(size <= TDirectArrayHolderInplace::GetMaxSize(), "Too large array size: " << size);
+
     const auto buffer = MKQLAllocFastWithSize(
         sizeof(TDirectArrayHolderInplace) + size * sizeof(NUdf::TUnboxedValue),
         CurrentAllocState_, EMemorySubPool::Default);

@@ -34,7 +34,7 @@ void TextYqlUuidToBytes(TStringBuf uuid, char* ptr)
         try {
             return Char2Digit(*ptr) * 16 + Char2Digit(*(ptr + 1));
         } catch (const std::exception& ex) {
-            THROW_ERROR_EXCEPTION("Could not parse hex byte") << ex;
+            THROW_ERROR_EXCEPTION("Could not parse hex byte").With(ex);
         }
     };
     auto verifyDash = [] (const char* ptr) {

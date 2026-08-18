@@ -30,6 +30,7 @@ private:
             HFunc(TEvPQ::TEvInitCredentials, HandleInitCredentials);
             HFunc(TEvPQ::TEvCredentialsCreated, HandleCredentialsCreated);
             HFunc(TEvPQ::TEvChangePartitionConfig, HandleChangeConfig);
+            HFunc(TEvPQ::TEvMirrorTopicDescription, HandleDescriptionResult);
             HFunc(TEvents::TEvPoisonPill, Handle);
         default:
             break;
@@ -90,6 +91,7 @@ private:
 
     bool CredentialsRequestInFlight = false;
     bool DescribeTopicRequestInFlight = false;
+    ui64 DescribeGeneration = 0;
 };
 
 }// NKikimr

@@ -497,11 +497,11 @@ NKikimr::TConclusionStatus TIndexInfo::ReuseIndexChunks(std::vector<std::shared_
     AFL_VERIFY(checkRecordsCount == recordsCount)("index_id", indexId)("sum", checkRecordsCount)("portion", recordsCount);
     const TString& indexStorageId = GetIndexStorageId(indexId, specialTier);
     auto opStorage = operators->GetOperatorVerified(indexStorageId);
+    const i64 maxBlobSize = opStorage->GetBlobSplitSettings().GetMaxBlobSize();
     for (auto&& chunk : chunks) {
-        if ((i64)chunk->GetPackedSize() > opStorage->GetBlobSplitSettings().GetMaxBlobSize()) {
+        if ((i64)chunk->GetPackedSize() > maxBlobSize) {
             return TConclusionStatus::Fail("blob size for secondary data (" + ::ToString(indexId) + ":" + ::ToString(chunk->GetPackedSize()) +
-                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" +
-                                           ::ToString(opStorage->GetBlobSplitSettings().GetMaxBlobSize()) + ")");
+                                           ":" + ::ToString(recordsCount) + ") bigger than limit (" + ::ToString(maxBlobSize) + ")");
         }
     }
     if (indexStorageId == IStoragesManager::LocalMetadataStorageId) {
@@ -530,7 +530,16 @@ NKikimr::TConclusionStatus TIndexInfo::AppendIndex(const THashMap<ui32, std::vec
     }
     std::vector<std::shared_ptr<IPortionDataChunk>> chunks(
         std::make_move_iterator(indexChunkConclusion->begin()), std::make_move_iterator(indexChunkConclusion->end()));
-    return ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
+    auto conclusion = ReuseIndexChunks(std::move(chunks), indexId, operators, recordsCount, specialTier, result);
+    if (conclusion.IsFail()) {
+        // The index does not fit the target storage. Store the portion without it, like a portion older than
+        // the index itself: the data stays correct, only the skip optimization is lost.
+        YDB_LOG_WARN("",
+            {"event", "index_skipped"},
+            {"index_name", index->GetIndexName()},
+            {"reason", conclusion.GetErrorMessage()});
+    }
+    return TConclusionStatus::Success();
 }
 
 std::shared_ptr<NIndexes::NMax::TIndexMeta> TIndexInfo::GetIndexMetaMax(const ui32 columnId) const {

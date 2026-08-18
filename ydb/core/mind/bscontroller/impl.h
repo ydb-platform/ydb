@@ -4,6 +4,7 @@
 
 #include "bsc.h"
 #include "cluster_balancing.h"
+#include "group_mapper.h"
 #include "scheme.h"
 #include "mood.h"
 #include "types.h"
@@ -525,8 +526,7 @@ public:
         }
 
         bool SlotSpaceEnforced(TBlobStorageController& self) const {
-            return Metrics.HasEnforcedDynamicSlotSize() &&
-                self.PDiskSpaceColorBorder >= NKikimrBlobStorage::TPDiskSpaceColor::YELLOW;
+            return TGroupMapper::SlotSpaceEnforced(Metrics, self.PDiskSpaceColorBorder);
         }
 
         bool HasFullMetrics() const {
@@ -544,26 +544,25 @@ public:
         }
 
         void UpdateOperational(bool nodeConnected) {
-            Operational = nodeConnected && (!Metrics.HasState() ||
-                Metrics.GetState() == NKikimrBlobStorage::TPDiskState::Normal);
+            Operational = TGroupMapper::IsPDiskOperational(nodeConnected, &Metrics);
         }
 
-        bool ShouldBeSettledBySelfHeal() const {
-            return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
-                || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
-                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT
-                || MaintenanceStatus == NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
-        }
-
-        bool IsSelfHealReasonDecommit() const {
-            return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT &&
-                Status != NKikimrBlobStorage::EDriveStatus::FAULTY &&
-                Status != NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED;
+        ESelfHealReassignmentPriority GetSelfHealReassignmentPriority() const {
+            if (Status == NKikimrBlobStorage::EDriveStatus::FAULTY ||
+                    Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED) {
+                return ESelfHealReassignmentPriority::DriveStatus;
+            } else if (DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT) {
+                return ESelfHealReassignmentPriority::DecommitStatus;
+            } else if (MaintenanceStatus ==
+                    NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED) {
+                return ESelfHealReassignmentPriority::MaintenanceStatus;
+            } else {
+                return ESelfHealReassignmentPriority::None;
+            }
         }
 
         bool UsableInTermsOfDecommission(bool isSelfHealReasonDecommit) const {
-            return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE // acceptable in any case
-                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED && !isSelfHealReasonDecommit;
+            return TGroupMapper::UsableInTermsOfDecommission(DecommitStatus, isSelfHealReasonDecommit);
         }
 
         bool BadInTermsOfSelfHeal() const {
@@ -572,29 +571,15 @@ public:
         }
 
         auto GetSelfHealStatusTuple() const {
-            return std::make_tuple(ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal(), Decommitted(), IsSelfHealReasonDecommit());
+            return std::make_tuple(GetSelfHealReassignmentPriority(), BadInTermsOfSelfHeal(), Decommitted());
         }
 
         bool AcceptsNewSlots() const {
-            return Status == NKikimrBlobStorage::EDriveStatus::ACTIVE
-                && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED
-                && MaintenanceStatus != NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_VDISKS;
+            return TGroupMapper::AcceptsNewSlots(Status, MaintenanceStatus);
         }
 
         bool Decommitted() const {
-            switch (DecommitStatus) {
-                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE:
-                    return false;
-                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_PENDING:
-                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT:
-                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_REJECTED:
-                    return true;
-                case NKikimrBlobStorage::EDecommitStatus::DECOMMIT_UNSET:
-                case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MIN_SENTINEL_DO_NOT_USE_:
-                case NKikimrBlobStorage::EDecommitStatus::EDecommitStatus_INT_MAX_SENTINEL_DO_NOT_USE_:
-                    break;
-            }
-            Y_ABORT("unexpected EDecommitStatus");
+            return TGroupMapper::IsDecommitted(DecommitStatus);
         }
 
         bool HasGoodExpectedStatus() const {
@@ -1924,6 +1909,7 @@ public:
     // For test purposes, required for self heal actor
     void CreateEmptyHostRecordsMap() {
         HostRecords = std::make_shared<THostRecordMapImpl>();
+        EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
     }
 
     ui64 NextConfigTxSeqNo = 1;

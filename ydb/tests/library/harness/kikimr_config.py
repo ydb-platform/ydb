@@ -175,6 +175,7 @@ class KikimrConfigGenerator(object):
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             kafka_api_port=None,
             kafka_listen_address=None,
+            kafka_auto_create_topics=False,
             metadata_section=None,
             column_shard_config=None,
             use_config_store=False,
@@ -603,6 +604,8 @@ class KikimrConfigGenerator(object):
             kafka_proxy_config["listening_port"] = self.get_kafka_api_port(node_id)
             if kafka_listen_address is not None:
                 kafka_proxy_config["listening_address"] = kafka_listen_address
+            if kafka_auto_create_topics:
+                kafka_proxy_config["auto_create_topics_enable"] = True
 
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 

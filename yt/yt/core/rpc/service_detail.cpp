@@ -582,24 +582,31 @@ public:
             return;
         }
 
+        // Guards from race with DoGuardedRun. If request timed out then there
+        // is no need to attempt to execute it. Thus, early exchange here.
+        auto wasRun = RunLatch_.exchange(true);
+
         YT_TLOG_DEBUG("Request timed out, canceling")
             .With("RequestId", RequestId_)
             .With("Stage", stage);
 
-        auto error = TError(NYT::EErrorCode::Timeout, "Request timed out");
+        auto error = TError(
+            NYT::EErrorCode::Timeout,
+            "Request timed out%v",
+            stage == ERequestProcessingStage::Waiting ? " before being run" : "");
 
         if (RuntimeInfo_->Descriptor.StreamingEnabled) {
             AbortStreamsUnlessClosed(error);
         }
 
-        CanceledList_.Fire(error << GetCanceledError());
+        CanceledList_.Fire(error.With(GetCanceledError()));
 
         MethodPerformanceCounters_->TimedOutRequestCounter.Increment();
 
-        // Guards from race with DoGuardedRun.
         // We can only mark as complete those requests that will not be run
-        // as there's no guarantee that, if started,  the method handler will respond promptly to cancelation.
-        if (!RunLatch_.exchange(true)) {
+        // as there's no guarantee that, if started, the method handler will
+        // respond promptly to cancelation.
+        if (!wasRun) {
             SetComplete();
         }
     }
@@ -1945,7 +1952,7 @@ void TServiceBase::DoHandleRequest(TIncomingRequest&& incomingRequest)
     if (authenticationQueueSize > authenticationQueueSizeLimit) {
         ReplyError(
             TError(NRpc::EErrorCode::RequestQueueSizeLimitExceeded, "Authentication request queue size limit exceeded")
-                << TErrorAttribute("limit", authenticationQueueSizeLimit),
+                .With("limit", authenticationQueueSizeLimit),
             std::move(incomingRequest));
         return;
     }
@@ -2028,11 +2035,11 @@ void TServiceBase::ReplyError(TError error, TIncomingRequest&& incomingRequest)
     ProfileRequest(&incomingRequest);
 
     auto richError = std::move(error)
-        << TErrorAttribute("request_id", incomingRequest.RequestId)
-        << TErrorAttribute("realm_id", ServiceId_.RealmId)
-        << TErrorAttribute("service", ServiceId_.ServiceName)
-        << TErrorAttribute("method", incomingRequest.Method)
-        << TErrorAttribute("endpoint", incomingRequest.ReplyBus->GetEndpointDescription());
+        .With("request_id", incomingRequest.RequestId)
+        .With("realm_id", ServiceId_.RealmId)
+        .With("service", ServiceId_.ServiceName)
+        .With("method", incomingRequest.Method)
+        .With("endpoint", incomingRequest.ReplyBus->GetEndpointDescription());
 
     NLogging::ELogLevel logLevel = NLogging::ELogLevel::Debug;
     if (incomingRequest.RuntimeInfo) {
@@ -2067,7 +2074,7 @@ void TServiceBase::OnRequestAuthenticated(
     if (!authResultOrError.IsOK()) {
         ReplyError(
             TError(NRpc::EErrorCode::AuthenticationError, "Request authentication failed")
-                << authResultOrError,
+                .With(authResultOrError),
             std::move(incomingRequest));
         return;
     }
@@ -2090,8 +2097,8 @@ void TServiceBase::OnRequestAuthenticated(
         if (user != authenticatedUser) {
             ReplyError(
                 TError(NRpc::EErrorCode::AuthenticationError, "Manually specified and authenticated users mismatch")
-                    << TErrorAttribute("user", user)
-                    << TErrorAttribute("authenticated_user", authenticatedUser),
+                    .With("user", user)
+                    .With("authenticated_user", authenticatedUser),
                 std::move(incomingRequest));
             return;
         }
@@ -2316,7 +2323,7 @@ TError TServiceBase::DoCheckRequestFeatures(const NRpc::NProto::TRequestHeader& 
             return TError(
                 NRpc::EErrorCode::UnsupportedServerFeature,
                 "Server does not support the feature requested by client")
-                << TErrorAttribute("feature_id", featureId);
+                .With("feature_id", featureId);
         }
     }
     return {};
@@ -2855,9 +2862,9 @@ void TServiceBase::ValidateRequestFeatures(const IServiceContextPtr& context)
     if (auto error = DoCheckRequestFeatures(header); !error.IsOK()) {
         auto requestId = FromProto<TRequestId>(header.request_id());
         THROW_ERROR std::move(error)
-            << TErrorAttribute("request_id", requestId)
-            << TErrorAttribute("service", header.service())
-            << TErrorAttribute("method", header.method());
+            .With("request_id", requestId)
+            .With("service", header.service())
+            .With("method", header.method());
     }
 }
 
@@ -2943,7 +2950,7 @@ void TServiceBase::DoConfigure(
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error configuring RPC service %v",
             ServiceId_.ServiceName)
-            << TError(ex);
+            .With(TError(ex));
     }
 }
 
@@ -2963,7 +2970,7 @@ void TServiceBase::Configure(
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error parsing RPC service %v config",
                 ServiceId_.ServiceName)
-                << TError(ex);
+                .With(TError(ex));
         }
     } else {
         config = New<TServiceConfig>();

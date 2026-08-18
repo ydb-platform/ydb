@@ -33,6 +33,7 @@ public:
     virtual void Reply(
         NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
         TString reason = {}) noexcept = 0;
+    virtual bool IsIntegrityIo() const noexcept { return false; }
 
     virtual void ClearForRecycle() noexcept;
 
@@ -43,9 +44,15 @@ public:
 
     void SetSpan(NWilson::TSpan&& span) { Span = std::move(span); }
     NWilson::TSpan& GetSpan() { return Span; }
+    NWilson::TSpan ExtractSpan() { return std::move(Span); }
 
     void SetCookie(ui64 cookie) { Cookie = cookie; }
     ui64 GetCookie() const { return Cookie; }
+
+    // Read-path integrity zero mask (TIntegrityManager::TReadPlan::Mixed): bit i covers the i-th
+    // IntegrityUnitSize block of the read range; unset bits are zero-filled before replying. Must
+    // live in the op because the reply happens on the uring completion thread.
+    void SetReadUsedBlocksMask(TDynBitMap&& usedBlocks) { ReadUsedBlocksMask.emplace(std::move(usedBlocks)); }
 
     const TActorId& GetDDiskId() const { return DDiskId; }
     const TActorId& GetOriginalRequester() const { return OriginalRequester; }
@@ -71,6 +78,9 @@ protected:
 
     virtual void SelfRecycle() noexcept { delete this; }
 
+    // Zero-fills the blocks of freshly read data whose ReadUsedBlocksMask bits are unset.
+    void ApplyReadUsedBlocksMask(TRope& data) noexcept;
+
 private:
     NHPTimer::STime StartTs;
 
@@ -87,6 +97,8 @@ private:
 
     TRcBuf AlignedDataHolder;
     std::optional<TRope> Data;
+
+    std::optional<TDynBitMap> ReadUsedBlocksMask;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -103,7 +115,19 @@ public:
         NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
         TString reason = {}) noexcept override;
 
+    void ClearForRecycle() noexcept override;
     void SelfRecycle() noexcept override;
+
+    void SetChunkKey(ui64 tabletId, ui64 vChunkIndex) {
+        TabletId = tabletId;
+        VChunkIndex = vChunkIndex;
+        HasChunkKey = true;
+    }
+
+private:
+    ui64 TabletId = 0;
+    ui64 VChunkIndex = 0;
+    bool HasChunkKey = false;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -172,6 +196,32 @@ private:
     ui64 RequestId = 0;
     ui64 SegmentBegin = 0;
     ui64 SegmentEnd = 0;
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// TDDiskActor::TIntegrityIoOp
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// Executes one TIntegrityManager::TWriteIo (chunk header replica / extent format write) and posts
+// TEvPrivate::TEvIntegrityIoResult{IoId, Status} back to the actor. Integrity I/O only happens at
+// chunk allocation time, so these ops are not pooled: SelfRecycle simply deletes.
+class TDDiskActor::TIntegrityIoOp final : public TDDiskActor::TDirectIoOpBase {
+public:
+    explicit TIntegrityIoOp(TDDiskActor& actor)
+        : TDirectIoOpBase(actor)
+    {}
+
+    void Reply(
+        NActors::TActorSystem* actorSystem, NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TString reason = {}) noexcept override;
+    bool IsIntegrityIo() const noexcept override { return true; }
+
+    void SetIoId(ui64 ioId) {
+        IoId = ioId;
+    }
+
+private:
+    ui64 IoId = 0;
 };
 
 } // namespace NKikimr::NDDisk

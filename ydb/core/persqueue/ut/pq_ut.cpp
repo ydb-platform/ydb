@@ -426,6 +426,145 @@ Y_UNIT_TEST(TestCompaction) {
     });
 }
 
+// Regression for https://github.com/ydb-platform/ydb/issues/49436:
+// failed/partial KV/cache read for compaction (cookie=ReadBlobsForCompaction) must not
+// unpack empty blobs in CompactRequestedBlob/GetBatches. After the failure goes
+// away, a later compaction must keep the same messages (no loss / no duplicates).
+enum class ECompactionBlobReadInjection {
+    // Production shape from #49436: Error set, all RawValues cleared.
+    ErrorAndAllBlobsEmpty,
+    // Exercises the empty-blob branch with HasError==false. Keep Blobs[0] nonempty
+    // to satisfy TEvBlobResponse::Check(); clear a later blob (OVERRUN/crop-like).
+    OkWithLaterBlobEmpty,
+};
+
+void TestCompactionSurvivesFailedBlobRead(ECompactionBlobReadInjection injection) {
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.EnableDetailedPQLog = true;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(50000);
+    // High threshold so writes do not trigger async compaction before we inject the failure.
+    // ForceCompaction still runs because it passes force=true.
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(300);
+
+    // Blobs below low watermark are read+rewritten (not renamed) during compaction.
+    PQTabletPrepare({.partitions = 1, .lowWatermark = 10_MB, .writeSpeed = 50_MB},
+                    {{"user1", true}}, tc);
+
+    const TString sourceId = "sourceid_compaction_fail_read";
+    constexpr ui64 startOffset = 100;
+    constexpr ui64 initialMessages = 8;
+    constexpr ui64 totalMessages = 9;
+    const ui64 endOffset = startOffset + totalMessages;
+    TVector<TString> payloads;
+    payloads.reserve(totalMessages);
+    TVector<i32> expectedOffsets;
+    expectedOffsets.reserve(totalMessages);
+    for (ui64 i = 0; i < totalMessages; ++i) {
+        expectedOffsets.push_back(static_cast<i32>(startOffset + i));
+    }
+    for (ui64 i = 0; i < initialMessages; ++i) {
+        payloads.emplace_back(TString(200_KB, static_cast<char>('a' + i)));
+        TVector<std::pair<ui64, TString>> data;
+        data.emplace_back(i + 1, payloads.back());
+        CmdWrite(0, sourceId, data, tc, false, {}, i == 0, "", -1, static_cast<i64>(startOffset + i));
+    }
+
+    bool injected = false;
+    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        if (auto* event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>()) {
+            if (!injected && event->GetCookie() == TPartition::ERequestCookie::ReadBlobsForCompaction) {
+                injected = true;
+
+                TVector<TRequestedBlob> blobs = event->GetBlobs();
+                UNIT_ASSERT_C(!blobs.empty(), "compaction blob read response has no blobs");
+
+                TErrorInfo error;
+                switch (injection) {
+                    case ECompactionBlobReadInjection::ErrorAndAllBlobsEmpty:
+                        for (auto& blob : blobs) {
+                            blob.Clear();
+                        }
+                        error = TErrorInfo(NPersQueue::NErrorCode::ERROR, "injected BS/KV failure");
+                        break;
+                    case ECompactionBlobReadInjection::OkWithLaterBlobEmpty:
+                        UNIT_ASSERT_C(blobs.size() >= 2,
+                            "need at least two blobs to clear a later one while keeping Blobs[0]");
+                        UNIT_ASSERT_C(!blobs[0].Empty(), "Blobs[0] must stay nonempty for Check()");
+                        for (size_t i = 1; i < blobs.size(); ++i) {
+                            blobs[i].Clear();
+                        }
+                        // Default TErrorInfo is OK → HasError() == false.
+                        break;
+                }
+
+                const TActorId recipient = ev->Recipient;
+                const TActorId sender = ev->Sender;
+                auto* poisoned = new TEvPQ::TEvBlobResponse(
+                    /*cookie=*/0,
+                    std::move(blobs),
+                    error);
+                poisoned->Check();
+                ev.Reset(new IEventHandle(recipient, sender, poisoned));
+            }
+        }
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+
+    CmdRunCompaction(0, tc);
+
+    TDispatchOptions options;
+    options.CustomFinalCondition = [&] { return injected; };
+    tc.Runtime->DispatchEvents(options);
+    UNIT_ASSERT(injected);
+
+    // After the fix: tablet stays alive and accepts further writes.
+    // Before the fix: AFL_ENSURE(Data != End) aborts while handling the poisoned response.
+    payloads.emplace_back(TString(1_KB, 'y'));
+    TVector<std::pair<ui64, TString>> more;
+    more.emplace_back(totalMessages, payloads.back());
+    CmdWrite(0, sourceId, more, tc, false, {}, false, "", -1, static_cast<i64>(startOffset + initialMessages));
+    PQGetPartInfo(startOffset, endOffset, tc);
+
+    // Error is gone: next forced compaction must succeed and preserve the log.
+    tc.Runtime->SetObserverFunc([](TAutoPtr<IEventHandle>&) {
+        return TTestActorRuntimeBase::EEventAction::PROCESS;
+    });
+    CmdRunCompaction(0, tc);
+
+    auto assertExactLog = [&](const char* stage) {
+        PQGetPartInfo(startOffset, endOffset, tc);
+
+        TPQCmdReadSettings readSettings{
+            "", 0, static_cast<i64>(startOffset), static_cast<ui32>(totalMessages + 1), 64_MB,
+            static_cast<ui32>(totalMessages), false,
+            expectedOffsets, 0, 0, "user1"};
+        const auto readResult = CmdReadAndGetResult(readSettings, tc);
+        UNIT_ASSERT_VALUES_EQUAL_C(readResult.ResultSize(), totalMessages, stage);
+        for (ui64 i = 0; i < totalMessages; ++i) {
+            const auto& msg = readResult.GetResult(i);
+            UNIT_ASSERT_VALUES_EQUAL_C(msg.GetOffset(), startOffset + i, stage);
+            UNIT_ASSERT_VALUES_EQUAL_C(msg.GetSeqNo(), i + 1, stage);
+            UNIT_ASSERT_VALUES_EQUAL_C(msg.GetSourceId(), sourceId, stage);
+            UNIT_ASSERT_VALUES_EQUAL_C(msg.GetData(), payloads[i], stage);
+        }
+    };
+
+    assertExactLog("after successful compaction");
+
+    // Restart forces a fresh load from KV (compaction zone), not in-memory FastWrite state.
+    PQTabletRestart(tc);
+    assertExactLog("after restart");
+}
+
+Y_UNIT_TEST(CompactionSurvivesFailedBlobRead) {
+    TestCompactionSurvivesFailedBlobRead(ECompactionBlobReadInjection::ErrorAndAllBlobsEmpty);
+}
+
+Y_UNIT_TEST(CompactionSurvivesEmptyLaterBlobWithoutError) {
+    TestCompactionSurvivesFailedBlobRead(ECompactionBlobReadInjection::OkWithLaterBlobEmpty);
+}
 
 Y_UNIT_TEST(BatchedMessagesWriteWithoutFeatureFlagFails) {
     TTestContext tc;
@@ -4088,8 +4227,13 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
 
         static ui32 pqConfigVersion = 1'000;
 
-        PQTabletPrepare({.maxCountInPartition=100, .deleteTime=TDuration::Days(2).Seconds(), .partitions=1, .specVersion=pqConfigVersion++},
-                        {{"user1", true}, {"user2", true}}, tc);
+        TTabletPreparationParameters prepareParams{
+            .maxCountInPartition=100,
+            .deleteTime=TDuration::Days(2).Seconds(),
+            .partitions=1,
+            .specVersion=pqConfigVersion++,
+        };
+        PQTabletPrepare(prepareParams, {{"user1", true}, {"user2", true}}, tc);
         CmdWrite(0, "sourceid1", data, tc, false, {}, true);
 
         // Reset tablet cache
@@ -4098,8 +4242,6 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         TAutoPtr<IEventHandle> handle;
         TEvPersQueue::TEvResponse* readResult = nullptr;
         THolder<TEvPersQueue::TEvRequest> readRequest;
-        TEvPersQueue::TEvUpdateConfigResponse* consumerDeleteResult = nullptr;
-        THolder<TEvPersQueue::TEvUpdateConfig> consumerDeleteRequest;
 
         // Read request
         {
@@ -4114,20 +4256,12 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
             read->SetTimeoutMs(5000);
         }
 
-        // Consumer delete request
-        {
-            consumerDeleteRequest.Reset(new TEvPersQueue::TEvUpdateConfig());
-            consumerDeleteRequest->MutableRecord()->SetTxId(42);
-            auto& cfg = *consumerDeleteRequest->MutableRecord()->MutableTabletConfig();
-            cfg.SetVersion(pqConfigVersion++);
-            cfg.AddPartitionIds(0);
-            cfg.AddPartitions()->SetPartitionId(0);
-            cfg.SetLocalDC(true);
-            cfg.SetTopic("topic");
-            auto& cons = *cfg.AddConsumers();
-            cons.SetName("user2");
-            cons.SetImportant(true);
-        }
+        TVector<TConsumerPreparationParameters> remainingConsumers{{
+            .Name = "user2",
+            .Important = true,
+        }};
+        auto consumerDeleteConfig = MakePQTabletConfig(
+            prepareParams, remainingConsumers, *tc.Runtime, pqConfigVersion++);
 
         TActorId edge = tc.Runtime->AllocateEdgeActor();
 
@@ -4141,13 +4275,8 @@ Y_UNIT_TEST(TestReadAndDeleteConsumer) {
         });
 
         // Delete consumer while read request is still in progress
-        tc.Runtime->SendToPipe(tc.TabletId, edge, consumerDeleteRequest.Release(), 0, GetPipeConfigWithRetries());
-        consumerDeleteResult = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvUpdateConfigResponse>(handle);
-        {
-            //Cerr << "Got consumer delete response: " << consumerDeleteResult->Record << Endl;
-            UNIT_ASSERT(consumerDeleteResult->Record.HasStatus());
-            UNIT_ASSERT_VALUES_EQUAL((int)consumerDeleteResult->Record.GetStatus(), (int)NKikimrPQ::EStatus::OK);
-        }
+        SendPQTabletConfig(*tc.Runtime, tc.TabletId, edge, consumerDeleteConfig,
+                           tc.NextPqConfigTxId++, tc.NextPqConfigPlanStep++);
 
         // Resend intercepted blob responses and wait for read result
         captureBlobResponsesObserver.Remove();
@@ -4387,7 +4516,7 @@ Y_UNIT_TEST(PQ_Tablet_Does_Not_Remove_The_Blob_Until_The_Reading_Is_Complete)
     TAutoPtr<IEventHandle> blobResponseEvent;
     auto observe = [&](TAutoPtr<IEventHandle>& ev) {
         if (auto* event = ev->CastAsLocal<TEvPQ::TEvBlobResponse>()) {
-            if (event->GetCookie() == 0) { // ERequestCookie::ReadBlobsForCompaction
+            if (event->GetCookie() == TPartition::ERequestCookie::ReadBlobsForCompaction) {
                 return TTestActorRuntimeBase::EEventAction::PROCESS;
             }
             blobResponseEvent = ev;

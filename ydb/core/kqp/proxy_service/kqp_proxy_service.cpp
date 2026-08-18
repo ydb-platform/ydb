@@ -392,13 +392,19 @@ public:
 
         if (auto gateway = FederatedQuerySetup ? FederatedQuerySetup->HttpGateway : nullptr) {
             if (auto scheduler = AppData()->KqpComputeScheduler) {
-                // TODO: read Period / MaxHandlers / MinDefaultFraction from THttpGatewayConfig.
+                const auto& httpGatewayConfig = QueryServiceConfig.GetHttpGateway();
+                const size_t maxHandlers = httpGatewayConfig.HasMaxInFlightCount()
+                    ? httpGatewayConfig.GetMaxInFlightCount() : 1024;
+                const auto period = TDuration::MilliSeconds(
+                    httpGatewayConfig.HasPoolCapsPushPeriodMs() ? httpGatewayConfig.GetPoolCapsPushPeriodMs() : 500);
+                const double minDefaultFraction = httpGatewayConfig.HasMinDefaultPoolShare()
+                    ? httpGatewayConfig.GetMinDefaultPoolShare() : 0.1;
                 auto* pusher = NYql::CreateHttpPoolCapPusher(
                     [scheduler]() { return scheduler->GetLeafPoolFairShares(); },
                     gateway,
-                    TDuration::MilliSeconds(500),
-                    /*maxHandlers=*/ 1024,
-                    /*minDefaultFraction=*/ 0.1);
+                    period,
+                    maxHandlers,
+                    minDefaultFraction);
                 TActivationContext::Register(pusher);
             }
         }

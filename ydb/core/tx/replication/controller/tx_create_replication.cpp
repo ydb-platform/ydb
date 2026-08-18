@@ -22,8 +22,8 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         YDB_LOG_CREATE_CONTEXT(TxLogPrefix);
-        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"execute", Ev->Get()->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", Ev->Get()->ToString()});
 
         auto& record = Ev->Get()->Record;
         Result = MakeHolder<TEvController::TEvCreateReplicationResult>();

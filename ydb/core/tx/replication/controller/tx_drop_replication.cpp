@@ -39,8 +39,8 @@ public:
     }
 
     bool ExecutePub(TTransactionContext& txc, const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"execute", PubEv->Get()->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", PubEv->Get()->ToString()});
 
         const auto& record = PubEv->Get()->Record;
         const auto pathId = TPathId::FromProto(record.GetPathId());
@@ -102,8 +102,8 @@ public:
     }
 
     bool ExecutePriv(TTransactionContext& txc, const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"execute", PrivEv->Get()->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", PrivEv->Get()->ToString()});
 
         const auto rid = PrivEv->Get()->ReplicationId;
         Replication = Self->Find(rid);

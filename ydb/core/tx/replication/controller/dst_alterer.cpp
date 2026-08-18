@@ -22,7 +22,7 @@ class TDstAlterer: public TActorBootstrapped<TDstAlterer> {
     }
 
     STATEFN(StateAllocateTxId) {
-               YDB_LOG_CREATE_CONTEXT(LogPrefix,
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
             {"actorState","StateAllocateTxId"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);

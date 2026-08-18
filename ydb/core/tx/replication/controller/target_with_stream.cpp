@@ -32,15 +32,17 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
         const auto& result = ev->Get()->Result;
         if (!result.IsSuccess()) {
             if (IsRetryableError(result)) {
-                YDB_LOG_WARN("Error of resolving topic Retry",
-                    {"srcStreamPath", SrcStreamPath},
-                    {"ev", ev->Get()->ToString()});
+                YDB_LOG_WARN("Error of resolving topic",
+                    {"streamPath", SrcStreamPath},
+                    {"ev", ev->Get()->ToString()},
+                    {"outcome", "retry"});
                 return Retry();
             }
 
-            YDB_LOG_ERROR("Error of resolving topic Stop",
-                {"srcStreamPath", SrcStreamPath},
-                {"ev", ev->Get()->ToString()});
+            YDB_LOG_ERROR("Error of resolving topic",
+                {"streamPath", SrcStreamPath},
+                {"ev", ev->Get()->ToString()},
+                {"outcome", "stop"});
             return; // TODO: hard error
         }
 

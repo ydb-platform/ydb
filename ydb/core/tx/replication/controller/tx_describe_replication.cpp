@@ -49,7 +49,7 @@ class TTargetDescriber: public TActorBootstrapped<TTargetDescriber> {
             Result.emplace(id, std::move(result));
         } else {
             YDB_LOG_ERROR("Describe failed",
-                                {"id", id},
+                {"id", id},
                 {"path", path},
                 {"status", result.GetStatus()},
                 {"issues", result.GetIssues().ToOneLineString()});
@@ -151,8 +151,8 @@ public:
     }
 
     bool ExecutePub(TTransactionContext&, const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"execute", PubEv->Get()->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", PubEv->Get()->ToString()});
 
         const auto& record = PubEv->Get()->Record;
         const auto pathId = TPathId::FromProto(record.GetPathId());
@@ -183,8 +183,8 @@ public:
     }
 
     bool ExecutePriv(TTransactionContext&, const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Dump logPrefix, execute",
-            {"execute", PrivEv->Get()->ToString()});
+        YDB_LOG_DEBUG_CTX(ctx, "Execute",
+            {"ev", PrivEv->Get()->ToString()});
 
         const auto rid = PrivEv->Get()->ReplicationId;
 

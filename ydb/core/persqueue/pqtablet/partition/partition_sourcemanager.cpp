@@ -174,12 +174,22 @@ void TPartitionSourceManager::TSourceManager::Update(TSchemaChangeInfo&& schemaC
     // Unlike heartbeats (emitter-only until AnswerCurrentWrites), schema changes also
     // persist LastSchemaChange via SourceIdWriter so crash recovery can advance
     // GetCommittedSchemaChangeVersion() without waiting for a re-ACK.
+    // Keep the same regression guard as SchemaChangeEmitter::Process (prefer writer
+    // state when present so a later Update in this batch cannot regress).
+    const auto isNewerThan = [&](const TSourceIdInfo& info) {
+        return !info.LastSchemaChange || schemaChange.Version > info.LastSchemaChange->Version;
+    };
+
     auto copySchemaChange = schemaChange;
     Batch.SchemaChangeEmitter.Process(SourceId, std::move(copySchemaChange));
     if (InMemory != MemoryStorage().end()) {
-        Batch.SourceIdWriter.RegisterSourceId(SourceId, InMemory->second.Updated(std::move(schemaChange)));
+        if (isNewerThan(InMemory->second)) {
+            Batch.SourceIdWriter.RegisterSourceId(SourceId, InMemory->second.Updated(std::move(schemaChange)));
+        }
     } else if (InWriter != WriteStorage().end()) {
-        Batch.SourceIdWriter.RegisterSourceId(SourceId, InWriter->second.Updated(std::move(schemaChange)));
+        if (isNewerThan(InWriter->second)) {
+            Batch.SourceIdWriter.RegisterSourceId(SourceId, InWriter->second.Updated(std::move(schemaChange)));
+        }
     }
 }
 

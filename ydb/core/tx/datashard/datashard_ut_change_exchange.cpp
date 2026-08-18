@@ -4739,7 +4739,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT_C(partitionCount >= 1, "CDC stream must have at least one partition");
 
         TVector<TVector<std::pair<TString, TString>>> records(partitionCount);
-        while (true) {
+        for (ui32 iteration = 0; ; ++iteration) {
+            UNIT_ASSERT_C(iteration < 60, "Timed out waiting for schema change records in all partitions");
+
             bool allHaveSchemaChange = true;
             for (ui32 i = 0; i < records.size(); ++i) {
                 records[i] = GetRecords(runtime, edgeActor, "/Root/Table/Stream", i);

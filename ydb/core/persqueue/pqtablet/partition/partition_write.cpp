@@ -349,7 +349,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             ctx, writeResponse.Cookie, s, seqNo, partNo, totalParts,
             replyOffset, CurrentTimestamp, false, maxSeqNo,
             TDuration::Zero(), TDuration::Zero(), queueTime, writeTime, pending.Span
-        );
+        ); // quota tracking is not meaningful for deferred replies
         it = PendingSchemaChangeResponses.erase(it);
     }
 
@@ -436,7 +436,8 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             }
 
             const auto& scVersion = writeResponse.Msg.SchemaChangeVersion;
-            if (scVersion) {
+            // Duplicates do not need quorum gating; the original write already registered.
+            if (scVersion && !already) {
                 const auto committed = scCommittedForDecision
                     ? *scCommittedForDecision
                     : Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());

@@ -1,0 +1,63 @@
+#include "kqp_sink_common.h"
+
+namespace NKikimr {
+namespace NKqp {
+
+using namespace NYdb;
+using namespace NYdb::NQuery;
+
+Y_UNIT_TEST_SUITE(KqpReadYourWrites) {
+
+// ============================================================================
+// Basic write → point read
+// ============================================================================
+
+// After inserting a new row, a point lookup in the same transaction must see it.
+class TInsertThenSelectPointRead : public TTableDataModificationTester {
+    TTxSettings TxSettings_;
+public:
+    TInsertThenSelectPointRead(TTxSettings txSettings)
+        : TxSettings_(txSettings)
+    {
+        SetFillTables(false);
+    }
+protected:
+    void DoExecute() override {
+        auto client = Kikimr->GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");
+        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto tx = result.GetTransaction();
+
+        result = session.ExecuteQuery(R"(
+            SELECT Value FROM KV2 WHERE Key = 1u;
+        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[["inserted"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+};
+
+Y_UNIT_TEST_TWIN(InsertThenSelectPointRead_Serializable, IsOlap) {
+    TInsertThenSelectPointRead tester(TTxSettings::SerializableRW());
+    tester.SetIsOlap(IsOlap);
+    tester.Execute();
+}
+
+Y_UNIT_TEST_TWIN(InsertThenSelectPointRead_Snapshot, IsOlap) {
+    TInsertThenSelectPointRead tester(TTxSettings::SnapshotRW());
+    tester.SetIsOlap(IsOlap);
+    tester.Execute();
+}
+
+Y_UNIT_TEST(InsertThenSelectPointRead_ReadCommitted) {
+    TInsertThenSelectPointRead tester(TTxSettings::ReadCommittedRW());
+    tester.Execute();
+}
+
+} // Y_UNIT_TEST_SUITE
+
+} // namespace NKqp
+} // namespace NKikimr

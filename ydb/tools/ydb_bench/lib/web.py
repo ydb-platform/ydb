@@ -171,7 +171,8 @@ _JS = (
     "const profile of entries){lines.push('  '+profile.name+':');lines.push('    threads: '+yamlArray(profile.threads));for(c"
     "onst parameter of benchmark.parameters)lines.push('    '+parameter.name+': '+yamlArray(profile.parameters[parameter.name"
     "]||parameter.default));lines.push('    duration: '+profile.duration);lines.push('    repetitions: '+profile.repetitions)"
-    ";lines.push('    affinity: '+yamlArray(profile.affinity));lines.push('    background-load: '+yamlArray(profile.background_load||['none']));if(profile.timeout!==null&&profile.timeout!==undefined&&profil"
+    ";lines.push('    affinity: '+yamlArray(profile.affinity));lines.push('    background-load: '+yamlArray(profile.background_"
+    "load||['none']));if(profile.timeout!==null&&profile.timeout!==undefined&&profil"
     "e.timeout!=='')lines.push('    timeout: '+profile.timeout)}}return lines.join('\\n')+'\\n'}\n"
     "async function syncEditor(){try{const value=await api('/api/editor-config',jsonOptions({yaml:editor.yaml,perf:editor.per"
     'f}));editor.model=value;editor.error=null;if(!editor.selected&&value.profiles.length)editor.selected=value.profiles[0].k'
@@ -248,7 +249,10 @@ _JS = (
     ".duration)+field('repetitions','Repetitions',profile.repetitions)+'</div><div class=field><label>Affinity modes</label><"
     'div class=checkboxes>\'+editor.model.affinity_modes.map(mode=>\'<label><input class=affinity type=checkbox value="\'+esc(mo'
     'de)+\'" \'+(profile.affinity.includes(mode)?\'checked\':\'\')+\'> \'+esc(mode)+\'</label>\').join(\'\')+\'</div></div><div class=tool'
-    "bar><div class=field><label>Background load</label><div class=checkboxes>'+editor.model.background_load_modes.map(mode=>'<label><input class=background-load type=checkbox value=\"'+esc(mode)+'\" '+((profile.background_load||['none']).includes(mode)?'checked':'')+'> '+esc(mode)+'</label>').join('')+'</div></div><button class=danger id=delete-profile>Delete profile</button></div>'\n"
+    "bar><div class=field><label>Background load</label><div class=checkboxes>'+editor.model.background_load_modes.map(mode=>"
+    "'<label><input class=background-load type=checkbox value=\"'+esc(mode)+'\" '+((profile.background_load||['none']).inclu"
+    "des(mode)?'checked':'')+'> '+esc(mode)+'</label>').join('')+'</div></div><button class=danger id=delete-profile>Delete pro"
+    "file</button></div>'\n"
     '}\n'
     'function arrayField(value,minimum=1){\n'
     "  const parts=value.split(',').map(part=>part.trim()).filter(Boolean),values=[],seen=new Set;\n"
@@ -281,7 +285,9 @@ _JS = (
     "raw=document.querySelector('#parameter-'+index)?.value||parameter.default.join(', ');item.parameters[parameter.name]=par"
     "ameter.type==='integer'?arrayField(raw,parameter.minimum??1):raw.split(',').map(value=>value.trim()).filter(Boolean)});i"
     "tem.duration=Number(document.querySelector('#duration').value);item.repetitions=Number(document.querySelector('#repetiti"
-    "ons').value);item.affinity=[...document.querySelectorAll('.affinity:checked')].map(input=>input.value);item.background_load=[...document.querySelectorAll('.background-load:checked')].map(input=>input.value);if(!item.background_load.length)throw Error('Select at least one background load mode.')} );editor.selected"
+    "ons').value);item.affinity=[...document.querySelectorAll('.affinity:checked')].map(input=>input.value);item.background_l"
+    "oad=[...document.querySelectorAll('.background-load:checked')].map(input=>input.value);if(!item.background_load.length)"
+    "throw Error('Select at least one background load mode.')} );editor.selected"
     "=benchmarkName+'/'+name;if(!event?.target?.classList.contains('affinity')&&!event?.target?.classList.contains('background-load')&&!event?.target?.classList.contains('parameter"
     "-choice'))renderNew()}catch(error){document.querySelector('#editor-message').innerHTML=displayError(error)}};for(const i"
     "nput of document.querySelectorAll('#benchmark,#profile-name,#threads,[id^=parameter-],.parameter-choice,#duration,#repet"
@@ -535,8 +541,11 @@ _JS = (
     '    const sets=indexed.map(item=>new Set([...item.rows].filter(([,row])=>Number.isFinite(Number(row[item.metric]))).map('
     '([x])=>x))),common=[...sets[0]].filter(value=>sets.every(set=>set.has(value))).sort((a,b)=>Number(a)-Number(b)),union=ne'
     'w Set(sets.flatMap(set=>[...set]));\n'
-    "    const xValues=[...union].sort((a,b)=>Number(a)-Number(b));if(!xValues.length){warning.innerHTML='<div class=\"notice error\">No numeric values are available.</div>';output.innerHTML='';return}\n"
-    "    if(common.length<union.size){const coverage=indexed.map(item=>esc(item.label)+': '+sets[indexed.indexOf(item)].size+' / '+union.size).join('; ');warning.innerHTML='<div class=notice><strong>Incomplete data:</strong> gaps mark unsupported or missing configurations.<div class=coverage>'+coverage+'</div></div>'}els"
+    "    const xValues=[...union].sort((a,b)=>Number(a)-Number(b));if(!xValues.length){warning.innerHTML='<div class=\"notice"
+    " error\">No numeric values are available.</div>';output.innerHTML='';return}\n"
+    "    if(common.length<union.size){const coverage=indexed.map(item=>esc(item.label)+': '+sets[indexed.indexOf(item)].size+'"
+    " / '+union.size).join('; ');warning.innerHTML='<div class=notice><strong>Incomplete data:</strong> gaps mark unsupported"
+    " or missing configurations.<div class=coverage>'+coverage+'</div></div>'}els"
     "e warning.innerHTML='<div class=\"notice good\">All selected lines cover '+union.size+' '+esc(state.x)+' values.</div>'"
     ';\n'
     "    if(indexed.length===1)indexed[0].label=indexed[0].metric;const colors=indexed.map((_,index)=>chartColors[index%char"

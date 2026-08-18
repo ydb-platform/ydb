@@ -1900,12 +1900,12 @@ protected:
         NDqProto::TCheckpoint checkpoint;
 
         const ui64 dataSize = !outputInfo.Finished ? sink->Pop(dataBatch, bytes) : 0;
-        Y_UNUSED(sink->Pop(watermark));
+        const bool hasWatermark = sink->Pop(watermark);
         const bool hasCheckpoint = sink->Pop(checkpoint);
         if (!dataSize && !hasCheckpoint) {
             if (!sink->IsFinished()) {
                 CA_LOG_D("sink " << outputIndex << ": nothing to send and is not finished");
-                return 0; // sink is empty and not finished yet
+                return hasWatermark; // sink is empty and not finished yet
             }
         }
         outputInfo.Finished = sink->IsFinished();
@@ -1913,6 +1913,7 @@ protected:
         YQL_ENSURE(!dataSize || !dataBatch.empty()); // dataSize != 0 => !dataBatch.empty() // even if we're about to send empty rows.
 
         const ui32 checkpointSize = hasCheckpoint ? checkpoint.ByteSize() : 0;
+        Y_DEBUG_ABORT_UNLESS(!hasCheckpoint || checkpointSize > 0);
 
         TMaybe<NDqProto::TCheckpoint> maybeCheckpoint;
         if (hasCheckpoint) {
@@ -1922,7 +1923,7 @@ protected:
         outputInfo.AsyncOutput->SendData(std::move(dataBatch), dataSize, maybeCheckpoint, outputInfo.Finished);
         CA_LOG_T("sink " << outputIndex << ": sent " << dataSize << " bytes of data and " << checkpointSize << " bytes of checkpoint barrier");
 
-        return dataSize + checkpointSize;
+        return dataSize + checkpointSize + hasWatermark;
     }
 
 protected:

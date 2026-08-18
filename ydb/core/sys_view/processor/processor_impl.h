@@ -104,9 +104,6 @@ private:
         ui64 Nodes = 0;
         ui64 TotalCpuTimeUs = 0;
         ui64 NodeRetainedCpuTimeUs = 0;
-        ui64 CompletedQueries = 0;
-        ui64 RejectedQueries = 0;
-        ui64 EvictedHashes = 0;
         ui64 SummaryNodes = 0;
         ui64 ProcessorRetainedCpuTimeUs = 0;
         ui64 RequestedNodes = 0;
@@ -164,7 +161,8 @@ private:
     void PersistDatabase(NIceDb::TNiceDb& db);
     void PersistStage(NIceDb::TNiceDb& db);
     void PersistIntervalEnd(NIceDb::TNiceDb& db);
-    void PersistLastMergedQueryMetricsIntervalEnd(NIceDb::TNiceDb& db);
+    void PersistLastMergedQueryMetricsIntervalEnd(
+        NIceDb::TNiceDb& db, TInstant intervalEnd);
     void PersistMetricsOneHourEvictBeforeHourEnd(NIceDb::TNiceDb& db, ui64 cutoff);
 
     template <typename TSchema>
@@ -180,7 +178,7 @@ private:
     static ui64 QueryMetricsResultSize(const TQueryToMetrics& result);
     void EnforceMetricsOneHourByteLimit(NIceDb::TNiceDb& db, TInstant activeHourEnd);
     void UpdateMetricsOneHourRetentionCounters(ui64 retainedBytes, ui64 evictedBuckets);
-    void LogQueryMetricsCoverage(TInstant hourEnd, ui32 persistedHourMetrics) const;
+    void UpdateAndLogQueryMetricsCoverage(TInstant hourEnd, ui32 persistedHourMetrics);
     void FinalizeQueryMetricsInterval(NIceDb::TNiceDb& db);
     void PersistQueryResults(NIceDb::TNiceDb& db);
 

@@ -22,6 +22,26 @@ enum ETxTypes {
 enum ESimpleCounters {
     COUNTER_QUERY_METRICS_ONE_HOUR_RETAINED_BYTES = 0
         [(CounterOpts) = {Name: "QueryMetricsOneHourRetainedBytes"}];
+    COUNTER_QUERY_METRICS_LAST_INTERVAL_TOTAL_CPU_TIME_US = 1
+        [(CounterOpts) = {Name: "QueryMetricsLastIntervalTotalCpuTimeUs"}];
+    COUNTER_QUERY_METRICS_LAST_INTERVAL_NODE_RETAINED_CPU_TIME_US = 2
+        [(CounterOpts) = {Name: "QueryMetricsLastIntervalNodeRetainedCpuTimeUs"}];
+    COUNTER_QUERY_METRICS_LAST_INTERVAL_PROCESSOR_RETAINED_CPU_TIME_US = 3
+        [(CounterOpts) = {Name: "QueryMetricsLastIntervalProcessorRetainedCpuTimeUs"}];
+    COUNTER_QUERY_METRICS_LAST_INTERVAL_RECEIVED_CPU_TIME_US = 4
+        [(CounterOpts) = {Name: "QueryMetricsLastIntervalReceivedCpuTimeUs"}];
+    COUNTER_QUERY_METRICS_LAST_INTERVAL_SUMMARY_NODES = 5
+        [(CounterOpts) = {Name: "QueryMetricsLastIntervalSummaryNodes"}];
+    COUNTER_QUERY_METRICS_LAST_INTERVAL_COVERAGE_KNOWN_NODES = 6
+        [(CounterOpts) = {Name: "QueryMetricsLastIntervalCoverageKnownNodes"}];
+    COUNTER_QUERY_METRICS_LAST_INTERVAL_REQUESTED_NODES = 7
+        [(CounterOpts) = {Name: "QueryMetricsLastIntervalRequestedNodes"}];
+    COUNTER_QUERY_METRICS_LAST_INTERVAL_RESPONDED_NODES = 8
+        [(CounterOpts) = {Name: "QueryMetricsLastIntervalRespondedNodes"}];
+    COUNTER_QUERY_METRICS_LAST_INTERVAL_FAILED_NODES = 9
+        [(CounterOpts) = {Name: "QueryMetricsLastIntervalFailedNodes"}];
+    COUNTER_QUERY_METRICS_LAST_INTERVAL_TIMED_OUT_NODES = 10
+        [(CounterOpts) = {Name: "QueryMetricsLastIntervalTimedOutNodes"}];
 }
 
 enum ECumulativeCounters {

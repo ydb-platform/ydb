@@ -4,10 +4,32 @@ from collections import Counter
 import logging
 import os
 import pytest
+import signal
+import subprocess
+import tarfile
+import tempfile
+import urllib.request
 import uuid
 import yatest
 
-from ydb.tests.library.compatibility.fixtures import MixedClusterFixture, RollingUpgradeAndDowngradeFixture, RestartToAnotherVersionFixture, string_version_to_tuple
+from ydb.tests.library.compatibility.fixtures import (
+    MixedClusterFixture,
+    RollingUpgradeAndDowngradeFixture,
+    RestartToAnotherVersionFixture,
+    string_version_to_tuple,
+)
+from ydb.tests.oss.ydb_sdk_import import ydb
+from test_topic import (
+    BATCHING_FLAG,
+    CurrentToCurrentVersionFixture,
+    OFFSET_DELTA_FLAG,
+    STABLE_26_3,
+    read_messages,
+    set_feature_flags,
+    wait_topic_end_offset,
+    write_kafka_batch,
+    write_raw_messages,
+)
 
 
 class Workload:
@@ -114,6 +136,10 @@ class Workload:
 
 
 MIN_SUPPORTED_VERSION = "stable-25-1-4"
+KAFKA_WORKLOAD_CONSUMER = "workload-consumer"
+KAFKA_CHECKER_CONSUMER = "targetCheckerConsumer"
+KAFKA_STREAMS_JAR_URL = "https://storage.yandexcloud.net/ydb-ci/kafka/e2e-kafka-api-tests-1.0-with-parameter-choice.jar"
+KAFKA_JDK_URL = "https://storage.yandexcloud.net/ydb-ci/kafka/jdk-linux-x86_64.yandex.tgz"
 
 
 def skip_if_unsupported(versions):
@@ -121,8 +147,6 @@ def skip_if_unsupported(versions):
         pytest.skip(f"Only available since {MIN_SUPPORTED_VERSION}")
 
 
-<<<<<<< HEAD
-=======
 def create_kafka_streams_topic(driver, topic, consumers):
     try:
         driver.topic_client.drop_topic(topic)
@@ -200,7 +224,6 @@ class KafkaStreamsRuntime:
         ], start_new_session=True)
 
 
->>>>>>> 15e634b3897 (fix kafka proxy (#50202))
 class TestKafkaTopicMixedClusterFixture(MixedClusterFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -262,8 +285,6 @@ class TestKafkaTopicRestartToAnotherVersion(RestartToAnotherVersionFixture):
         utils.run_stress_test(duration=20)
 
         utils.drop_topic()
-<<<<<<< HEAD
-=======
 
 
 class TestKafkaTopicMessagesBatchingDisabledRead(CurrentToCurrentVersionFixture):
@@ -408,4 +429,3 @@ class TestKafkaTopicMessagesBatchingDisabledRead(CurrentToCurrentVersionFixture)
             message.decode("utf-8")
             for message in batch_messages
         }
->>>>>>> 15e634b3897 (fix kafka proxy (#50202))

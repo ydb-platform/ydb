@@ -9,6 +9,8 @@
 #include <util/generic/algorithm.h>
 #include <util/random/fast.h>
 
+#include <thread>
+
 namespace NKikimr::NDataShard {
 
 namespace {
@@ -80,6 +82,74 @@ THashSet<TString> BruteForceTopK(
 } // namespace
 
 Y_UNIT_TEST_SUITE(THnswIndexTest) {
+    Y_UNIT_TEST(OmittedMinRowsUsesDocumentedDefault) {
+        Ydb::Table::VectorIndexSettings settings;
+        UNIT_ASSERT_VALUES_EQUAL(GetHnswMinRows(settings), 10000u);
+        settings.set_hnsw_min_rows(0);
+        UNIT_ASSERT_VALUES_EQUAL(GetHnswMinRows(settings), 0u);
+    }
+
+    Y_UNIT_TEST(CacheSettingsIdentityIsNormalizedAndComplete) {
+        auto cached = MakeSettings(
+            Ydb::Table::VectorIndexSettings::DISTANCE_COSINE,
+            Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT,
+            2);
+        auto requested = cached;
+        requested.set_hnsw_connectivity(16);
+        requested.set_hnsw_construction_candidates(200);
+        requested.set_hnsw_search_candidates(15);
+        UNIT_ASSERT(AreHnswIndexSettingsCompatible(cached, requested));
+
+        requested.set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_EUCLIDEAN);
+        UNIT_ASSERT(!AreHnswIndexSettingsCompatible(cached, requested));
+        requested = cached;
+        requested.set_vector_dimension(3);
+        UNIT_ASSERT(!AreHnswIndexSettingsCompatible(cached, requested));
+        requested = cached;
+        requested.set_hnsw_search_candidates(16);
+        UNIT_ASSERT(!AreHnswIndexSettingsCompatible(cached, requested));
+    }
+
+    Y_UNIT_TEST(CacheMemoryTrackerBoundariesAndUnderflow) {
+        THnswCacheMemoryTracker tracker;
+        UNIT_ASSERT(!tracker.TryAcquire(1));
+
+        tracker.SetLimit(100);
+        UNIT_ASSERT(tracker.TryAcquire(100));
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(), 100);
+        UNIT_ASSERT(!tracker.TryAcquire(1));
+        UNIT_ASSERT(!tracker.TryAcquire(Max<ui64>()));
+
+        tracker.Release(40);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(), 60);
+        tracker.Release(100);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(), 0);
+    }
+
+    Y_UNIT_TEST(CacheMemoryTrackerConcurrentAcquireRelease) {
+        THnswCacheMemoryTracker tracker;
+        tracker.SetLimit(8);
+        std::atomic<ui64> acquired = 0;
+        std::vector<std::thread> threads;
+        for (size_t i = 0; i < 8; ++i) {
+            threads.emplace_back([&] {
+                for (size_t attempt = 0; attempt < 10000; ++attempt) {
+                    if (tracker.TryAcquire(1)) {
+                        ++acquired;
+                        tracker.Release(1);
+                    }
+                }
+            });
+        }
+        tracker.SetLimit(4);
+        for (auto& thread : threads) {
+            thread.join();
+        }
+        UNIT_ASSERT(acquired.load() > 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetUsed(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetLimit(), 4);
+    }
+
 
     Y_UNIT_TEST(BuildAndSearchFindsExactNeighborForTinyDataset) {
         auto settings = MakeSettings(
@@ -345,7 +415,7 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
 
         // The immutable graph retains erased keys. DataShard subsequently
         // validates every candidate against the MVCC-visible posting table.
-        const auto result = index->Search(SerializeFloatVector({0.0f, 0.0f}), 1);
+        const auto result = index->Search(SerializeFloatVector({0.0f, 0.0f}), 2);
         THashSet<TString> keys;
         for (const auto& [key, _] : result.Results) {
             keys.insert(key);

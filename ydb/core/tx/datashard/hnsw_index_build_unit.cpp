@@ -14,6 +14,8 @@ using namespace NActors;
 namespace {
 
 // Collects (serialized key, embedding) pairs for every row of the posting table.
+// Keep reservation and page-fault handling in sync with
+// ScanVectorColumnForHnsw() in datashard__read_iterator.cpp.
 // Runs inside the finalize scheme transaction, where a page fault is an ordinary
 // transaction restart rather than a dropped attempt.
 bool ScanPostingTableVectors(
@@ -23,8 +25,10 @@ bool ScanPostingTableVectors(
     const Ydb::Table::VectorIndexSettings& settings,
     TDataShard& dataShard,
     std::shared_ptr<void>& memoryReservation,
+    ui64& reservedBytes,
     std::vector<std::pair<TString, TString>>& keysAndVectors)
 {
+    reservedBytes = 0;
     // KeyColumnIds is in key order, which is the order the read path expects
     // when it deserializes these keys back (see MaterializeHnswResults).
     std::vector<NTable::TTag> columns;
@@ -48,6 +52,7 @@ bool ScanPostingTableVectors(
     if (!memoryReservation) {
         return true;
     }
+    reservedBytes = estimatedBytes;
 
     keysAndVectors.clear();
     keysAndVectors.reserve(precharge.ItemsPrecharged);
@@ -91,6 +96,7 @@ bool ScanPostingTableVectors(
         };
         memoryReservation = std::make_shared<TCombinedReservation>(
             TCombinedReservation{std::move(memoryReservation), std::move(keyReservation)});
+        reservedBytes += keyBytes;
     }
 
     return true;
@@ -103,10 +109,11 @@ IActor* CreateHnswIndexBuildJob(
         ui64 txId,
         const Ydb::Table::VectorIndexSettings& settings,
         std::vector<std::pair<TString, TString>> keysAndVectors,
-        std::shared_ptr<void> memoryReservation)
+        std::shared_ptr<void> memoryReservation,
+        ui64 maxMemoryBytes)
 {
     return CreateHnswIndexBuildWorker(settings, std::move(keysAndVectors),
-        std::move(memoryReservation),
+        std::move(memoryReservation), maxMemoryBytes,
         [replyTo, txId](THnswIndexBuildResult&& result, const TActorContext& ctx) mutable {
             TAutoPtr<IDestructable> product = new THnswIndexBuildProduct(
                 std::move(result.Index), std::move(result.MemoryReservation),
@@ -192,9 +199,10 @@ protected:
         }
 
         std::vector<std::pair<TString, TString>> keysAndVectors;
+        ui64 reservedBytes = 0;
         std::shared_ptr<void> memoryReservation;
         if (!ScanPostingTableVectors(txc, table, vectorColumnTag, settings, DataShard,
-                memoryReservation, keysAndVectors)) {
+                memoryReservation, reservedBytes, keysAndVectors)) {
             // Page fault: this unit is re-executed after the pages are fetched.
             PageFault = true;
             return false;
@@ -209,11 +217,11 @@ protected:
         if (keysAndVectors.empty()) {
             return false;
         }
-        if (keysAndVectors.size() < settings.hnsw_min_rows()) {
+        if (keysAndVectors.size() < GetHnswMinRows(settings)) {
             LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, DataShard.TabletID()
                 << " HNSW: partition is below hnsw_min_rows for localTid=" << table.LocalTid
                 << " rows=" << keysAndVectors.size()
-                << " minimum=" << settings.hnsw_min_rows());
+                << " minimum=" << GetHnswMinRows(settings));
             return false;
         }
 
@@ -223,10 +231,11 @@ protected:
 
         LocalTid = table.LocalTid;
         VectorColumnTag = vectorColumnTag;
+        Settings = settings;
         RowCountAtBuild = keysAndVectors.size();
         tx->SetAsyncJobActor(ctx.Register(
             CreateHnswIndexBuildJob(DataShard.SelfId(), op->GetTxId(), settings,
-                std::move(keysAndVectors), std::move(memoryReservation)),
+                std::move(keysAndVectors), std::move(memoryReservation), reservedBytes),
             TMailboxType::HTSwap,
             AppData(ctx)->BatchPoolId));
 
@@ -248,7 +257,7 @@ protected:
                 << " size=" << result->Index->Size());
             DataShard.SetHnswIndex(LocalTid, result->Index,
                 std::move(result->MemoryReservation), RowCountAtBuild,
-                VectorColumnTag);
+                VectorColumnTag, Settings);
         } else {
             // A failed build only costs acceleration, not correctness: reads
             // fall back to brute force.
@@ -276,6 +285,7 @@ public:
 private:
     ui32 LocalTid = 0;
     ui32 VectorColumnTag = 0;
+    Ydb::Table::VectorIndexSettings Settings;
     ui64 RowCountAtBuild = 0;
     mutable bool PageFault = false;
 };

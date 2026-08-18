@@ -5,10 +5,62 @@
 #include <util/generic/string.h>
 
 #include <memory>
+#include <atomic>
 #include <utility>
 #include <vector>
 
 namespace NKikimr::NDataShard {
+
+// Proto3 optional fields have no schema-level defaults. Keep the documented
+// server-side default in one place so omitted SQL settings do not behave as 0.
+ui64 GetHnswMinRows(const Ydb::Table::VectorIndexSettings& settings);
+
+// Returns whether an index built with `cached` may serve a request with
+// `requested`. This compares normalized values, so an omitted HNSW parameter
+// and the corresponding explicit default are treated identically.
+bool AreHnswIndexSettingsCompatible(
+    const Ydb::Table::VectorIndexSettings& cached,
+    const Ydb::Table::VectorIndexSettings& requested);
+
+class THnswCacheMemoryTracker {
+public:
+    void SetLimit(ui64 limit) noexcept {
+        Limit.store(limit, std::memory_order_release);
+    }
+
+    ui64 GetLimit() const noexcept {
+        return Limit.load(std::memory_order_acquire);
+    }
+
+    ui64 GetUsed() const noexcept {
+        return Used.load(std::memory_order_acquire);
+    }
+
+    bool TryAcquire(ui64 bytes) noexcept {
+        ui64 used = Used.load(std::memory_order_relaxed);
+        while (true) {
+            const ui64 limit = Limit.load(std::memory_order_acquire);
+            if (!limit || used > limit || bytes > limit - used) {
+                return false;
+            }
+            if (Used.compare_exchange_weak(used, used + bytes,
+                    std::memory_order_acq_rel, std::memory_order_relaxed)) {
+                return true;
+            }
+        }
+    }
+
+    void Release(ui64 bytes) noexcept {
+        ui64 used = Used.load(std::memory_order_relaxed);
+        while (!Used.compare_exchange_weak(used, bytes < used ? used - bytes : 0,
+                std::memory_order_acq_rel, std::memory_order_relaxed)) {
+        }
+    }
+
+private:
+    std::atomic<ui64> Limit = 0;
+    std::atomic<ui64> Used = 0;
+};
 
 // Result of an HNSW search: pairs of (serialized primary key, distance).
 struct THnswSearchResult {
@@ -53,6 +105,7 @@ public:
     void Erase(TStringBuf key);
     bool HasDelta(TStringBuf key) const;
     bool HasChanges() const;
+    size_t ChangeCount() const;
 
     size_t Size() const;
     size_t Dimension() const;

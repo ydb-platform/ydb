@@ -38,6 +38,7 @@ byte activation_credits = 0;
 byte queued_activations = 0;
 bool waker_pending = false;
 bool work_epoch = false;
+bool queue_epoch = false;
 
 inline request_waker() {
     atomic {
@@ -84,7 +85,8 @@ proctype Worker(byte id) {
             if
             :: atomic {
                 queued_activations > 0 ->
-                queued_activations--
+                queued_activations--;
+                queue_epoch = !queue_epoch
             };
                 state[id] = WORK;
                 atomic {
@@ -111,7 +113,10 @@ proctype Producer() {
         activation_credits < MAX_QUEUE ->
         activation_credits++
     };
-        queued_activations++;
+        atomic {
+            queued_activations++;
+            queue_epoch = !queue_epoch
+        };
         if
         :: sleeping_count > 0 -> request_waker()
         :: else -> skip
@@ -375,6 +380,13 @@ ltl live_reconcile_stable {
         ((<>[] reconciled_one) && ([]<> work_epoch) && ([]<> !work_epoch))) &&
     ((<>[] target_max) ->
         ((<>[] reconciled_max) && ([]<> work_epoch) && ([]<> !work_epoch)))
+}
+
+/* Once the queue is non-empty, its size must eventually change. Every queue
+ * mutation is exactly one push or one pop and toggles queue_epoch atomically. */
+ltl live_queue_changes {
+    ([] ((queued_activations != 0 && !queue_epoch) -> <> queue_epoch)) &&
+    ([] ((queued_activations != 0 && queue_epoch) -> <> !queue_epoch))
 }
 
 init {

@@ -83,16 +83,12 @@ public:
         return TGenStep(*Blobs.begin());
     }
 
-    // Non-destructive iteration; returns true if any blob satisfies the predicate.
-    template <class TPredicate>
-        requires std::invocable<TPredicate&, const TLogoBlobID&>
-    bool AnyOf(TPredicate&& pred) const {
-        for (auto& blob : Blobs) {
-            if (pred(blob)) {
-                return true;
-            }
-        }
-        return false;
+    std::set<TLogoBlobID, TGenStepFromLogoBlobIdComparator>::const_iterator begin() const {
+        return Blobs.begin();
+    }
+
+    std::set<TLogoBlobID, TGenStepFromLogoBlobIdComparator>::const_iterator end() const {
+        return Blobs.end();
     }
 
     template <class TActor>

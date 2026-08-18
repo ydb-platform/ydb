@@ -5196,7 +5196,7 @@ IGraphTransformer::TStatus SqlGroupingWrapper(const TExprNode::TPtr& input, TExp
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    YQL_TYPE_ANN_PTR result;
+    TCheckedDerefPtr<const TTypeAnnotationNode> result;
     if (isYql) {
         result = ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64);
     } else {

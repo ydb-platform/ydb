@@ -13,8 +13,6 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/checked_deref_ptr.h>
 
-#define YQL_TYPE_ANN_PTR NYql::TCheckedDerefPtr<const TTypeAnnotationNode>
-
 #include <yql/essentials/public/issue/yql_issue_manager.h>
 #include <yql/essentials/public/udf/udf_data_type.h>
 
@@ -2292,8 +2290,8 @@ public:
         State_ = TypeAnnotation_ ? EState::TypeComplete : EState::Initial;
     }
 
-    YQL_TYPE_ANN_PTR GetTypeAnn() const {
-        return static_cast<YQL_TYPE_ANN_PTR>(TypeAnnotation_);
+    NYql::TCheckedDerefPtr<const TTypeAnnotationNode> GetTypeAnn() const {
+        return static_cast<NYql::TCheckedDerefPtr<const TTypeAnnotationNode>>(TypeAnnotation_);
     }
 
     EState GetState() const {

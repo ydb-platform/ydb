@@ -360,7 +360,7 @@ namespace NActors {
 
     void TInputSessionTCP::CloseInputSession() {
         CloseInputSessionRequested = true;
-        ReceiveData();
+        ReceiveDataTCP(true);
     }
 
     void TInputSessionTCP::Handle(TEvPollerReady::TPtr ev) {
@@ -383,7 +383,7 @@ namespace NActors {
             Metrics->IncSpuriousReadWakeups();
         }
 
-        ReceiveData();
+        ReceiveDataTCP(!UseRdmaSendReceiveTransport() || msg->Socket == Socket);
 
         if (Params.Encryption && writeBlocked && ev->Sender != SessionId) {
             Send(SessionId, ev->Release().Release());
@@ -397,7 +397,7 @@ namespace NActors {
         } else if (msg->Socket == XdcSocket) {
             XdcPollerToken = std::move(msg->PollerToken);
         }
-        ReceiveData();
+        ReceiveDataTCP(!UseRdmaSendReceiveTransport() || msg->Socket == Socket);
     }
 
     void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaReadDone::TPtr& ev) {
@@ -412,10 +412,32 @@ namespace NActors {
         ProcessEvents(GetPerChannelContext(ev->Get()->Channel));
     }
 
-    void TInputSessionTCP::Handle(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr&) {
+    void TInputSessionTCP::ReceiveDataMainChannelRdma(NInterconnect::NRdma::TEvRdmaIoReceiveDone::TPtr& ev) {
+        if (!ev->Get()->IsSuccess()) {
+            LOG_ERROR_IC_SESSION("ICRDMA", "RDMA RECEIVE failed Source# %s ErrCode# %d",
+                ev->Get()->GetErrSource().data(), ev->Get()->GetErrCode());
+            throw TExDestroySession({TDisconnectReason::RdmaError()});
+        }
+
+        auto& received = std::get<NInterconnect::NRdma::TEvRdmaIoReceiveDone::TSuccess>(ev->Get()->Record).Buf;
+        const size_t bytes = received.GetSize();
+        if (bytes) {
+            IncomingData.Insert(IncomingData.End(), std::move(received));
+            Metrics->AddTotalBytesRead(bytes);
+            BytesRdmaRecieved += bytes;
+            LastReceiveTimestamp = TActivationContext::Monotonic();
+        }
+
+        ReceiveDataTCP(false);
     }
 
-    void TInputSessionTCP::ReceiveData() {
+    void TInputSessionTCP::ReceiveDataTCP() {
+        ReceiveDataTCP(!UseRdmaSendReceiveTransport());
+    }
+
+    void TInputSessionTCP::ReceiveDataTCP(bool readMainChannel) {
+        ReadMainChannelRequested |= readMainChannel;
+
         TTimeLimit limit(GetMaxCyclesPerEvent());
         ui64 numDataBytes = 0;
 
@@ -459,7 +481,13 @@ namespace NActors {
             }
 
             // try to read more data into buffers
-            progress |= ReadMore();
+            if (ReadMainChannelRequested) {
+                if (ReadMore()) {
+                    progress = true;
+                } else {
+                    ReadMainChannelRequested = false;
+                }
+            }
             progress |= ReadXdc(&numDataBytes);
 
             if (!progress) { // no progress was made during this iteration
@@ -542,7 +570,11 @@ namespace NActors {
                 ui64 sendTime = AtomicGet(Context->ControlPacketSendTimer);
                 TDuration duration = CyclesToDuration(GetCycleCountFast() - sendTime);
                 const auto durationUs = duration.MicroSeconds();
-                Metrics->UpdatePingTimeHistogram(durationUs);
+                if (UseRdmaSendReceiveTransport()) {
+                    Metrics->UpdatePingTimeRdmaHistogram(durationUs);
+                } else {
+                    Metrics->UpdatePingTimeHistogram(durationUs);
+                }
                 PingQ.push_back(duration);
                 if (PingQ.size() > 16) {
                     PingQ.pop_front();
@@ -729,7 +761,7 @@ namespace NActors {
         }
     }
 
-    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, bool isRdma) {
+    TRcBuf TInputSessionTCP::AllocateRcBuf(ui64 size, ui64 headroom, ui64 tailroom, ui64 alignment, bool isRdma) {
         if (isRdma) {
             Y_ABORT_UNLESS(Common->RdmaMemPool, "RdmaMemPool is not initialized");
             auto buffer = Common->RdmaMemPool->AllocRcBuf(size + headroom + tailroom, NInterconnect::NRdma::IMemPool::EMPTY);
@@ -740,6 +772,22 @@ namespace NActors {
             buffer->TrimBack(size);
             return buffer.value();
         } else {
+            if (alignment > 1) {
+                Y_DEBUG_ABORT_UNLESS((alignment & (alignment - 1)) == 0);
+                // Align the payload data pointer itself. TRopeAlignedBuffer gives us a 16-byte aligned base buffer,
+                // but headroom may still shift the visible data away from the requested alignment, so we always keep
+                // up to alignment - 1 bytes of extra slack and spend part of it as additional headroom.
+                const size_t extra = alignment - 1;
+                TRcBuf buffer = TRcBuf(TRopeAlignedBuffer::Allocate(size + headroom + tailroom + extra));
+                const uintptr_t ptr = reinterpret_cast<uintptr_t>(buffer.GetData()) + headroom;
+                const size_t misalignment = ptr & (alignment - 1);
+                const size_t shift = misalignment ? alignment - misalignment : 0;
+                tailroom += extra - shift;
+                buffer.TrimFront(size + tailroom);
+                buffer.TrimBack(size);
+                Y_DEBUG_ABORT_UNLESS(reinterpret_cast<uintptr_t>(buffer.GetData()) % alignment == 0);
+                return buffer;
+            }
             return TRcBuf::Uninitialized(size, headroom, tailroom);
         }
     }
@@ -765,14 +813,14 @@ namespace NActors {
                     if (!IgnorePayload) { // process command if packet is being applied
                         auto& pendingEvent = context.PendingEvents.back();
                         const bool isInline = cmd == EXdcCommand::DECLARE_SECTION_INLINE;
+                        const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
                         pendingEvent.SerializationInfo.Sections.push_back(TEventSectionInfo{headroom, size, tailroom,
-                            alignment, isInline});
+                            alignment, isInline, isRdma});
 
                         Y_ABORT_UNLESS(!isInline || Params.UseXdcShuffle);
                         if (!isInline) {
                             // allocate buffer and push it into the payload
-                            const bool isRdma = cmd == EXdcCommand::DECLARE_SECTION_RDMA;
-                            auto buffer = AllocateRcBuf(size, headroom, tailroom, isRdma);
+                            auto buffer = AllocateRcBuf(size, headroom, tailroom, alignment, isRdma);
                             if (!buffer) {
                                 LOG_CRIT_IC_SESSION("ICRDMA", "Unable to allocate rcbuf for section, sz: %d, use_rdma: %d", size, isRdma);
                                 throw TExDestroySession{TDisconnectReason::FormatError()};
@@ -896,9 +944,9 @@ namespace NActors {
                     ptr += credsSerializedSize;
 
                     if (cmd == EXdcCommand::RDMA_READ && Params.ChecksumRdmaEvent) {
-                        context.PendingEvents.back().RdmaCumulativeCheckSum = ReadUnaligned<ui32>(ptr);
+                        context.PendingEvents.back().RdmaReadCumulativeCheckSum = ReadUnaligned<ui32>(ptr);
                     } else {
-                        context.PendingEvents.back().RdmaCumulativeCheckSum = std::nullopt;
+                        context.PendingEvents.back().RdmaReadCumulativeCheckSum = std::nullopt;
                     }
 
                     ptr += sizeof(ui32);
@@ -938,6 +986,33 @@ namespace NActors {
             UpdateInboundPacketQ(z, pendingEvent.RdmaSize);
             if (processPacketQueue) {
                 ProcessInboundPacketQ(0,0);
+            }
+
+            std::optional<ui32> rdmaReadChecksum;
+            if (pendingEvent.RdmaReadCumulativeCheckSum) {
+                XXH3_state_t state;
+                XXH3_64bits_reset(&state);
+
+                auto externalIt = pendingEvent.ExternalPayload.Begin();
+                auto consumeExternal = [&externalIt](size_t size, XXH3_state_t* checksumState) {
+                    while (size) {
+                        Y_ABORT_UNLESS(externalIt.Valid());
+                        const size_t len = Min(size, externalIt.ContiguousSize());
+                        if (checksumState) {
+                            XXH3_64bits_update(checksumState, externalIt.ContiguousData(), len);
+                        }
+                        externalIt += len;
+                        size -= len;
+                    }
+                };
+
+                for (const auto& section : pendingEvent.SerializationInfo.Sections) {
+                    if (!section.IsInline) {
+                        consumeExternal(section.Size, section.IsRdmaCapable ? &state : nullptr);
+                    }
+                }
+
+                rdmaReadChecksum = XXH3_64bits_digest(&state);
             }
 
             // create aggregated payload
@@ -997,17 +1072,8 @@ namespace NActors {
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
             }
-            if (pendingEvent.RdmaCumulativeCheckSum) {
-                XXH3_state_t state;
-                XXH3_64bits_reset(&state);
-                for (auto iter = payload.Begin(); iter.Valid(); ++iter) {
-                    auto memRegion = NInterconnect::NRdma::TryExtractFromRcBuf(iter.GetChunk());
-                    if (!memRegion.Empty()) {
-                        XXH3_64bits_update(&state, memRegion.GetAddr(), memRegion.GetSize());
-                    }
-                }
-                checksum = XXH3_64bits_digest(&state);
-                if (checksum != *pendingEvent.RdmaCumulativeCheckSum) {
+            if (rdmaReadChecksum) {
+                if (*rdmaReadChecksum != *pendingEvent.RdmaReadCumulativeCheckSum) {
                     LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
@@ -1376,7 +1442,7 @@ namespace NActors {
     void TInputSessionTCP::HandleCheckDeadPeer() {
         const TMonotonic now = TActivationContext::Monotonic();
         if (now >= LastReceiveTimestamp + DeadPeerTimeout) {
-            ReceiveData();
+            ReceiveDataTCP();
             if (Socket && now >= LastReceiveTimestamp + DeadPeerTimeout) {
                 // nothing has changed, terminate session
                 throw TExDestroySession{TDisconnectReason::DeadPeer()};
@@ -1394,7 +1460,11 @@ namespace NActors {
         const auto pingUs = ping.MicroSeconds();
         Context->PingRTT_us = pingUs;
         NewPingProtocol = true;
-        Metrics->UpdatePingTimeHistogram(pingUs);
+        if (UseRdmaSendReceiveTransport()) {
+            Metrics->UpdatePingTimeRdmaHistogram(pingUs);
+        } else {
+            Metrics->UpdatePingTimeHistogram(pingUs);
+        }
     }
 
     void TInputSessionTCP::HandleClock(TInstant clock) {
@@ -1457,6 +1527,7 @@ namespace NActors {
                             MON_VAR(PacketsReadFromSocket)
                             MON_VAR(DataPacketsReadFromSocket)
                             MON_VAR(IgnoredDataPacketsFromSocket)
+                            MON_VAR(BytesRdmaRecieved)
 
                             MON_VAR(BytesReadFromXdcSocket)
                             MON_VAR(XdcSections)

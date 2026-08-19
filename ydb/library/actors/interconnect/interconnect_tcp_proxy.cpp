@@ -1,5 +1,6 @@
 #include "interconnect_tcp_proxy.h"
 #include "interconnect_handshake.h"
+#include "packet.h"
 #include "interconnect_tcp_session.h"
 #include "interconnect_tcp_session_v2.h"
 #include <ydb/library/actors/core/log.h>
@@ -8,6 +9,16 @@
 #include <util/system/getpid.h>
 
 namespace NActors {
+    NInterconnect::NRdma::TRdmaRuntimeParams CreateRdmaRuntimeParams(int maxWr, bool enableSendReceive) noexcept {
+        const int rdmaReceiveBufSize = TTcpPacketBuf::FullPacketSize;
+        return {
+            -1,
+            maxWr,
+            enableSendReceive ? maxWr : 0,
+            enableSendReceive ? rdmaReceiveBufSize : 0,
+        };
+    }
+
     static constexpr TDuration GetNodeRequestTimeout = TDuration::Seconds(5);
     static constexpr TDuration BaseRdmaRetryDelay = TDuration::Seconds(5);
     static constexpr ui32 MaxSafeRdmaRetryBackoffLevel = 30;
@@ -256,7 +267,7 @@ namespace NActors {
             LOG_NOTICE_IC("ICP14", "(actor %s) rejecting resume for session that does not support continuation"
                 " Self# %s Peer# %s", ev->Sender.ToString().data(), msg->Self.ToString().data(),
                 msg->Peer.ToString().data());
-        } else if (Session->HasRdmaState()) {
+        } else if (Session->GetRdmaState() != IInterconnectSession::ERdmaState::None) {
             LOG_NOTICE_IC("ICRDMA", "(actor %s) rejecting graceful reconnect for RDMA session Self# %s Peer# %s",
                 ev->Sender.ToString().data(), msg->Self.ToString().data(), msg->Peer.ToString().data());
             InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::NewSession());
@@ -778,7 +789,7 @@ namespace NActors {
         if (CurrentStateFunc() == &TThis::StateWork) {
             SetRdmaRetryWatchdogPending(false);
             // There is a chance that session was promouted to use RDMA without us.
-            if (!InvokeSession(&IInterconnectSession::IsRdmaInUse)) {
+            if (InvokeSession(&IInterconnectSession::GetRdmaState) != IInterconnectSession::ERdmaState::Active) {
                 InvokeSession(&IInterconnectSession::Terminate, TDisconnectReason::NewSession());
             }
         } else {

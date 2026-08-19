@@ -5,6 +5,7 @@ import unittest
 import pytest
 
 from ydb.public.tools.lib.cmds import (
+    enable_tls,
     generic_connector_config,
     load_existing_grpc_tls_data,
     resolve_deploy_config_action,
@@ -12,6 +13,22 @@ from ydb.public.tools.lib.cmds import (
     should_preserve_existing_config,
 )
 from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
+
+
+@pytest.mark.parametrize(
+    ('value', 'expected'),
+    (
+        ('1', True),
+        ('true', True),
+        ('TRUE', True),
+        ('0', False),
+        ('false', False),
+        ('', False),
+    ),
+)
+def test_enable_tls_accepts_documented_boolean_values(monkeypatch, value, expected):
+    monkeypatch.setenv('YDB_GRPC_ENABLE_TLS', value)
+    assert enable_tls() is expected
 
 
 def test_kikimr_config_generator_generic_connector_config():

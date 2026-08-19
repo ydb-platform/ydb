@@ -264,7 +264,7 @@ def default_users():
 
 
 def enable_tls():
-    return os.getenv('YDB_GRPC_ENABLE_TLS') == 'true'
+    return os.getenv('YDB_GRPC_ENABLE_TLS', '').strip().lower() in ('1', 'true')
 
 
 def is_tiny_mode():

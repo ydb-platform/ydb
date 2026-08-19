@@ -204,22 +204,33 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           AFTER_SHA: ${{ github.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          GH_TOKEN: ${{ github.token }}
+          PR_HEAD_SHA: ${{ steps.pr.outputs.sha }}
+          PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}
         run: |
           set -euo pipefail
           changed_file=$(mktemp)
 
           case "$EVENT_NAME" in
             pull_request_target)
-              gh api "repos/${{ github.repository }}/pulls/${PR_NUMBER}/files" \
-                --paginate --jq '.[] | .filename, (.previous_filename // empty)' \
+              local_head_ref="refs/remotes/origin/codecov-pr-${PR_NUMBER}-head"
+              git fetch --no-tags --no-recurse-submodules origin \
+                "+refs/pull/${PR_NUMBER}/head:${local_head_ref}"
+              fetched_head=$(git rev-parse --verify "${local_head_ref}^{commit}")
+              if [ "$fetched_head" != "$PR_HEAD_SHA" ]; then
+                echo "The PR head changed while collecting files. Please use the latest run." >&2
+                exit 1
+              fi
+              git -c core.quotePath=false diff --name-only --no-renames \
+                "$PR_BASE_SHA...$PR_HEAD_SHA" -- \
                 > "$changed_file"
               ;;
             push)
               if [ "$BEFORE_SHA" = "0000000000000000000000000000000000000000" ]; then
-                git diff --name-only --no-renames HEAD~1 HEAD > "$changed_file"
+                git -c core.quotePath=false diff --name-only --no-renames \
+                  HEAD~1 HEAD > "$changed_file"
               else
-                git diff --name-only --no-renames "$BEFORE_SHA" "$AFTER_SHA" > "$changed_file"
+                git -c core.quotePath=false diff --name-only --no-renames \
+                  "$BEFORE_SHA" "$AFTER_SHA" > "$changed_file"
               fi
               ;;
             *)

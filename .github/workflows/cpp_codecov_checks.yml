@@ -46,7 +46,7 @@ jobs:
 
       - name: Parse YAML
         run: |
-          ruby -e 'require "yaml"; ARGV.each { |path| YAML.load_file(path) }' \
+          ruby -e 'require "yaml"; ARGV.each { |path| YAML.safe_load(File.read(path), aliases: false) }' \
             .github/actions/run_clang_codecov/action.yaml \
             .github/workflows/cpp_codecov.yml \
             .github/workflows/cpp_codecov_checks.yml \

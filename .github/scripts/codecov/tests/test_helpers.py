@@ -601,7 +601,7 @@ class WorkflowContractTest(unittest.TestCase):
                 "-rjson",
                 "-ryaml",
                 "-e",
-                "puts JSON.generate(YAML.load_file(ARGV.fetch(0)))",
+                "puts JSON.generate(YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false))",
                 str(path),
             ],
             check=True,
@@ -656,6 +656,36 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertNotIn("context.payload.pull_request.labels", workflow)
         self.assertIn("if (pr.head.sha !== eventPr.head.sha)", workflow)
         self.assertIn("steps.authorization.outputs.allowed == 'true'", workflow)
+
+    def test_pr_changed_files_are_pinned_to_the_authorized_sha(self) -> None:
+        workflow = (
+            GITHUB_DIR / "workflows" / "cpp_codecov.yml"
+        ).read_text(encoding="utf-8")
+        self.assertIn("PR_HEAD_SHA: ${{ steps.pr.outputs.sha }}", workflow)
+        self.assertIn("PR_BASE_SHA: ${{ steps.pr.outputs.base_sha }}", workflow)
+        self.assertIn('"+refs/pull/${PR_NUMBER}/head:${local_head_ref}"', workflow)
+        self.assertIn('if [ "$fetched_head" != "$PR_HEAD_SHA" ]', workflow)
+        self.assertIn('"$PR_BASE_SHA...$PR_HEAD_SHA"', workflow)
+        self.assertIn("git -c core.quotePath=false diff", workflow)
+        self.assertIn("--name-only --no-renames", workflow)
+        self.assertNotIn("pulls/${PR_NUMBER}/files", workflow)
+
+    def test_untrusted_yaml_is_loaded_safely(self) -> None:
+        checks = (
+            GITHUB_DIR / "workflows" / "cpp_codecov_checks.yml"
+        ).read_text(encoding="utf-8")
+        tests = Path(__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            'YAML.safe_load(File.read(path), aliases: false)',
+            checks,
+        )
+        self.assertIn(
+            'YAML.safe_load(File.read(ARGV.fetch(0)), aliases: false)',
+            tests,
+        )
+        unsafe_loader = "YAML." + "load_file"
+        self.assertNotIn(unsafe_loader, checks)
+        self.assertNotIn(unsafe_loader, tests)
 
     def test_codecov_upload_uses_explicit_safe_arguments(self) -> None:
         action = (

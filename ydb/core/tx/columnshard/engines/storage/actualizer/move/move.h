@@ -47,6 +47,11 @@ protected:
         TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& internalContext) override;
 
 public:
+    // Pure selection rule: a portion is moved only if at least one of its blobs lives in
+    // a group being decommissioned. Split out so it is testable without a portion
+    // accessor, which needs arrow-backed metadata to construct.
+    static bool HasBlobInGroups(const std::vector<TUnifiedBlobId>& blobIds, const THashSet<ui32>& groups);
+
     void ActualizePortionInfo(const TPortionDataAccessor& accessor);
 
 protected:

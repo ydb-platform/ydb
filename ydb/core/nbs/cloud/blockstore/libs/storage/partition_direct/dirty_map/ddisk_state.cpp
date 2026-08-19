@@ -5,13 +5,70 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
+namespace {
+
 ////////////////////////////////////////////////////////////////////////////////
 
-void TDDiskState::Init(ui64 totalBlockCount, ui64 operationalBlockCount)
+constexpr ui64 Mask = 0xffff;
+constexpr ui64 Offset = 16;
+
+////////////////////////////////////////////////////////////////////////////////
+void SaveField(
+    const TBlockRangeField& field,
+    PartitionDirect::NProto::TBlockField* proto)
 {
+    field.Enumerate(
+        [&](TBlockRange64 item)
+        {
+            Y_ABORT_UNLESS((item.Start & Mask) == item.Start);
+            Y_ABORT_UNLESS((item.Size() & Mask) == item.Size());
+
+            const ui32 startAndLength =
+                ((item.Start & Mask) << Offset) | (item.Size() & Mask);
+            proto->AddStartAndLength(startAndLength);
+            return TBlockRangeField::EEnumerateContinuation::Continue;
+        });
+
+    // TODO save as bitmap when segment count exceed N
+}
+
+void LoadField(
+    const PartitionDirect::NProto::TBlockField& proto,
+    TBlockRangeField* field)
+{
+    for (const ui32 startAndLength: proto.GetStartAndLength()) {
+        const ui64 start = startAndLength >> Offset;
+        const ui64 size = startAndLength & Mask;
+        Y_ABORT_UNLESS(size > 0);
+        field->Add(TBlockRange64::WithLength(start, size));
+    }
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TDDiskState::Init(
+    IBehindAheadMonitor* behindAheadMonitor,
+    ui64 totalBlockCount,
+    ui64 operationalBlockCount)
+{
+    BehindAheadMonitor = behindAheadMonitor;
     TotalBlockCount = totalBlockCount;
     OperationalBlockCount = operationalBlockCount;
     UpdateState(true);
+}
+
+void TDDiskState::Save(PartitionDirect::NProto::TDDiskState* proto) const
+{
+    SaveField(AheadField, proto->MutableAhead());
+    SaveField(BehindField, proto->MutableBehind());
+}
+
+void TDDiskState::Load(const PartitionDirect::NProto::TDDiskState& proto)
+{
+    LoadField(proto.GetAhead(), &AheadField);
+    LoadField(proto.GetBehind(), &BehindField);
 }
 
 void TDDiskState::SwitchOffline()
@@ -51,7 +108,7 @@ void TDDiskState::OnRangeFlushed(TBlockRange64 range, EFlushCompletion flush)
     // possible to receive successful flush confirmation on a lagging replica.
     // We will ignore such ranges for safety.
     if (Lagging && flush == EFlushCompletion::Missed) {
-        BehindField.Add(range);
+        AddBehind(range);
     }
 
     // The replica is not lagging and data has been written. Adding the range to
@@ -77,13 +134,20 @@ bool TDDiskState::CanReadFromDDisk(TBlockRange64 range) const
         return true;
     }
 
+    // Don't allow reading from "green" blocks for now.
     // if (AheadField.Contains(range))
     //    return true;
+
     if (BehindField.Overlaps(range)) {
         return false;
     }
 
     return range.End < OperationalBlockCount;
+}
+
+bool TDDiskState::HasBehindOverlapping(TBlockRange64 range) const
+{
+    return BehindField.Overlaps(range);
 }
 
 std::optional<TBlockRange64> TDDiskState::GetFreshRange() const
@@ -115,8 +179,11 @@ std::optional<TBlockRange64> TDDiskState::GetFreshRange() const
 
 void TDDiskState::RangeSynced(TBlockRange64 range)
 {
-    BehindField.Remove(range);
-    AheadField.Remove(range);
+    const bool behindChanged = BehindField.Remove(range);
+    const bool aheadChanged = AheadField.Remove(range);
+    if (behindChanged || aheadChanged) {
+        BehindAheadMonitor->OnBehindAheadChanged();
+    }
 
     const ui64 newWatermark = range.End + 1;
     if (OperationalBlockCount < newWatermark &&
@@ -156,6 +223,20 @@ TString TDDiskState::DebugPrintBehind() const
     return BehindField.Print();
 }
 
+TString TDDiskState::DebugPrintAheadBehindBrief() const
+{
+    if (AheadField.Empty() && BehindField.Empty()) {
+        return {};
+    }
+
+    TStringBuilder result;
+    result << "a" << AheadField.GetSegmentCount() << "/"
+           << AheadField.GetBlockCount() << ";";
+    result << "b" << BehindField.GetSegmentCount() << "/"
+           << BehindField.GetBlockCount() << ";";
+    return result;
+}
+
 bool TDDiskState::IsFresh() const
 {
     return OperationalBlockCount != TotalBlockCount || !BehindField.Empty();
@@ -174,10 +255,22 @@ void TDDiskState::AddAhead(TBlockRange64 range)
 {
     Y_ABORT_UNLESS(!Lagging);
 
-    BehindField.Remove(range);
-    AheadField.Add(range);
+    const bool behindChanged = BehindField.Remove(range);
+    const bool aheadChanged = AheadField.Add(range);
+    if (behindChanged || aheadChanged) {
+        BehindAheadMonitor->OnBehindAheadChanged();
+    }
+
     if (OperationalBlockCount) {
         AheadField.Remove(TBlockRange64::WithLength(0, OperationalBlockCount));
+    }
+}
+
+void TDDiskState::AddBehind(TBlockRange64 range)
+{
+    const bool behindChanged = BehindField.Add(range);
+    if (behindChanged) {
+        BehindAheadMonitor->OnBehindAheadChanged();
     }
 }
 

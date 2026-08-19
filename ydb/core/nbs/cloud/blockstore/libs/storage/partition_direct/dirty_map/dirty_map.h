@@ -5,9 +5,9 @@
 #include "inflight_info.h"
 #include "range_locker.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_field.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -15,8 +15,6 @@
 #include <util/generic/hash_set.h>
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
-
-#include <span>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -51,6 +49,7 @@ struct TPBufferCounters
 class TBlocksDirtyMap
     : public ILockableRanges
     , public IReadyQueue
+    , public IBehindAheadMonitor
     , public TDisableCopyMove
     , public std::enable_shared_from_this<TBlocksDirtyMap>
 {
@@ -147,8 +146,18 @@ public:
         EPBufferCounter counter,
         size_t byteCount) override;
 
+    // IBehindAheadMonitor implementation
+    void OnBehindAheadChanged() override;
+
     [[nodiscard]] bool NeedFlush() const;
     [[nodiscard]] bool NeedErase() const;
+
+    // Persist
+    [[nodiscard]] bool NeedPersist() const;
+    [[nodiscard]] PartitionDirect::NProto::TDirtyMapState
+    GetStateForPersist() const;
+    void StatePersisted(ui32 persistGeneration);
+    [[nodiscard]] ui64 GetCurrentGeneration() const;
 
     // Debug purposes
     [[nodiscard]] TString DebugPrintPBuffers();
@@ -160,6 +169,7 @@ public:
     [[nodiscard]] TString DebugPrintReadyToErase() const;
     [[nodiscard]] TString DebugPrintAhead() const;
     [[nodiscard]] TString DebugPrintBehind() const;
+    [[nodiscard]] TString DebugPrintAheadBehindBrief() const;
     [[nodiscard]] TString DebugPrintInflightSync();
 
 private:
@@ -202,6 +212,10 @@ private:
     [[nodiscard]] bool HasInflightFlush(THostIndex host, TBlockRange64 range);
     void InflightFlushFinished(TBlockRange64 range);
 
+    [[nodiscard]] bool CheckEraseAbility(
+        TBlockRange64 range,
+        TInflightInfo& inflightInfo);
+
     const ui32 BlockSize;
     const ui64 BlockCount;
 
@@ -236,6 +250,10 @@ private:
 
     // DDisks freshness state.
     TVector<TDDiskState> DDiskStates;
+    // Changed when DDiskState changed his behind or ahead map.
+    ui32 BehindAheadGeneration = 0;
+    // Last persisted DDisks states generation.
+    ui32 PersistedGeneration = 0;
 
     // PBuffers space usage counters.
     TVector<TPBufferCounters> PBufferCounters;

@@ -6,7 +6,7 @@ namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-void TBlockRangeField::Add(TBlockRange64 range)
+bool TBlockRangeField::Add(TBlockRange64 range)
 {
     // Non-overlapping ranges sorted by End are also sorted by Start, so we
     // can iterate forward and stop early.
@@ -22,6 +22,8 @@ void TBlockRangeField::Add(TBlockRange64 range)
 
     ui64 mergedStart = range.Start;
     ui64 mergedEnd = range.End;
+    size_t erasedCount = 0;
+    TBlockRange64 firstErased = range;
 
     while (it != Intervals.end()) {
         // For non-overlapping ranges sorted by End (= sorted by Start), we can
@@ -32,24 +34,33 @@ void TBlockRangeField::Add(TBlockRange64 range)
             break;
         }
 
+        if (erasedCount == 0) {
+            firstErased = *it;
+        }
         mergedStart = Min(mergedStart, it->Start);
         mergedEnd = Max(mergedEnd, it->End);
         it = Intervals.erase(it);
+        ++erasedCount;
     }
 
-    Intervals.insert(TBlockRange64::MakeClosedInterval(mergedStart, mergedEnd));
+    const TBlockRange64 merged =
+        TBlockRange64::MakeClosedInterval(mergedStart, mergedEnd);
+    Intervals.insert(merged);
+
+    return erasedCount != 1 || merged != firstErased;
 }
 
-void TBlockRangeField::Remove(TBlockRange64 range)
+bool TBlockRangeField::Remove(TBlockRange64 range)
 {
     if (Intervals.empty()) {
-        return;
+        return false;
     }
 
     // Find first interval with End >= range.Start (could overlap with range).
     auto it = Intervals.lower_bound(
         TBlockRange64::MakeClosedInterval(0, range.Start));
 
+    bool changed = false;
     while (it != Intervals.end()) {
         // Since Start is monotonically increasing (non-overlapping + sorted by
         // End), stop once Start is past range.End.
@@ -59,6 +70,7 @@ void TBlockRangeField::Remove(TBlockRange64 range)
 
         const TBlockRange64 existing = *it;
         it = Intervals.erase(it);
+        changed = true;
 
         // Keep the left tail if the existing interval starts before
         // range.Start.
@@ -75,11 +87,14 @@ void TBlockRangeField::Remove(TBlockRange64 range)
             break;
         }
     }
+    return changed;
 }
 
-void TBlockRangeField::Clear()
+bool TBlockRangeField::Clear()
 {
+    const bool changed = !Intervals.empty();
     Intervals.clear();
+    return changed;
 }
 
 bool TBlockRangeField::Overlaps(TBlockRange64 other) const
@@ -111,6 +126,20 @@ void TBlockRangeField::Enumerate(TEnumerateFunc func) const
 bool TBlockRangeField::Empty() const
 {
     return Intervals.empty();
+}
+
+size_t TBlockRangeField::GetBlockCount() const
+{
+    size_t total = 0;
+    for (const auto& range: Intervals) {
+        total += range.Size();
+    }
+    return total;
+}
+
+size_t TBlockRangeField::GetSegmentCount() const
+{
+    return Intervals.size();
 }
 
 TString TBlockRangeField::Print() const

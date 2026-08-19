@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_field.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 
 #include <util/generic/string.h>
 
@@ -9,6 +10,15 @@
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
+
+// Allows to receive notifications about changes in data that need to be
+// persisted in the partition local database.
+struct IBehindAheadMonitor
+{
+    virtual ~IBehindAheadMonitor() = default;
+
+    virtual void OnBehindAheadChanged() = 0;
+};
 
 class TDDiskState
 {
@@ -36,7 +46,15 @@ public:
 
     // Enables the use of DDisk. If the operational blocks count less then total
     // block count, then the DDisk is only partially filled (fresh).
-    void Init(ui64 totalBlockCount, ui64 operationalBlockCount);
+    void Init(
+        IBehindAheadMonitor* behindAheadMonitor,
+        ui64 totalBlockCount,
+        ui64 operationalBlockCount);
+
+    // Save ahead and behind maps to proto.
+    void Save(PartitionDirect::NProto::TDDiskState* proto) const;
+    // Load ahead and behind maps from proto.
+    void Load(const PartitionDirect::NProto::TDDiskState& proto);
 
     // Completely disables DDisk usage.
     void SwitchOffline();
@@ -57,6 +75,7 @@ public:
 
     [[nodiscard]] EState GetState() const;
     [[nodiscard]] bool CanReadFromDDisk(TBlockRange64 range) const;
+    [[nodiscard]] bool HasBehindOverlapping(TBlockRange64 range) const;
 
     [[nodiscard]] std::optional<TBlockRange64> GetFreshRange() const;
     void RangeSynced(TBlockRange64 range);
@@ -65,11 +84,15 @@ public:
     [[nodiscard]] TString DebugPrint() const;
     [[nodiscard]] TString DebugPrintAhead() const;
     [[nodiscard]] TString DebugPrintBehind() const;
+    [[nodiscard]] TString DebugPrintAheadBehindBrief() const;
 
 private:
     [[nodiscard]] bool IsFresh() const;
     void UpdateState(bool force);
     void AddAhead(TBlockRange64 range);
+    void AddBehind(TBlockRange64 range);
+
+    IBehindAheadMonitor* BehindAheadMonitor = nullptr;
 
     EState State = EState::Disabled;
 

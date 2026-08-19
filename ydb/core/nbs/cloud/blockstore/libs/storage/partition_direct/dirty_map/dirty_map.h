@@ -66,6 +66,8 @@ public:
         ui64 blockCount);
     ~TBlocksDirtyMap() override;
 
+    void Load(const TDirtyMapStateProto& proto);
+
     // Note. Fresh watermarks are not applying for exists DDisks.
     void UpdateConfig(const TVChunkConfig& vChunkConfig);
 

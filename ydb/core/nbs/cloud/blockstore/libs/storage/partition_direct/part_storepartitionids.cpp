@@ -42,7 +42,8 @@ void TPartitionActor::CompleteStorePartitionIds(
     Start(
         ctx,
         args.DirectBlockGroupsConnections,
-        {}   // vChunkConfigs
+        {},   // vChunkConfigs
+        {}    // dirtyMapStates
     );
 }
 

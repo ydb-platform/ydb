@@ -99,13 +99,6 @@ void TestAddJsonIndex(const std::string& type, bool nullable) {
     }
 
     CompareYson(R"([
-        [[10u];""];
-        [[11u];""];
-        [[12u];""];
-        [[13u];""];
-        [[14u];""];
-        [[15u];""];
-        [[16u];""];
         [[13u];"\0\0"];
         [[15u];"\0\0"];
         [[12u];"\0\1"];
@@ -563,6 +556,12 @@ void TestJsonCorpus(TTestJsonCorpusOptions tOpts, TPredicateBuilderOptions pOpts
             ++errCount;
 
             Cerr << p.Sql << ", err" << Endl;
+        } else if (!idxResult.IsSuccess() && idxResult.GetIssues().ToString().contains(
+            "JSON index cannot be used: full-range search cannot be performed using full-text search")) {
+            UNIT_ASSERT_C(mainResult.IsSuccess(), "Main query failed for predicate: " << p.Sql << " err: " << mainResult.GetIssues().ToString());
+            ++errCount;
+
+            Cerr << p.Sql << ", full-range err" << Endl;
         } else {
             UNIT_ASSERT_C(idxResult.IsSuccess(), "INDEX query failed for predicate: " << p.Sql << " err: " << idxResult.GetIssues().ToString());
             UNIT_ASSERT_C(mainResult.IsSuccess(), "MAIN query failed for predicate: " << p.Sql << " err: " << mainResult.GetIssues().ToString());

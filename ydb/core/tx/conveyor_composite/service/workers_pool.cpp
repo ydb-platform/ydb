@@ -149,6 +149,15 @@ bool TWorkersPool::HasFreeWorker() const {
     return !ActiveWorkersIdx.empty();
 }
 
+bool TWorkersPool::CanExecuteCategory(const ESpecialTaskCategory category) const {
+    if (!HasFreeWorker()) {
+        return false;
+    }
+    return std::any_of(Processes.begin(), Processes.end(), [category](const TWeightedCategory& process) {
+        return process.GetCategory()->GetCategory() == category;
+    });
+}
+
 void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts) {
     AFL_VERIFY(HasFreeWorker());
     AFL_VERIFY(tasksBatch.size());

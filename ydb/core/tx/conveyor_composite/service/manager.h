@@ -57,6 +57,15 @@ public:
         return *Categories[(ui64)category];
     }
 
+    bool HasFreeWorkerForCategory(const ESpecialTaskCategory category) const {
+        for (const auto& pool : WorkerPools) {
+            if (pool->CanExecuteCategory(category)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     TConclusionStatus ValidateConfigUpdate(const NConfig::TConfig& config) const {
         if (config.IsEnabled() != Config.IsEnabled()) {
             return TConclusionStatus::Fail("runtime Enabled update is not supported yet");
@@ -70,9 +79,6 @@ public:
             if (currentPool.GetPoolName() != desiredPool.GetName()) {
                 return TConclusionStatus::Fail("runtime worker pool reorder/rename is not supported yet");
             }
-            if (currentPool.GetMaxBatchSize() != desiredPool.GetMaxBatchSize()) {
-                return TConclusionStatus::Fail("runtime MaxBatchSize update is not supported yet");
-            }
         }
         return TConclusionStatus::Success();
     }
@@ -85,6 +91,7 @@ public:
             Categories[(ui64)category]->UpdateConfig(config.GetCategoryConfig(category));
         }
         for (ui32 poolIdx = 0; poolIdx < WorkerPools.size(); ++poolIdx) {
+            WorkerPools[poolIdx]->UpdateMaxBatchSize(config.GetWorkerPools()[poolIdx].GetMaxBatchSize());
             WorkerPools[poolIdx]->ApplyTopologyUpdate(config.GetWorkerPools()[poolIdx], Categories);
         }
         Config = config;

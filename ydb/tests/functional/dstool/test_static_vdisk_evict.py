@@ -1,4 +1,3 @@
-from ydb.apps.dstool.lib import common
 from ydb.apps.dstool.main import main as dstool_main
 from ydb.tests.library.common import cms
 from ydb.tests.library.common.types import Erasure
@@ -12,7 +11,7 @@ STATIC_GROUP_SIZE = STATIC_ERASURE.min_fail_domains
 CLUSTER_CONFIG = dict(
     erasure=STATIC_ERASURE,
     nodes=STATIC_GROUP_SIZE + 1,
-    use_in_memory_pdisks=True,
+    use_in_memory_pdisks=False,
     use_config_store=True,
     separate_node_configs=True,
     simple_config=True,
@@ -48,7 +47,7 @@ def wait_static_vdisks_ready(cluster):
     def get_ready_vdisks():
         vdisks = get_static_vdisks(cluster)
         assert len(vdisks) == STATIC_GROUP_SIZE, 'Static group is not fully configured'
-        assert all(common.vslot_is_bsc_ready(vdisk) for vdisk in vdisks), 'Static group is not BSC-ready'
+        assert all(vdisk.Ready for vdisk in vdisks), 'Static group is not BSC-ready'
         return vdisks
 
     return retry_assertions(get_ready_vdisks, timeout_seconds=180, step_seconds=2)

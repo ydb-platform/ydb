@@ -393,8 +393,10 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         : TSides<IComputationNode*>{.Build = rightStream, .Probe = leftStream};
 
     TJoinFilters filters = ParseJoinFilters(ctx, callable, BaseInputs);
-    MKQL_ENSURE(!filters || !meta.Settings.LeftIsBuild(),
-                "Join filters are not supported with LeftIsBuild block join");
+    if (meta.Settings.LeftIsBuild()) {
+        // Filters are stored as left/right; map them onto probe/build after swapping the inputs
+        filters.SwapSides();
+    }
 
     return DispatchHashJoinByKind<TBlockHashJoinWrapper, IComputationNode>(
         joinKind, "unsupported join type in block hash join", ctx.Mutables, std::move(meta), streams,

@@ -1310,6 +1310,42 @@ TJoinTestData LeftOnlyLeftFilterTestData() {
     return td;
 }
 
+TJoinTestData LeftJoinLeftFilterTestDataLeftIsBuild() {
+    auto td = LeftJoinLeftFilterTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+TJoinTestData LeftJoinCommonFilterTestDataLeftIsBuild() {
+    auto td = LeftJoinCommonFilterTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+TJoinTestData LeftSemiLeftFilterTestDataLeftIsBuild() {
+    auto td = LeftSemiLeftFilterTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+TJoinTestData LeftSemiCommonFilterTestDataLeftIsBuild() {
+    auto td = LeftSemiCommonFilterTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+TJoinTestData LeftOnlyLeftFilterTestDataLeftIsBuild() {
+    auto td = LeftOnlyLeftFilterTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+TJoinTestData LeftOnlyCommonFilterTestDataLeftIsBuild() {
+    auto td = LeftOnlyCommonFilterTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
 // Shape of a probe side produced by a chain of LEFT JOINs in the new optimizer:
 // several 4-byte payload columns interleaved with 1-byte flag columns, with the
 // join key sitting in the middle. Such a row is short enough for the small-tuple
@@ -1610,6 +1646,30 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST_TWIN(TestHashLeftOnlyJoinCommonFilter, BlockJoin) {
         Test(LeftOnlyCommonFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST(TestHashLeftJoinLeftFilterLeftIsBuild) {
+        Test(LeftJoinLeftFilterTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestHashLeftJoinCommonFilterLeftIsBuild) {
+        Test(LeftJoinCommonFilterTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestHashLeftSemiJoinLeftFilterLeftIsBuild) {
+        Test(LeftSemiLeftFilterTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestHashLeftSemiJoinCommonFilterLeftIsBuild) {
+        Test(LeftSemiCommonFilterTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestHashLeftOnlyJoinLeftFilterLeftIsBuild) {
+        Test(LeftOnlyLeftFilterTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestHashLeftOnlyJoinCommonFilterLeftIsBuild) {
+        Test(LeftOnlyCommonFilterTestDataLeftIsBuild(), true);
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 

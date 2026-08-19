@@ -545,10 +545,17 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 }
             };
             bool found = false;
+            auto acceptMatch = [&](TSingleTuple tableMatch) {
+                if (!pairPasses(tableMatch)) {
+                    return false;
+                }
+                found = true;
+                table.MarkUsed(tableMatch);
+                return true;
+            };
             if constexpr (Kind == EJoinKind::Left) {
                 table.Lookup(probeRow, [&](TSingleTuple tableMatch) {
-                    if (pairPasses(tableMatch)) {
-                        found = true;
+                    if (acceptMatch(tableMatch)) {
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
                     }
                 });
@@ -557,8 +564,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 }
             } else {
                 table.Lookup(probeRow, [&](TSingleTuple tableMatch) {
-                    if (pairPasses(tableMatch)) {
-                        found = true;
+                    if (acceptMatch(tableMatch)) {
                         if constexpr (Kind == EJoinKind::Inner) {
                             consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
                         }

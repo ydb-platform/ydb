@@ -123,13 +123,19 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
             return;
         }
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
-            if (TrackUsed_) {
-                size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / RowWidth_;
-                MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
-                Used_[index] = 1;
-            }
             consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
         });
+    }
+
+    // Call only after the pair is accepted, including join filters. Marking inside Lookup would
+    // treat filter-rejected matches as used and drop them from unmatched Left/LeftOnly output.
+    void MarkUsed(TSingleTuple tuple) {
+        if (!TrackUsed_) {
+            return;
+        }
+        size_t index = (tuple.PackedData - BuildData_.PackedTuples.data()) / RowWidth_;
+        MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
+        Used_[index] = 1;
     }
 
     void ForEachWhereUsed(bool used, std::invocable<TSingleTuple> auto consume) const {

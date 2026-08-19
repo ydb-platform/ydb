@@ -10459,9 +10459,9 @@
     ],
     "test_sql2yql.test[select_yql-select_op_union_named_node_projection]": [
         {
-            "checksum": "75ef0127df83376c3e2457c7fc987dcb",
+            "checksum": "b85005bd0001be0890600c7b66dc16c0",
             "size": 1466,
-            "uri": "https://{canondata_backend}/1597364/fdeffca975c2d2d1bc708528a504feb47b36c5c9/resource.tar.gz#test_sql2yql.test_select_yql-select_op_union_named_node_projection_/sql.yql"
+            "uri": "https://{canondata_backend}/1942173/d72c1dddedb0c3b391d1ba06382254491d8a13f5/resource.tar.gz#test_sql2yql.test_select_yql-select_op_union_named_node_projection_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-select_op_union_subquery_2]": [

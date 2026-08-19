@@ -281,7 +281,7 @@ Y_UNIT_TEST(FromTmpTableWithImmediateClusterWithTablePrefixPath) {
 
     TWordCountHive stat = {"YqlSelect", "Read!", "TempTable"};
     TString program = VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1 + (1 + 1));
     UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["TempTable"], 2);
     UNIT_ASSERT_STRING_CONTAINS(program, R"(TempTable '"tmp")");
@@ -301,7 +301,7 @@ Y_UNIT_TEST(FromTmpTableWithImmediateCluster) {
 
     TWordCountHive stat = {"YqlSelect", "Read!", "TempTable"};
     VerifyProgram(res, stat);
-    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1 + (1 + 1));
     UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
     UNIT_ASSERT_VALUES_EQUAL(stat["TempTable"], 2);
 }
@@ -2316,3 +2316,171 @@ Y_UNIT_TEST(RecursiveReferenceFromSubquery) {
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelectWithCTE)
+
+Y_UNIT_TEST_SUITE(YqlSelectInsertInto) {
+
+Y_UNIT_TEST(SelectMinimal) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        INSERT INTO plato.x
+        SELECT 1
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1 + 1);
+}
+
+Y_UNIT_TEST(SelectColumnOrder) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        INSERT INTO plato.x (a, b, c)
+        SELECT 1 AS a, 2 AS b, 3 AS c
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1 + 1);
+}
+
+Y_UNIT_TEST(ValuesNoColumnOrder) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        INSERT INTO plato.x
+        VALUES (1)
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "requires specification of table columns");
+}
+
+Y_UNIT_TEST(ValuesColumnOrder) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        INSERT INTO plato.x (a)
+        VALUES (1)
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Unordered"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1 + 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Unordered"], 1);
+}
+
+Y_UNIT_TEST(Read) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        INSERT INTO plato.x
+        SELECT * FROM plato.y
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!", "Unordered"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1 + 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Unordered"], 1);
+}
+
+Y_UNIT_TEST(ReadOrdered) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        INSERT INTO plato.x
+        SELECT * FROM plato.y ORDER BY a
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!", "Unordered"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1 + 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Unordered"], 0);
+}
+
+} // Y_UNIT_TEST_SUITE(YqlSelectInsertInto)
+
+Y_UNIT_TEST_SUITE(YqlSelectUpdate) {
+
+Y_UNIT_TEST(OnExample) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.AssumeYdbOnClusterWithSlash = true;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE `/Root/ydb`;
+
+        $to_update = (
+            SELECT Key, SubKey, "Updated" AS Value
+            FROM my_table
+            WHERE Key = 1
+        );
+
+        UPDATE my_table ON
+        SELECT * FROM $to_update;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!", "Write!", "update_on"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], (1 + 1) + (1 + 1));
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Write!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["update_on"], 1);
+}
+
+} // Y_UNIT_TEST_SUITE(YqlSelectUpdate)
+
+Y_UNIT_TEST_SUITE(YqlSelectDelete) {
+
+Y_UNIT_TEST(OnExample) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.AssumeYdbOnClusterWithSlash = true;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE `/Root/ydb`;
+
+        $to_delete = (
+            SELECT Key, SubKey
+            FROM my_table
+            WHERE Value = "ToDelete"
+            LIMIT 100
+        );
+
+        DELETE FROM my_table ON
+        SELECT * FROM $to_delete;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "Read!", "Write!", "delete_on", "limit"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], (1 + 1) + (1 + 1));
+    UNIT_ASSERT_VALUES_EQUAL(stat["Read!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["Write!"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["delete_on"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["limit"], 1);
+}
+
+} // Y_UNIT_TEST_SUITE(YqlSelectDelete)

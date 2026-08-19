@@ -154,6 +154,14 @@ protected:
     TMatchRecognizeBuilderPtr MatchRecognizeBuilder_;
 };
 
+using TSourceResult = TSQLResult<TNonNull<TSourcePtr>>;
+
+TSourceResult Wrap(TSourcePtr source);
+
+TSourcePtr Unwrap(TSourceResult result);
+
+TNodeResult ToNode(TSourceResult x);
+
 template <>
 inline TVector<TSourcePtr> CloneContainer<TSourcePtr>(const TVector<TSourcePtr>& args) {
     TVector<TSourcePtr> cloneArgs;

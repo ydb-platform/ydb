@@ -3,6 +3,8 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/scope.h>
+
 #include <utility>
 
 using namespace NYql;
@@ -333,8 +335,14 @@ public:
             options = L(options, Q(Y(Q("filter"), TableSource_->BuildFilterLambda())));
         }
 
+        TBlocks dependencies;
         bool unordered = false;
         if (Values_) {
+            ctx.PushCurrentBlocks(&dependencies);
+            Y_DEFER {
+                ctx.PopCurrentBlocks();
+            };
+
             if (!Values_->Init(ctx, TableSource_.Get())) {
                 return false;
             }
@@ -349,6 +357,10 @@ public:
         }
 
         TNodePtr node(BuildInputTables(Pos_, tableList, /*inSubquery=*/false, Scoped_));
+        for (const auto& dependency : dependencies) {
+            node->Add(dependency);
+        }
+
         if (!node->Init(ctx, underlyingSrc)) {
             return false;
         }

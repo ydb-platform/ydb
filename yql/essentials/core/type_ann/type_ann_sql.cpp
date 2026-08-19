@@ -3204,7 +3204,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                             }
 
                             if (yqlFromSettings &&
-                                yqlFromSettings->IsCTE &&
+                                yqlFromSettings->IsExplicitlyColumnOrdered &&
                                 p->HeadPtr()->GetTypeAnn() &&
                                 p->HeadPtr()->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Universal)
                             {

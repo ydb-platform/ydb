@@ -194,7 +194,7 @@ public:
             endKeyInclusive = false;
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing",
+        YDB_LOG_DEBUG_CTX(ctx, "S3 Listing: start at key",
             {"tabletId", Self->TabletID()},
             {"startKey", JoinVectorIntoString(key, " ")},
             {"endKey", JoinVectorIntoString(endKey, " ")},

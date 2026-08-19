@@ -34,7 +34,6 @@ TString NormalizeJson(const TString& jsonString) {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-const TPathId TABLE_ID(72057594046644480ull, 42);
 const TString TABLE_PATH = "/Root/db/dir/table";
 const TString RELATIVE_TABLE_PATH = "dir/table";
 const TTabletTypes::EType TABLET_TYPE = TTabletTypes::DataShard;
@@ -64,9 +63,17 @@ constexpr const char* APP_CUMULATIVE_COUNTER_NAMES[] = {
 };
 
 constexpr TTabletPercentileCounter::TRangeDef PERCENTILE_RANGES[] = {
-    {  0,   "0"},
-    { 10,  "10"},
-    {100, "100"},
+	    {      0,   "0%"},
+	    { 100000,  "10%"},
+	    { 200000,  "20%"},
+	    { 300000,  "30%"},
+	    { 400000,  "40%"},
+	    { 500000,  "50%"},
+	    { 600000,  "60%"},
+	    { 700000,  "70%"},
+	    { 800000,  "80%"},
+	    { 900000,  "90%"},
+	    {1000000, "100%"},
 };
 
 } // namespace

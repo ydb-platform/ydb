@@ -113,6 +113,72 @@ void DumpCounters(const TString& title, NMonitoring::TDynamicCounterPtr rootGrou
          << NormalizeJson(NMonitoring::ToJson(*rootGroup)) << Endl;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// RAW tree helpers, modelled on FindTableGroup/FindLeafGroup/FindCategoryCountersGroup/
+// GetCounterValue/GetHistogramTotal in node_database_metrics_aggregator_ut.cpp: the
+// processor's raw tree has the same shape below its own root (no database= label,
+// the caller already scoped RawRoot to the role-agnostic private group), so these
+// are the same helpers minus that one label.
+
+NMonitoring::TDynamicCounterPtr FindRawTableGroup(
+    NMonitoring::TDynamicCounterPtr rawRoot,
+    const TString& relativeTablePath = RELATIVE_TABLE_PATH
+) {
+    return rawRoot->FindSubgroup("table", relativeTablePath);
+}
+
+NMonitoring::TDynamicCounterPtr FindRawExecutorCountersGroup(NMonitoring::TDynamicCounterPtr bucketGroup) {
+    if (!bucketGroup) {
+        return nullptr;
+    }
+    auto typeGroup = bucketGroup->FindSubgroup("type", TTabletTypes::TypeToStr(TABLET_TYPE));
+    if (!typeGroup) {
+        return nullptr;
+    }
+    return typeGroup->FindSubgroup("category", "executor");
+}
+
+NMonitoring::TDynamicCounterPtr FindRawLeafExecutorCounters(
+    NMonitoring::TDynamicCounterPtr rawRoot,
+    ui64 tabletId,
+    ui32 followerId,
+    const TString& relativeTablePath = RELATIVE_TABLE_PATH
+) {
+    auto tableGroup = FindRawTableGroup(rawRoot, relativeTablePath);
+    if (!tableGroup) {
+        return nullptr;
+    }
+    auto perPartitionGroup = tableGroup->FindSubgroup("detailed_metrics", "per_partition");
+    if (!perPartitionGroup) {
+        return nullptr;
+    }
+    auto tabletGroup = perPartitionGroup->FindSubgroup("tablet_id", ToString(tabletId));
+    if (!tabletGroup) {
+        return nullptr;
+    }
+    return FindRawExecutorCountersGroup(tabletGroup->FindSubgroup("follower_id", ToString(followerId)));
+}
+
+ui64 GetCounterValue(NMonitoring::TDynamicCounterPtr countersGroup, const TString& name) {
+    UNIT_ASSERT_C(countersGroup, "no counter group for the counter " << name);
+    auto counter = countersGroup->FindNamedCounter("sensor", name);
+    UNIT_ASSERT_C(counter, "no counter " << name);
+    return counter->Val();
+}
+
+ui64 GetHistogramTotal(NMonitoring::TDynamicCounterPtr countersGroup, const TString& name) {
+    UNIT_ASSERT_C(countersGroup, "no counter group for the histogram " << name);
+    auto histogram = countersGroup->FindHistogram(name);
+    UNIT_ASSERT_C(histogram, "no histogram " << name);
+
+    auto snapshot = histogram->Snapshot();
+    ui64 total = 0;
+    for (ui32 i = 0; i < snapshot->Count(); ++i) {
+        total += snapshot->Value(i);
+    }
+    return total;
+}
+
 } // namespace
 
 /**
@@ -319,5 +385,244 @@ Y_UNIT_TEST_SUITE(TProcessorDatabaseMetricsAggregatorTest) {
 
         UNIT_ASSERT(!FindPublicTableGroup(fixture.PublicRoot));
         UNIT_ASSERT(!fixture.RawRoot->FindSubgroup("table", RELATIVE_TABLE_PATH));
+    }
+
+    /**
+     * Pins the P0: the node's Pack() diffs the Max pair against an EMPTY
+     * baseline (detailed_counters_diff.cpp), i.e. it comes out DENSE-turned-
+     * sparse exactly like the sum pair, with CumulativeCount set. Before the
+     * fix, the processor's TAggregateCumulative<true> decoded it as if it
+     * were still dense (bounded by CumulativeCount == 0 for an all-zero
+     * baseline), so every cross-node MAX(<cumulative>) silently decoded to 0
+     * no matter what the node sent. A single generation gives
+     * MAX(ConsumedCPU) == 0 by construction (the aggregate is a per-second
+     * RATE: TAggregatedTabletCounters::Apply needs a PREVIOUS report of the
+     * SAME tablet to compute one), so this needs a second generation, 5 s
+     * later, with its own delta, to produce the non-zero rate the whole
+     * defect hinges on.
+     */
+    Y_UNIT_TEST(MaxCumulativeCounterRoundTripsThroughPackAndUnpack) {
+        TSimulatedNode node1;
+        TProcessorFixture fixture;
+
+        TFakeTablet leader1(1000, 0);
+        leader1.AddCumulative(CONSUMED_CPU, 50);
+        leader1.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        fixture.ApplyNode(1, node1, 1);
+        fixture.Processor->RecalculateAllCounters();
+
+        auto leafExecutorCounters = FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leafExecutorCounters, "MAX(ConsumedCPU)"), 0u);
+
+        leader1.AddCumulative(CONSUMED_CPU, 100);
+        leader1.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
+
+        fixture.ApplyNode(1, node1, 2);
+        fixture.Processor->RecalculateAllCounters();
+
+        DumpCounters("Raw tree after the second generation", fixture.RawRoot);
+
+        // 100 over the 5 s gap: non-zero only if the encode (dense-turned-sparse,
+        // node side) and the decode (sparse, processor side) finally agree
+        UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leafExecutorCounters, "MAX(ConsumedCPU)"), 100u / 5u);
+    }
+
+    /**
+     * No existing test applies more than one generation with a Cumulative
+     * assertion: this pins that a Cumulative/HIST-sourced public metric
+     * (table.datashard.consumed_cpu_us) is the running total of EVERY
+     * generation's delta from EVERY node (AggregateIncrementalTabletCounters
+     * sums straight into TCrossNodeEntry::Accumulator on every ApplyDelta,
+     * never resets it), not just the latest generation's snapshot the way a
+     * Simple/MAX gauge behaves.
+     */
+    Y_UNIT_TEST(MultiGenerationCumulativeAccumulatesEveryDeltaFromEveryNode) {
+        TSimulatedNode node1;
+        TSimulatedNode node2;
+        TProcessorFixture fixture;
+
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+
+        ui64 expectedTotal = 0;
+        TInstant now = NOW;
+
+        for (ui64 generation = 1; generation <= 3; ++generation) {
+            const ui64 delta1 = 10 * generation;
+            const ui64 delta2 = 7 * generation;
+
+            leader1.AddCumulative(CONSUMED_CPU, delta1);
+            leader2.AddCumulative(CONSUMED_CPU, delta2);
+            leader1.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now);
+            leader2.Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, now);
+
+            fixture.ApplyNode(1, node1, generation);
+            fixture.ApplyNode(2, node2, generation);
+            fixture.Processor->RecalculateAllCounters();
+
+            expectedTotal += delta1 + delta2;
+            now += TDuration::Seconds(5);
+        }
+
+        DumpCounters("Public tree after 3 generations from 2 nodes", fixture.PublicRoot);
+
+        auto tableGroup = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(tableGroup);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.consumed_cpu_us"), expectedTotal);
+    }
+
+    /**
+     * Plan 09 names "map-after-transport keeps HIST/MAX correct" as the
+     * reason for its step ordering, but nothing exercised it: this asserts
+     * the percentile aggregate (HIST(ConsumedCPU), one observation per
+     * Report()) actually survives a pack/unpack round trip. Each of the two
+     * generations' diff (CalculateCountersDiff's histogram branch) carries
+     * exactly one new observation, and TAggregateCumulative<false> sums
+     * those diffs into the raw leaf bucket across generations, so the total
+     * must be 2, not 1 (the second generation's diff dropped) or 0.
+     */
+    Y_UNIT_TEST(HistogramAggregateRoundTripsThroughPackAndUnpack) {
+        TSimulatedNode node1;
+        TProcessorFixture fixture;
+
+        TFakeTablet leader1(1000, 0);
+
+        leader1.AddCumulative(CONSUMED_CPU, 50);
+        leader1.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+        fixture.ApplyNode(1, node1, 1);
+        fixture.Processor->RecalculateAllCounters();
+
+        leader1.AddCumulative(CONSUMED_CPU, 80);
+        leader1.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
+        fixture.ApplyNode(1, node1, 2);
+        fixture.Processor->RecalculateAllCounters();
+
+        DumpCounters("Raw tree after 2 generations, HIST(ConsumedCPU)", fixture.RawRoot);
+
+        auto leafExecutorCounters = FindRawLeafExecutorCounters(fixture.RawRoot, 1000, 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(leafExecutorCounters, "HIST(ConsumedCPU)"), 2u);
+    }
+
+    /**
+     * A PARTITION leaf is single-owner (F1): the tablet behind (tablet_id,
+     * follower_id) has exactly one legitimate owner at a time, so two nodes
+     * reporting the very same leaf at once is only ever the transient window
+     * of a partition move (old and new owner both still reporting, up to one
+     * 5 s tick). TCrossNodeEntry::Recalculate takes the MAX across nodes for
+     * a single-owner bucket's Simple/gauge part rather than the SUM used for
+     * a many-owner TABLE collapse bucket, so table.datashard.row_count must
+     * come out as ONE copy of the value here, not two. Dropping either owner
+     * afterwards must not change it: the survivor's own copy is already the
+     * whole story.
+     */
+    Y_UNIT_TEST(PartitionMoveTransientDoesNotDoubleAGauge) {
+        TSimulatedNode node1;
+        TSimulatedNode node2;
+        TProcessorFixture fixture;
+
+        TFakeTablet leaderOnNode1(1000, 0);
+        leaderOnNode1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 55);
+        leaderOnNode1.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        TFakeTablet leaderOnNode2(1000, 0);
+        leaderOnNode2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 55);
+        leaderOnNode2.Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        fixture.ApplyNode(1, node1, 1);
+        fixture.ApplyNode(2, node2, 1);
+        fixture.Processor->RecalculateAllCounters();
+
+        DumpCounters("Public tree, the same leaf reported by both owners in one tick", fixture.PublicRoot);
+
+        auto tableGroup = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(tableGroup);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 55u);
+
+        // Drop the old owner: the new owner's own copy is unchanged, so the
+        // public value must stay exactly what it already was
+        fixture.Processor->DropNode(1);
+        fixture.Processor->RecalculateAllCounters();
+
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 55u);
+    }
+
+    /**
+     * Before the fix, a PARTITION message's TTableEntry* was obtained (and,
+     * on an older code path, created) BEFORE the leaf loop ran, so a message
+     * whose Leaves field is empty still left a group behind: nothing in the
+     * (never entered) loop body could ever reach it again to clean it up,
+     * leaking both the raw and the public table= group forever. Hand-built,
+     * the way TableLevelSumsPartialsAndRejectsFollowerPartial hand-builds
+     * its rejected TABLE partial: PARTITION level, a TablePath, and
+     * deliberately no Leaves at all.
+     */
+    Y_UNIT_TEST(LeaflessPartitionMessageLeavesNoGroupBehind) {
+        TProcessorFixture fixture;
+
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters> leafless;
+        auto* entry = leafless.Add();
+        entry->SetTablePath(TABLE_PATH);
+        entry->SetLevel(TDetailedMetricsSettings::MetricsLevelPartition);
+        // Leaves deliberately left empty
+
+        fixture.Processor->ApplyFromNode(1, false /* isFollowerRole */, leafless);
+        fixture.Processor->RecalculateAllCounters();
+
+        DumpCounters("Public tree after a leafless PARTITION message", fixture.PublicRoot);
+
+        UNIT_ASSERT(!FindPublicTableGroup(fixture.PublicRoot));
+        UNIT_ASSERT(!fixture.RawRoot->FindSubgroup("table", RELATIVE_TABLE_PATH));
+    }
+
+    /**
+     * A METRICS_LEVEL flip reaches nodes asynchronously: node1 still reports
+     * TABLE, node2 already reports PARTITION, for the SAME path, in the SAME
+     * tick — and again the next tick. Before the fix, every disagreeing
+     * message tore the shared TTableEntry down and rebuilt both its counter
+     * groups from scratch, so the surviving (TABLE) shape's own live value
+     * would come back wrong (0, until some LATER tick's message happened to
+     * repopulate it) on every single tick a disagreeing node kept reporting.
+     * The disagreeing message itself is simply skipped (LevelMatches),
+     * leaving normal absence detection (ReconcileStream) to retire the old
+     * shape once its last real contributor stops feeding it — which never
+     * happens here, since node1 keeps reporting TABLE every tick.
+     */
+    Y_UNIT_TEST(LevelDisagreementDoesNotResetTheSurvivingShapeEveryTick) {
+        TSimulatedNode node1;
+        TSimulatedNode node2;
+        TProcessorFixture fixture;
+
+        TFakeTablet leader1(1000, 0);
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 77);
+        leader1.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW);
+
+        TFakeTablet leader2(2000, 0);
+        leader2.SetSimple(DB_UNIQUE_ROWS_TOTAL, 999);
+        leader2.Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW);
+
+        fixture.ApplyNode(1, node1, 1);
+        fixture.ApplyNode(2, node2, 1);
+        fixture.Processor->RecalculateAllCounters();
+
+        auto tableGroup = FindPublicTableGroup(fixture.PublicRoot);
+        UNIT_ASSERT(tableGroup);
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 77u);
+        // The disagreeing message left no per-partition leaf either: the TABLE shape wins
+        UNIT_ASSERT(!tableGroup->FindSubgroup("tablet_id", "2000"));
+
+        // TICK 2: node1 reports a FRESH value (proving the shape is still live,
+        // not frozen), node2 keeps disagreeing at PARTITION level as before
+        leader1.SetSimple(DB_UNIQUE_ROWS_TOTAL, 90);
+        leader1.Report(node1.Leaders, TDetailedMetricsSettings::MetricsLevelTable, NOW + TDuration::Seconds(5));
+        leader2.Report(node2.Leaders, TDetailedMetricsSettings::MetricsLevelPartition, NOW + TDuration::Seconds(5));
+
+        fixture.ApplyNode(1, node1, 2);
+        fixture.ApplyNode(2, node2, 2);
+        fixture.Processor->RecalculateAllCounters();
+
+        DumpCounters("Public tree after the second tick's disagreeing message", fixture.PublicRoot);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetMappedCounterValue(tableGroup, "table.datashard.row_count"), 90u);
     }
 }

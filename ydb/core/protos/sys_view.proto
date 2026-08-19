@@ -582,11 +582,6 @@ message TDetailedTableCounters {
         optional TDbTabletCounters Counters = 3;
     }
 
-    // TPathId, split into its two scalar fields the same way TPartitionStatsKey
-    // does above.
-    optional uint64 OwnerId = 1;
-    optional uint64 PathId = 2;
-
     optional string TablePath = 3;
     optional NKikimrSchemeOp.TTableDetailedMetricsSettings.EMetricsLevel Level = 4;
 

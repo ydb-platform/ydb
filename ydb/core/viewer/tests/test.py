@@ -822,6 +822,38 @@ class TestViewer(object):
         }))
 
     @classmethod
+    def test_storage_groups_pdisk_fields_hidden_for_database_user(cls):
+        def pdisk_visibility(data):
+            return [
+                {
+                    'HasPDisk': bool((vdisk.get('PDisk') or {}).get('PDiskId')),
+                    'PDiskId': (vdisk.get('PDisk') or {}).get('PDiskId'),
+                }
+                for group in data.get('StorageGroups') or []
+                for vdisk in group.get('VDisks') or []
+            ]
+
+        params = {
+            'database': cls.dedicated_db,
+            'fields_required': 'VDisk,PDisk,NodeId,PDiskId',
+        }
+        probe_visibility = pdisk_visibility(cls.get_viewer("/storage/groups", params))
+        pdisk_id = next((entry['PDiskId'] for entry in probe_visibility if entry['HasPDisk']), None)
+        request_params = {
+            **params,
+            'pdisk_id': str(pdisk_id).rsplit('-', 1)[-1] if pdisk_id else '',
+        }
+
+        return {
+            'database': pdisk_visibility(cls.get_viewer(
+                "/storage/groups",
+                request_params,
+                headers=cls.make_cookie_headers(cls.database_session_id),
+            )),
+            'root': pdisk_visibility(cls.get_viewer("/storage/groups", request_params)),
+        }
+
+    @classmethod
     def test_viewer_groups_group_by_pool_name(cls):
         return [
             cls.get_viewer_normalized("/viewer/groups", {

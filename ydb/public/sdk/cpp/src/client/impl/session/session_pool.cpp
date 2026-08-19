@@ -108,12 +108,13 @@ TSessionPool::TSessionPool(std::uint32_t maxActiveSessions, std::uint32_t minPoo
     , MinPoolSize_(minPoolSize)
 {}
 
-static void CloseAndDeleteSession(std::unique_ptr<TKqpSessionCommon>&& impl,
+static bool CloseAndDeleteSession(std::unique_ptr<TKqpSessionCommon>&& impl,
                                   std::shared_ptr<ISessionClient> client) {
     auto deleter = TKqpSessionCommon::GetSmartDeleter(client);
     TKqpSessionCommon* p = impl.release();
-    p->MarkBroken();
+    const bool becameTerminal = p->MarkBroken();
     deleter(p);
+    return becameTerminal;
 }
 
 void TSessionPool::ReplySessionToUser(
@@ -356,7 +357,9 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
             for (auto& sessionImpl : sessionsToDelete) {
                 if (sessionImpl) {
                     Y_ABORT_UNLESS(sessionImpl->GetState() == TKqpSessionCommon::S_IDLE);
-                    CloseAndDeleteSession(std::move(sessionImpl), strongClient);
+                    if (CloseAndDeleteSession(std::move(sessionImpl), strongClient)) {
+                        strongClient->RecordSessionClosed("pool_idle_timeout");
+                    }
                 }
             }
 
@@ -407,7 +410,10 @@ void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<IS
     }
 
     if (session) {
-        Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
+        const auto state = session->GetState();
+        Y_ABORT_UNLESS(state == TKqpSessionCommon::S_IDLE ||
+            state == TKqpSessionCommon::S_BROKEN ||
+            state == TKqpSessionCommon::S_CLOSING);
         CloseAndDeleteSession(std::move(session), client);
     }
 }

@@ -37,10 +37,11 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
         std::shared_ptr<::NYdb::TKqpSessionCommon> impl, NThreading::TFuture<TResponse> asyncResponse,
         bool updateTimeout,
         TDuration timeout,
-        std::function<void(const TResponse&, TKqpSessionCommon&)> cb = {})
+        std::function<void(const TResponse&, TKqpSessionCommon&)> cb = {},
+        std::shared_ptr<ISessionClient> sessionClient = {})
 {
     auto promise = NThreading::NewPromise<TResponse>();
-    asyncResponse.Subscribe([impl, promise, cb, updateTimeout, timeout](NThreading::TFuture<TResponse> future) mutable {
+    asyncResponse.Subscribe([impl, promise, cb, sessionClient, updateTimeout, timeout](NThreading::TFuture<TResponse> future) mutable {
         Y_ABORT_UNLESS(future.HasValue());
 
         // TResponse can hold refcounted user provided data (TSession for example)
@@ -56,13 +57,27 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
         if (status.IsTransportError()
             && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED && status.GetStatus() != EStatus::CLIENT_OUT_OF_RANGE)
         {
-            impl->MarkBroken();
+            if (impl->MarkBroken() && sessionClient) {
+                if (status.GetStatus() == EStatus::CLIENT_DEADLINE_EXCEEDED) {
+                    sessionClient->RecordSessionClosed("client_timeout");
+                } else if (status.GetStatus() == EStatus::CLIENT_CANCELLED) {
+                    sessionClient->RecordSessionClosed("client_cancelled");
+                } else {
+                    sessionClient->RecordSessionClosed("transport_error");
+                }
+            }
         } else if (status.GetStatus() == EStatus::SESSION_BUSY) {
-            impl->MarkBroken();
-        } else if (status.GetStatus() == EStatus::BAD_SESSION) {
-            impl->MarkBroken();
+            if (impl->MarkBroken() && sessionClient) {
+                sessionClient->RecordSessionClosed("session_busy");
+            }
+        } else if (status.GetStatus() == EStatus::BAD_SESSION || status.GetStatus() == EStatus::SESSION_EXPIRED) {
+            if (impl->MarkBroken() && sessionClient) {
+                sessionClient->RecordSessionClosed("bad_session");
+            }
         } else if (IsSessionCloseRequested(status)) {
-            impl->MarkAsClosing();
+            if (impl->MarkAsClosing() && sessionClient) {
+                sessionClient->RecordSessionClosed("session_shutdown");
+            }
         } else {
             // NOTE: About GetState and lock
             // Simultanious call multiple requests on the same session make no sence, due to server limitation.

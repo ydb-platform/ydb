@@ -11,18 +11,21 @@ EAttachStreamReadAction HandleAttachSessionState(
         if (!session) {
             return EAttachStreamReadAction::Stop;
         }
+        const bool isIdle = session->GetState() == TKqpSessionCommon::S_IDLE;
         if (state.has_node_shutdown()) {
             const auto nodeId = session->GetEndpointKey().GetNodeId();
             if (nodeId != 0 && client) {
                 client->PessimizeNode(nodeId);
             }
         }
-        if (session->GetState() == TKqpSessionCommon::S_IDLE) {
+        if (session->MarkAsClosing() && client) {
+            client->RecordSessionClosed(
+                state.has_node_shutdown() ? "node_shutdown" : "session_shutdown");
+        }
+        if (isIdle) {
             if (client) {
                 session->CloseFromServer(client);
             }
-        } else {
-            session->MarkAsClosing();
         }
         return EAttachStreamReadAction::Stop;
     }

@@ -42,8 +42,9 @@ public:
     const std::string& GetId() const;
     const std::string& GetEndpoint() const;
     const TEndpointKey& GetEndpointKey() const;
-    void MarkBroken();
-    void MarkAsClosing();
+    // Return true only for the first transition into a terminal state.
+    bool MarkBroken();
+    bool MarkAsClosing();
     void MarkActive();
     void MarkIdle();
     bool IsOwnedBySessionPool() const;

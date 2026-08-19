@@ -91,6 +91,14 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
             default: {
                 auto impl = holder->TrySharedOwning();
                 if (impl) {
+                    auto strongClient = client.lock();
+                    if (impl->MarkBroken() && strongClient) {
+                        if (grpcStatus.GRpcStatusCode == grpc::StatusCode::OUT_OF_RANGE) {
+                            strongClient->RecordSessionClosed("attach_closed");
+                        } else {
+                            strongClient->RecordSessionClosed("transport_error");
+                        }
+                    }
                     impl->CloseFromServer(client);
                     holder->Release();
                 }
@@ -102,16 +110,21 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
 TSession::TImpl::TImpl(TStreamProcessorPtr ptr, const std::string& sessionId, const std::string& endpoint, std::weak_ptr<ISessionClient> client)
     : TKqpSessionCommon(sessionId, endpoint, true)
     , StreamProcessor_(ptr)
+    , SessionClient_(client)
     , SessionHolder(std::make_shared<TSafeTSessionImplHolder>(this))
 {
     if (ptr) {
         MarkActive();
         SetNeedUpdateActiveCounter(true);
-        StartAsyncRead(StreamProcessor_, client, SessionHolder);
+        StartAsyncRead(StreamProcessor_, SessionClient_, SessionHolder);
     } else {
         MarkBroken();
         SetNeedUpdateActiveCounter(true);
     }
+}
+
+std::shared_ptr<ISessionClient> TSession::TImpl::GetSessionClient() const {
+    return SessionClient_.lock();
 }
 
 TSession::TImpl::~TImpl() {

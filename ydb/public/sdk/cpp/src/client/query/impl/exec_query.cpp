@@ -65,6 +65,12 @@ public:
     {}
 
     ~TReaderImpl() {
+        if (!Finished_ && Session_) {
+            auto sessionClient = Session_->SessionImpl_->GetSessionClient();
+            if (Session_->SessionImpl_->MarkBroken() && sessionClient) {
+                sessionClient->RecordSessionClosed("client_cancelled");
+            }
+        }
         StreamProcessor_->Cancel();
     }
 
@@ -85,6 +91,9 @@ public:
                 EStatus clientStatus = static_cast<EStatus>(self->Response_.status());
                 TPlainStatus plainStatus{clientStatus, std::move(issues), self->Endpoint_, {}};
                 TStatus status{std::move(plainStatus)};
+                if (!status.IsSuccess()) {
+                    self->Finished_ = true;
+                }
 
                 std::optional<TExecStats> stats;
                 std::optional<TTransaction> tx;
@@ -128,7 +137,9 @@ public:
             Session_->SessionImpl_,
             DoReadNext(std::move(self)),
             false, // no need to ping stream session
-            TDuration::Zero());
+            TDuration::Zero(),
+            {},
+            Session_->SessionImpl_->GetSessionClient());
     }
 
 private:

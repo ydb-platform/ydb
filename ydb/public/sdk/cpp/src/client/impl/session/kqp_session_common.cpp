@@ -56,21 +56,25 @@ const TEndpointKey& TKqpSessionCommon::GetEndpointKey() const {
 }
 
 // Can be called from interceptor, need lock
-void TKqpSessionCommon::MarkBroken() {
+bool TKqpSessionCommon::MarkBroken() {
     std::lock_guard guard(Lock_);
+    const bool firstTerminal = State_ != EState::S_BROKEN && State_ != EState::S_CLOSING;
     if (State_ == EState::S_ACTIVE) {
         NeedUpdateActiveCounter_ = true;
     }
     State_ = EState::S_BROKEN;
+    return firstTerminal;
 }
 
-void TKqpSessionCommon::MarkAsClosing() {
+bool TKqpSessionCommon::MarkAsClosing() {
     std::lock_guard guard(Lock_);
+    const bool firstTerminal = State_ != EState::S_BROKEN && State_ != EState::S_CLOSING;
     if (State_ == EState::S_ACTIVE) {
         NeedUpdateActiveCounter_ = true;
     }
 
     State_ = EState::S_CLOSING;
+    return firstTerminal;
 }
 
 void TKqpSessionCommon::MarkActive() {

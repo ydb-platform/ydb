@@ -215,6 +215,10 @@ void TDynamicNameserver::Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext
                 << "      <td class='right-align'>Protocol state:</td>" << Endl
                 << "      <td>" << ToString(ProtocolState) << "</td>" << Endl
                 << "    </tr>" << Endl
+                << "    <tr>" << Endl
+                << "      <td class='right-align'>EnableNodeBrokerLongLease:</td>" << Endl
+                << "      <td>" << (EnableLongLease ? "true" : "false") << "</td>" << Endl
+                << "    </tr>" << Endl
                 << "  </tbody>" << Endl
                 << "</table></div>" << Endl;
 

@@ -6,43 +6,36 @@ logger = logging.getLogger(__name__)
 
 
 class TestS3TpchImport(S3ImportTestBase):
-    def validate_table(self, table_name: str):
+    _LINEITEM_COLUMNS = """
+        l_linenumber, l_orderkey,
+        l_comment, l_commitdate, l_discount, l_extendedprice,
+        l_linestatus, l_partkey, l_quantity, l_receiptdate,
+        l_returnflag, l_shipdate, l_shipinstruct, l_shipmode,
+        l_suppkey, l_tax
+    """
+
+    def _table_stats(self, table_name: str, with_hash: bool = True):
+        if with_hash:
+            projected = f"$t = SELECT {self._LINEITEM_COLUMNS} FROM {table_name};\n"
+            query = projected + """
+                SELECT
+                    String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS hash,
+                    COUNT(*) AS size
+                FROM $t;
+            """
+        else:
+            query = f"SELECT COUNT(*) AS size FROM {table_name};"
+        return self.ydb_client.query(query)[0].rows[0]
+
+    def validate_table(self, table_name: str, expected_size: int, expected_hash=None):
         logger.info(f"Validation of {table_name}...")
-
-        result_sets = self.ydb_client.query(f"""
-            $check_table = SELECT
-                l_linenumber, l_orderkey,
-                l_comment, l_commitdate, l_discount, l_extendedprice,
-                l_linestatus, l_partkey, l_quantity, l_receiptdate,
-                l_returnflag, l_shipdate, l_shipinstruct, l_shipmode,
-                l_suppkey, l_tax
-            FROM {table_name};
-            SELECT
-                String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS hash,
-                COUNT(*) AS size
-            FROM $check_table;
-
-            $lineitem_table = SELECT
-                l_linenumber, l_orderkey,
-                l_comment, l_commitdate, l_discount, l_extendedprice,
-                l_linestatus, l_partkey, l_quantity, l_receiptdate,
-                l_returnflag, l_shipdate, l_shipinstruct, l_shipmode,
-                l_suppkey, l_tax
-            FROM lineitem;
-            SELECT
-                String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS hash,
-                COUNT(*) AS size
-            FROM $lineitem_table;
-        """)
-
-        check_result = result_sets[0].rows[0]
-        assert check_result.size > 0
-
-        lineitem_result = result_sets[1].rows[0]
-        assert check_result.size == lineitem_result.size, \
-            f"Row count mismatch: {table_name} has {check_result.size}, lineitem has {lineitem_result.size}"
-        assert check_result.hash == lineitem_result.hash, \
-            f"Hash mismatch: {table_name} hash={check_result.hash}, lineitem hash={lineitem_result.hash}"
+        result = self._table_stats(table_name, with_hash=expected_hash is not None)
+        assert result.size > 0
+        assert result.size == expected_size, \
+            f"Row count mismatch: {table_name} has {result.size}, expected {expected_size}"
+        if expected_hash is not None:
+            assert result.hash == expected_hash, \
+                f"Hash mismatch: {table_name} hash={result.hash}, expected {expected_hash}"
 
     def test_import_and_export(self):
         test_bucket = "test_import_and_export_bucket"
@@ -91,10 +84,13 @@ class TestS3TpchImport(S3ImportTestBase):
         self.ydb_client.run_cli_comand(["workload", "tpch", "init", "--datetime-types=dt32", "--store", "column"])
         self.ydb_client.run_cli_comand(["workload", "tpch", "import", "generator", "--scale", "1"])
 
+        lineitem = self._table_stats("lineitem", with_hash=True)
+        logger.info(f"Lineitem reference: size={lineitem.size}, hash={lineitem.hash}")
+
         logger.info("Exporting into s3...")
         self.ydb_client.query("INSERT INTO s3_table SELECT * FROM lineitem")
         logger.info(f"Exporting finished, bucket stats: {self.s3_client.get_bucket_stat(test_bucket)}")
-        self.validate_table("s3_table")
+        self.validate_table("s3_table", expected_size=lineitem.size)
 
         logger.info("Importing into ydb...")
         self.ydb_client.query("""
@@ -104,4 +100,4 @@ class TestS3TpchImport(S3ImportTestBase):
                 STORE = COLUMN
             ) AS SELECT * FROM s3_table
         """)
-        self.validate_table("from_s3")
+        self.validate_table("from_s3", expected_size=lineitem.size, expected_hash=lineitem.hash)

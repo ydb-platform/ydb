@@ -1778,6 +1778,65 @@ partitioning_settings {
             NBackup::ComputeChecksum(createTableQuery) + " create_table.sql");
     }
 
+    Y_UNIT_TEST(ShouldExportTableWithoutDroppedGeneratedColumnAsProtoSchema) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a" Type: "Int32" }
+            Columns {
+              Name: "stored"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + 1"
+                Stored: true
+                DependencyColumnNames: ["a"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        const auto exportTable = [&](const TString& destinationPrefix) {
+            TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "%s"
+                  }
+                }
+            )", S3Port(), destinationPrefix.c_str()));
+            Env().TestWaitNotification(Runtime(), txId);
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        };
+
+        exportTable("with-generated");
+        UNIT_ASSERT(HasS3File("/with-generated/create_table.sql"));
+        UNIT_ASSERT(!HasS3File("/with-generated/scheme.pb"));
+
+        TestAlterTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DropColumns { Name: "stored" }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        exportTable("without-generated");
+        UNIT_ASSERT(!HasS3File("/without-generated/create_table.sql"));
+        const auto scheme = GetS3FileContent("/without-generated/scheme.pb");
+        UNIT_ASSERT(!scheme.empty());
+
+        Ydb::Table::CreateTableRequest request;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(scheme, &request));
+        UNIT_ASSERT_VALUES_EQUAL(request.columns_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(request.columns(0).name(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(request.columns(1).name(), "a");
+    }
+
     Y_UNIT_TEST(ShouldRejectGeneratedTableExportToAmbiguousSchemaPrefix) {
         EnvOptions().EnableChecksumsExport(true);
         Env();

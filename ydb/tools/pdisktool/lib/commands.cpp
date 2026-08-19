@@ -403,8 +403,11 @@ int CmdVerify(const TGlobals& g) {
     proto.SetSysLogSetsOk(syslogOk);
     proto.SetLogRecords(session.Log.Records.size());
 
-    ui64 checked = 0;
-    ui64 bad = 0;
+    // A committed chunk is only partly written: huge slots are reserved before the data lands and an
+    // SST leaves its tail free. Scan the chunks for a written/unwritten census, but keep quiet about
+    // sectors with no valid hash -- they are the normal steady state, not damage.
+    ui64 scanned = 0;
+    ui64 unwritten = 0;
     const ui32 sectors = session.Format.ChunkSize / session.Format.SectorSize;
     for (ui32 i = 0; i < session.State.Chunks.size(); ++i) {
         if (!IsOwnerUser(session.State.Chunks[i].OwnerId)) {
@@ -415,17 +418,41 @@ int CmdVerify(const TGlobals& g) {
         }
         for (ui32 s = 0; s < sectors; ++s) {
             const ui64 offset = session.Format.Offset(i, s);
-            ++checked;
+            ++scanned;
             auto restored = RestoreOneSector(*session.Device, session.Format, offset,
-                session.Format.MagicDataChunk, session.Format.ChunkKey, true, session.Issues,
-                TStringBuilder() << "verify[" << i << ":" << s << "]");
+                session.Format.MagicDataChunk, session.Format.ChunkKey, false, session.Issues,
+                TStringBuilder() << "verify[" << i << ":" << s << "]",
+                {}, ESectorRef::Unreferenced);
             if (!restored.Ok) {
-                ++bad;
+                ++unwritten;
             }
         }
     }
-    proto.SetDataSectorsChecked(checked);
-    proto.SetDataSectorsBad(bad);
+    proto.SetDataSectorsScanned(scanned);
+    proto.SetDataSectorsUnwritten(unwritten);
+
+    // Now the part that matters: every sector some index or blob part points at must hash correctly.
+    ui64 refChecked = 0;
+    ui64 refBad = 0;
+    for (ui32 owner = 0; owner < session.State.Owners.size(); ++owner) {
+        if (!IsOwnerUser(static_cast<TOwner>(owner))) {
+            continue;
+        }
+        if (session.State.Owners[owner].VDiskId == TVDiskID::InvalidId) {
+            continue;
+        }
+        auto snap = ReconstructHull(*session.Device, session.Format, session.State, session.Log,
+            static_cast<TOwner>(owner), Nothing(), session.Issues);
+        for (const auto& part : CollectReferencedParts(snap)) {
+            auto res = CheckLogicalRange(*session.Device, session.Format, part.ChunkIdx,
+                part.Offset, part.Size, session.Issues,
+                TStringBuilder() << "verify-ref[owner " << owner << "]");
+            refChecked += res.Checked;
+            refBad += res.Bad;
+        }
+    }
+    proto.SetReferencedSectorsChecked(refChecked);
+    proto.SetReferencedSectorsBad(refBad);
     return FinishText(proto, session.Issues, g.Json(), PrintVerifyText);
 }
 

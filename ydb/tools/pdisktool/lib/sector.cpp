@@ -64,7 +64,8 @@ TRestoredSector RestoreTripleCopy(
     ui64 magic,
     const TKey& key,
     TIssueLog& issues,
-    const TString& location)
+    const TString& location,
+    ESectorRef ref)
 {
     TVector<ui8> raw(format.SectorSize * NPDisk::ReplicationFactor);
     device.Pread(raw.data(), raw.size(), offset, issues);
@@ -100,7 +101,9 @@ TRestoredSector RestoreTripleCopy(
     out.GoodFlags = goodFlags;
     out.LastGoodIdx = lastGood;
     if (lastGood == Max<ui32>()) {
-        issues.Warning(location, TStringBuilder() << "No good replica at offset# " << offset);
+        if (ref == ESectorRef::Referenced) {
+            issues.Warning(location, TStringBuilder() << "No good replica at offset# " << offset);
+        }
         return out;
     }
     ui8* winner = raw.data() + lastGood * format.SectorSize;
@@ -120,14 +123,17 @@ TRestoredSector RestoreOneSector(
     bool decrypt,
     TIssueLog& issues,
     const TString& location,
-    const TLogoBlobID& blobId)
+    const TLogoBlobID& blobId,
+    ESectorRef ref)
 {
     TVector<ui8> raw(format.SectorSize);
     device.Pread(raw.data(), raw.size(), offset, issues);
 
     TRestoredSector out;
     if (!CheckSectorHash(format, offset, magic, raw.data(), blobId)) {
-        issues.Warning(location, TStringBuilder() << "Bad sector hash offset# " << offset);
+        if (ref == ESectorRef::Referenced) {
+            issues.Warning(location, TStringBuilder() << "Bad sector hash offset# " << offset);
+        }
         return out;
     }
     out.GoodCount = 1;

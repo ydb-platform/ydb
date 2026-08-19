@@ -35,11 +35,15 @@ struct THullSnapshot {
     TVector<TBlobIndexEntry> Blobs;
     TVector<TBlockIndexEntry> Blocks;
     TVector<TBarrierIndexEntry> Barriers;
+    TVector<TDiskPart> SstParts; // index fragments walked while loading the SSTs
     ui64 LogoBlobsCompactedLsn = 0;
     ui64 BlocksCompactedLsn = 0;
     ui64 BarriersCompactedLsn = 0;
     TMaybe<TErasureType::EErasureSpecies> Erasure;
 };
+
+// Every disk range the snapshot points at: SST index fragments plus on-disk blob parts.
+TVector<TDiskPart> CollectReferencedParts(const THullSnapshot& snap);
 
 THullSnapshot ReconstructHull(
     IDeviceReader& device,

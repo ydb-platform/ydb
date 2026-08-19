@@ -174,11 +174,15 @@ TLogScanResult ScanMainLog(
         bool endOfLog = false;
         for (ui64 sectorIdx = 0; sectorIdx < usable; ++sectorIdx) {
             const ui64 offset = format.Offset(chunkIdx, sectorIdx);
+            // An invalid hash is how the log tail is found: the sector was simply never written.
             auto restored = RestoreOneSector(device, format, offset, format.MagicLogChunk,
-                format.LogKey, true, issues, TStringBuilder() << "log[" << chunkIdx << ":" << sectorIdx << "]");
+                format.LogKey, true, issues, TStringBuilder() << "log[" << chunkIdx << ":" << sectorIdx << "]",
+                {}, ESectorRef::Unreferenced);
             if (!restored.Ok) {
                 endOfLog = true;
                 result.LastSectorIdx = sectorIdx;
+                issues.Info("log", TStringBuilder() << "Log ends at chunk# " << chunkIdx
+                    << " sector# " << sectorIdx);
                 break;
             }
             if (lastNonce != 0 && lastNonce != Max<ui64>() && restored.Nonce != lastNonce + 1) {
@@ -285,9 +289,11 @@ TLogScanResult ScanMainLog(
             break;
         }
 
+        // The last chunk of the chain has no next-chunk reference yet, so a missing one ends the walk.
         const ui64 refOffset = format.Offset(chunkIdx, usable);
         auto next = RestoreTripleCopy(device, format, refOffset, format.MagicNextLogChunkReference,
-            format.LogKey, issues, TStringBuilder() << "next-ref[" << chunkIdx << "]");
+            format.LogKey, issues, TStringBuilder() << "next-ref[" << chunkIdx << "]",
+            ESectorRef::Unreferenced);
         if (!next.Ok) {
             break;
         }

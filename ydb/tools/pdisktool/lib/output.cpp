@@ -293,8 +293,10 @@ void PrintVerifyText(const NKikimr::NPdiskTool::TVerifyResult& proto, IOutputStr
     out << "FormatReplicasOk: " << proto.GetFormatReplicasOk() << Endl;
     out << "SysLogSetsOk: " << proto.GetSysLogSetsOk() << Endl;
     out << "LogRecords: " << proto.GetLogRecords() << Endl;
-    out << "DataSectorsChecked: " << proto.GetDataSectorsChecked() << Endl;
-    out << "DataSectorsBad: " << proto.GetDataSectorsBad() << Endl;
+    out << "DataSectorsScanned: " << proto.GetDataSectorsScanned() << Endl;
+    out << "DataSectorsUnwritten: " << proto.GetDataSectorsUnwritten() << Endl;
+    out << "ReferencedSectorsChecked: " << proto.GetReferencedSectorsChecked() << Endl;
+    out << "ReferencedSectorsBad: " << proto.GetReferencedSectorsBad() << Endl;
 }
 
 TString HexDump(const void* data, ui32 size) {

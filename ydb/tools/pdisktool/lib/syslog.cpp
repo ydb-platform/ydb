@@ -15,17 +15,23 @@ TSysLogReadResult ReadSysLog(
     const ui32 beginSectorIdx = format.FirstSysLogSectorIdx();
     result.SectorSets.resize(setCount);
 
+    // The SysLog is a ring of sector sets that is swept in full. Sets the ring has not reached yet
+    // hold no valid copy, which is normal, so the sweep stays quiet and the per-set state below
+    // (GoodSectorFlags, IsConsistent) carries the diagnostics instead.
+    ui32 emptySets = 0;
     for (ui32 setIdx = 0; setIdx < setCount; ++setIdx) {
         const ui32 sectorIdx = beginSectorIdx + setIdx * NPDisk::ReplicationFactor;
         const ui64 offset = ui64(sectorIdx) * format.SectorSize;
         auto restored = RestoreTripleCopy(device, format, offset, format.MagicSysLogChunk,
-            format.SysLogKey, issues, TStringBuilder() << "syslog[" << setIdx << "]");
+            format.SysLogKey, issues, TStringBuilder() << "syslog[" << setIdx << "]",
+            ESectorRef::Unreferenced);
 
         auto& info = result.SectorSets[setIdx];
         info.SetIdx = setIdx;
         info.FirstSectorIdx = sectorIdx;
         info.GoodSectorFlags = restored.GoodFlags;
         if (!restored.Ok) {
+            ++emptySets;
             continue;
         }
         info.Nonce = restored.Nonce;
@@ -57,6 +63,11 @@ TSysLogReadResult ReadSysLog(
                 info.PayloadPartSize = pageHeader->Size;
             }
         }
+    }
+
+    if (emptySets) {
+        issues.Info("syslog", TStringBuilder() << emptySets << " of " << setCount
+            << " sector sets have no valid copy (not yet reached by the SysLog ring)");
     }
 
     ui32 loopOffset = 0;

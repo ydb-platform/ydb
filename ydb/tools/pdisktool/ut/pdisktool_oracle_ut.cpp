@@ -317,24 +317,105 @@ Y_UNIT_TEST_SUITE(TPDiskToolOracle) {
             new TEvChunkWrite::TAlignedParts(TString(payload)), nullptr, true, 1));
         yard.Stop();
 
+        ui64 firstSectorOffset = 0;
+        ui32 payloadSize = 0;
+        {
+            auto session = OpenTool(yard.Map);
+            firstSectorOffset = session.Format.Offset(chunk, 0);
+            payloadSize = session.Format.SectorPayloadSize();
+            TIssueLog issues;
+            auto clean = ReadChunkLogical(*session.Device, session.Format, session.State, chunk, false, issues);
+            UNIT_ASSERT_VALUES_EQUAL(clean.Data[0], 'X');
+        }
+
         // Corrupt first data sector of the chunk.
-        const ui64 off = ui64(chunk) * ChunkSize;
         TVector<ui8> sector(4096);
-        UNIT_ASSERT(yard.Map->Read(sector.data(), 4096, off));
+        UNIT_ASSERT(yard.Map->Read(sector.data(), 4096, firstSectorOffset));
         sector[10] ^= 0xff;
-        UNIT_ASSERT(yard.Map->Write(sector.data(), 4096, off));
+        UNIT_ASSERT(yard.Map->Write(sector.data(), 4096, firstSectorOffset));
 
         auto session = OpenTool(yard.Map);
         TIssueLog issues;
         auto data = ReadChunkLogical(*session.Device, session.Format, session.State, chunk, false, issues);
         UNIT_ASSERT(data.GapCount >= 1);
-        bool sawIssue = false;
-        for (const auto& i : issues.Items) {
-        if (i.Location.find("chunk[") != TString::npos) {
-                sawIssue = true;
+        // The damaged sector is left as a hole in the logical image; the next one is still intact.
+        UNIT_ASSERT_VALUES_EQUAL(data.Data[0], 0);
+        UNIT_ASSERT_VALUES_EQUAL(data.Data[payloadSize], 'X');
+    }
+
+    Y_UNIT_TEST(UnwrittenSectorsAreQuietReferencedOnesAreReported) {
+        TYard yard;
+        const TVDiskID vdisk(3, 1, 0, 0, 0);
+        auto init = yard.Call<TEvYardInitResult>(new TEvYardInit(2, vdisk, yard.Guid));
+        const TOwner owner = init->PDiskParams->Owner;
+        const TOwnerRound round = init->PDiskParams->OwnerRound;
+        auto reserved = yard.Call<TEvChunkReserveResult>(new TEvChunkReserve(owner, round, 1));
+        const TChunkIdx chunk = reserved->ChunkIds[0];
+        NPDisk::TCommitRecord commit;
+        commit.CommitChunks.push_back(chunk);
+        yard.Call<TEvLogResult>(new TEvLog(owner, round, TLogSignature::First, commit,
+            TRcBuf(TString()), TLsnSeg(1, 1), nullptr));
+        // Only the head of the chunk is written; the tail stays untouched, like a reserved huge slot
+        // or the free space in an SST.
+        TString payload(8192, 'X');
+        yard.Call<TEvChunkWriteResult>(new TEvChunkWrite(owner, round, chunk, 0,
+            new TEvChunkWrite::TAlignedParts(TString(payload)), nullptr, true, 1));
+        yard.Stop();
+
+        auto hasBadHash = [](const TIssueLog& issues) {
+            for (const auto& i : issues.Items) {
+                if (i.Message.find("Bad sector hash") != TString::npos) {
+                    return true;
+                }
             }
+            return false;
+        };
+
+        ui32 payloadSize = 0;
+        ui64 firstSectorOffset = 0;
+        {
+            auto session = OpenTool(yard.Map);
+            payloadSize = session.Format.SectorPayloadSize();
+            firstSectorOffset = session.Format.Offset(chunk, 0);
+
+            // Scanning the whole chunk must stay quiet: almost all of it was never written.
+            TIssueLog scanIssues;
+            auto whole = ReadChunkLogical(*session.Device, session.Format, session.State, chunk, false, scanIssues);
+            UNIT_ASSERT(whole.GapCount > 1);
+            UNIT_ASSERT_C(!hasBadHash(scanIssues), "whole-chunk scan reported never-written sectors as bad");
+
+            // Reading the written head is a referenced read, and it is intact.
+            TIssueLog refIssues;
+            TString head = ReadLogicalRange(*session.Device, session.Format, session.State, chunk,
+                0, payloadSize, refIssues, "blob");
+            UNIT_ASSERT_VALUES_EQUAL(head.size(), payloadSize);
+            UNIT_ASSERT_VALUES_EQUAL(head[0], 'X');
+            UNIT_ASSERT_C(!hasBadHash(refIssues), "intact referenced range reported as bad");
+
+            // Checking a range that reaches into the unwritten tail does count bad sectors: something
+            // points there, so the data is genuinely missing.
+            TIssueLog tailIssues;
+            auto tail = CheckLogicalRange(*session.Device, session.Format, chunk,
+                payloadSize * 4, payloadSize, tailIssues, "verify-ref");
+            UNIT_ASSERT_VALUES_EQUAL(tail.Checked, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(tail.Bad, 1u);
+            UNIT_ASSERT(hasBadHash(tailIssues));
         }
-        UNIT_ASSERT(sawIssue || data.GapCount >= 1);
+
+        // Corrupt the first (written, referenced) sector.
+        TVector<ui8> sector(4096);
+        UNIT_ASSERT(yard.Map->Read(sector.data(), 4096, firstSectorOffset));
+        sector[10] ^= 0xff;
+        UNIT_ASSERT(yard.Map->Write(sector.data(), 4096, firstSectorOffset));
+
+        auto session = OpenTool(yard.Map);
+        TIssueLog refIssues;
+        ReadLogicalRange(*session.Device, session.Format, session.State, chunk, 0, payloadSize, refIssues, "blob");
+        UNIT_ASSERT_C(hasBadHash(refIssues), "damaged referenced sector was not reported");
+
+        TIssueLog scanIssues;
+        ReadChunkLogical(*session.Device, session.Format, session.State, chunk, false, scanIssues);
+        UNIT_ASSERT_C(!hasBadHash(scanIssues), "whole-chunk scan must not warn per sector");
     }
 
     Y_UNIT_TEST(EncryptionOffFormat) {

@@ -231,8 +231,13 @@ message TVerifyResult {
     optional uint64 FormatReplicasOk = 2;
     optional uint64 SysLogSetsOk = 3;
     optional uint64 LogRecords = 4;
-    optional uint64 DataSectorsChecked = 5;
-    optional uint64 DataSectorsBad = 6;
+    // Whole-chunk scan of committed user chunks. Unwritten sectors are expected here (huge slot
+    // reservations, SST tails), so they are counted but not reported as issues.
+    optional uint64 DataSectorsScanned = 5;
+    optional uint64 DataSectorsUnwritten = 6;
+    // Sectors the reconstructed Hull actually references; a bad hash here is real damage.
+    optional uint64 ReferencedSectorsChecked = 7;
+    optional uint64 ReferencedSectorsBad = 8;
 }
 
 message TDumpSectorResult {

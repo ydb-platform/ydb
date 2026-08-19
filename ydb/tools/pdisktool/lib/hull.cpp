@@ -8,6 +8,7 @@
 #include <ydb/core/protos/base.pb.h>
 
 #include <algorithm>
+#include <tuple>
 #include <util/system/unaligned_mem.h>
 
 namespace NKikimr::NPDiskTool {
@@ -40,7 +41,7 @@ TString ReadDiskPart(
     const TDiskPart& part,
     TIssueLog& issues)
 {
-    return ReadLogicalRange(device, format, state, part.ChunkIdx, part.Offset, part.Size, issues);
+    return ReadLogicalRange(device, format, state, part.ChunkIdx, part.Offset, part.Size, issues, "sst");
 }
 
 template <class TKey, class TMemRec>
@@ -51,6 +52,7 @@ bool LoadSstLinear(
     const TDiskPart& entry,
     TVector<TIndexRecord<TKey, TMemRec>>& index,
     TVector<TDiskPart>& outbound,
+    TVector<TDiskPart>& visitedParts,
     TIssueLog& issues)
 {
     TDiskPart cur = entry;
@@ -63,6 +65,7 @@ bool LoadSstLinear(
 
     TVector<TString> partsNewestFirst;
     while (!cur.Empty()) {
+        visitedParts.push_back(cur);
         TString data = ReadDiskPart(device, format, state, cur, issues);
         if (data.size() < (first ? sizeof(TIdxDiskPlaceHolder) : sizeof(TIdxDiskLinker))) {
             issues.Warning("hull", TStringBuilder() << "SST fragment too small at " << cur.ToString(), true);
@@ -195,6 +198,30 @@ void UpsertBlob(TVector<TBlobIndexEntry>& blobs, const TLogoBlobID& id, const TM
 
 } // namespace
 
+TVector<TDiskPart> CollectReferencedParts(const THullSnapshot& snap) {
+    TVector<TDiskPart> parts = snap.SstParts;
+    for (const auto& e : snap.Blobs) {
+        if (e.MemRec.GetType() == TBlobType::MemBlob) {
+            continue;
+        }
+        TDiskDataExtractor extr;
+        const TDiskPart* outbound = e.Outbound.empty() ? nullptr : e.Outbound.data();
+        e.MemRec.GetDiskData(&extr, outbound);
+        for (const TDiskPart* p = extr.Begin; p != extr.End; ++p) {
+            if (!p->Empty()) {
+                parts.push_back(*p);
+            }
+        }
+    }
+    std::sort(parts.begin(), parts.end(), [](const TDiskPart& a, const TDiskPart& b) {
+        return std::make_tuple(a.ChunkIdx, a.Offset, a.Size) < std::make_tuple(b.ChunkIdx, b.Offset, b.Size);
+    });
+    parts.erase(std::unique(parts.begin(), parts.end(), [](const TDiskPart& a, const TDiskPart& b) {
+        return a.ChunkIdx == b.ChunkIdx && a.Offset == b.Offset && a.Size == b.Size;
+    }), parts.end());
+    return parts;
+}
+
 THullSnapshot ReconstructHull(
     IDeviceReader& device,
     const TDiskFormat& format,
@@ -227,7 +254,9 @@ THullSnapshot ReconstructHull(
                 TDiskPart part(p);
                 TVector<TIndexRecord<TKeyLogoBlob, TMemRecLogoBlob>> index;
                 TVector<TDiskPart> outbound;
-                if (!LoadSstLinear<TKeyLogoBlob, TMemRecLogoBlob>(device, format, state, part, index, outbound, issues)) {
+                if (!LoadSstLinear<TKeyLogoBlob, TMemRecLogoBlob>(device, format, state, part, index, outbound,
+                    snap.SstParts, issues))
+                {
                     continue;
                 }
                 for (const auto& rec : index) {
@@ -257,7 +286,9 @@ THullSnapshot ReconstructHull(
             for (const auto& p : ssts) {
                 TVector<TIndexRecord<TKeyBlock, TMemRecBlock>> index;
                 TVector<TDiskPart> outbound;
-                if (!LoadSstLinear<TKeyBlock, TMemRecBlock>(device, format, state, TDiskPart(p), index, outbound, issues)) {
+                if (!LoadSstLinear<TKeyBlock, TMemRecBlock>(device, format, state, TDiskPart(p), index, outbound,
+                    snap.SstParts, issues))
+                {
                     continue;
                 }
                 for (const auto& rec : index) {
@@ -283,7 +314,9 @@ THullSnapshot ReconstructHull(
             for (const auto& p : ssts) {
                 TVector<TIndexRecord<TKeyBarrier, TMemRecBarrier>> index;
                 TVector<TDiskPart> outbound;
-                if (!LoadSstLinear<TKeyBarrier, TMemRecBarrier>(device, format, state, TDiskPart(p), index, outbound, issues)) {
+                if (!LoadSstLinear<TKeyBarrier, TMemRecBarrier>(device, format, state, TDiskPart(p), index, outbound,
+                    snap.SstParts, issues))
+                {
                     continue;
                 }
                 for (const auto& rec : index) {

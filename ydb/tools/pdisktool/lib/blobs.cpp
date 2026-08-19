@@ -201,7 +201,7 @@ bool ExportBlobParts(
             if (p->Empty()) {
                 continue;
             }
-            TString data = ReadLogicalRange(device, format, state, p->ChunkIdx, p->Offset, p->Size, issues);
+            TString data = ReadLogicalRange(device, format, state, p->ChunkIdx, p->Offset, p->Size, issues, "blob");
             TString name = TStringBuilder() << e.Id.ToString() << ".part" << (partNo + 1);
             TFileOutput out(dir / name);
             out.Write(data.data(), data.size());

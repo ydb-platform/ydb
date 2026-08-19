@@ -15,6 +15,17 @@ struct TRestoredSector {
     TVector<ui8> DecryptedSector; // full sector after decrypt of payload+canary, footer still original
 };
 
+// Whether anything on disk points at the sector being read.
+//
+// A chunk is committed as a whole, but only part of it is usually written: huge slots are allocated
+// ahead of the data, and an SST leaves free space in its tail. Those sectors carry no valid hash, and
+// that is the normal steady state -- not damage. Only report a hash mismatch when some index, log
+// record or blob part actually references the sector, otherwise a healthy disk drowns the real errors.
+enum class ESectorRef {
+    Referenced,
+    Unreferenced,
+};
+
 // Triple-copy restore (syslog / next-chunk-reference): pick the replica with the highest nonce among valid hashes.
 // For triple copy, all replicas are hashed with the same `offset` (first replica offset).
 TRestoredSector RestoreTripleCopy(
@@ -24,7 +35,8 @@ TRestoredSector RestoreTripleCopy(
     ui64 magic,
     const TKey& key,
     TIssueLog& issues,
-    const TString& location);
+    const TString& location,
+    ESectorRef ref = ESectorRef::Referenced);
 
 // Single-sector restore (log / data chunk).
 TRestoredSector RestoreOneSector(
@@ -36,7 +48,8 @@ TRestoredSector RestoreOneSector(
     bool decrypt,
     TIssueLog& issues,
     const TString& location,
-    const TLogoBlobID& blobId = {});
+    const TLogoBlobID& blobId = {},
+    ESectorRef ref = ESectorRef::Referenced);
 
 bool CheckSectorHash(
     const TDiskFormat& format,

@@ -49,7 +49,7 @@ public:
 
         const bool mappingByIdEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicSourceIdMappingById();
 
-        const TString TopicIdString = TopicId ? ToString(TopicId) : TString{};
+        const TString TopicIdString = TopicId ? "/" + ToString(TopicId) : TString{};
         TopicKey = (mappingByIdEnabled && TopicId) ? TopicIdString : TopicName;
         // The fallback to the legacy name-based key is required only when the Id was
         // back-filled by an alter on a pre-existing topic (IdTxStep != 0, the sentinel 0

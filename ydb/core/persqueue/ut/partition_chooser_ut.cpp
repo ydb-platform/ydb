@@ -723,8 +723,8 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NewSourceId_WriteByIdKey_Test) {
     server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
 
     auto config = CreateConfig0(false);
-    config.MutablePQTabletConfig()->SetId(TestTopicId);
-    config.MutablePQTabletConfig()->SetIdTxStep(0); // Id filled at create: no name fallback
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep(0); // Id filled at create: no name fallback
     AddPartition(config, 0);
 
     auto r = ChoosePartition(server, config, "Id_Source_0");
@@ -742,8 +742,8 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NameFallbackInsideWindow_Test) {
     server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
 
     auto config = CreateConfig0(false);
-    config.MutablePQTabletConfig()->SetId(TestTopicId);
-    config.MutablePQTabletConfig()->SetIdTxStep(TInstant::Now().MilliSeconds()); // back-filled now
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep(TInstant::Now().MilliSeconds()); // back-filled now
     AddPartition(config, 0);
     AddPartition(config, 1);
 
@@ -761,8 +761,8 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenFilledAtCreate_Test
     server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
 
     auto config = CreateConfig0(false);
-    config.MutablePQTabletConfig()->SetId(TestTopicId);
-    config.MutablePQTabletConfig()->SetIdTxStep(0);
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep(0);
     AddPartition(config, 0);
     AddPartition(config, 1);
 
@@ -780,8 +780,8 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenWindowClosed_Test) 
     server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
 
     auto config = CreateConfig0(false);
-    config.MutablePQTabletConfig()->SetId(TestTopicId);
-    config.MutablePQTabletConfig()->SetIdTxStep((TInstant::Now() - TDuration::Days(20)).MilliSeconds());
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep((TInstant::Now() - TDuration::Days(20)).MilliSeconds());
     AddPartition(config, 0);
     AddPartition(config, 1);
 
@@ -799,8 +799,8 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_IdKeyPreferredOverName_Test) {
     server.CleverServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicSourceIdMappingById(true);
 
     auto config = CreateConfig0(false);
-    config.MutablePQTabletConfig()->SetId(TestTopicId);
-    config.MutablePQTabletConfig()->SetIdTxStep(TInstant::Now().MilliSeconds());
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep(TInstant::Now().MilliSeconds());
     AddPartition(config, 0);
     AddPartition(config, 1);
 
@@ -820,8 +820,8 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_FlagOff_UsesLegacyNameKey_Test) {
     // Flag stays off (default): Id must be ignored.
 
     auto config = CreateConfig0(false);
-    config.MutablePQTabletConfig()->SetId(TestTopicId);
-    config.MutablePQTabletConfig()->SetIdTxStep(TInstant::Now().MilliSeconds());
+    config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetTxStep(TInstant::Now().MilliSeconds());
     AddPartition(config, 0);
     AddPartition(config, 1);
 

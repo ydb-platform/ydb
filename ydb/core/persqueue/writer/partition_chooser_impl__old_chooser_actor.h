@@ -31,7 +31,7 @@ public:
                            NWilson::TTraceId traceId)
         : TAbstractPartitionChooserActor<TPartitionChooserActor<TPipeCreator>, TPipeCreator>(
                 parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId),
-                config.GetPQTabletConfig().GetId(), config.GetPQTabletConfig().GetIdTxStep())
+                config.GetPQTabletConfig().GetId().GetId(), config.GetPQTabletConfig().GetId().GetTxStep())
         , PQRBHelper(config.GetBalancerTabletID()) {
     }
 

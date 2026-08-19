@@ -370,6 +370,14 @@ message TOffloadConfig {
 }
 
 message TPQTabletConfig {
+    message TopicId {
+        optional uint64 Id = 1;
+        // Wall-clock ms timestamp (coordinator plan step) at which Id was stamped.
+        // 0 = Id filled at create (no legacy name-keyed fallback); non-zero = Id back-filled by an alter.
+        optional uint64 TxStep = 2;
+    }
+    optional TopicId Id = 49;
+
     optional uint64 CacheSize = 1 [default = 104857600]; //100Mb, per tablet
     optional TPartitionConfig PartitionConfig = 2; //mandatory
     repeated uint32 PartitionIds = 3; //will be filled by schemeshard, don't touch. Deprecated by Partitions (id: 31)
@@ -527,13 +535,6 @@ message TPQTabletConfig {
     optional string SqsCloudId = 46 [default = ""];
     optional string SqsFolderId = 47 [default = ""];
     optional bool SqsExportMetrics = 48 [default = false];
-    // Unique topic Id used to key SourceId→Partition mapping instead of the topic name.
-    // For FirstClass topics this is the topic's LocalPathId; for federation topics it is
-    // an opaque uint64 supplied by CM via the _id attribute.
-    optional uint64 Id = 49;
-    // Sentinel (0) when Id was filled at topic create time, otherwise the schemeshard transaction step
-    // at which Id was stamped during an alter.
-    optional uint64 IdTxStep = 50;
 }
 
 message THeartbeat {

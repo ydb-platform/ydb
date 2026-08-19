@@ -785,10 +785,10 @@ bool TPropose::CanPersistState(const TTxState& txState,
         TTopicInfo::TPtr pqGroup = context.SS->Topics[PathId];
         if (pqGroup && pqGroup->AlterData) {
             const auto& newTabletConfig = pqGroup->AlterData->GetTabletConfig();
-            if (newTabletConfig.HasId() && !newTabletConfig.HasIdTxStep()) {
+            if (newTabletConfig.HasId() && !newTabletConfig.GetId().HasTxStep()) {
                 LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                             DebugHint() << " can't persist state: " <<
-                            "Id back-fill is waiting for the plan step to stamp IdTxStep");
+                            "Id back-fill is waiting for the plan step to stamp TxStep");
                 return false;
             }
         }
@@ -819,13 +819,13 @@ void TPropose::PersistState(const TTxState& txState,
     NKikimrPQ::TPQTabletConfig newTabletConfig = pqGroup->AlterData->GetTabletConfig();
 
     // Only an alter can back-fill an Id on a pre-existing topic. A create always stamps the
-    // sentinel IdTxStep = 0 in CreatePersQueueGroup, so never touch it here.
+    // sentinel TxStep = 0 in CreatePersQueueGroup, so never touch it here.
     if (txState.TxType == TTxState::TxAlterPQGroup
-            && newTabletConfig.HasId() && !newTabletConfig.HasIdTxStep()
+            && newTabletConfig.HasId() && !newTabletConfig.GetId().HasTxStep()
             && txState.PlanStep != InvalidStepId) {
         // The Id is filled by this alter transaction: remember the exact plan step so
         // writers keep the name-keyed fallback during the transition window.
-        newTabletConfig.SetIdTxStep(ui64(txState.PlanStep));
+        newTabletConfig.MutableId()->SetTxStep(ui64(txState.PlanStep));
         Y_PROTOBUF_SUPPRESS_NODISCARD newTabletConfig.SerializeToString(&pqGroup->AlterData->TabletConfig);
     }
 

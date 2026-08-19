@@ -33,7 +33,7 @@ public:
                            NWilson::TTraceId traceId)
         : TAbstractPartitionChooserActor<TSMPartitionChooserActor<TPipeCreator>, TPipeCreator>(
                 parentId, chooser, fullConverter, sourceId, preferedPartition, std::move(traceId),
-                config.GetPQTabletConfig().GetId(), config.GetPQTabletConfig().GetIdTxStep())
+                config.GetPQTabletConfig().GetId().GetId(), config.GetPQTabletConfig().GetId().GetTxStep())
         , Graph(graph) {
     }
 

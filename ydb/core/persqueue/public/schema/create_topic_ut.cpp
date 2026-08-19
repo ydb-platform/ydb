@@ -152,7 +152,7 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
 
         auto config = DescribeTabletConfig(runtime, path);
         // The stored Id is the LocalPathId, not the supplied _id value.
-        UNIT_ASSERT_VALUES_UNEQUAL(config.GetId(), 1234567u);
+        UNIT_ASSERT_VALUES_UNEQUAL(config.GetId().GetId(), 1234567u);
     }
 
     // Flag off: the attribute is ignored as well.
@@ -179,9 +179,9 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
         AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::SUCCESS);
 
         auto config = DescribeTabletConfig(runtime, path);
-        UNIT_ASSERT_VALUES_EQUAL(config.GetId(), 1234567u);
-        UNIT_ASSERT(config.HasIdTxStep());
-        UNIT_ASSERT_VALUES_EQUAL(config.GetIdTxStep(), 0u); // sentinel: filled at create
+        UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetId(), 1234567u);
+        UNIT_ASSERT(config.GetId().HasTxStep());
+        UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetTxStep(), 0u); // sentinel: filled at create
         // Restore FirstClass mode for subsequent sub-cases if any.
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(true);
     }

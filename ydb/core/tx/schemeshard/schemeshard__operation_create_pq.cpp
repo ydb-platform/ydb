@@ -474,13 +474,13 @@ public:
         if (AppData()->FeatureFlags.GetEnableTopicSourceIdMappingById()) {
             bool configChanged = false;
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !config.HasId()) {
-                config.SetId(dstPath.Base()->PathId.LocalPathId);
+                config.MutableId()->SetId(dstPath.Base()->PathId.LocalPathId);
                 configChanged = true;
             }
-            if (config.HasId() && !config.HasIdTxStep()) {
+            if (config.HasId() && !config.GetId().HasTxStep()) {
                 // Sentinel: the id is filled at create, so writers must not use the
                 // name-keyed fallback (a brand-new topic has no legacy rows).
-                config.SetIdTxStep(0);
+                config.MutableId()->SetTxStep(0);
                 configChanged = true;
             }
             if (configChanged) {

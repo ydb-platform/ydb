@@ -8057,9 +8057,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 NLs::Finished, [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
                     UNIT_ASSERT(config.HasId());
-                    UNIT_ASSERT(config.GetId() != 0);
-                    UNIT_ASSERT_VALUES_EQUAL(config.GetIdTxStep(), 0);
-                    topicId = config.GetId();
+                    UNIT_ASSERT(config.GetId().GetId() != 0);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetTxStep(), 0);
+                    topicId = config.GetId().GetId();
                 }
             }
         );
@@ -8078,8 +8078,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 NLs::PathExist,
                 NLs::Finished, [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
-                    UNIT_ASSERT_VALUES_EQUAL(config.GetId(), topicId);
-                    UNIT_ASSERT_VALUES_EQUAL(config.GetIdTxStep(), 0);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetId(), topicId);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetTxStep(), 0);
                 }
             }
         );
@@ -8113,7 +8113,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Name: "Topic2"
             PQTabletConfig {
                 PartitionConfig { LifetimeSeconds: 10 }
-                Id: 987654321
+                Id { Id: 987654321 }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -8123,9 +8123,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 NLs::PathExist,
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
-                    UNIT_ASSERT_VALUES_EQUAL(config.GetId(), 987654321u);
-                    UNIT_ASSERT(config.HasIdTxStep());
-                    UNIT_ASSERT(config.GetIdTxStep() > 0);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetId(), 987654321u);
+                    UNIT_ASSERT(config.GetId().HasTxStep());
+                    UNIT_ASSERT(config.GetId().GetTxStep() > 0);
                 }
             }
         );
@@ -8135,7 +8135,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             Name: "Topic2"
             PQTabletConfig {
                 PartitionConfig { LifetimeSeconds: 30 }
-                Id: 111222333
+                Id { Id: 111222333 }
             }
         )");
         env.TestWaitNotification(runtime, txId);
@@ -8145,7 +8145,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                 NLs::PathExist,
                 NLs::Finished, [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
                     const auto& config = record.GetPathDescription().GetPersQueueGroup().GetPQTabletConfig();
-                    UNIT_ASSERT_VALUES_EQUAL(config.GetId(), 987654321u);
+                    UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetId(), 987654321u);
                 }
             }
         );

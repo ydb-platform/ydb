@@ -163,9 +163,7 @@ enum ECumulativeCounters {
 
 enum EHnswLabeledCounters {
     option (GlobalGroupNamesOpts) = {
-        Names: "table_id"
         Names: "table_path"
-        Names: "index_id"
         Names: "index_path"
     };
 

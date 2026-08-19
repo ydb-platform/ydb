@@ -421,7 +421,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
                 break;
             }
             const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable());
-            // After restart TruncatingLocalToInternal is empty and GenerationIndex.Live is
+            // After restart Truncating fence is empty and GenerationIndex.Live is
             // rebuilt from DB. Re-fence the path (same as MoveTablePropose replay) so writes stay
             // blocked while TRUNCATE is still pending.
             if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(schemeShardLocalPathId, false)) {

@@ -354,6 +354,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::TableScheme().FileName);
     }
 
+    static bool IsCreateTable(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTable().FileName);
+    }
+
     static bool IsTopic(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTopic().FileName);
     }
@@ -379,7 +383,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
     static bool IsCreatedByQuery(TStringBuf schemeKey) {
-        return IsView(schemeKey)
+        return IsCreateTable(schemeKey)
+            || IsView(schemeKey)
             || IsReplication(schemeKey)
             || IsTransfer(schemeKey)
             || IsExternalDataSource(schemeKey)

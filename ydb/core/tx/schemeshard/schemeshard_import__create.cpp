@@ -16,6 +16,7 @@
 #include <ydb/public/lib/ydb_cli/dump/files/files.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_data_source_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/external_table_utils.h>
+#include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/replication_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 #include <ydb/public/lib/ydb_cli/dump/util/util.h>
@@ -111,6 +112,10 @@ bool IsCreateExternalTableQuery(const TString& query) {
     return query.Contains("CREATE EXTERNAL TABLE");
 }
 
+bool IsCreateTableQuery(const TString& query) {
+    return query.Contains("CREATE TABLE `");
+}
+
 bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
@@ -127,6 +132,12 @@ bool RewriteCreateQuery(
         return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
     } else if (IsCreateExternalTableQuery(query)) {
         return NYdb::NDump::RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues);
+    } else if (IsCreateTableQuery(query)) {
+        return NYdb::NDump::RewriteCreateQuery(
+            query,
+            "CREATE TABLE `{}`",
+            dbPath,
+            issues);
     }
 
     issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);

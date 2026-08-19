@@ -93,7 +93,10 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             return Finish(Ydb::StatusIds::GENERIC_ERROR, "no scheme operations");
         }
 
-        if (transactions[0].GetSchemeOperation().HasCreateView()) {
+        if (transactions[0].GetSchemeOperation().HasCreateTable()) {
+            const auto& createTable = transactions[0].GetSchemeOperation().GetCreateTable();
+            return Finish(result->Status, createTable);
+        } else if (transactions[0].GetSchemeOperation().HasCreateView()) {
             const auto& createView = transactions[0].GetSchemeOperation().GetCreateView();
             return Finish(result->Status, createView);
         } else if (transactions[0].GetSchemeOperation().HasCreateReplication()) {

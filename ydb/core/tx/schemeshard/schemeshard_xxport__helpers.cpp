@@ -46,6 +46,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransaction(
 const TVector<XxportProperties>& GetXxportProperties() {
     static TVector<XxportProperties> properties = {
         {NYdb::NDump::NFiles::TableScheme().FileName, NBackup::EBackupFileType::TableSchema, NKikimrSchemeOp::EPathType::EPathTypeTable},
+        {NYdb::NDump::NFiles::CreateTable().FileName, NBackup::EBackupFileType::TableSchema, NKikimrSchemeOp::EPathType::EPathTypeTable},
         {NYdb::NDump::NFiles::CreateView().FileName, NBackup::EBackupFileType::ViewCreate, NKikimrSchemeOp::EPathType::EPathTypeView},
         {NYdb::NDump::NFiles::CreateTopic().FileName, NBackup::EBackupFileType::TopicCreate, NKikimrSchemeOp::EPathType::EPathTypePersQueueGroup},
         {NYdb::NDump::NFiles::CreateAsyncReplication().FileName, NBackup::EBackupFileType::AsyncReplicationCreate, NKikimrSchemeOp::EPathType::EPathTypeReplication},

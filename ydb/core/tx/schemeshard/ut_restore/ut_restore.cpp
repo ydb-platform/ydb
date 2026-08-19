@@ -6,6 +6,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -383,7 +384,17 @@ namespace {
             }
 
             switch (item.Type) {
-            case EPathTypeTable:
+            case EPathTypeTable: {
+                if (item.CreationQuery) {
+                    auto createTableKey = prefix + "/create_table.sql";
+                    result.emplace(createTableKey, item.CreationQuery);
+                    if (withChecksum) {
+                        result.emplace(NBackup::ChecksumKey(createTableKey), item.CreationQuery.Checksum);
+                    }
+                    break;
+                }
+                [[fallthrough]];
+            }
             case EPathTypeColumnTable: {
                 auto schemeKey = prefix + "/scheme.pb";
                 result.emplace(schemeKey, item.Scheme);
@@ -3751,6 +3762,111 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.Data[0].YsonStr, content);
+    }
+
+    Y_UNIT_TEST(CreateTableQueryPersistsAcrossSchemeShardRestart) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        TTestDataWithScheme data;
+        data.CreationQuery = R"(PRAGMA classic_division = '0';
+CREATE TABLE `/OldRoot/Original` (
+    key Uint32 NOT NULL,
+    a Int32,
+    g Int32 GENERATED ALWAYS AS (a + 1) STORED,
+    PRIMARY KEY (key)
+);
+)";
+        data.Data.emplace_back("1,41\n", EmptyYsonStr);
+
+        const TString expectedQuery = R"(PRAGMA classic_division = '0';
+CREATE TABLE `/MyRoot/Restored` (
+    key Uint32 NOT NULL,
+    a Int32,
+    g Int32 GENERATED ALWAYS AS (a + 1) STORED,
+    PRIMARY KEY (key)
+);
+)";
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TVector<TString> compileQueries;
+        auto compileObserver = runtime.AddObserver<TEvKqp::TEvCompileRequest>([&](auto& ev) {
+            if (ev->Get()->Query) {
+                compileQueries.emplace_back(ev->Get()->Query->Text);
+            }
+        });
+
+        TString schemeGetterError;
+        auto schemeGetterObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeReady>([&](auto& ev) {
+            if (!ev->Get()->Success) {
+                schemeGetterError = ev->Get()->Error;
+            }
+        });
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> createTableBlocker(runtime, [](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1
+                && record.GetTransaction(0).GetOperationType() == ESchemeOpCreateTable;
+        });
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("prepared CREATE TABLE query", [&] {
+            return !createTableBlocker.empty() || !schemeGetterError.empty();
+        });
+        UNIT_ASSERT_C(schemeGetterError.empty(), schemeGetterError);
+        UNIT_ASSERT_VALUES_EQUAL(compileQueries.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(compileQueries.front(), expectedQuery);
+
+        const auto& preparedQuery = createTableBlocker.front()->Get()->Record.GetTransaction(0);
+        UNIT_ASSERT_VALUES_EQUAL(preparedQuery.GetWorkingDir(), "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(preparedQuery.GetCreateTable().GetName(), "Restored");
+
+        createTableBlocker.Stop();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL_C(compileQueries.size(), 1,
+            "prepared CREATE TABLE query must be reused after SchemeShard restart");
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Restored");
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+
+        const auto& columns = describe.GetPathDescription().GetTable().GetColumns();
+        const NKikimrSchemeOp::TColumnDescription* generated = nullptr;
+        for (const auto& column : columns) {
+            if (column.GetName() == "g") {
+                generated = &column;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(generated, describe.ShortDebugString());
+        UNIT_ASSERT(generated->HasDefaultFromExpression());
+        UNIT_ASSERT_VALUES_EQUAL(generated->GetDefaultFromExpression().GetExprText(), "a + 1");
+        UNIT_ASSERT_VALUES_EQUAL(generated->GetDefaultFromExpression().GetContext(),
+            "PRAGMA classic_division = \"0\";");
     }
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnMultiShardTable, EnableDataShardDirectPartImport) {

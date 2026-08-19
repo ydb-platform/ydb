@@ -35,6 +35,21 @@ struct TTableEntry {
     NMonitoring::TDynamicCounterPtr TableGroup;
 
     /**
+     * The identity Pack() reports this table under: the FULL path, the way the
+     * tablets report it, not the relative path the entry is keyed by (the
+     * processor strips the database prefix itself, off its own database path).
+     */
+    TString TablePath;
+
+    /**
+     * The level of the last tablet to report this table. Last writer wins: an
+     * entry outlives a level change only while another tablet still holds it
+     * (the changing tablet is moved out of the old shape by AddCounters), so
+     * the freshest report is the one to publish.
+     */
+    EDetailedMetricsLevel MetricsLevel = TDetailedMetricsSettings::MetricsLevelUnspecified;
+
+    /**
      * The tablet type of the first tablet of this table that was registered.
      * All subsequent tablets of the same table must report the same type.
      */
@@ -109,7 +124,7 @@ public:
             return;
         }
 
-        auto* entry = GetOrCreateTable(metricsLevel, relativePath);
+        auto* entry = GetOrCreateTable(tablePath, metricsLevel, relativePath);
         if (!entry) {
             return;
         }
@@ -214,17 +229,9 @@ public:
         TGuard<TMutex> guard(DetailedMetricsLock());
 
         for (auto& [relativePath, entry] : Tables) {
-            if (!entry.TableBucket && entry.Leaves.empty()) {
-                // Nothing this instance holds for the table (for example, a table
-                // level table whose only tablets belong to the other role)
-                continue;
-            }
-
             auto* tableCounters = out.Add();
-            tableCounters->SetOwnerId(entry.Info.TableId.OwnerId);
-            tableCounters->SetPathId(entry.Info.TableId.LocalPathId);
-            tableCounters->SetTablePath(entry.Info.TablePath);
-            tableCounters->SetLevel(entry.Info.MetricsLevel);
+            tableCounters->SetTablePath(entry.TablePath);
+            tableCounters->SetLevel(entry.MetricsLevel);
 
             if (entry.TableBucket) {
                 entry.TableBucket->Pack(*tableCounters->MutableTableCounters(), generation);
@@ -289,7 +296,11 @@ private:
     /**
      * @return The per-table state, or nullptr if the table collects no detailed metrics
      */
-    TTableEntry* GetOrCreateTable(EDetailedMetricsLevel metricsLevel, const TStringBuf relativePath) {
+    TTableEntry* GetOrCreateTable(
+        const TString& tablePath,
+        EDetailedMetricsLevel metricsLevel,
+        const TStringBuf relativePath
+    ) {
         if (!IsTableLevel(metricsLevel) && !IsPartitionLevel(metricsLevel)) {
             return nullptr;
         }
@@ -304,6 +315,8 @@ private:
         if (it != Tables.end()) {
             Y_DEBUG_ABORT_UNLESS(!it->second.IsEmpty());
 
+            it->second.MetricsLevel = metricsLevel;
+
             return &it->second;
         }
 
@@ -312,6 +325,8 @@ private:
         const TString newKey(relativePath);
         auto& entry = Tables[newKey];
         entry.TableGroup = GetOrCreateDatabaseGroup()->GetSubgroup(TABLE_LABEL, newKey);
+        entry.TablePath = tablePath;
+        entry.MetricsLevel = metricsLevel;
 
         return &entry;
     }

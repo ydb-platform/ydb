@@ -3,7 +3,6 @@
 #include "node_database_metrics_aggregator.h"
 
 #include <ydb/core/protos/sys_view.pb.h>
-#include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <util/datetime/base.h>
@@ -41,7 +40,6 @@ TString NormalizeJson(const TString& jsonString);
  * that a bare tablet.Report(aggregator, level, now) call means the same
  * table/type in both test files.
  */
-extern const TPathId TABLE_ID;
 extern const TString TABLE_PATH;
 extern const TString RELATIVE_TABLE_PATH;
 extern const TTabletTypes::EType TABLET_TYPE;

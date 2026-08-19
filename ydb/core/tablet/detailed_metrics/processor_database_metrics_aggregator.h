@@ -1,7 +1,5 @@
 #pragma once
 
-#include "detailed_metrics_tree.h"
-
 #include <ydb/core/base/tablet_types.h>
 #include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
@@ -87,14 +85,25 @@ public:
      * makes a gauge dropping to 0 correct, C2). Cumulative/HIST accumulated
      * as the delta since this node's previous call for the same entry.
      *
+     * No duplicate/retry protection: ApplyDelta adds Cumulative/HIST deltas
+     * unconditionally, and Pack() is documented to reproduce the same
+     * payload for a repeated generation, so redelivering the same message
+     * double-counts. The caller MUST dedup by generation before calling
+     * this — the existing envelope handler already does (ydb/core/sys_view/
+     * processor/db_counters.cpp:409,468: same generation => respond and
+     * return without re-applying).
+     *
      * @param[in] nodeId The reporting node.
      * @param[in] isFollowerRole Which of the node's two Tablet Counters
      *            Aggregator instances packed tables (TABLETS / TABLETS_
      *            FOLLOWERS on the wire, step 11/12). A TABLE-level entry
-     *            on the follower stream is rejected — Y_DEBUG_ABORT_UNLESS
-     *            plus drop, not sum, in release (S1'': the follower side
-     *            builds no TABLE collapse bucket, so this can only mean the
-     *            wire or the caller is confused about which role is which).
+     *            on the follower stream is dropped, not summed (S1'': the
+     *            follower side builds no TABLE collapse bucket, so this can
+     *            only mean the wire or the caller is confused about which
+     *            role is which) — silently, since this is remote input, not
+     *            a local invariant, so it must not abort even in a debug
+     *            build. Counting rejected messages belongs to step 13, where
+     *            the actor has a logging context to attribute them by.
      * @param[in] tables The WHOLE per-message list, not a delta of the list
      *            itself: a table (or a PARTITION leaf) this stream used to
      *            report and does not mention now loses nodeId from its

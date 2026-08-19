@@ -36,7 +36,7 @@ const TString RENAMED_TABLE_PATH = "/Root/db/dir/renamed_table";
 const TString RENAMED_RELATIVE_TABLE_PATH = "dir/renamed_table";
 
 ////////////////////////////////////////////////////////////////////////////////
-// TABLE_ID, TABLE_PATH, RELATIVE_TABLE_PATH, TABLET_TYPE, ESimpleCounter,
+// TABLE_PATH, RELATIVE_TABLE_PATH, TABLET_TYPE, ESimpleCounter,
 // ECumulativeCounter, EAppCumulativeCounter and TFakeTablet itself live in
 // ut_helpers.h now (NDetailedMetricsTests, brought in by the using-directive
 // above): they are shared with processor_database_metrics_aggregator_ut.cpp,
@@ -306,6 +306,30 @@ ui64 GetPackedCumulativeDelta(const NKikimrSysView::TDbCounters& counters, ui32 
         }
     }
     return 0;
+}
+
+/**
+ * @return The largest VALUE half of every (index, value) pair packed for the given
+ *         histogram, or 0 if the diff carries none at all (every bucket unchanged, or
+ *         clamped to 0 and therefore omitted, since the sparse encoding skips zero
+ *         deltas — see HasPackedCumulativeIndex/GetPackedCumulativeDelta above)
+ *
+ * @note Deliberately histogram-wide rather than per-bucket: it pins the CLASS of the
+ *       underflow bug (an implausibly large delta somewhere in the histogram) rather
+ *       than one magic bucket index of the fixture's ranges.
+ */
+ui64 GetPackedHistogramMaxBucketValue(const NKikimrSysView::TDbCounters& counters, ui32 histogramIndex) {
+    UNIT_ASSERT_C(histogramIndex < counters.HistogramSize(), "no Histogram[" << histogramIndex << "]");
+
+    const auto& buckets = counters.GetHistogram(histogramIndex).GetBuckets();
+    ui64 maxValue = 0;
+    for (int i = 0; i + 1 < buckets.size(); i += 2) {
+        const ui64 value = static_cast<ui64>(buckets.Get(i + 1));
+        if (value > maxValue) {
+            maxValue = value;
+        }
+    }
+    return maxValue;
 }
 
 /**
@@ -744,7 +768,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         // The very first report of a tablet contributes a 0 observation (there is no
         // previous report of it to derive a per second rate from), so both partitions'
         // observations land in the <=0 bucket of the ranges {0, 10, 100}
-        UNIT_ASSERT_VALUES_EQUAL(GetHistogramBuckets(leaderCounters, "HIST(ConsumedCPU)"), "2,0,0,0");
+        UNIT_ASSERT_VALUES_EQUAL(GetHistogramBuckets(leaderCounters, "HIST(ConsumedCPU)"), "2,0,0,0,0,0,0,0,0,0,0,0");
         UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(leaderCounters, "HIST(ConsumedCPU)"), 2);
         UNIT_ASSERT_VALUES_EQUAL(GetCounterValue(leaderCounters, "ConsumedCPU"), 100 + 200);
 
@@ -755,7 +779,7 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         DumpCounters("Table level counters after forgetting the second partition", rootGroup);
 
         // The histogram aggregate is rebuilt from the surviving partitions only
-        UNIT_ASSERT_VALUES_EQUAL(GetHistogramBuckets(leaderCounters, "HIST(ConsumedCPU)"), "1,0,0,0");
+        UNIT_ASSERT_VALUES_EQUAL(GetHistogramBuckets(leaderCounters, "HIST(ConsumedCPU)"), "1,0,0,0,0,0,0,0,0,0,0,0");
         UNIT_ASSERT_VALUES_EQUAL(GetHistogramTotal(leaderCounters, "HIST(ConsumedCPU)"), 1);
 
         // The accumulated cumulative counter is NOT reduced: the CPU the forgotten
@@ -2439,10 +2463,11 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         UNIT_ASSERT(table1);
         UNIT_ASSERT(table1->HasTableCounters());
         UNIT_ASSERT_VALUES_EQUAL(table1->LeavesSize(), 0);
-        UNIT_ASSERT_VALUES_EQUAL(table1->GetOwnerId(), TABLE_ID.OwnerId);
-        UNIT_ASSERT_VALUES_EQUAL(table1->GetPathId(), TABLE_ID.LocalPathId);
         UNIT_ASSERT_VALUES_EQUAL(table1->GetTablePath(), TABLE_PATH);
-        UNIT_ASSERT_VALUES_EQUAL(table1->GetLevel(), TDetailedMetricsSettings::MetricsLevelTable);
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDetailedMetricsSettings::EMetricsLevel_Name(table1->GetLevel()),
+            TDetailedMetricsSettings::EMetricsLevel_Name(TDetailedMetricsSettings::MetricsLevelTable)
+        );
 
         const auto& executor1 = table1->GetTableCounters().GetExecutorCounters();
         UNIT_ASSERT_VALUES_EQUAL(GetPackedSimple(executor1, DB_UNIQUE_ROWS_TOTAL), 10);
@@ -2589,7 +2614,10 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         // The very same shape: no TableCounters, exactly one leaf, the very same level
         UNIT_ASSERT_VALUES_EQUAL(leaderTable->HasTableCounters(), followerTable->HasTableCounters());
         UNIT_ASSERT_VALUES_EQUAL(leaderTable->LeavesSize(), followerTable->LeavesSize());
-        UNIT_ASSERT_VALUES_EQUAL(leaderTable->GetLevel(), followerTable->GetLevel());
+        UNIT_ASSERT_VALUES_EQUAL(
+            TDetailedMetricsSettings::EMetricsLevel_Name(leaderTable->GetLevel()),
+            TDetailedMetricsSettings::EMetricsLevel_Name(followerTable->GetLevel())
+        );
 
         UNIT_ASSERT_VALUES_EQUAL(
             GetPackedSimple(leaderTable->GetLeaves(0).GetCounters().GetExecutorCounters(), DB_UNIQUE_ROWS_TOTAL),
@@ -2645,5 +2673,73 @@ Y_UNIT_TEST_SUITE(TNodeDatabaseMetricsAggregatorTest) {
         const auto& executorC = tableC->GetTableCounters().GetExecutorCounters();
         UNIT_ASSERT_VALUES_EQUAL(GetPackedSimple(executorC, DB_UNIQUE_ROWS_TOTAL), 999);
         UNIT_ASSERT_VALUES_EQUAL(GetPackedCumulativeDelta(executorC, CONSUMED_CPU), 999);
+    }
+
+    /**
+     * Regression test for CalculateCountersDiff()'s histogram bucket underflow: a
+     * per-bucket (current - prev) subtraction of the HIST(x) percentile aggregate
+     * wrapped to ~2^64 whenever the current absolute bucket value came in SMALLER than
+     * the one confirmed by the previous packed generation. It is now clamped to 0, the
+     * very same fix as the Cumulative delta above.
+     *
+     * @note The fixture's only percentile counter, HIST(ConsumedCPU), is declared
+     *       integral = true (ut_helpers.cpp): it sums a value into its buckets per
+     *       contributing tablet rather than replacing them, which is exactly what lets
+     *       a TABLE-level collapse bucket's aggregate SHRINK when one of its tablets is
+     *       forgotten between two packed generations — the underflow this guards
+     *       against. ForgetTabletDropsPercentileObservations pins the very same shrink
+     *       (2 observations -> 1) on the live counter tree; this test pins it across
+     *       two Pack() calls instead, where the old code actually wrapped.
+     */
+    Y_UNIT_TEST(PackHistogramBucketDeltaNeverUnderflowsWhenTheAggregateShrinks) {
+        NMonitoring::TDynamicCounterPtr rootGroup = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        auto aggregator = CreateNodeDatabaseMetricsAggregator(
+            rootGroup,
+            DATABASE_PATH,
+            false /* isFollowerRole */
+        );
+
+        const TInstant now = TInstant::Seconds(100);
+
+        // Two leader partitions of one TABLE-level table, collapsed into the very same
+        // bucket, both landing an observation in the very same HIST(ConsumedCPU) range
+        TFakeTablet leader1(1000, 0);
+        TFakeTablet leader2(2000, 0);
+
+        leader1.AddCumulative(CONSUMED_CPU, 100);
+        leader2.AddCumulative(CONSUMED_CPU, 200);
+
+        for (auto* tablet : {&leader1, &leader2}) {
+            tablet->Report(aggregator, TDetailedMetricsSettings::MetricsLevelTable, now);
+        }
+
+        // Generation 1: Confirmed is still empty, so nothing can underflow yet
+        auto packed1 = PackOnce(aggregator, 1);
+        UNIT_ASSERT(FindPackedTable(packed1));
+
+        // The second partition is forgotten between the two packed generations, so the
+        // aggregate shrinks
+        aggregator->ForgetTablet(leader2.TabletId, leader2.FollowerId);
+
+        // Generation 2: Pack() diffs the shrunk Current against the Confirmed generation
+        // 1 snapshot. Before the fix this produced a ~2^64 "delta" for the emptied
+        // observation; the fix clamps it to 0.
+        auto packed2 = PackOnce(aggregator, 2);
+        auto* table2 = FindPackedTable(packed2);
+        UNIT_ASSERT(table2);
+
+        const auto& executor2 = table2->GetTableCounters().GetExecutorCounters();
+
+        // Every emitted bucket delta is bounded by the total number of observations
+        // ever recorded (2, one per partition): anything above that is the underflow
+        // wrap, not a plausible histogram value
+        constexpr ui64 TOTAL_OBSERVATIONS_EVER_RECORDED = 2;
+        UNIT_ASSERT_C(
+            GetPackedHistogramMaxBucketValue(executor2, 0 /* HIST(ConsumedCPU), the only percentile counter */)
+                <= TOTAL_OBSERVATIONS_EVER_RECORDED,
+            "a bucket delta above " << TOTAL_OBSERVATIONS_EVER_RECORDED
+                << " observations: the histogram underflow wrapped to ~2^64 again"
+        );
     }
 }

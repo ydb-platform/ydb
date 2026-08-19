@@ -98,11 +98,7 @@ public:
     NCommon::TConfSetting<bool, Static> OptDisallowFuseJoins;
     NCommon::TConfSetting<bool, Static> OptCreateStageForAggregation;
     NCommon::TConfSetting<bool, Static> OptValidateStreamingConstraints;
-<<<<<<< HEAD
-=======
     NCommon::TConfSetting<bool, Static> OptValidateStreamingCheckpoints;
-    NCommon::TConfSetting<bool, Static> OptFallbackToLegacyOptimizer;
->>>>>>> 26e74bceefd (YQ-5607 added checkpoints usage validation for streaming queries (#50184))
 
     // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
     NCommon::TConfSetting<TString, Static> CostBasedOptimization;

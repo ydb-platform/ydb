@@ -155,7 +155,7 @@ public:
         AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
 
         NConfig::TConfig config = NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
-        const auto actorId = actorSystem.Register(CreateService(config, protoConfig, counters));
+        const auto actorId = actorSystem.Register(CreateService(config, counters));
 
         std::vector<std::shared_ptr<IRequestProcessor>> requests = GetRequests();
         for (auto&& i : requests) {

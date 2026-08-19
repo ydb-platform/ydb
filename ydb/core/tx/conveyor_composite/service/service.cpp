@@ -7,44 +7,16 @@
 
 #include <library/cpp/lwtrace/mon/mon_lwtrace.h>
 
-#include <google/protobuf/util/message_differencer.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_CONVEYOR
 
 namespace NKikimr::NConveyorComposite {
 
-namespace {
-
-bool HasOnlyWorkersCountChanges(const NKikimrConfig::TCompositeConveyorConfig& current,
-    const NKikimrConfig::TCompositeConveyorConfig& candidate, TString& differences) {
-    using TMessageDifferencer = google::protobuf::util::MessageDifferencer;
-    using TWorkersPoolProto = NKikimrConfig::TCompositeConveyorConfig::TWorkersPool;
-
-    TMessageDifferencer differencer;
-    differencer.set_message_field_comparison(TMessageDifferencer::EQUIVALENT);
-    differencer.set_report_ignores(false);
-    differencer.IgnoreField(
-        TWorkersPoolProto::descriptor()->FindFieldByNumber(TWorkersPoolProto::kWorkersCountFieldNumber));
-    differencer.IgnoreField(
-        TWorkersPoolProto::descriptor()->FindFieldByNumber(TWorkersPoolProto::kDefaultFractionOfThreadsCountFieldNumber));
-    differencer.ReportDifferencesToString(&differences);
-    return differencer.Compare(current, candidate);
-}
-
-}   // namespace
-
 LWTRACE_USING(YDB_CONVEYOR_COMPOSITE_PROVIDER);
 
-TDistributor::TDistributor(const NConfig::TConfig& config,
-    NKikimrConfig::TCompositeConveyorConfig appliedCompositeConveyorConfig,
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
+TDistributor::TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals)
     : Config(config)
     , ConveyorName("COMPOSITE_CONVEYOR")
-    , Counters(ConveyorName, conveyorSignals)
-    , AppliedCompositeConveyorConfig(std::move(appliedCompositeConveyorConfig)) {
-}
-
-TDistributor::~TDistributor() {
+    , Counters(ConveyorName, conveyorSignals) {
 }
 
 void TDistributor::Bootstrap() {
@@ -68,10 +40,6 @@ void TDistributor::SubscribeToCompositeConveyorConfig() {
 }
 
 void TDistributor::ScheduleConfigSubscriptionRetry() {
-    if (ConfigSubscriptionRetryScheduled) {
-        return;
-    }
-
     Schedule(TDuration::Seconds(1), new TEvInternal::TEvRetryConfigSubscription());
 }
 
@@ -107,20 +75,22 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
     }
 
     auto desiredConfig = configConclusion.DetachResult();
-    TString differences;
-    if (!HasOnlyWorkersCountChanges(AppliedCompositeConveyorConfig, candidateProto, differences)) {
-        YDB_LOG_WARN("",
+    auto validation = Manager->ValidateConfigUpdate(desiredConfig);
+    if (validation.IsFail()) {
+        YDB_LOG_ERROR("",
             {"name", ConveyorName},
-            {"action", "composite_conveyor_non_workers_update_ignored"},
-            {"differences", differences});
+            {"action", "composite_conveyor_config_update_rejected"},
+            {"error", validation.GetErrorMessage()});
         ReplyConfigNotification(ev);
         return;
     }
 
+    AFL_VERIFY(!PendingConfigNotification);
     PendingConfigNotification = std::move(ev);
-    if (Manager->StartWorkersUpdate(desiredConfig)) {
+    if (Manager->StartConfigUpdate(desiredConfig)) {
         CompleteConfigUpdate();
     }
+    Y_UNUSED(Manager->DrainTasks());
 }
 
 void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
@@ -132,7 +102,6 @@ void TDistributor::CompleteConfigUpdate() {
     AFL_VERIFY(PendingConfigNotification);
     AFL_VERIFY(!Manager->HasWorkersUpdateInProgress());
 
-    AppliedCompositeConveyorConfig = PendingConfigNotification->Get()->GetConfig().GetCompositeConveyorConfig();
     ReplyConfigNotification(PendingConfigNotification);
     PendingConfigNotification.Reset();
 }
@@ -161,7 +130,6 @@ void TDistributor::HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 }
 
 void TDistributor::HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& /*ev*/) {
-    ConfigSubscriptionRetryScheduled = false;
     YDB_LOG_WARN("",
         {"name", ConveyorName},
         {"action", "retry_composite_conveyor_config_subscription"});
@@ -179,6 +147,7 @@ void TDistributor::HandleMain(TEvInternal::TEvWorkerStopped::TPtr& ev) {
     if (Manager->OnWorkerStopped(*ev->Get())) {
         CompleteConfigUpdate();
     }
+    Y_UNUSED(Manager->DrainTasks());
 }
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
@@ -202,11 +171,9 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
     workersPool.GetCounters()->SendFwdDuration->Add(ev.GetForwardSendDuration().MicroSeconds());
 
     workersPool.AddDeliveryDuration(ev.GetForwardSendDuration() + backSendDuration);
-    workersPool.ReleaseWorker(ev.GetWorkerIdx());
     workersPool.PutTaskResults(ev.DetachResults(), ev.GetWorkersPoolId(), ev.GetWorkerIdx());
-    if (workersPool.HasTasks()) {
-        AFL_VERIFY(workersPool.DrainTasks());
-    }
+    workersPool.ReleaseWorker(ev.GetWorkerIdx());
+    Y_UNUSED(Manager->DrainTasks());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {

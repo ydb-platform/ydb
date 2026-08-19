@@ -27,10 +27,7 @@ private:
     const TString ConveyorName = "common";
     std::shared_ptr<TTasksManager> Manager;
     TCounters Counters;
-    TMonotonic LastAddProcessInstant = TMonotonic::Now();
 
-    NKikimrConfig::TCompositeConveyorConfig AppliedCompositeConveyorConfig;
-    bool ConfigSubscriptionRetryScheduled = false;
     NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr PendingConfigNotification;
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
@@ -48,16 +45,6 @@ private:
     void ScheduleConfigSubscriptionRetry();
     void ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev);
     void CompleteConfigUpdate();
-
-    void AddProcess(const ui64 processId, const TCPULimitsConfig& cpuLimits);
-
-    void AddCPUTime(const ui64 processId, const TDuration d);
-
-    TWorkerTask PopTask();
-
-    void PushTask(const TWorkerTask& task);
-
-    void ChangeAmountCPULimit(const double delta);
 
 public:
     STATEFN(StateMain) {
@@ -82,20 +69,15 @@ public:
         }
     }
 
-    TDistributor(const NConfig::TConfig& config,
-        NKikimrConfig::TCompositeConveyorConfig appliedCompositeConveyorConfig,
-        TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals);
-
-    ~TDistributor();
+    TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals);
 
     void Bootstrap();
 };
 
-inline NActors::IActor* CreateService(const NConfig::TConfig& config,
-    NKikimrConfig::TCompositeConveyorConfig appliedCompositeConveyorConfig,
-    TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
+inline NActors::IActor* CreateService(
+    const NConfig::TConfig& config, TIntrusivePtr<::NMonitoring::TDynamicCounters> conveyorSignals) {
     TServiceOperator::Register(config);
-    return new TDistributor(config, std::move(appliedCompositeConveyorConfig), conveyorSignals);
+    return new TDistributor(config, conveyorSignals);
 }
 
 }   // namespace NKikimr::NConveyorComposite

@@ -129,7 +129,6 @@ struct TEvInternal {
 
     class TEvTaskProcessedResult: public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:
-        using TBase = TConclusion<ITask::TPtr>;
         YDB_READONLY_DEF(TDuration, ForwardSendDuration);
         std::vector<TWorkerTaskResult> Results;
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());

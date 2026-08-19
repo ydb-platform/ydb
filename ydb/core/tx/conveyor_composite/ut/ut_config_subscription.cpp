@@ -19,20 +19,66 @@ constexpr ui64 SubscriptionId = 42;
 class TCounterTask: public NConveyor::ITask {
 private:
     TAtomicCounter& Counter;
+    const TDuration ExecutionDuration;
 
     void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
+        const auto start = TMonotonic::Now();
+        while (TMonotonic::Now() - start < ExecutionDuration) {
+        }
         Counter.Inc();
     }
 
 public:
-    explicit TCounterTask(TAtomicCounter& counter)
-        : Counter(counter) {
+    explicit TCounterTask(TAtomicCounter& counter, const TDuration executionDuration = TDuration::Zero())
+        : Counter(counter)
+        , ExecutionDuration(executionDuration) {
     }
 
     TString GetTaskClassIdentifier() const override {
         return "COUNTER";
     }
 };
+
+using TLinkConfig = std::pair<ESpecialTaskCategory, double>;
+
+NKikimrConfig::TCompositeConveyorConfig BuildTopologyConfig(const std::vector<std::vector<TLinkConfig>>& pools,
+    const std::vector<std::pair<ESpecialTaskCategory, ui64>>& categoryLimits = {}) {
+    NKikimrConfig::TCompositeConveyorConfig result;
+    result.SetEnabled(true);
+    for (ui32 poolIdx = 0; poolIdx < pools.size(); ++poolIdx) {
+        auto* pool = result.AddWorkerPools();
+        pool->SetName("pool-" + ::ToString(poolIdx + 1));
+        pool->SetWorkersCount(1);
+        for (const auto& [category, weight] : pools[poolIdx]) {
+            auto* link = pool->AddLinks();
+            link->SetCategory(::ToString(category));
+            link->SetWeight(weight);
+        }
+    }
+    for (const auto& [category, queueSizeLimit] : categoryLimits) {
+        auto* categoryConfig = result.AddCategories();
+        categoryConfig->SetName(::ToString(category));
+        categoryConfig->SetQueueSizeLimit(queueSizeLimit);
+    }
+    return result;
+}
+
+ui64 GetQueueSizeLimitCounter(
+    const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const ESpecialTaskCategory category) {
+    return counters->GetSubgroup("module_id", "COMPOSITE_CONVEYOR")
+        ->GetSubgroup("category", ::ToString(category))
+        ->GetCounter("Value/WaitingQueueSizeLimit")
+        ->Val();
+}
+
+ui64 GetWeightCounter(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters, const TString& poolName,
+    const ESpecialTaskCategory category) {
+    return counters->GetSubgroup("module_id", "COMPOSITE_CONVEYOR")
+        ->GetSubgroup("pool_name", poolName)
+        ->GetSubgroup("wp_category", ::ToString(category))
+        ->GetCounter("Value/Weight")
+        ->Val();
+}
 
 NKikimrConfig::TCompositeConveyorConfig BuildConfig(const double workersCount) {
     NKikimrConfig::TCompositeConveyorConfig result;
@@ -74,7 +120,6 @@ private:
         auto notification = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         notification->Record.SetSubscriptionId(SubscriptionId);
         notification->Record.AddItemKinds(kinds.front());
-        notification->Record.MutableConfig()->MutableCompositeConveyorConfig()->SetEnabled(false);
         ctx.Send(ev->Sender, notification.Release(), 0, NotificationCookie);
     }
 
@@ -116,6 +161,32 @@ void CheckNotificationResponse(
     UNIT_ASSERT(response->Flags & NActors::IEventHandle::FlagTrackDelivery);
 }
 
+ui64 ExecuteTaskAndGetPool(NActors::TTestActorRuntime& runtime, const NActors::TActorId& distributor,
+    const NActors::TActorId& sender, const ESpecialTaskCategory category) {
+    TAtomicCounter counter;
+    std::optional<ui64> workersPoolId;
+    auto resultObserver = runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {
+        for (const auto& result : ev->Get()->GetResults()) {
+            if (result.GetCategory() == category) {
+                workersPoolId = ev->Get()->GetWorkersPoolId();
+            }
+        }
+    });
+    auto scheduleObserver = runtime.AddObserver<TEvInternal::TEvNewTask>([&](auto& ev) {
+        runtime.EnableScheduleForActor(ev->Recipient, true);
+    });
+
+    runtime.Send(distributor, sender,
+        new TEvExecution::TEvNewTask(std::make_shared<TCounterTask>(counter), category, 0));
+    for (ui32 attempt = 0; attempt < 100 && counter.Val() == 0; ++attempt) {
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 1);
+    UNIT_ASSERT(workersPoolId);
+    return *workersPoolId;
+}
+
 }   // namespace
 
 Y_UNIT_TEST_SUITE(TCompositeConveyorConfigSubscription) {
@@ -130,7 +201,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfigSubscription) {
         NKikimrConfig::TCompositeConveyorConfig protoConfig;
         protoConfig.SetEnabled(true);
         auto config = NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
-        const auto distributor = runtime.Register(CreateService(config, protoConfig, MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+        const auto distributor = runtime.Register(CreateService(config, MakeIntrusive<::NMonitoring::TDynamicCounters>()));
         runtime.EnableScheduleForActor(distributor, true);
 
         CheckSubscriptionRequest(runtime, sink);
@@ -174,7 +245,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfigSubscription) {
             stoppedWorkers.emplace_back(ev->Get()->WorkerIdx);
         });
 
-        const auto distributor = runtime.Register(CreateService(initialConfig, initialProto, MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+        const auto distributor = runtime.Register(CreateService(initialConfig, MakeIntrusive<::NMonitoring::TDynamicCounters>()));
         CheckSubscriptionRequest(runtime, sink);
         CheckNotificationResponse(runtime, sink, SubscriptionId, NotificationCookie);
 
@@ -206,6 +277,197 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfigSubscription) {
         UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 1);
     }
 
+    Y_UNIT_TEST(TopologyReconcileRoutesTasksAndUpdatesCategoryLimits) {
+        NActors::TTestActorRuntime runtime;
+        runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+        const auto sink = runtime.AllocateEdgeActor();
+        const auto dispatcher = runtime.Register(new TFakeConfigsDispatcher(sink));
+        runtime.RegisterService(NConsole::MakeConfigsDispatcherID(runtime.GetNodeId(0)), dispatcher);
+
+        auto initialProto = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Normalizer, 1}},
+                {{ESpecialTaskCategory::Insert, 1}}},
+            {{ESpecialTaskCategory::Scan, 10}});
+        auto initialConfig = NConfig::TConfig::BuildFromProto(initialProto).DetachResult();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto distributor = runtime.Register(CreateService(initialConfig, counters));
+        CheckSubscriptionRequest(runtime, sink);
+        CheckNotificationResponse(runtime, sink, SubscriptionId, NotificationCookie);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(counters, ESpecialTaskCategory::Scan), 10);
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(counters, ESpecialTaskCategory::Insert), 256 * 1024);
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteTaskAndGetPool(runtime, distributor, sink, ESpecialTaskCategory::Scan), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteTaskAndGetPool(runtime, distributor, sink, ESpecialTaskCategory::Insert), 2);
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteTaskAndGetPool(runtime, distributor, sink, ESpecialTaskCategory::Compaction), 0);
+
+        auto removeScanLink = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Normalizer, 1}}, {{ESpecialTaskCategory::Insert, 1}}},
+            {{ESpecialTaskCategory::Insert, 20}});
+
+        bool blockTask = true;
+        TAutoPtr<NActors::IEventHandle> capturedTask;
+        std::optional<ui64> capturedTaskPool;
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<NActors::IEventHandle>& ev) {
+            if (blockTask && ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType) {
+                capturedTask = ev.Release();
+                return NActors::TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == TEvInternal::TEvTaskProcessedResult::EventType) {
+                capturedTaskPool = ev->Get<TEvInternal::TEvTaskProcessedResult>()->GetWorkersPoolId();
+            }
+            return NActors::TTestActorRuntime::EEventAction::PROCESS;
+        });
+        TAtomicCounter capturedTaskCounter;
+        runtime.Send(distributor, sink,
+            new TEvExecution::TEvNewTask(
+                std::make_shared<TCounterTask>(capturedTaskCounter), ESpecialTaskCategory::Scan, 0));
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(capturedTask);
+
+        SendConfigUpdate(runtime, distributor, sink, removeScanLink, 300, 3000);
+        CheckNotificationResponse(runtime, sink, 300, 3000);
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(counters, ESpecialTaskCategory::Scan), 256 * 1024);
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(counters, ESpecialTaskCategory::Insert), 20);
+
+        blockTask = false;
+        runtime.EnableScheduleForActor(capturedTask->Recipient, true);
+        runtime.Send(capturedTask.Release(), 0, true);
+        for (ui32 attempt = 0; attempt < 100 && capturedTaskCounter.Val() == 0; ++attempt) {
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(capturedTaskCounter.Val(), 1);
+        UNIT_ASSERT(capturedTaskPool);
+        UNIT_ASSERT_VALUES_EQUAL(*capturedTaskPool, 1);
+        runtime.SetObserverFunc(previousObserver);
+
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteTaskAndGetPool(runtime, distributor, sink, ESpecialTaskCategory::Scan), 0);
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteTaskAndGetPool(runtime, distributor, sink, ESpecialTaskCategory::Normalizer), 1);
+
+        auto moveScanToSecondPool = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Normalizer, 1}},
+                {{ESpecialTaskCategory::Insert, 1}, {ESpecialTaskCategory::Scan, 1}}},
+            {{ESpecialTaskCategory::Insert, 20}});
+        SendConfigUpdate(runtime, distributor, sink, moveScanToSecondPool, 301, 3001);
+        CheckNotificationResponse(runtime, sink, 301, 3001);
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteTaskAndGetPool(runtime, distributor, sink, ESpecialTaskCategory::Scan), 2);
+
+        auto moveLinksBetweenPools = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 1}},
+                {{ESpecialTaskCategory::Insert, 1}, {ESpecialTaskCategory::Normalizer, 1}}},
+            {{ESpecialTaskCategory::Normalizer, 30}});
+        SendConfigUpdate(runtime, distributor, sink, moveLinksBetweenPools, 302, 3002);
+        CheckNotificationResponse(runtime, sink, 302, 3002);
+
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(counters, ESpecialTaskCategory::Insert), 256 * 1024);
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(counters, ESpecialTaskCategory::Normalizer), 30);
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteTaskAndGetPool(runtime, distributor, sink, ESpecialTaskCategory::Scan), 1);
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteTaskAndGetPool(runtime, distributor, sink, ESpecialTaskCategory::Normalizer), 2);
+
+        auto removeNormalizerLink = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 1}}, {{ESpecialTaskCategory::Insert, 1}}});
+        SendConfigUpdate(runtime, distributor, sink, removeNormalizerLink, 303, 3003);
+        CheckNotificationResponse(runtime, sink, 303, 3003);
+        UNIT_ASSERT_VALUES_EQUAL(ExecuteTaskAndGetPool(runtime, distributor, sink, ESpecialTaskCategory::Normalizer), 0);
+    }
+
+    Y_UNIT_TEST(WeightUpdateChangesSchedulingWithoutMovingTasksToAnotherPool) {
+        NActors::TTestActorRuntime runtime;
+        runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
+
+        const auto sink = runtime.AllocateEdgeActor();
+        const auto dispatcher = runtime.Register(new TFakeConfigsDispatcher(sink));
+        runtime.RegisterService(NConsole::MakeConfigsDispatcherID(runtime.GetNodeId(0)), dispatcher);
+
+        auto initialProto = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 100}}});
+        auto initialConfig = NConfig::TConfig::BuildFromProto(initialProto).DetachResult();
+        auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+        const auto distributor = runtime.Register(CreateService(initialConfig, counters));
+        CheckSubscriptionRequest(runtime, sink);
+        CheckNotificationResponse(runtime, sink, SubscriptionId, NotificationCookie);
+
+        bool captureNextWorkerBatch = false;
+        TAutoPtr<NActors::IEventHandle> capturedWorkerBatch;
+        std::vector<std::pair<ESpecialTaskCategory, ui64>> completedTasks;
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<NActors::IEventHandle>& ev) {
+            if (captureNextWorkerBatch && ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType) {
+                captureNextWorkerBatch = false;
+                capturedWorkerBatch = ev.Release();
+                return NActors::TTestActorRuntime::EEventAction::DROP;
+            }
+            if (ev->GetTypeRewrite() == TEvInternal::TEvTaskProcessedResult::EventType) {
+                const auto* result = ev->Get<TEvInternal::TEvTaskProcessedResult>();
+                for (const auto& taskResult : result->GetResults()) {
+                    completedTasks.emplace_back(taskResult.GetCategory(), result->GetWorkersPoolId());
+                }
+            }
+            return NActors::TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto runPhase = [&](const ESpecialTaskCategory firstCategory) {
+            const ui64 completedBefore = completedTasks.size();
+            TAtomicCounter completedCounter;
+            captureNextWorkerBatch = true;
+            runtime.Send(distributor, sink,
+                new TEvExecution::TEvNewTask(
+                    std::make_shared<TCounterTask>(completedCounter, TDuration::MicroSeconds(50)), firstCategory, 0));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            UNIT_ASSERT(capturedWorkerBatch);
+
+            for (ui32 i = 0; i < 100; ++i) {
+                runtime.Send(distributor, sink,
+                    new TEvExecution::TEvNewTask(std::make_shared<TCounterTask>(completedCounter, TDuration::MicroSeconds(50)),
+                        ESpecialTaskCategory::Scan, 0));
+                runtime.Send(distributor, sink,
+                    new TEvExecution::TEvNewTask(std::make_shared<TCounterTask>(completedCounter, TDuration::MicroSeconds(50)),
+                        ESpecialTaskCategory::Insert, 0));
+            }
+            runtime.SimulateSleep(TDuration::MilliSeconds(10));
+            UNIT_ASSERT_VALUES_EQUAL(completedCounter.Val(), 0);
+
+            runtime.EnableScheduleForActor(capturedWorkerBatch->Recipient, true);
+            runtime.Send(capturedWorkerBatch.Release(), 0, true);
+            for (ui32 attempt = 0; attempt < 1000 && completedCounter.Val() != 201; ++attempt) {
+                runtime.SimulateSleep(TDuration::MilliSeconds(1));
+            }
+            UNIT_ASSERT_VALUES_EQUAL(completedCounter.Val(), 201);
+            UNIT_ASSERT_VALUES_EQUAL(completedTasks.size() - completedBefore, 201);
+            for (ui64 i = completedBefore; i < completedTasks.size(); ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(completedTasks[i].second, 1);
+            }
+
+            ui32 scanTasks = 0;
+            ui32 insertTasks = 0;
+            const ui64 prefixEnd = Min<ui64>(completedBefore + 151, completedTasks.size());
+            for (ui64 i = completedBefore + 1; i < prefixEnd; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(completedTasks[i].second, 1);
+                if (completedTasks[i].first == ESpecialTaskCategory::Scan) {
+                    ++scanTasks;
+                } else if (completedTasks[i].first == ESpecialTaskCategory::Insert) {
+                    ++insertTasks;
+                }
+            }
+            return std::pair(scanTasks, insertTasks);
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(counters, "pool-1", ESpecialTaskCategory::Scan), 1);
+        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(counters, "pool-1", ESpecialTaskCategory::Insert), 100);
+        const auto [scanBefore, insertBefore] = runPhase(ESpecialTaskCategory::Scan);
+        UNIT_ASSERT_C(scanBefore > insertBefore, "lower scheduling weight must receive more tasks in the prefix");
+
+        auto swappedWeights = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 100}, {ESpecialTaskCategory::Insert, 1}}});
+        SendConfigUpdate(runtime, distributor, sink, swappedWeights, 400, 4000);
+        CheckNotificationResponse(runtime, sink, 400, 4000);
+        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(counters, "pool-1", ESpecialTaskCategory::Scan), 100);
+        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(counters, "pool-1", ESpecialTaskCategory::Insert), 1);
+
+        const auto [scanAfter, insertAfter] = runPhase(ESpecialTaskCategory::Insert);
+        UNIT_ASSERT_C(insertAfter > scanAfter, "updated lower scheduling weight must receive more tasks in the prefix");
+        runtime.SetObserverFunc(previousObserver);
+    }
+
     Y_UNIT_TEST(ShrinkWaitsForAnAlreadyAssignedBatch) {
         NActors::TTestActorRuntime runtime;
         runtime.Initialize(NKikimr::TAppPrepare().Unwrap());
@@ -216,7 +478,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfigSubscription) {
 
         auto initialProto = BuildConfig(2.4);
         auto initialConfig = NConfig::TConfig::BuildFromProto(initialProto).DetachResult();
-        const auto distributor = runtime.Register(CreateService(initialConfig, initialProto, MakeIntrusive<::NMonitoring::TDynamicCounters>()));
+        const auto distributor = runtime.Register(CreateService(initialConfig, MakeIntrusive<::NMonitoring::TDynamicCounters>()));
         CheckSubscriptionRequest(runtime, sink);
         CheckNotificationResponse(runtime, sink, SubscriptionId, NotificationCookie);
 

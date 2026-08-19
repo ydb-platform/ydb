@@ -283,6 +283,8 @@ Y_UNIT_TEST_SUITE(THnswIndexTest) {
     Y_UNIT_TEST(MemoryEstimateAccountsForConnectivity) {
         const auto defaultEstimate = THnswIndex::EstimateMemoryBytes(100, 4, 16);
         const auto denseEstimate = THnswIndex::EstimateMemoryBytes(100, 4, 100);
+        UNIT_ASSERT_VALUES_EQUAL(defaultEstimate,
+            100 * (2 * 4 * sizeof(float) + 256 + 2 * 16 * sizeof(ui32)));
         UNIT_ASSERT_GT(denseEstimate, defaultEstimate);
         UNIT_ASSERT_VALUES_EQUAL(denseEstimate - defaultEstimate,
             100 * 2 * (100 - 16) * sizeof(ui32));

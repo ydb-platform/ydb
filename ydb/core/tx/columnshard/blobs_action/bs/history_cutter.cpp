@@ -119,7 +119,7 @@ bool THistoryCutterWrapper::IsEnabled() const {
     if (NYDBTest::TControllers::GetColumnShardController()->IsCSCutHistoryEnabled()) {
         return true;
     }
-    return HasAppData() && AppData()->FeatureFlags.GetEnableCutHistory() && AppData()->ColumnShardConfig.GetCutHistoryEnabled();
+    return HasAppData() && AppData()->FeatureFlags.GetEnableCutHistory();
 }
 
 bool THistoryCutterWrapper::SeenGroupsCheckPasses(

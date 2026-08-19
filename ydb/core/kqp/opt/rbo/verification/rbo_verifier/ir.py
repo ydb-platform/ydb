@@ -35,6 +35,10 @@ MAX_STATIC_IN_ITEMS = 512
 MAX_BOUND_DEPTH = 64
 MAX_EXPR_NODES = 1024
 MAX_EXPR_DEPTH = 128
+OPAQUE_FINGERPRINT_PREFIX = "format:13:yql-opaque-v1;"
+RESTRICTED_CONCAT_FINGERPRINT_PREFIX = (
+    f"{OPAQUE_FINGERPRINT_PREFIX}node:8:callable;content:6:Concat;"
+)
 OPAQUE_DOUBLE_FINGERPRINT_PREFIX = "format:21:yql-passive-double-v1;"
 JOIN_KINDS = frozenset(
     {
@@ -384,6 +388,15 @@ class Snapshot:
         schemas = validate_snapshot(self)
         root_schema = schemas[self.plan.root]
         return tuple(root_schema[name] for name in self.plan.output)
+
+
+@dataclass(frozen=True, slots=True)
+class CheckedConcatCorridor:
+    """One eager checked-Concat producer and its rootward row selectors."""
+
+    producer: Project
+    output: str
+    selectors: tuple[Limit | Sort, ...]
 
 
 def _fail(path: str, message: str) -> None:
@@ -746,7 +759,7 @@ def _parse_expr(
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
         )
 
-    if kind in {"opaque", "opaque_double"}:
+    if kind in {"opaque", "opaque_double", "checked_concat"}:
         _keys(obj, {"kind", "fingerprint", "type", "nullable", "args"}, path)
         raw_args = _array(obj["args"], f"{path}.args")
         result_type = _scalar_type(obj["type"], f"{path}.type")
@@ -764,6 +777,23 @@ def _parse_expr(
                 _fail(
                     f"{path}.fingerprint",
                     "opaque_double requires the audited passive-Double fingerprint prefix "
+                    "and a non-empty identity suffix",
+                )
+        elif kind == "checked_concat":
+            if result_type != "String" or nullable:
+                _fail(path, "checked_concat result must be non-null String")
+            if not 1 <= len(raw_args) <= 2:
+                _fail(
+                    f"{path}.args",
+                    "checked_concat requires one or two stored-String arguments",
+                )
+            if not (
+                fingerprint.startswith(RESTRICTED_CONCAT_FINGERPRINT_PREFIX)
+                and len(fingerprint) > len(RESTRICTED_CONCAT_FINGERPRINT_PREFIX)
+            ):
+                _fail(
+                    f"{path}.fingerprint",
+                    "checked_concat requires the audited root-Concat fingerprint prefix "
                     "and a non-empty identity suffix",
                 )
         return Expr(
@@ -1548,6 +1578,44 @@ def _infer_expr(
                 _infer_expr(arg, columns, f"{path}.args[{index}]", bindings)
         return ValueType(expr.result_type, expr.nullable)
 
+    if expr.kind == "checked_concat":
+        if expr.result_type != "String" or expr.nullable:
+            _fail(path, "checked_concat result must be non-null String")
+        fingerprint = expr.fingerprint
+        if not (
+            isinstance(fingerprint, str)
+            and fingerprint.startswith(RESTRICTED_CONCAT_FINGERPRINT_PREFIX)
+            and len(fingerprint) > len(RESTRICTED_CONCAT_FINGERPRINT_PREFIX)
+        ):
+            _fail(
+                f"{path}.fingerprint",
+                "checked_concat requires the audited root-Concat fingerprint prefix "
+                "and a non-empty identity suffix",
+            )
+        if not 1 <= len(expr.args) <= 2:
+            _fail(path, "checked_concat requires one or two stored-String arguments")
+        if any(
+            argument.kind != "column" or argument.column is None
+            for argument in expr.args
+        ):
+            _fail(path, "checked_concat arguments must be direct column references")
+        argument_columns = tuple(argument.column for argument in expr.args)
+        if len(set(argument_columns)) != len(argument_columns):
+            _fail(path, "checked_concat arguments must reference distinct columns")
+        for index, arg in enumerate(expr.args):
+            argument = _infer_expr(
+                arg,
+                columns,
+                f"{path}.args[{index}]",
+                bindings,
+            )
+            if argument.name != "String":
+                _fail(
+                    f"{path}.args[{index}]",
+                    "checked_concat arguments must be stored String columns",
+                )
+        return ValueType("String", False)
+
     if expr.kind == "opaque_double":
         if expr.result_type != DOUBLE or expr.nullable is not True:
             _fail(path, "opaque_double result must be Optional<Double>")
@@ -1935,6 +2003,21 @@ def plan_node_inputs(node: PlanNode) -> tuple[str, ...]:
     if isinstance(node, UnionAll):
         return tuple(item.node for item in node.inputs)
     raise AssertionError(f"unknown node class {type(node).__name__}")
+
+
+def _plan_descendants(
+    nodes: Mapping[str, PlanNode],
+    root: str,
+) -> frozenset[str]:
+    reached: set[str] = set()
+    pending = [root]
+    while pending:
+        node_id = pending.pop()
+        if node_id in reached:
+            continue
+        reached.add(node_id)
+        pending.extend(plan_node_inputs(nodes[node_id]))
+    return frozenset(reached)
 
 
 def _void_columns(columns: Mapping[str, Column]) -> set[str]:
@@ -2344,6 +2427,183 @@ def _validate_error_projection_dataflow(snapshot: Snapshot) -> None:
             "of one keyed left_semi Join with every marked output used "
             "as an exact right key",
         )
+
+
+def _checked_concat_count(expression: Expr) -> int:
+    return int(expression.kind == "checked_concat") + sum(
+        _checked_concat_count(argument)
+        for argument in expression.args
+    )
+
+
+def _node_expressions(node: PlanNode) -> tuple[Expr, ...]:
+    if isinstance(node, Scan):
+        return tuple(
+            expression
+            for expression in (node.predicate, node.pushed_limit)
+            if expression is not None
+        )
+    if isinstance(node, Project):
+        return tuple(column.expression for column in node.columns)
+    if isinstance(node, Filter):
+        return (node.predicate,)
+    if isinstance(node, Limit):
+        return tuple(
+            expression
+            for expression in (node.count, node.offset)
+            if expression is not None
+        )
+    if isinstance(node, Sort):
+        return () if node.limit is None else (node.limit,)
+    if isinstance(node, Join):
+        return (node.predicate,)
+    return ()
+
+
+def checked_concat_corridor(snapshot: Snapshot) -> CheckedConcatCorridor | None:
+    """Validate and return the deliberately narrow eager checked-Concat path."""
+
+    nodes = snapshot.plan.node_map()
+    producers: list[tuple[Project, Projection]] = []
+    for index, subplan in enumerate(snapshot.plan.subplans):
+        if (
+            isinstance(subplan, ExistsSubplan)
+            and subplan.predicate is not None
+            and _checked_concat_count(subplan.predicate)
+        ):
+            _fail(
+                f"snapshot.plan.subplans[{index}].predicate",
+                "checked_concat may appear only as a top-level Project expression",
+            )
+    for node in snapshot.plan.nodes:
+        if isinstance(node, Project):
+            for index, projection in enumerate(node.columns):
+                count = _checked_concat_count(projection.expression)
+                if not count:
+                    continue
+                if count != 1 or projection.expression.kind != "checked_concat":
+                    _fail(
+                        f"node {node.id!r}.columns[{index}].expression",
+                        "checked_concat must be one complete top-level Project expression",
+                    )
+                producers.append((node, projection))
+            continue
+        if any(
+            _checked_concat_count(expression)
+            for expression in _node_expressions(node)
+        ):
+            _fail(
+                f"node {node.id!r}",
+                "checked_concat may appear only as a top-level Project expression",
+            )
+
+    if not producers:
+        return None
+    if len(producers) != 1:
+        _fail(
+            "snapshot.plan.nodes",
+            "exactly one checked_concat Project expression is modeled",
+        )
+    producer, projection = producers[0]
+
+    main_nodes = _plan_descendants(nodes, snapshot.plan.root)
+    subplan_nodes = frozenset().union(
+        *(
+            _plan_descendants(nodes, subplan.root)
+            for subplan in snapshot.plan.subplans
+        )
+    )
+    if producer.id not in main_nodes or producer.id in subplan_nodes:
+        _fail(
+            f"node {producer.id!r}",
+            "checked_concat must belong only to the main result plan",
+        )
+
+    if snapshot.stage_graph is not None:
+        if producer.id != snapshot.plan.root:
+            _fail(
+                f"node {producer.id!r}",
+                "a staged checked_concat Project must be the plan root",
+            )
+        if projection.output not in snapshot.plan.output:
+            _fail(
+                f"node {producer.id!r}.columns",
+                "the checked_concat output must be returned by the result root",
+            )
+        return CheckedConcatCorridor(producer, projection.output, ())
+
+    consumers: dict[str, list[PlanNode]] = {
+        node.id: [] for node in snapshot.plan.nodes
+    }
+    for consumer in snapshot.plan.nodes:
+        for child in plan_node_inputs(consumer):
+            consumers[child].append(consumer)
+
+    current = producer
+    current_output = projection.output
+    selectors: list[Limit | Sort] = []
+    while current.id != snapshot.plan.root:
+        parents = consumers[current.id]
+        if len(parents) != 1:
+            _fail(
+                f"node {current.id!r}",
+                "checked_concat rootward dataflow must have exactly one consumer",
+            )
+        parent = parents[0]
+        if isinstance(parent, Project):
+            transports = tuple(
+                column
+                for column in parent.columns
+                if current_output in expression_columns(column.expression)
+            )
+            if (
+                len(transports) != 1
+                or transports[0].expression.kind != "column"
+                or transports[0].expression.column != current_output
+            ):
+                _fail(
+                    f"node {parent.id!r}.columns",
+                    "checked_concat may cross a Project only as one direct column transport",
+                )
+            current_output = transports[0].output
+        elif isinstance(parent, Sort):
+            if any(item.column == current_output for item in parent.order):
+                _fail(
+                    f"node {parent.id!r}.order",
+                    "checked_concat may not be consumed as a Sort key",
+                )
+            if parent.limit is not None:
+                selectors.append(parent)
+        elif isinstance(parent, Limit):
+            if parent.offset is not None:
+                _fail(
+                    f"node {parent.id!r}.offset",
+                    "checked_concat does not cross a rootward Limit with an offset",
+                )
+            if parent.ensure_at_most_one:
+                _fail(
+                    f"node {parent.id!r}",
+                    "checked_concat does not cross an error-bearing Limit",
+                )
+            selectors.append(parent)
+        else:
+            _fail(
+                f"node {parent.id!r}",
+                "checked_concat rootward dataflow supports only direct Projects, "
+                "Sort, and offset-free Limit",
+            )
+        current = parent
+
+    if current_output not in snapshot.plan.output:
+        _fail(
+            "snapshot.plan.output",
+            "the checked_concat output must be returned by the result root",
+        )
+    return CheckedConcatCorridor(
+        producer,
+        projection.output,
+        tuple(selectors),
+    )
 
 
 def _validate_void_dataflow(
@@ -2895,30 +3155,8 @@ def _direct_correlation_inner_column(
 
 
 def _node_expression_columns(node: PlanNode) -> frozenset[str]:
-    if isinstance(node, Scan):
-        expressions = tuple(
-            expression
-            for expression in (node.predicate, node.pushed_limit)
-            if expression is not None
-        )
-    elif isinstance(node, Project):
-        expressions = tuple(column.expression for column in node.columns)
-    elif isinstance(node, Filter):
-        expressions = (node.predicate,)
-    elif isinstance(node, Limit):
-        expressions = tuple(
-            expression
-            for expression in (node.count, node.offset)
-            if expression is not None
-        )
-    elif isinstance(node, Sort):
-        expressions = () if node.limit is None else (node.limit,)
-    elif isinstance(node, Join):
-        expressions = (node.predicate,)
-    else:
-        expressions = ()
     result = frozenset()
-    for expression in expressions:
+    for expression in _node_expressions(node):
         result |= expression_columns(expression)
     return result
 
@@ -3130,6 +3368,20 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
             result = {}
             for index, column in enumerate(node.columns):
                 expression_path = f"node {node.id!r}.columns[{index}]"
+                if column.expression.kind == "checked_concat":
+                    for argument_index, argument in enumerate(
+                        column.expression.args
+                    ):
+                        if (
+                            argument.kind == "column"
+                            and argument.column is not None
+                            and argument.column not in input_schema
+                        ):
+                            _fail(
+                                f"{expression_path}.args[{argument_index}]",
+                                "checked_concat arguments must be physical "
+                                "Project input columns",
+                            )
                 if column.error_on_null:
                     source = (
                         input_schema.get(column.expression.column)
@@ -3564,20 +3816,9 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         if column not in root_schema:
             _fail("snapshot.plan.output", f"column {column!r} is not produced by the root")
 
-    def descendants(root: str) -> frozenset[str]:
-        reached: set[str] = set()
-        pending = [root]
-        while pending:
-            node_id = pending.pop()
-            if node_id in reached:
-                continue
-            reached.add(node_id)
-            pending.extend(plan_node_inputs(nodes[node_id]))
-        return frozenset(reached)
-
-    main_nodes = descendants(snapshot.plan.root)
+    main_nodes = _plan_descendants(nodes, snapshot.plan.root)
     subplan_nodes = {
-        subplan.binding: descendants(subplan.root)
+        subplan.binding: _plan_descendants(nodes, subplan.root)
         for subplan in snapshot.plan.subplans
     }
     subplans_by_binding = {
@@ -4060,6 +4301,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
         schemas,
     )
     _validate_error_projection_dataflow(snapshot)
+    checked_concat_corridor(snapshot)
     _validate_void_dataflow(snapshot, schemas)
     _validate_stage_graph(snapshot, schemas, average_state_carriers)
     return schemas

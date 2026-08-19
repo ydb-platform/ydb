@@ -10,7 +10,17 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, TypeAlias
 
 from . import smt
-from .ir import Aggregate, INTEGRAL_DOUBLE_AVERAGE_STATE, Snapshot
+from .ir import (
+    Aggregate,
+    Filter,
+    INTEGRAL_DOUBLE_AVERAGE_STATE,
+    Join,
+    Limit,
+    Scan,
+    Snapshot,
+    Sort,
+    checked_concat_corridor,
+)
 from .relation import (
     Database,
     Evaluator,
@@ -367,6 +377,62 @@ def _integral_average_observer(
     return observe
 
 
+def _checked_concat_producer_bound(
+    snapshot: Snapshot,
+    producer_input: str,
+    row_bound: int,
+) -> int:
+    """Conservatively bound the exact q84 scan/filter/cross spine."""
+
+    nodes = snapshot.plan.node_map()
+    cache: dict[str, int] = {}
+
+    def bound(node_id: str) -> int:
+        if node_id in cache:
+            return cache[node_id]
+        node = nodes[node_id]
+        if isinstance(node, Scan):
+            result = row_bound
+        elif isinstance(node, Filter):
+            result = bound(node.input)
+        elif isinstance(node, Join) and node.kind in {"cross", "inner"}:
+            result = bound(node.left) * bound(node.right)
+        else:
+            raise VerificationError(
+                "checked_concat eager-cardinality gate supports only the "
+                "q84 Scan/Filter/Cross-or-Inner-Join producer spine; "
+                f"node {node_id!r} is {type(node).__name__}"
+            )
+        cache[node_id] = result
+        return result
+
+    return bound(producer_input)
+
+
+def _check_checked_concat_eager_bound(
+    snapshot: Snapshot,
+    row_bound: int,
+) -> None:
+    corridor = checked_concat_corridor(snapshot)
+    if corridor is None or not corridor.selectors:
+        return
+    maximum = _checked_concat_producer_bound(
+        snapshot,
+        corridor.producer.input,
+        row_bound,
+    )
+    for selector in corridor.selectors:
+        limit = selector.count if isinstance(selector, Limit) else selector.limit
+        assert limit is not None and type(limit.value) is int
+        if maximum > limit.value:
+            operation = "Limit" if isinstance(selector, Limit) else "TopSort"
+            raise VerificationError(
+                f"checked_concat Project {corridor.producer.id!r} may eagerly "
+                f"evaluate {maximum} rows at row bound {row_bound}, exceeding "
+                f"{operation} {selector.id!r} bound {limit.value}"
+            )
+
+
 def _build_problem(
     before: Snapshot,
     after: Snapshot,
@@ -378,6 +444,10 @@ def _build_problem(
     boundary_observer: BoundaryObserver | None,
     comparison_observer: ComparisonObserver | None,
 ) -> Problem:
+    if row_bound < 0:
+        raise VerificationError("row bound must not be negative")
+    _check_checked_concat_eager_bound(before, row_bound)
+    _check_checked_concat_eager_bound(after, row_bound)
     _check_catalogs(before, after)
     if len(before.plan.output) != len(after.plan.output):
         raise SchemaMismatch("root output arity differs")
@@ -395,7 +465,6 @@ def _build_problem(
                 f"root output nullability differs at position {index}: "
                 f"{left.nullable!r} and {right.nullable!r}"
             )
-
     try:
         script = smt.Script(timeout_ms)
         database = Database(before, row_bound, script)

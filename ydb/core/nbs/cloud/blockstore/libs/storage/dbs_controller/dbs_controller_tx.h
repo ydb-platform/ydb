@@ -62,18 +62,8 @@ struct TTxDbsController
 
         THashMap<
             TDbsControllerDatabase::TInverseKey,
-            TVector<TDbsControllerDatabase::TDirectKey>>
-            RelationsToAdd;
-
-        THashMap<
-            TDbsControllerDatabase::TInverseKey,
-            THashSet<TDbsControllerDatabase::TDirectKey>>
-            RelationsToRemove;
-
-        THashMap<
-            TDbsControllerDatabase::TInverseKey,
             NProto::TDDiskDirectBlockGroups>
-            InverseRecordsPreloaded;
+            ModifiedInverseRecords;
 
         explicit TUpdateDDiskMap(
             NBS::NStorage::TRequestInfoPtr requestInfo,
@@ -86,9 +76,7 @@ struct TTxDbsController
 
         void Clear()
         {
-            RelationsToAdd.clear();
-            RelationsToRemove.clear();
-            InverseRecordsPreloaded.clear();
+            ModifiedInverseRecords.clear();
         }
     };
 
@@ -107,7 +95,7 @@ struct TTxDbsController
         THashMap<
             TDbsControllerDatabase::TInverseKey,
             NProto::TDDiskDirectBlockGroups>
-            InverseRecordsPreloaded;
+            ModifiedInverseRecords;
 
         explicit TRemoveTabletDDiskMap(
             NBS::NStorage::TRequestInfoPtr requestInfo,
@@ -120,7 +108,7 @@ struct TTxDbsController
         {
             DirectKeys.clear();
             InverseKeys.clear();
-            InverseRecordsPreloaded.clear();
+            ModifiedInverseRecords.clear();
         }
     };
 

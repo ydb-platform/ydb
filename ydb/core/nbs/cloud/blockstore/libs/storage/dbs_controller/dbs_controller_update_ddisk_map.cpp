@@ -7,17 +7,21 @@ namespace NYdb::NBS::NBlockStore::NStorage::NDbsController {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-template <typename TField, typename TPred>
-    requires requires(const TField& f, TPred pred)
+template <typename TRepeatedField, typename TPred>
+    requires requires(TRepeatedField& f, TPred pred)
 {
     {
-        pred(f)
+        f.SwapElements(0, 1)
+    };
+    {
+        f.RemoveLast()
+    };
+    {
+        pred(f.Get(0))
     } -> std::same_as<bool>;
 }
 
-static size_t RemoveIf(
-    ::google::protobuf::RepeatedPtrField<TField>& repeatedField,
-    TPred predicate)
+static size_t RemoveIf(TRepeatedField& repeatedField, TPred predicate)
 {
     size_t removesCount = 0;
     for (int i = 0; i < repeatedField.size(); ++i) {
@@ -29,6 +33,25 @@ static size_t RemoveIf(
         }
     }
     return removesCount;
+}
+
+template <typename TDDisks>
+static TVector<TDbsControllerDatabase::TInverseKey> ListSortedDDiskIds(
+    const TDDisks& ddisks)
+{
+    TVector<TDbsControllerDatabase::TInverseKey> result;
+    for (const auto& ids: ddisks) {
+        result.push_back(
+            {ids.GetDDisk().GetNodeId(),
+             ids.GetDDisk().GetPDiskId(),
+             ids.GetDDisk().GetDDiskSlotId()});
+        result.push_back(
+            {ids.GetPersistentBuffer().GetNodeId(),
+             ids.GetPersistentBuffer().GetPDiskId(),
+             ids.GetPersistentBuffer().GetDDiskSlotId()});
+    }
+    std::ranges::sort(result);
+    return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -82,9 +105,18 @@ bool TDbsControllerActor::PrepareUpdateDDiskMap(
     TTxDbsController::TUpdateDDiskMap& args)
 {
     Y_UNUSED(ctx);
-    Y_UNUSED(args);
 
     TDbsControllerDatabase db(tx.DB);
+
+    TVector<TDbsControllerDatabase::TInverseKey> relationsToModify;
+
+    struct TDiff
+    {
+        THashSet<ui64> Added;
+        THashSet<ui64> Removed;
+    };
+
+    THashMap<TDbsControllerDatabase::TInverseKey, TDiff> diffs;
 
     for (ui64 dbgIndex = 0;
          dbgIndex < args.DDisks.DirectBlockGroupsDDisksSize();
@@ -98,74 +130,63 @@ bool TDbsControllerActor::PrepareUpdateDDiskMap(
             return false;
         }
 
-        THashSet<TDbsControllerDatabase::TInverseKey> oldRelations;
+        auto oldDDiskIds = ListSortedDDiskIds(directRecord.GetDDiskIds());
+        auto newDDiskIds = ListSortedDDiskIds(
+            args.DDisks.GetDirectBlockGroupsDDisks(dbgIndex).GetDDiskIds());
 
-        for (const auto& ids: directRecord.GetDDiskIds()) {
-            oldRelations.insert(
-                {ids.GetDDisk().GetNodeId(),
-                 ids.GetDDisk().GetPDiskId(),
-                 ids.GetDDisk().GetDDiskSlotId()});
-            oldRelations.insert(
-                {ids.GetPersistentBuffer().GetNodeId(),
-                 ids.GetPersistentBuffer().GetPDiskId(),
-                 ids.GetPersistentBuffer().GetDDiskSlotId()});
+        TVector<TDbsControllerDatabase::TInverseKey> relationsToRemove;
+        std::ranges::set_difference(
+            oldDDiskIds,
+            newDDiskIds,
+            std::back_inserter(relationsToRemove));
+
+        TVector<TDbsControllerDatabase::TInverseKey> relationsToAdd;
+        std::ranges::set_difference(
+            newDDiskIds,
+            oldDDiskIds,
+            std::back_inserter(relationsToAdd));
+
+        std::ranges::set_union(
+            newDDiskIds,
+            oldDDiskIds,
+            std::back_inserter(relationsToModify));
+
+        for (const auto& key: relationsToRemove) {
+            diffs[key].Removed.insert(dbgIndex);
         }
 
-        THashSet<TDbsControllerDatabase::TInverseKey> newRelations;
-        const auto& dbgInfo = args.DDisks.GetDirectBlockGroupsDDisks(dbgIndex);
+        for (const auto& key: relationsToAdd) {
+            diffs[key].Added.insert(dbgIndex);
+        }
+    }
 
-        for (const auto& ids: dbgInfo.GetDDiskIds()) {
-            newRelations.insert(
-                {ids.GetDDisk().GetNodeId(),
-                 ids.GetDDisk().GetPDiskId(),
-                 ids.GetDDisk().GetDDiskSlotId()});
-            newRelations.insert(
-                {ids.GetPersistentBuffer().GetNodeId(),
-                 ids.GetPersistentBuffer().GetPDiskId(),
-                 ids.GetPersistentBuffer().GetDDiskSlotId()});
+    for (const auto& key: relationsToModify) {
+        auto& record = args.ModifiedInverseRecords[key];
+        if (!db.LoadInverseRecord(key, record)) {
+            return false;
         }
 
-        TVector<TDbsControllerDatabase::TInverseKey> common;
-        for (const auto& key: newRelations) {
-            if (oldRelations.contains(key)) {
-                common.push_back(key);
+        const auto& diff = diffs.at(key);
+
+        decltype(record.MutablePartitionDirectBlockGroups(0)
+                     ->MutableDirectBlockGroupIndex()) dbgListPtr = nullptr;
+
+        for (auto& partitionRec: *record.MutablePartitionDirectBlockGroups()) {
+            if (partitionRec.GetPartitionTabletId() == args.PartitionTabletId) {
+                dbgListPtr = partitionRec.MutableDirectBlockGroupIndex();
+                break;
             }
         }
-
-        for (const auto& key: common) {
-            oldRelations.erase(key);
-            newRelations.erase(key);
+        if (dbgListPtr == nullptr) {
+            auto* newRec = record.AddPartitionDirectBlockGroups();
+            newRec->SetPartitionTabletId(args.PartitionTabletId);
+            dbgListPtr = newRec->MutableDirectBlockGroupIndex();
         }
 
-        for (const auto& key: oldRelations) {
-            args.RelationsToRemove[key].insert(
-                {args.PartitionTabletId, dbgIndex});
-        }
-
-        for (const auto& key: newRelations) {
-            args.RelationsToAdd[key].push_back(
-                {args.PartitionTabletId, dbgIndex});
-        }
-    }
-
-    // Preload inverse records
-    for (const auto& key: args.RelationsToAdd | std::views::keys) {
-        NProto::TDDiskDirectBlockGroups record;
-        if (!db.LoadInverseRecord(key, record)) {
-            return false;
-        }
-        args.InverseRecordsPreloaded[key] = std::move(record);
-    }
-
-    for (const auto& key: args.RelationsToRemove | std::views::keys) {
-        if (args.InverseRecordsPreloaded.contains(key)) {
-            continue;
-        }
-        NProto::TDDiskDirectBlockGroups record;
-        if (!db.LoadInverseRecord(key, record)) {
-            return false;
-        }
-        args.InverseRecordsPreloaded[key] = std::move(record);
+        RemoveIf(
+            *dbgListPtr,
+            [&diff](const ui64 index) { return diff.Removed.contains(index); });
+        dbgListPtr->Add(diff.Added.begin(), diff.Added.end());
     }
 
     return true;
@@ -177,8 +198,6 @@ void TDbsControllerActor::ExecuteUpdateDDiskMap(
     TTxDbsController::TUpdateDDiskMap& args)
 {
     Y_UNUSED(ctx);
-    Y_UNUSED(tx);
-    Y_UNUSED(args);
 
     TDbsControllerDatabase db(tx.DB);
 
@@ -191,49 +210,7 @@ void TDbsControllerActor::ExecuteUpdateDDiskMap(
             args.DDisks.GetDirectBlockGroupsDDisks(dbgIndex));
     }
 
-    for (const auto& [key, dbgs]: args.RelationsToRemove) {
-        auto& rec = args.InverseRecordsPreloaded.at(key);
-        for (auto& perPartitionRec: *rec.MutablePartitionDirectBlockGroups()) {
-            if (perPartitionRec.GetPartitionTabletId() != std::get<0>(key)) {
-                continue;
-            }
-            TVector<ui64> filteredDbgIndexes;
-            for (const auto& dbg: dbgs) {
-                if (!dbgs.contains(dbg)) {
-                    filteredDbgIndexes.push_back(std::get<1>(dbg));
-                }
-            }
-            perPartitionRec.MutableDirectBlockGroupIndex()->Assign(
-                filteredDbgIndexes.begin(),
-                filteredDbgIndexes.end());
-        }
-    }
-
-    for (const auto& [key, dbgs]: args.RelationsToAdd) {
-        auto& rec = args.InverseRecordsPreloaded.at(key);
-
-        bool recordFound = false;
-        for (auto& perPartitionRec: *rec.MutablePartitionDirectBlockGroups()) {
-            if (perPartitionRec.GetPartitionTabletId() != std::get<0>(key)) {
-                continue;
-            }
-            recordFound = true;
-            for (const auto& dbg: dbgs) {
-                perPartitionRec.MutableDirectBlockGroupIndex()->Add(
-                    std::get<1>(dbg));
-            }
-        }
-        if (!recordFound) {
-            auto* perPartitionRec = rec.AddPartitionDirectBlockGroups();
-            perPartitionRec->SetPartitionTabletId(std::get<0>(key));
-            for (const auto& dbg: dbgs) {
-                perPartitionRec->MutableDirectBlockGroupIndex()->Add(
-                    std::get<1>(dbg));
-            }
-        }
-    }
-
-    for (const auto& [key, record]: args.InverseRecordsPreloaded) {
+    for (const auto& [key, record]: args.ModifiedInverseRecords) {
         db.StoreInverseRecord(key, record);
     }
 }
@@ -242,11 +219,13 @@ void TDbsControllerActor::CompleteUpdateDDiskMap(
     const NActors::TActorContext& ctx,
     TTxDbsController::TUpdateDDiskMap& args)
 {
-    LOG_INFO(
+    LOG_INFO_S(
         ctx,
         NKikimrServices::DBS_CONTROLLER,
-        "UpdateDDiskMap persisted data for tablet %" PRIu64,
-        args.PartitionTabletId);
+        "UpdateDDiskMap persisted data for tablet "
+            << args.PartitionTabletId << ": "
+            << args.ModifiedInverseRecords.size()
+            << " inverse records updated");
 
     auto response =
         std::make_unique<TEvDbsControllerPrivate::TEvUpdateDDiskMapResponse>(
@@ -262,9 +241,6 @@ bool TDbsControllerActor::PrepareRemoveTabletDDiskMap(
     NKikimr::NTabletFlatExecutor::TTransactionContext& tx,
     TTxDbsController::TRemoveTabletDDiskMap& args)
 {
-    Y_UNUSED(ctx);
-    Y_UNUSED(args);
-
     TDbsControllerDatabase db(tx.DB);
 
     if (!db.GetRecordKeysForTablet(
@@ -277,32 +253,11 @@ bool TDbsControllerActor::PrepareRemoveTabletDDiskMap(
 
     // Preload inverse records
     for (const auto& key: args.InverseKeys) {
-        NProto::TDDiskDirectBlockGroups record;
+        auto& record = args.ModifiedInverseRecords[key];
         if (!db.LoadInverseRecord(key, record)) {
             return false;
         }
-        args.InverseRecordsPreloaded[key] = std::move(record);
-    }
 
-    return true;
-}
-
-void TDbsControllerActor::ExecuteRemoveTabletDDiskMap(
-    const NActors::TActorContext& ctx,
-    NKikimr::NTabletFlatExecutor::TTransactionContext& tx,
-    TTxDbsController::TRemoveTabletDDiskMap& args)
-{
-    Y_UNUSED(ctx);
-    Y_UNUSED(tx);
-    Y_UNUSED(args);
-
-    TDbsControllerDatabase db(tx.DB);
-
-    for (const auto& key: args.DirectKeys) {
-        db.RemoveRecord(key);
-    }
-
-    for (auto& [key, record]: args.InverseRecordsPreloaded) {
         const size_t removed = RemoveIf(
             *record.MutablePartitionDirectBlockGroups(),
             [id = args.PartitionTabletId](const auto& x)
@@ -317,17 +272,39 @@ void TDbsControllerActor::ExecuteRemoveTabletDDiskMap(
                     << args.PartitionTabletId << ", DDiskId = " << key);
         }
     }
+
+    return true;
+}
+
+void TDbsControllerActor::ExecuteRemoveTabletDDiskMap(
+    const NActors::TActorContext& ctx,
+    NKikimr::NTabletFlatExecutor::TTransactionContext& tx,
+    TTxDbsController::TRemoveTabletDDiskMap& args)
+{
+    Y_UNUSED(ctx);
+
+    TDbsControllerDatabase db(tx.DB);
+
+    for (const auto& key: args.DirectKeys) {
+        db.RemoveRecord(key);
+    }
+
+    for (const auto& [key, record]: args.ModifiedInverseRecords) {
+        db.StoreInverseRecord(key, record);
+    }
 }
 
 void TDbsControllerActor::CompleteRemoveTabletDDiskMap(
     const NActors::TActorContext& ctx,
     TTxDbsController::TRemoveTabletDDiskMap& args)
 {
-    LOG_INFO(
+    LOG_INFO_S(
         ctx,
         NKikimrServices::DBS_CONTROLLER,
-        "RemoveTabletDDiskMap cleared data for tablet %" PRIu64,
-        args.PartitionTabletId);
+        "RemoveTabletDDiskMap cleared data for tablet "
+            << args.PartitionTabletId << ": "
+            << args.ModifiedInverseRecords.size()
+            << " inverse records updated");
 
     auto response = std::make_unique<
         TEvDbsControllerPrivate::TEvRemoveTabletDDiskMapResponse>(

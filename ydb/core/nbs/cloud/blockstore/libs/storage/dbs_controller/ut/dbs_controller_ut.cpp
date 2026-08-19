@@ -239,8 +239,7 @@ Y_UNIT_TEST_SUITE(TDbsControllerTest)
                 TEvDbsControllerPrivate::TEvGetPartitionsForNodeResponse>();
 
             UNIT_ASSERT(!HasError(response->GetError()));
-            UNIT_ASSERT_VALUES_EQUAL(1, response->Record.PartitionsSize());
-            UNIT_ASSERT_VALUES_EQUAL(1, response->Record.GetPartitions(0));
+            UNIT_ASSERT_VALUES_EQUAL(0, response->Record.PartitionsSize());
         }
     }
 }

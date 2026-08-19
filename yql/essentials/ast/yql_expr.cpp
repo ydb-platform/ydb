@@ -300,6 +300,7 @@ struct TContext {
                 return Expr.MakeType<TStreamExprType>(r);
             } else if (content == TStringBuf("Struct")) {
                 TVector<const TItemExprType*> children;
+                children.reserve(node.GetChildrenCount());
                 for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                     auto r = CompileTypeAnnotationNode(*node.GetChild(index));
                     if (!r) {
@@ -322,6 +323,7 @@ struct TContext {
                 return ann;
             } else if (content == TStringBuf("Multi")) {
                 TTypeAnnotationNode::TListType children;
+                children.reserve(node.GetChildrenCount());
                 for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                     auto r = CompileTypeAnnotationNode(*node.GetChild(index));
                     if (!r) {
@@ -339,6 +341,7 @@ struct TContext {
                 return ann;
             } else if (content == TStringBuf("Tuple")) {
                 TTypeAnnotationNode::TListType children;
+                children.reserve(node.GetChildrenCount());
                 for (size_t index = 1; index < node.GetChildrenCount(); ++index) {
                     auto r = CompileTypeAnnotationNode(*node.GetChild(index));
                     if (!r) {
@@ -419,6 +422,7 @@ struct TContext {
                 }
 
                 TVector<TCallableExprType::TArgumentInfo> args;
+                args.reserve(node.GetChildrenCount());
                 size_t optCount = 0;
                 TString payload;
                 if (!node.GetChild(1)->IsList()) {
@@ -673,6 +677,7 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
         case ETypeAnnotationKind::Tuple: {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Tuple"), pool);
             TSmallVec<TAstNode*> children;
+            children.reserve(annotation.Cast<TTupleExprType>()->GetItems().size() + 1U);
             children.push_back(self);
             for (auto& child : annotation.Cast<TTupleExprType>()->GetItems()) {
                 children.push_back(ConvertTypeAnnotationToAst(*child, pool, refAtoms));
@@ -684,6 +689,7 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
         case ETypeAnnotationKind::Struct: {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Struct"), pool);
             TSmallVec<TAstNode*> children;
+            children.reserve(annotation.Cast<TStructExprType>()->GetItems().size() + 1U);
             children.push_back(self);
             for (auto& child : annotation.Cast<TStructExprType>()->GetItems()) {
                 children.push_back(ConvertTypeAnnotationToAst(*child, pool, refAtoms));
@@ -774,6 +780,7 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
             }
 
             TSmallVec<TAstNode*> children;
+            children.reserve(callable->GetArguments().size() + 3U);
             children.push_back(self);
 
             children.push_back(TAstNode::NewList(TPosition(), mainSettings.data(), mainSettings.size(), pool));
@@ -849,6 +856,7 @@ TAstNode* ConvertTypeAnnotationToAst(const TTypeAnnotationNode& annotation, TMem
         case ETypeAnnotationKind::Multi: {
             auto self = TAstNode::NewLiteralAtom(TPosition(), TStringBuf("Multi"), pool);
             TSmallVec<TAstNode*> children;
+            children.reserve(annotation.Cast<TMultiExprType>()->GetItems().size() + 1U);
             children.push_back(self);
             for (auto& child : annotation.Cast<TMultiExprType>()->GetItems()) {
                 children.push_back(ConvertTypeAnnotationToAst(*child, pool, refAtoms));
@@ -994,6 +1002,7 @@ TExprNode::TListType CompileLambda(const TAstNode& node, TContext& ctx) {
 
     ctx.PushFrame();
     TExprNode::TListType argNodes;
+    argNodes.reserve(params->GetChildrenCount());
     for (ui32 index = 0; index < params->GetChildrenCount(); ++index) {
         auto arg = params->GetChild(index);
         auto lambdaArg = ctx.ProcessNode(*arg, ctx.Expr.NewArgument(arg->GetPosition(), arg->GetContent()));
@@ -1891,6 +1900,7 @@ TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TS
 
             case TExprNode::List: {
                 TSmallVec<TAstNode*> values;
+                values.reserve(node.ChildrenSize());
                 for (const auto& child : node.Children()) {
                     values.push_back(BuildValueNode(*child, ctx, topLevelName, annotationFlags, pool, useBindings));
                 }
@@ -1934,6 +1944,7 @@ TAstNode* BuildValueNode(const TExprNode& node, TVisitNodeContext& ctx, const TS
                 }
 
                 TSmallVec<TAstNode*> children;
+                children.reserve(node.ChildrenSize() + 1U);
                 children.push_back(AnnotateAstNode(
                     ctx.RefAtoms ? TAstNode::NewLiteralAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool) : TAstNode::NewAtom(ctx.Expr.GetPosition(node.Pos()), node.Content(), pool),
                     /*exprNode=*/nullptr, annotationFlags, pool, ctx.RefAtoms));
@@ -2730,6 +2741,7 @@ void CheckArguments(const TExprNode& root) {
         auto rootUnresolved = CollectUnresolvedArgs(root, unresolvedArgsMap, allArgs, 0);
         if (rootUnresolved && !rootUnresolved->empty()) {
             TVector<ui64> ids;
+            ids.reserve(rootUnresolved->size());
             for (auto& i : *rootUnresolved) {
                 ids.push_back(i->UniqueId());
             }

@@ -296,7 +296,7 @@ std::deque<std::string_view> GetAllItemTypeFields(const TTypeAnnotationNode* typ
 
 TPartOfConstraintBase::TSetOfSetsType MakeFullSet(const TPartOfConstraintBase::TSetType& keys) {
     TPartOfConstraintBase::TSetOfSetsType sets;
-    sets.reserve(sets.size());
+    sets.reserve(keys.size());
     for (const auto& key : keys) {
         sets.insert_unique(TPartOfConstraintBase::TSetType{key});
     }
@@ -327,6 +327,7 @@ TSortedConstraintNode::TSortedConstraintNode(TExprContext& ctx, const NYT::TNode
 
 TSortedConstraintNode::TContainerType TSortedConstraintNode::NodeToContainer(TExprContext& ctx, const NYT::TNode& serialized) {
     TSortedConstraintNode::TContainerType sorted;
+    sorted.reserve(serialized.AsList().size());
     try {
         for (const auto& pair : serialized.AsList()) {
             TPartOfConstraintBase::TSetType set = TPartOfConstraintBase::NodeToSet(ctx, pair.AsList().front());
@@ -2048,6 +2049,7 @@ TVarIndexConstraintNode::TVarIndexConstraintNode(TExprContext& ctx, size_t mapIt
     : TConstraintNode(ctx, Name())
 {
     YQL_ENSURE(mapItemsCount > 0);
+    Mapping_.reserve(mapItemsCount);
     for (size_t i = 0; i < mapItemsCount; ++i) {
         Mapping_.push_back(std::make_pair(i, i));
     }

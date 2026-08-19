@@ -1123,6 +1123,7 @@ private:
 
     TAstNode* MakeStructType(const TMap<TString, TAstNode*>& members) {
         TSmallVec<TAstNode*> items;
+        items.reserve(members.size() + 1U);
         items.push_back(MakeLiteralAtom(TStringBuf("StructType")));
 
         for (const auto& member : members) {

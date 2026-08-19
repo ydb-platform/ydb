@@ -7,6 +7,7 @@
 #include "test_server.h"
 
 #include <ydb/core/base/counters.h>
+#include <ydb/core/kafka_proxy/actors/kafka_api_versions_actor.h>
 #include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -19,6 +20,8 @@
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/digest/md5/md5.h>
 #include <library/cpp/string_utils/base64/base64.h>
+
+#include <util/network/socket.h>
 
 using namespace NKafka;
 using namespace NYdb;
@@ -177,6 +180,59 @@ TString GetMessageMetaKey(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEv
 void AssertMessageMeta(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& msg, const TString& field,
                        const TString& expectedValue) {
     UNIT_ASSERT_VALUES_EQUAL_C(GetMessageMetaKey(msg, field), expectedValue, "Field " << field << " not found in message meta");
+}
+
+TString MakeKafkaRequestFrame(TRequestHeaderData& header, const TString& body) {
+    TKafkaWriteBuffer payload(256);
+    TKafkaWritable writable(payload);
+    header.Write(writable, RequestHeaderVersion(header.RequestApiKey, header.RequestApiVersion));
+    writable.write(body.data(), body.size());
+
+    const TString payloadBytes = payload.AsString();
+    TKafkaWriteBuffer frame(256);
+    TKafkaWritable frameWritable(frame);
+    TKafkaInt32 size = payloadBytes.size();
+    frameWritable << size;
+    frameWritable.write(payloadBytes.data(), payloadBytes.size());
+    return frame.AsString();
+}
+
+TString MakeMetadataRequestWithHugeTopicsArray(TKafkaVersion version) {
+    TRequestHeaderData header;
+    header.RequestApiKey = NKafka::EApiKey::METADATA;
+    header.RequestApiVersion = version;
+    header.CorrelationId = 9101;
+    header.ClientId = "";
+
+    TKafkaWriteBuffer body(32);
+    TKafkaWritable writable(body);
+    constexpr TKafkaInt32 HugeLength = 2147483647;
+    if (version >= 9) {
+        writable.writeUnsignedVarint<ui32>(static_cast<ui32>(HugeLength) + 1);
+    } else {
+        writable << HugeLength;
+    }
+    return MakeKafkaRequestFrame(header, body.AsString());
+}
+
+void SendKafkaFrameAndExpectConnectionClose(ui16 port, const TString& frame) {
+    TNetworkAddress addr("localhost", port);
+    TSocket socket(addr);
+    socket.SetSocketTimeout(5, 0);
+
+    TSocketOutput output(socket);
+    output.Write(frame.data(), frame.size());
+    output.Flush();
+
+    TSocketInput input(socket);
+    char buf[16];
+    bool closed = false;
+    try {
+        closed = input.Read(buf, sizeof(buf)) == 0;
+    } catch (const yexception&) {
+        closed = true;
+    }
+    UNIT_ASSERT_C(closed, "server must close the kafka connection instead of allocating a huge array");
 }
 
 void AssertPartitionsIsUniqueAndCountIsExpected(std::vector<TReadInfo> readInfos, ui32 expectedPartitionsCount, TString topic) {
@@ -3300,6 +3356,80 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].NodeId, testServer.KikimrServer->GetRuntime()->GetFirstNodeId());
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Host, "::1");
         UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers[0].Port, testServer.Port);
+    }
+
+    Y_UNIT_TEST(HugeArrayLengthOverSocketDoesNotCrashServer) {
+        TInsecureTestServer testServer;
+        TKafkaTestClient healthyClient(testServer.Port);
+
+        {
+            auto apiVersions = healthyClient.ApiVersions();
+            UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        SendKafkaFrameAndExpectConnectionClose(testServer.Port, MakeMetadataRequestWithHugeTopicsArray(5));
+        SendKafkaFrameAndExpectConnectionClose(testServer.Port, MakeMetadataRequestWithHugeTopicsArray(12));
+
+        {
+            auto apiVersions = healthyClient.ApiVersions();
+            UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        {
+            auto metadataResponse = healthyClient.Metadata({});
+            UNIT_ASSERT_VALUES_EQUAL(metadataResponse->ClusterId, "ydb-cluster");
+            UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers.size(), 1);
+        }
+
+        TKafkaTestClient newClient(testServer.Port);
+        auto metadataResponse = newClient.Metadata({});
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->ClusterId, "ydb-cluster");
+        UNIT_ASSERT_VALUES_EQUAL(metadataResponse->Brokers.size(), 1);
+    }
+
+    Y_UNIT_TEST(GetApiVersionsUnsupportedVersionUsesKip511Fallback) {
+        auto unsupported = GetApiVersions(5);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNSUPPORTED_VERSION));
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys[0].ApiKey, static_cast<TKafkaInt16>(API_VERSIONS));
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys[0].MinVersion, 0);
+        UNIT_ASSERT_VALUES_EQUAL(unsupported->ApiKeys[0].MaxVersion, AdvertisedApiVersionsMax);
+
+        auto supported = GetApiVersions(2);
+        UNIT_ASSERT_VALUES_EQUAL(supported->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(supported->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
+    }
+
+    Y_UNIT_TEST(ApiVersionsUnsupportedVersionKeepsConnection) {
+        TInsecureTestServer testServer;
+        TKafkaTestClient client(testServer.Port);
+
+        auto msg = client.ApiVersionsAtVersion(5);
+
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::UNSUPPORTED_VERSION));
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys[0].ApiKey, static_cast<TKafkaInt16>(API_VERSIONS));
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys[0].MinVersion, 0);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ApiKeys[0].MaxVersion, AdvertisedApiVersionsMax);
+
+        auto retry = client.ApiVersions();
+        UNIT_ASSERT_VALUES_EQUAL(retry->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(retry->ApiKeys.size(), EXPECTED_API_KEYS_COUNT);
+    }
+
+    Y_UNIT_TEST(GetApiVersionsAdvertisesProduceMinZero) {
+        auto supported = GetApiVersions(2);
+        UNIT_ASSERT_VALUES_EQUAL(supported->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        bool foundProduce = false;
+        for (const auto& key : supported->ApiKeys) {
+            if (key.ApiKey == PRODUCE) {
+                foundProduce = true;
+                UNIT_ASSERT_VALUES_EQUAL(key.MinVersion, 0);
+                UNIT_ASSERT_VALUES_EQUAL(key.MaxVersion, 9);
+            }
+        }
+        UNIT_ASSERT(foundProduce);
     }
 
     Y_UNIT_TEST(MetadataInServerlessScenario) {

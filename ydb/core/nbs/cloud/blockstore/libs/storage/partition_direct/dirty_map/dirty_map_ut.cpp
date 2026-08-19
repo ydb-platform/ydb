@@ -57,6 +57,13 @@ void FlushAll(const TFlushHints& flushHint, TBlocksDirtyMap& dirtyMap)
     }
 }
 
+void EraseAll(const TEraseHints& eraseHints, TBlocksDirtyMap& dirtyMap)
+{
+    for (const auto& [host, hint]: eraseHints.GetAllHints()) {
+        dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -689,9 +696,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT(!eraseHints.Empty());
-        dirtyMap->EraseFinished(THostIndex{0}, {100}, {});
-        dirtyMap->EraseFinished(THostIndex{1}, {100}, {});
-        dirtyMap->EraseFinished(THostIndex{2}, {100}, {});
+        EraseAll(eraseHints, *dirtyMap);
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
 
         // A late success and a late failure for the forgotten lsn: the
@@ -792,11 +797,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H2:0:123;"
             "H3:0:123;",
             eraseHints.DebugPrint());
-
-        // Finish erasing
-        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap->EraseFinished(host, MakeLsnVector(hint.Segments), {});
-        }
+        EraseAll(eraseHints, *dirtyMap);
     }
 
     // A Fresh DDisk has range tracking enabled. When a write is flushed to it,
@@ -853,9 +854,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Drain erases so the inflight map ends clean.
         auto eraseHints = dirtyMap->MakeEraseHint(1);
-        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap->EraseFinished(host, MakeLsnVector(hint.Segments), {});
-        }
+        EraseAll(eraseHints, *dirtyMap);
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
     }
 
@@ -903,11 +902,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H2:0:123;"
             "H3:0:123;",
             eraseHints.DebugPrint());
-
-        // Finish erasing
-        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap->EraseFinished(host, MakeLsnVector(hint.Segments), {});
-        }
+        EraseAll(eraseHints, *dirtyMap);
     }
 
     Y_UNIT_TEST(ShouldWriteAndFlushAndEraseWithTwoDisabled)
@@ -962,11 +957,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H3:0:123;"
             "H4:0:123;",
             eraseHints.DebugPrint());
-
-        // Finish erasing
-        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap->EraseFinished(host, MakeLsnVector(hint.Segments), {});
-        }
+        EraseAll(eraseHints, *dirtyMap);
     }
 
     Y_UNIT_TEST(ShouldNotFlushAndEraseFromDisabled)
@@ -1015,12 +1006,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H1:0:123;"
             "H2:0:123;",
             eraseHints.DebugPrint());
-
-        // Finish erasing
-        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap->EraseFinished(host, MakeLsnVector(hint.Segments), {});
-        }
-
+        EraseAll(eraseHints, *dirtyMap);
         // Should remove inflight items
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
     }
@@ -1895,11 +1881,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H1:0:123;"
             "H2:0:123;",
             eraseHints.DebugPrint());
-
-        // Finish erasing on enabled hosts.
-        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap->EraseFinished(host, MakeLsnVector(hint.Segments), {});
-        }
+        EraseAll(eraseHints, *dirtyMap);
 
         // The disabled host's erase was auto-confirmed, so inflight should be
         // clear.
@@ -2001,10 +1983,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Erase should only cover hosts that still have write data (0 and 2).
         UNIT_ASSERT_VALUES_EQUAL("H0:0:123;H2:0:123;", eraseHints.DebugPrint());
-        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap->EraseFinished(host, MakeLsnVector(hint.Segments), {});
-        }
-
+        EraseAll(eraseHints, *dirtyMap);
         // Inflight should be fully cleaned up.
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
     }
@@ -2128,10 +2107,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT_EQUAL(false, eraseHints.Empty());
-        for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap->EraseFinished(host, MakeLsnVector(hint.Segments), {});
-        }
-
+        EraseAll(eraseHints, *dirtyMap);
         // The inflight item is gone.
         UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
 
@@ -2496,6 +2472,85 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
         auto eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT_EQUAL(false, eraseHints.Empty());
+    }
+
+    Y_UNIT_TEST(ShouldNotEraseUntaggedLsn)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+
+        // Promote hand-off H3 to a primary DDisk so we have 4 desired DDisks.
+        vchunkConfig.PromoteHost(3);
+
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Disable H3 while it stays a desired DDisk -> it starts lagging and
+        // will record ranges it misses as Behind.
+        vchunkConfig.DisableHost(3);
+        dirtyMap->UpdateConfig(vchunkConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
+        UNIT_ASSERT_VALUES_EQUAL(0u, dirtyMap->GetCurrentGeneration());
+
+        // Write to the three enabled DDisks (quorum) and flush. The lagging H3
+        // misses the flush, so the range is recorded in its Behind field and
+        // the generation advances.
+        const THostMask requested =
+            MakeHostMask(true, true, true, false, false);
+        dirtyMap->RegisterInflightWrite(123, TBlockRange64::WithLength(10, 10));
+        dirtyMap->WriteFinished(
+            123,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            requested);
+
+        auto flushHint = dirtyMap->MakeFlushHint(1);
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
+        FlushAll(flushHint, *dirtyMap);
+
+        // H3 now lags behind on the written range; generation is 1.
+        UNIT_ASSERT_VALUES_EQUAL(
+            "  H3: [10..19]\n",
+            dirtyMap->DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL(1u, dirtyMap->GetCurrentGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap->NeedPersist());
+
+        // Persist generation 1. This advances PersistedGeneration to 1 while
+        // the inflight block is still untagged (PersistGeneration == 0).
+        dirtyMap->StatePersisted(1);
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
+
+        // The block overlaps Behind data that reflects a state which is only
+        // "as persisted as" the block's own generation, so erasing it now would
+        // be unsafe. Before the fix the untagged block was erased here; now it
+        // must be blocked and stay inflight.
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // Sync the Behind range on H3 (the lagging replica caught up). This
+        // clears Behind and advances the generation to 2.
+        auto sync =
+            dirtyMap->BeginRangeSync(3, TBlockRange64::WithLength(10, 10));
+        dirtyMap->EndRangeSync(sync.SyncId, true);
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
+        UNIT_ASSERT_VALUES_EQUAL(2u, dirtyMap->GetCurrentGeneration());
+
+        // Persist the newer generation. Now the block's tag (1) is strictly
+        // less than PersistedGeneration (2), so erasing is finally allowed.
+        dirtyMap->StatePersisted(2);
+
+        eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0:0:123;"
+            "H1:0:123;"
+            "H2:0:123;",
+            eraseHints.DebugPrint());
+        EraseAll(eraseHints, *dirtyMap);
+
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetInflightCount());
     }
 }
 

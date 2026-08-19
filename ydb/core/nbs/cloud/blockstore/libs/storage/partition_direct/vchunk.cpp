@@ -333,7 +333,7 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "AheadBehind:" << BlocksDirtyMap->DebugPrintAheadBehindBrief()
        << "\n";
     sb << "Ahead:\n" << BlocksDirtyMap->DebugPrintAhead();
-    sb << "Behind\n" << BlocksDirtyMap->DebugPrintBehind();
+    sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
     sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
     return sb;
 }

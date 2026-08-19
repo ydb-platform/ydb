@@ -1031,11 +1031,13 @@ bool TBlocksDirtyMap::CheckEraseAbility(
         return true;
     }
 
-    if (inflightInfo.GetPersistGeneration() < PersistedGeneration) {
+    if (inflightInfo.GetPersistGeneration() &&
+        inflightInfo.GetPersistGeneration() < PersistedGeneration)
+    {
         return true;
     }
 
-    bool eraseBlocked = AnyOf(
+    const bool eraseBlocked = AnyOf(
         DDiskStates,
         [&](const TDDiskState& ddiskState)
         {

@@ -55,12 +55,14 @@ void AdjustSecretPaths(
 
 TExternalDataSourceAuthFields::TExternalDataSourceAuthFields(
     const THashSet<TString>& mandatoryFields,
-    const TVector<TSecretSettingsNames>& secretsFields)
+    const TVector<TSecretSettingsNames>& secretsFields,
+    const THashSet<TString>& optionalFields)
     : MandatoryFields_(mandatoryFields)
     , SecretsFields_(secretsFields)
 {
-    AllPossibleFields_.reserve(MandatoryFields_.size() + 2 * SecretsFields_.size());
+    AllPossibleFields_.reserve(MandatoryFields_.size() + 2 * SecretsFields_.size() + optionalFields.size());
     AllPossibleFields_.insert(begin(MandatoryFields_), end(MandatoryFields_));
+    AllPossibleFields_.insert(begin(optionalFields), end(optionalFields));
     for (const auto& fields : SecretsFields_) {
         AllPossibleFields_.insert(fields.Name);
         AllPossibleFields_.insert(fields.Path);
@@ -157,10 +159,11 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
                               TSecretSettingsNames("password_secret"),
                           })},
         {"IAM", TExternalDataSourceAuthFields(
-                    {"service_account_id", "resource_id"},
+                    {"service_account_id"},
                     {
                         TSecretSettingsNames("initial_token_secret"),
-                    })},
+                    },
+                    {"resource_id"})},
         {"TOKEN", TExternalDataSourceAuthFields(
                       {},
                       {

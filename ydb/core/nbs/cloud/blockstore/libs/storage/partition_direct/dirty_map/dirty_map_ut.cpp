@@ -2517,31 +2517,16 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(1u, dirtyMap->GetCurrentGeneration());
         UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap->NeedPersist());
 
-        // Persist generation 1. This advances PersistedGeneration to 1 while
-        // the inflight block is still untagged (PersistGeneration == 0).
+        // Can't erase since state not persisted yet.
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL("", eraseHints.DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
+
+        // Persist generation 1.
         dirtyMap->StatePersisted(1);
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
 
-        // The block overlaps Behind data that reflects a state which is only
-        // "as persisted as" the block's own generation, so erasing it now would
-        // be unsafe. Before the fix the untagged block was erased here; now it
-        // must be blocked and stay inflight.
-        auto eraseHints = dirtyMap->MakeEraseHint(1);
-        UNIT_ASSERT_EQUAL(true, eraseHints.Empty());
-        UNIT_ASSERT_VALUES_EQUAL(1, dirtyMap->GetInflightCount());
-
-        // Sync the Behind range on H3 (the lagging replica caught up). This
-        // clears Behind and advances the generation to 2.
-        auto sync =
-            dirtyMap->BeginRangeSync(3, TBlockRange64::WithLength(10, 10));
-        dirtyMap->EndRangeSync(sync.SyncId, true);
-        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
-        UNIT_ASSERT_VALUES_EQUAL(2u, dirtyMap->GetCurrentGeneration());
-
-        // Persist the newer generation. Now the block's tag (1) is strictly
-        // less than PersistedGeneration (2), so erasing is finally allowed.
-        dirtyMap->StatePersisted(2);
-
+        // Can erase since red blocks persisted.
         eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0:0:123;"

@@ -831,19 +831,23 @@ void TVChunk::DoPersistDirtyMap()
     DirtyMapStatePersisting = true;
 
     auto state = BlocksDirtyMap->GetStateForPersist();
+    const ui32 stateGeneration = state.GetStateGeneration();
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "%s DoPersistDirtyMap: %s",
+        "%s Will persist dirty map. State generation %u",
         LogTitle.GetWithTime().c_str(),
-        state.DebugString().c_str());
+        stateGeneration);
 
-    DirectBlockGroup->Schedule(
-        TDuration::Seconds(1),
+    auto future = PartitionDirectService->UpdateDirtyMapState(
+        VChunkConfig.GetVChunkIndex(),
+        std::move(state));
+    future.Subscribe(
         [weakSelf = weak_from_this(),
-         stateGeneration = state.GetStateGeneration()]   //
-        ()
+         stateGeneration]   //
+        (const TFuture<void>& f)
         {
+            Y_UNUSED(f);
             if (auto self = weakSelf.lock()) {
                 self->OnDirtyMapPersisted(stateGeneration);
             }
@@ -852,6 +856,13 @@ void TVChunk::DoPersistDirtyMap()
 
 void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
 {
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Dirty map persisted. State generation: %u",
+        LogTitle.GetWithTime().c_str(),
+        stateGeneration);
+
     DirtyMapStatePersisting = false;
     BlocksDirtyMap->StatePersisted(stateGeneration);
 }

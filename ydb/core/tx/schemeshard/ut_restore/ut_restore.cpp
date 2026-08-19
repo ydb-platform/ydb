@@ -7,6 +7,7 @@
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -3773,6 +3774,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
 
         TTestDataWithScheme data;
+        data.Metadata = R"({"version": 1})";
         data.CreationQuery = R"(PRAGMA classic_division = '0';
 CREATE TABLE `/OldRoot/Original` (
     key Uint32 NOT NULL,
@@ -3798,7 +3800,7 @@ CREATE TABLE `/MyRoot/Restored` (
         UNIT_ASSERT(s3Mock.Start());
 
         TVector<TString> compileQueries;
-        auto compileObserver = runtime.AddObserver<TEvKqp::TEvCompileRequest>([&](auto& ev) {
+        auto compileObserver = runtime.AddObserver<NKikimr::NKqp::TEvKqp::TEvCompileRequest>([&](auto& ev) {
             if (ev->Get()->Query) {
                 compileQueries.emplace_back(ev->Get()->Query->Text);
             }
@@ -3808,6 +3810,17 @@ CREATE TABLE `/MyRoot/Restored` (
         auto schemeGetterObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeReady>([&](auto& ev) {
             if (!ev->Get()->Success) {
                 schemeGetterError = ev->Get()->Error;
+            }
+        });
+
+        TString schemeQueryError;
+        auto schemeQueryObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeQueryResult>([&](auto& ev) {
+            if (std::holds_alternative<TString>(ev->Get()->Result)) {
+                schemeQueryError = std::get<TString>(ev->Get()->Result);
+                if (schemeQueryError.empty()) {
+                    schemeQueryError = TStringBuilder()
+                        << "scheme query failed with status " << ev->Get()->Status;
+                }
             }
         });
 
@@ -3830,9 +3843,10 @@ CREATE TABLE `/MyRoot/Restored` (
         )", port));
 
         runtime.WaitFor("prepared CREATE TABLE query", [&] {
-            return !createTableBlocker.empty() || !schemeGetterError.empty();
+            return !createTableBlocker.empty() || !schemeGetterError.empty() || !schemeQueryError.empty();
         });
         UNIT_ASSERT_C(schemeGetterError.empty(), schemeGetterError);
+        UNIT_ASSERT_C(schemeQueryError.empty(), schemeQueryError);
         UNIT_ASSERT_VALUES_EQUAL(compileQueries.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(compileQueries.front(), expectedQuery);
 
@@ -3867,6 +3881,116 @@ CREATE TABLE `/MyRoot/Restored` (
         UNIT_ASSERT_VALUES_EQUAL(generated->GetDefaultFromExpression().GetExprText(), "a + 1");
         UNIT_ASSERT_VALUES_EQUAL(generated->GetDefaultFromExpression().GetContext(),
             "PRAGMA classic_division = \"0\";");
+    }
+
+    enum class ECreateTableQueryCompileResult {
+        Empty,
+        Multiple,
+        WrongOperation,
+    };
+
+    void ShouldRejectCreateTableQueryCompileResult(
+        ECreateTableQueryCompileResult mutation,
+        const TString& expectedError)
+    {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+
+        TTestDataWithScheme data;
+        data.CreationQuery = R"(CREATE TABLE `/OldRoot/Original` (
+    key Uint32 NOT NULL,
+    PRIMARY KEY (key)
+);
+)";
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        bool mutated = false;
+        auto compileResponseObserver = runtime.AddObserver<NKikimr::NKqp::TEvKqp::TEvCompileResponse>([&](auto& ev) {
+            const auto* result = ev->Get()->CompileResult.get();
+            if (mutated || !result || !result->PreparedQuery) {
+                return;
+            }
+
+            auto* preparedQuery = new NKikimrKqp::TPreparedQuery();
+            preparedQuery->MutablePhysicalQuery()->CopyFrom(result->PreparedQuery->GetPhysicalQuery());
+            auto* transactions = preparedQuery->MutablePhysicalQuery()->MutableTransactions();
+
+            switch (mutation) {
+            case ECreateTableQueryCompileResult::Empty:
+                transactions->Clear();
+                break;
+            case ECreateTableQueryCompileResult::Multiple: {
+                UNIT_ASSERT_VALUES_EQUAL(transactions->size(), 1);
+                const auto transaction = transactions->Get(0);
+                transactions->Add()->CopyFrom(transaction);
+                break;
+            }
+            case ECreateTableQueryCompileResult::WrongOperation: {
+                UNIT_ASSERT_VALUES_EQUAL(transactions->size(), 1);
+                auto* schemeOperation = transactions->Mutable(0)->MutableSchemeOperation();
+                UNIT_ASSERT(schemeOperation->HasCreateTable());
+                const auto modifyScheme = schemeOperation->GetCreateTable();
+                schemeOperation->MutableCreateView()->CopyFrom(modifyScheme);
+                break;
+            }
+            }
+
+            auto replacement = NKikimr::NKqp::TKqpCompileResult::Make(
+                result->Uid,
+                result->Status,
+                result->Issues,
+                result->MaxReadType);
+            replacement->PreparedQuery = std::make_shared<NKikimr::NKqp::TPreparedQueryHolder>(
+                preparedQuery,
+                nullptr,
+                true);
+            ev->Get()->CompileResult = std::move(replacement);
+            mutated = true;
+        });
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, importId);
+        const auto response = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(mutated);
+        UNIT_ASSERT_STRING_CONTAINS(
+            NYql::IssuesFromMessageAsString(response.GetResponse().GetEntry().GetIssues()),
+            expectedError);
+    }
+
+    Y_UNIT_TEST(CreateTableQueryRejectsEmptyKqpResult) {
+        ShouldRejectCreateTableQueryCompileResult(
+            ECreateTableQueryCompileResult::Empty,
+            "expected exactly one physical transaction");
+    }
+
+    Y_UNIT_TEST(CreateTableQueryRejectsMultipleKqpResults) {
+        ShouldRejectCreateTableQueryCompileResult(
+            ECreateTableQueryCompileResult::Multiple,
+            "expected exactly one physical transaction");
+    }
+
+    Y_UNIT_TEST(CreateTableQueryRejectsWrongKqpOperation) {
+        ShouldRejectCreateTableQueryCompileResult(
+            ECreateTableQueryCompileResult::WrongOperation,
+            "expected CREATE TABLE scheme operation");
     }
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnMultiShardTable, EnableDataShardDirectPartImport) {

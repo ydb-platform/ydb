@@ -593,23 +593,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
     }
 
-    void HandleScheme(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
-        const auto& msg = *ev->Get();
-        const auto& result = msg.Result;
-
-        LOG_D("HandleScheme TEvExternalStorage::TEvGetObjectResponse"
-            << ": self# " << SelfId()
-            << ", result# " << result);
-
-        if (!CheckResult(result, "GetObject")) {
-            return;
-        }
-
-        TString content;
-        if (!MaybeDecrypt(msg.Body, content, SchemeFileType)) {
-            return;
-        }
-
+    void StoreSchemeAndContinue(const TString& content) {
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
@@ -643,12 +627,32 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
         }
 
-        auto nextStep = [this]() {
-            if (NeedDownloadPermissions) {
-                StartDownloadingPermissions();
-            } else {
-                StartCheckingMaterializedIndexes();
-            }
+        if (NeedDownloadPermissions) {
+            StartDownloadingPermissions();
+        } else {
+            StartCheckingMaterializedIndexes();
+        }
+    }
+
+    void HandleScheme(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandleScheme TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        TString content;
+        if (!MaybeDecrypt(msg.Body, content, SchemeFileType)) {
+            return;
+        }
+
+        auto nextStep = [this, content]() {
+            StoreSchemeAndContinue(content);
         };
 
         if (NeedValidateChecksums) {

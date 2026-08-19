@@ -800,20 +800,12 @@ public:
             disposition = nullptr; // Do not save disposition if state already saved
         }
 
-<<<<<<< HEAD
-        const auto& creatorId = Register(TCreateScriptOperationQuery::MakeRetry(SelfId(), ExecutionId, RunScriptActorId, ev.Record, std::move(meta), MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation));
-        KQP_PROXY_LOG_D("Bootstrap. Start TCreateScriptOperationQuery " << creatorId << ", RunScriptActorId: " << RunScriptActorId);
-=======
         const auto& creatorId = Register(TCreateScriptOperationQuery::MakeRetry(
             SelfId(), ExecutionId, RunScriptActorId, ev.Record, std::move(meta), MaxRunTime, GetRetryState(),
             ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation,
             ev.StreamingQueryPath, ev.StreamingQueryOperationId
         ));
-        YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting TCreateScriptOperationQuery",
-            {"logPrefix", LogPrefix()},
-            {"creatorId", creatorId},
-            {"runScriptActorId", RunScriptActorId});
->>>>>>> 3d08ffc39b3 (YQ-5571 fixed race on streaming query start (#50288))
+        KQP_PROXY_LOG_D("Bootstrap. Start TCreateScriptOperationQuery " << creatorId << ", RunScriptActorId: " << RunScriptActorId);
     }
 
     void Handle(TEvPrivate::TEvCreateScriptOperationResponse::TPtr& ev) {

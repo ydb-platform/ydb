@@ -60,6 +60,10 @@ public:
         TString structuredToken = "";
         if (authMethod == "SERVICE_ACCOUNT") {
             structuredToken = ComposeStructuredTokenJsonForServiceAccountWithSecret(properties.Value("serviceAccountId", ""), properties.Value("serviceAccountIdSignatureReference", ""), properties.Value("serviceAccountIdSignature", ""));
+        } else if (authMethod == "IAM") {
+            const TString& serviceAccountId = properties.Value("iamServiceAccountId", "");
+            const TString& resourceId = properties.Value("iamResourceId", "");
+            structuredToken = ComposeStructuredTokenJsonForIamAuth(serviceAccountId, resourceId);
         } else {
             structuredToken = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
         }

@@ -133,32 +133,37 @@ TFormatReadResult ReadDiskFormat(
 }
 
 void FillFormatProto(const TFormatReadResult& result, NKikimr::NPdiskTool::TFormatResult& proto, bool showKeys) {
-    auto* f = proto.MutableFormat();
-    const auto& fmt = result.Format;
-    f->SetVersion(fmt.Version);
-    f->SetDiskSize(fmt.DiskSize);
-    f->SetGuid(fmt.Guid);
-    f->SetChunkSize(fmt.ChunkSize);
-    f->SetSectorSize(fmt.SectorSize);
-    f->SetSysLogSectorCount(fmt.SysLogSectorCount);
-    f->SetSystemChunkCount(fmt.SystemChunkCount);
-    TString text(fmt.FormatText, strnlen(fmt.FormatText, sizeof(fmt.FormatText)));
-    f->SetFormatText(text);
-    f->SetDiskFormatSize(fmt.DiskFormatSize);
-    f->SetTimestampUs(fmt.TimestampUs);
-    f->SetTimestamp(TInstant::MicroSeconds(fmt.TimestampUs).ToString());
-    f->SetFormatFlagsRaw(fmt.FormatFlags);
-    f->SetFormatFlags(fmt.FormatFlagsToString(fmt.FormatFlags));
-    f->SetMagicNextLogChunkReference(fmt.MagicNextLogChunkReference);
-    f->SetMagicLogChunk(fmt.MagicLogChunk);
-    f->SetMagicDataChunk(fmt.MagicDataChunk);
-    f->SetMagicSysLogChunk(fmt.MagicSysLogChunk);
-    f->SetMagicFormatChunk(fmt.MagicFormatChunk);
-    f->SetUserAccessibleChunkSize(fmt.GetUserAccessibleChunkSize());
-    if (showKeys) {
-        f->SetSysLogKey(fmt.SysLogKey);
-        f->SetLogKey(fmt.LogKey);
-        f->SetChunkKey(fmt.ChunkKey);
+    if (result.Ok) {
+        auto* f = proto.MutableFormat();
+        const auto& fmt = result.Format;
+        f->SetVersion(fmt.Version);
+        f->SetDiskSize(fmt.DiskSize);
+        f->SetGuid(fmt.Guid);
+        f->SetChunkSize(fmt.ChunkSize);
+        f->SetSectorSize(fmt.SectorSize);
+        f->SetSysLogSectorCount(fmt.SysLogSectorCount);
+        f->SetSystemChunkCount(fmt.SystemChunkCount);
+        TString text(fmt.FormatText, strnlen(fmt.FormatText, sizeof(fmt.FormatText)));
+        f->SetFormatText(text);
+        f->SetDiskFormatSize(fmt.DiskFormatSize);
+        f->SetTimestampUs(fmt.TimestampUs);
+        f->SetTimestamp(TInstant::MicroSeconds(fmt.TimestampUs).ToString());
+        f->SetFormatFlagsRaw(fmt.FormatFlags);
+        f->SetFormatFlags(fmt.FormatFlagsToString(fmt.FormatFlags));
+        f->SetMagicNextLogChunkReference(fmt.MagicNextLogChunkReference);
+        f->SetMagicLogChunk(fmt.MagicLogChunk);
+        f->SetMagicDataChunk(fmt.MagicDataChunk);
+        f->SetMagicSysLogChunk(fmt.MagicSysLogChunk);
+        f->SetMagicFormatChunk(fmt.MagicFormatChunk);
+        // TDiskFormat divides ChunkSize / SectorSize; both are 0 when decrypt failed.
+        if (fmt.SectorSize != 0 && fmt.ChunkSize >= fmt.SectorSize) {
+            f->SetUserAccessibleChunkSize(fmt.GetUserAccessibleChunkSize());
+        }
+        if (showKeys) {
+            f->SetSysLogKey(fmt.SysLogKey);
+            f->SetLogKey(fmt.LogKey);
+            f->SetChunkKey(fmt.ChunkKey);
+        }
     }
     for (const auto& r : result.Replicas) {
         auto* p = proto.AddReplicas();

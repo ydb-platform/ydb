@@ -10,6 +10,7 @@
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/tools/pdisktool/lib/blobs.h>
+#include <ydb/tools/pdisktool/lib/format.h>
 #include <ydb/tools/pdisktool/lib/session.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -437,5 +438,26 @@ Y_UNIT_TEST_SUITE(TPDiskToolOracle) {
         TIssueLog brokenIssues;
         MakeMainKey({}, brokenProto, "", true, brokenIssues);
         UNIT_ASSERT(brokenIssues.HasErrors());
+    }
+
+    Y_UNIT_TEST(FillFormatProtoOnFailedReadDoesNotCrash) {
+        TFormatReadResult result;
+        result.Ok = false;
+        TFormatReplicaInfo replica;
+        replica.Index = 0;
+        replica.Nonce = 1;
+        replica.Decrypted = true;
+        replica.Error = "hash mismatch nonce# 1";
+        result.Replicas.push_back(replica);
+
+        NKikimr::NPdiskTool::TFormatResult proto;
+        FillFormatProto(result, proto, false);
+        UNIT_ASSERT(!proto.HasFormat());
+        UNIT_ASSERT_VALUES_EQUAL(proto.ReplicasSize(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(proto.GetReplicas(0).GetNonce(), 1u);
+
+        TStringStream out;
+        PrintFormatText(proto, out);
+        UNIT_ASSERT(out.Str().Contains("nonce=1"));
     }
 }

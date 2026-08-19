@@ -7,10 +7,12 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr {
 
 static constexpr ui32 ChannelsCount = 5;
+static constexpr ui32 BlobSize = 1_KB;
 
 // Helper: all channels start in groupId; from generation fromGeneration they live in groupId2.
 static TIntrusivePtr<TTabletStorageInfo> CreateReassignedTabletInfo(ui64 tabletId, TTabletTypes::EType tabletType,
@@ -50,7 +52,7 @@ static TIntrusivePtr<TTabletStorageInfo> CreateInitialTabletInfo(
 }
 
 static NOlap::TUnifiedBlobId MakeDsBlobId(ui32 dsGroup, ui64 tabletId, ui32 gen, ui32 step, ui32 channel) {
-    TLogoBlobID logo(tabletId, gen, step, channel, 1024, 0);
+    TLogoBlobID logo(tabletId, gen, step, channel, BlobSize, 0);
     return NOlap::TUnifiedBlobId(dsGroup, logo);
 }
 
@@ -238,6 +240,34 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
 
         UNIT_ASSERT_C(shared.HasBlobsForGroups({ OldGroup }), "borrowed blob in old group must match via GetDsGroup");
         UNIT_ASSERT_C(!shared.HasBlobsForGroups({ NewGroup }), "unrelated group must not match");
+    }
+
+    // The selection rule that decides whether a portion is rewritten at all. Exercised
+    // directly: a TPortionDataAccessor needs arrow-backed portion metadata to build, and
+    // ActualizePortionInfo's remaining work is bookkeeping the other cases already cover.
+    Y_UNIT_TEST(HasBlobInGroupsSelectsOnlyTargetGroups) {
+        static constexpr ui64 TabletId = 46;
+        static constexpr ui32 TargetGroup = 100;
+        static constexpr ui32 OtherGroup = 200;
+        static constexpr ui32 ThirdGroup = 300;
+        static constexpr ui32 Gen = 3;
+        static constexpr ui32 Step = 1;
+        static constexpr ui32 Channel = 2;
+        const THashSet<ui32> targets{ TargetGroup };
+
+        const auto inTarget = MakeDsBlobId(TargetGroup, TabletId, Gen, Step, Channel);
+        const auto outsideTarget = MakeDsBlobId(OtherGroup, TabletId, Gen, Step, Channel);
+        const auto thirdParty = MakeDsBlobId(ThirdGroup, TabletId, Gen, Step, Channel);
+
+        using TActualizer = NOlap::NActualizer::TMoveDataActualizer;
+        UNIT_ASSERT_C(TActualizer::HasBlobInGroups({ inTarget }, targets), "a blob in a target group must select the portion");
+        UNIT_ASSERT_C(!TActualizer::HasBlobInGroups({ outsideTarget }, targets), "a blob outside the target groups must not select it");
+        UNIT_ASSERT_C(
+            TActualizer::HasBlobInGroups({ outsideTarget, inTarget }, targets), "one blob in a target group is enough, even alongside others");
+        UNIT_ASSERT_C(
+            !TActualizer::HasBlobInGroups({ outsideTarget, thirdParty }, targets), "no blob in a target group means the portion stays put");
+        UNIT_ASSERT_C(!TActualizer::HasBlobInGroups({}, targets), "a portion with no blobs is never selected");
+        UNIT_ASSERT_C(!TActualizer::HasBlobInGroups({ inTarget }, {}), "an empty target set selects nothing");
     }
 
 }   // Y_UNIT_TEST_SUITE

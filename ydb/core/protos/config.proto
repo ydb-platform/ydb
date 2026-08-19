@@ -2980,8 +2980,9 @@ message TColumnShardConfig {
     }
 
     optional TFlowControlConfig FlowControl = 74;
-    // 75/76: group-decommission features (75 = MoveDataEnabled in the sibling PR, 76 = CutHistory).
-    optional bool CutHistoryEnabled = 76 [default = false];
+    // 75/76: group-decommission features. Both are gated by feature flags
+    // (EnableColumnshardMoveData / EnableCutHistory), not by this config.
+    reserved 76;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

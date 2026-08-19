@@ -17,6 +17,11 @@ SRCS(
     diagnostic.cpp
     formatting.cpp
     layer.cpp
+    radix.cpp
 )
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

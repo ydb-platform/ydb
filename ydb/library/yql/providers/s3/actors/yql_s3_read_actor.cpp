@@ -48,6 +48,7 @@
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/parser/pg_wrapper/interface/arrow.h>
 
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 #include <util/stream/format.h>
 #include <util/system/fstat.h>
@@ -788,9 +789,11 @@ public:
 
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
                 // TODO: split DecodeRowGroups into smaller units (arrow async / column streaming)
-                startUnit();
-                ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
-                stopUnit();
+                {
+                    startUnit();
+                    Y_DEFER { stopUnit(); };
+                    ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
+                }
                 readyGroupCount++;
 
                 auto downloadedBytes = ReadInflightSize[readyGroupIndex];
@@ -805,6 +808,7 @@ public:
                 ui64 numRows = 0;
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
                     startUnit();
+                    Y_DEFER { stopUnit(); };
                     auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;
@@ -813,7 +817,6 @@ public:
                         convertedBatch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta()
                     ));
                     numRows += convertedBatch->num_rows();
-                    stopUnit();
                 }
                 if (StopIfConsumedEnough(numRows)) {
                     isCancelled = true;
@@ -1351,7 +1354,7 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr RawInflightSize;
     const bool AsyncDecompressing;
     const IDqSchedulerContextPtr SchedulerContext;
-    std::shared_ptr<IDqSchedulableWork> Work;
+    std::unique_ptr<IDqSchedulableWork> Work;
 };
 
 class TS3ReadCoroActor : public TActorCoro {

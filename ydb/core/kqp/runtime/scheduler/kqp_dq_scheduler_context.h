@@ -11,7 +11,7 @@ class TDqSchedulerContext : public NYql::NDq::IDqSchedulerContext {
 public:
     TDqSchedulerContext(NHdrf::NDynamic::TQueryPtr query, bool isSchedulable);
 
-    std::shared_ptr<NYql::NDq::IDqSchedulableWork> CreateSchedulableWork() override;
+    std::unique_ptr<NYql::NDq::IDqSchedulableWork> CreateSchedulableWork() override;
 
 private:
     const NHdrf::NDynamic::TQueryPtr Query;

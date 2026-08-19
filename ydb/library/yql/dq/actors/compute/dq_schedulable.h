@@ -43,7 +43,9 @@ struct IDqSchedulableWork {
 struct IDqSchedulerContext {
     virtual ~IDqSchedulerContext() = default;
 
-    virtual std::shared_ptr<IDqSchedulableWork> CreateSchedulableWork() = 0;
+    // Each caller must own its own IDqSchedulableWork instance — Start/Stop
+    // state is not thread-safe and not shareable across actors.
+    virtual std::unique_ptr<IDqSchedulableWork> CreateSchedulableWork() = 0;
 };
 
 using IDqSchedulerContextPtr = std::shared_ptr<IDqSchedulerContext>;

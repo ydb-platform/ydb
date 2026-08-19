@@ -650,7 +650,7 @@ private:
     const NS3Lister::ES3PatternVariant PatternVariant;
     const NS3Lister::ES3PatternType PatternType;
     const bool AllowLocalFiles;
-    std::shared_ptr<IDqSchedulableWork> Work;
+    std::unique_ptr<IDqSchedulableWork> Work;
     IHttpRequestContext::TPtr HttpRequestContext;
 
     static constexpr TDuration PoisonTimeout = TDuration::Minutes(30);

@@ -15,6 +15,13 @@ public:
         , PoolId(std::move(poolId))
     {}
 
+    ~TDqSchedulableWork() override {
+        // Safety net: release scheduler state if owner died between StartExecution
+        // and StopExecution. Idempotent — no-op if Executed=false.
+        bool forced = false;
+        TSchedulableActorBase::StopExecution(forced);
+    }
+
     bool StartExecution(TMonotonic now) override {
         return TSchedulableActorBase::StartExecution(now);
     }
@@ -56,11 +63,11 @@ TDqSchedulerContext::TDqSchedulerContext(NHdrf::NDynamic::TQueryPtr query, bool 
     , PoolId(ExtractPoolId(Query))
 {}
 
-std::shared_ptr<NYql::NDq::IDqSchedulableWork> TDqSchedulerContext::CreateSchedulableWork() {
+std::unique_ptr<NYql::NDq::IDqSchedulableWork> TDqSchedulerContext::CreateSchedulableWork() {
     if (!Query) {
         return nullptr;
     }
-    return std::make_shared<TDqSchedulableWork>(
+    return std::make_unique<TDqSchedulableWork>(
         TSchedulableActorOptions{
             .Query = Query,
             .IsSchedulable = IsSchedulable,

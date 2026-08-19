@@ -8,6 +8,7 @@
 #include <ydb/library/yql/providers/s3/events/events.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 
 #if defined(_linux_) || defined(_darwin_)
@@ -100,10 +101,10 @@ private:
             while (!decompressorBuffer->eof()) {
                 decompressorBuffer->nextIfAtEnd();
                 startUnit();
+                Y_DEFER { stopUnit(); };
                 TString data{decompressorBuffer->available(), ' '};
                 decompressorBuffer->read(&data.front(), decompressorBuffer->available());
                 Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::move(data), TakeCpuTimeDelta()));
-                stopUnit();
             }
         } catch (const TDtorException&) {
             // Stop any activity instantly
@@ -147,7 +148,7 @@ private:
     bool InputFinished = false;
     std::queue<THolder<TEvS3Provider::TEvDecompressDataRequest>> Requests;
     const IDqSchedulerContextPtr SchedulerContext;
-    std::shared_ptr<IDqSchedulableWork> Work;
+    std::unique_ptr<IDqSchedulableWork> Work;
 };
 
 class TS3DecompressorCoroActor : public TActorCoro {

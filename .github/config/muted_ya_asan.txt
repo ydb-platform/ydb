@@ -65,6 +65,7 @@ ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.Aggregation-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin+UseBlockHashJoin
 ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin-UseBlockHashJoin
+ydb/core/kqp/ut/rbo KqpRboYql.ClickBench_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics+ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.FilterPushdownThroughJoin
 ydb/core/kqp/ut/rbo KqpRboYql.Having
@@ -299,6 +300,7 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-3-1-codec3-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-3-1-codec4-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_compression[restart_stable-26-3-1_to_stable-26-3-1-codec5-ROW]
+ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_empty_result[restart_prestable-26-4_to_prestable-26-4-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_empty_result[restart_stable-26-3-1_to_prestable-26-4-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_empty_result[restart_stable-26-3-1_to_stable-26-3-1-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_limit_ordered_columns[restart_prestable-26-4_to_prestable-26-4-COLUMN]
@@ -351,6 +353,7 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_stable-26-3-1_to_prestable-26-4-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_column_alias[restart_stable-26-3-1_to_stable-26-3-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_empty_result[restart_prestable-26-4_to_stable-26-3-1-ROW]
+ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_empty_result[restart_stable-26-3-1_to_stable-26-3-1-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_prestable-26-4_to_prestable-26-4-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_prestable-26-4_to_stable-26-3-1-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_limit_ordered_columns[restart_prestable-26-4_to_stable-26-3-1-ROW]
@@ -404,6 +407,7 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-0-8388608-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-1-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-1-2048-ROW]
+ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-1-8388608-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-2-1-2-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-0-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-0-2048-ROW]
@@ -414,13 +418,16 @@ ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-2-2048-COLUMN]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-2-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-2-8388608-COLUMN]
+ydb/tests/compatibility/result_set_format test_result_set_value.py.TestResultSetValue.test_schema_inclusion_mode[restart_stable-26-3-1_to_stable-26-3-1-2-8388608-ROW]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade_multi_output[rolling_stable-26-3-1_to_prestable-26-4-False]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-4_to_prestable-26-4-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-4_to_prestable-26-4-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_prestable-26-4_to_stable-26-3-1-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-3-1_to_prestable-26-4-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-3-1_to_prestable-26-4-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-3-1_to_stable-26-2-1-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-3-1_to_stable-26-2-1-True]
+ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRestartToAnotherVersion.test_restart_to_another_version[restart_stable-26-3-1_to_stable-26-3-1-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_stable-26-3-1-False]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_stable-26-3-1-True]
 ydb/tests/compatibility/streaming test_watermarks.py.TestWatermarksRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-False]

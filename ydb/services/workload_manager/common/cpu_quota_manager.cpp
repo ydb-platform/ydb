@@ -57,8 +57,7 @@ void TCpuQuotaManager::UpdateSettings(const TSettings& settings) {
         CpuNumber = Settings.CpuNumber;
     }
 
-    // While reservations were in charge the legacy counter kept drifting up unused, so it has
-    // to be reseeded, otherwise switching back would stall admission until the drift decays
+    // QuotedLoad drifted unused while reservations were in charge, reseed it or rollback stalls
     if (previous.EnableLoadReservations && !Settings.EnableLoadReservations) {
         QuotedLoad = InstantLoad;
     }
@@ -91,6 +90,23 @@ void TCpuQuotaManager::PopPendingQuota() {
 void TCpuQuotaManager::ExpirePendingQuota(TInstant now) {
     while (!PendingQuotas.empty() && PendingQuotas.front().ExpireAt <= now) {
         PopPendingQuota();
+    }
+}
+
+// The reservation is taken at admission but duration is measured from execution start, so the
+// entry this query may still own is the newest one due to expire by start + LoadVisibilityDelay.
+void TCpuQuotaManager::ReleasePendingQuota(double quota, TDuration duration, TInstant now) {
+    const TInstant latestExpireAt = now - duration + Settings.LoadVisibilityDelay;
+    for (auto it = PendingQuotas.end(); it != PendingQuotas.begin();) {
+        --it;
+        if (it->ExpireAt <= latestExpireAt && it->Quota == quota) {
+            PendingQuota -= it->Quota;
+            PendingQuotas.erase(it);
+            if (PendingQuotas.empty()) {
+                PendingQuota = 0.0;
+            }
+            return;
+        }
     }
 }
 
@@ -188,16 +204,13 @@ TCpuQuotaManager::TCpuQuotaResponse TCpuQuotaManager::RequestCpuQuota(double quo
 }
 
 void TCpuQuotaManager::AdjustCpuQuota(double quota, TDuration duration, double cpuSecondsConsumed) {
-    ExpirePendingQuota(GetNow());
+    const auto now = GetNow();
+    const double queryQuota = quota ? quota : Settings.DefaultQueryLoad;
 
-    // The query is over, so its whole reservation is returned. Reservations are all worth the
-    // same, so releasing the soonest expiring one is releasing this query's own.
-    if (duration < Settings.LoadVisibilityDelay && !PendingQuotas.empty()) {
-        PopPendingQuota();
-    }
+    ExpirePendingQuota(now);
+    ReleasePendingQuota(queryQuota, duration, now);
 
     if (CpuNumber && duration && duration < Settings.AverageLoadInterval / 2 && quota <= 1.0) {
-        const double queryQuota = quota ? quota : Settings.DefaultQueryLoad;
         const double load = (cpuSecondsConsumed * 1000.0 / duration.MilliSeconds()) / CpuNumber;
         if (queryQuota > load) {
             const double adjustment = (queryQuota - load) / 2;

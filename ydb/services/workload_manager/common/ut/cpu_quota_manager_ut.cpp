@@ -179,6 +179,99 @@ Y_UNIT_TEST_SUITE(CpuQuotaManager) {
         UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD, 1e-9);
         UNIT_ASSERT(manager.TryStartQuery());
     }
+
+    // Two queries in flight, the younger finishes first: its own reservation must be the one
+    // released, otherwise the survivor carries the wrong expiry deadline
+    Y_UNIT_TEST(ConcurrentQueriesReleaseOwnReservation) {
+        TCpuQuotaManager::TSettings settings;
+        settings.EnableLoadReservations = true;
+        TTestCpuQuotaManager manager(settings);
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT(manager.TryStartQuery());                       // admitted at t0
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT(manager.TryStartQuery());                       // admitted at t0 + 1s
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.FinishQuery(TDuration::Seconds(1));                 // the younger one finishes
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD + settings.DefaultQueryLoad, 1e-9);
+
+        // the reservation left behind belongs to the older query, so it expires first
+        manager.Advance(TDuration::MilliSeconds(3500));
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD, 1e-9);
+    }
+
+    // A query reports the duration of its execution, which starts after admission. When that gap
+    // pushes it past LoadVisibilityDelay its own reservation is already gone, and finishing must
+    // not consume a reservation belonging to a query that is still running.
+    Y_UNIT_TEST(NoReleaseWhenOwnReservationExpired) {
+        TCpuQuotaManager::TSettings settings;
+        settings.EnableLoadReservations = true;
+        TTestCpuQuotaManager manager(settings);
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT(manager.TryStartQuery());                       // admitted at t0
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT(manager.TryStartQuery());                       // admitted at t0 + 1s
+
+        // 5.2s after its admission, reporting 4.9s of execution
+        manager.Advance(TDuration::MilliSeconds(4200));
+        manager.FinishQuery(TDuration::MilliSeconds(4900));
+
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD + settings.DefaultQueryLoad, 1e-9);
+    }
+
+    // FQ reserves a per request amount rather than the default, so a release must match the
+    // amount that was reserved
+    Y_UNIT_TEST(ReleaseMatchesReservedAmount) {
+        TCpuQuotaManager::TSettings settings;
+        settings.EnableLoadReservations = true;
+        TTestCpuQuotaManager manager(settings);
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT(manager.RequestCpuQuota(0.3, 0.9).Status == NYdb::EStatus::SUCCESS);
+        UNIT_ASSERT(manager.RequestCpuQuota(0.1, 0.9).Status == NYdb::EStatus::SUCCESS);
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.AdjustCpuQuota(0.1, TDuration::Seconds(1), 0.0);    // the small one finishes
+
+        // the 0.3 reservation must survive untouched
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD + 0.3, 1e-9);
+    }
+
+    // Enabling reservations on a live node must carry over the admissions made just before the
+    // flip: they are running and still unmeasured, so discarding them would over admit. The
+    // resulting conservatism is bounded by LoadVisibilityDelay and must clear on its own.
+    Y_UNIT_TEST(SwitchingOnReservationsKeepsRecentAdmissions) {
+        TCpuQuotaManager::TSettings settings;
+        TTestCpuQuotaManager manager(settings);
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT(manager.TryStartQuery());
+
+        manager.Advance(TDuration::Seconds(1));
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT(manager.TryStartQuery());
+
+        manager.Advance(TDuration::Seconds(1));
+        settings.EnableLoadReservations = true;
+        manager.UpdateSettings(settings);
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD + 2 * settings.DefaultQueryLoad, 1e-9);
+
+        manager.Advance(settings.LoadVisibilityDelay);
+        manager.MeasureLoad(BACKGROUND_LOAD);
+        UNIT_ASSERT_DOUBLES_EQUAL(manager.GetQuotedLoad(), BACKGROUND_LOAD, 1e-9);
+        UNIT_ASSERT(manager.TryStartQuery());
+    }
 }
 
 }  // namespace NKikimr::NWorkloadManager

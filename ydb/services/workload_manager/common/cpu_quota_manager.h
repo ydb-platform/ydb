@@ -36,8 +36,7 @@ public:
     struct TSettings {
         TDuration MonitoringRequestDelay = TDuration::Seconds(1);
         TDuration AverageLoadInterval = TDuration::Seconds(10);
-        // How long an admitted query keeps its cpu reservation before its load is expected
-        // to be visible in the measured cluster load
+        // How long a reservation is held before the query's load is expected to be measured
         TDuration LoadVisibilityDelay = TDuration::Seconds(5);
         TDuration IdleTimeout = TDuration::Seconds(60);
         double DefaultQueryLoad = 0.1;
@@ -78,8 +77,7 @@ protected:
     virtual TInstant GetNow() const;
 
 private:
-    // Quota reserved for a query that was admitted but whose load is not yet visible
-    // in the measured cluster load
+    // Quota for a query admitted but not yet visible in the measured load
     struct TPendingQuota {
         TInstant ExpireAt;
         double Quota;
@@ -87,6 +85,7 @@ private:
 
     void PopPendingQuota();
     void ExpirePendingQuota(TInstant now);
+    void ReleasePendingQuota(double quota, TDuration duration, TInstant now);
     void UpdateQuotaCounters();
 
     TCounters Counters;

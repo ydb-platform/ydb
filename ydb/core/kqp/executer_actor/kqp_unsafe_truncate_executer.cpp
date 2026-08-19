@@ -197,7 +197,8 @@ private:
             }
 
             for (const auto& index : entry.Indexes) {
-                if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobal) {
+                if (index.GetType() != NKikimrSchemeOp::EIndexTypeGlobal
+                    && index.GetType() != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
                     ReplyError(Ydb::StatusIds::PRECONDITION_FAILED, NYql::TIssuesIds::KIKIMR_BAD_OPERATION,
                         TStringBuilder() << "Unsafe TRUNCATE TABLE is not supported for " << table.Path
                                          << ": index " << index.GetName() << " is not a synchronous one");

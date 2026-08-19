@@ -6,10 +6,14 @@ Started: 2026-08-19T01:13:49+03:00
 Finished: 2026-08-19T01:31:24+03:00
 Spin: Spin Version 6.5.2 -- 6 December 2019
 
-Commands:
+Equivalent reproduction commands for the recorded claim:
   spin -a executor_pool_basic_waker.pml
-  cc -O3 -DNFAIR=2 -o pan pan.c
-  ./pan -a -m1000000 -w27
+  cc -O3 -o pan pan.c
+  ./pan -a -N live_resize_reconciles -m1000000 -w31
+
+The recorded result covers live_resize_reconciles. The live_queue_changes
+claim was added later and requires a separate run with:
+  ./pan -a -N live_queue_changes -m1000000 -w31
 
 Result: HOLDS (full state-space search completed with errors: 0)
 

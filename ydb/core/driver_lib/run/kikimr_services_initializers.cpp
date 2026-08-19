@@ -754,7 +754,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                 }
                 setup->LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
                     TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
-                        NInterconnect::NRdma::TRdmaRuntimeParams{-1, static_cast<int>(icConfig.GetRdmaMaxWr()), 0, 0},
+                        CreateRdmaRuntimeParams(static_cast<int>(icConfig.GetRdmaMaxWr()), icConfig.GetEnableRdmaSendReceive()),
                         rdmaCqMode,
                         interconectCounters.Get()),
                         TMailboxType::ReadAsFilled, interconnectPoolId));

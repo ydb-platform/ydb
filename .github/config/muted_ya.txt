@@ -9,6 +9,7 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
 ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics-ColumnStore
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.CommitTest
+ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/tx/schemeshard/ut_set_column_constraint_reboots SetNotNullReboots.SetNotNullOnSingleColumn[TabletReboots]
 ydb/core/tx/schemeshard/ut_set_column_constraint_reboots unittest.[*/*] chunk
 ydb/library/actors/interconnect/ut InterconnectDirectSession.ReceivesExpectedReplies

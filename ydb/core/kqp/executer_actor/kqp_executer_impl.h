@@ -623,7 +623,18 @@ protected:
         }
         auto& state = ResultChannelFlow[channelId];
         if (state.EstimatedFreeSpace != Max<i64>()) {
+            const bool wasPaused = state.IsPaused();
             state.EstimatedFreeSpace -= bytes;
+            if (!wasPaused && state.IsPaused()) {
+                YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Result channel paused",
+                    {"marker", "KQPEX"},
+                    {"actorId", SelfId()},
+                    {"txId", TxId},
+                    {"ctx", *GetUserRequestContext()},
+                    {"channelId", channelId},
+                    {"freeSpace", state.EstimatedFreeSpace},
+                    {"traceId", TraceId()});
+            }
         }
     }
 
@@ -795,18 +806,24 @@ protected:
                         ResultChannelFlow.erase(chId);
                     }
                 }
-                if (EnableResultChannelFlowControl) {
-                    for (auto& [chId, inputBuffer] : ResultInputBuffers) {
-                        ReadResultFromInputBuffer(chId, inputBuffer);
-                    }
-                }
                 return;
             }
 
             if (EnableResultChannelFlowControl) {
                 const ui32 channelId = ev->Get()->Record.GetChannelId();
                 auto& state = ResultChannelFlow[channelId];
+                const bool wasPaused = state.IsPaused();
                 state.EstimatedFreeSpace = ev->Get()->Record.GetFreeSpace();
+                if (wasPaused && !state.IsPaused()) {
+                    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Result channel resumed",
+                        {"marker", "KQPEX"},
+                        {"actorId", SelfId()},
+                        {"txId", TxId},
+                        {"ctx", *GetUserRequestContext()},
+                        {"channelId", channelId},
+                        {"freeSpace", state.EstimatedFreeSpace},
+                        {"traceId", TraceId()});
+                }
                 if (state.EstimatedFreeSpace > 0) {
                     if (auto it = ResultInputBuffers.find(channelId); it != ResultInputBuffers.end()) {
                         ReadResultFromInputBuffer(channelId, it->second);

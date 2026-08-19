@@ -4,6 +4,7 @@
 #include <ydb/core/kqp/common/control.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
+#include <ydb/core/tx/datashard/datashard_ut_common_kqp.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
@@ -84,6 +85,76 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 24);
+    }
+
+    Y_UNIT_TEST(ResultChannelFlowControlPauseResume) {
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableResultChannelFlowControl(true);
+
+        TKikimrRunner kikimr(settings);
+        const ui32 totalRows = 2000;
+        kikimr.RunCall([&] { CreateManyShardsTable(kikimr, totalRows, 50, 20); return true; });
+
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        bool pausedOnce = false;
+        bool paused = false;
+        TActorId executerId;
+        ui32 channelId = 0;
+        ui64 rowsWhilePaused = 0;
+        ui64 rowsAfterResume = 0;
+        ui32 dataMessagesWhilePaused = 0;
+
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvStreamData::EventType) {
+                auto& record = ev->Get<TEvKqpExecuter::TEvStreamData>()->Record;
+                auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                resp->Record.SetEnough(false);
+
+                if (!pausedOnce) {
+                    executerId = ev->Sender;
+                    channelId = record.GetChannelId();
+                    pausedOnce = true;
+                    paused = true;
+                    rowsWhilePaused += record.GetResultSet().rows().size();
+                    resp->Record.SetFreeSpace(0);
+                } else if (paused) {
+                    ++dataMessagesWhilePaused;
+                    resp->Record.SetFreeSpace(0);
+                } else {
+                    rowsAfterResume += record.GetResultSet().rows().size();
+                    resp->Record.SetFreeSpace(100_MB);
+                }
+
+                runtime.Send(new IEventHandle(ev->Sender, sender, resp.Release()));
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        auto streamSender = runtime.AllocateEdgeActor();
+        NDataShard::NKqpHelpers::SendRequest(runtime, streamSender,
+            NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT * FROM `/Root/ManyShardsTable`;", false));
+
+        runtime.SimulateSleep(TDuration::Seconds(1));
+        UNIT_ASSERT(pausedOnce);
+        UNIT_ASSERT_VALUES_EQUAL_C(dataMessagesWhilePaused, 0,
+            "no data should be delivered while the result channel is paused");
+
+        paused = false;
+        auto resumeAck = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(0, channelId);
+        resumeAck->Record.SetEnough(false);
+        resumeAck->Record.SetFreeSpace(100_MB);
+        runtime.Send(new IEventHandle(executerId, sender, resumeAck.Release()));
+
+        auto reply = runtime.GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(streamSender);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
+            reply->Get()->Record.GetResponse().DebugString());
+
+        UNIT_ASSERT_GT(rowsWhilePaused, 0);
+        UNIT_ASSERT_GT(rowsAfterResume, 0);
+        UNIT_ASSERT_VALUES_EQUAL(rowsWhilePaused + rowsAfterResume, totalRows);
     }
 
     // TODO: Test shard write shuffle.

@@ -33,7 +33,6 @@ class TestCutHistory(RollingUpgradeAndDowngradeFixture):
         yield from self.setup_cluster(
             extra_feature_flags=["enable_cut_history"],
             column_shard_config={
-                "cut_history_enabled": True,
                 "alter_object_enabled": True,
             },
             # The deny list is Hive's, not ColumnShard's, and ColumnShard is on it by

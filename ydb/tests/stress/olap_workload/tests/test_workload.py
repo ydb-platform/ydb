@@ -24,7 +24,6 @@ class TestYdbWorkload(StressFixture):
             column_shard_config={
                 "allow_nullable_columns_in_pk": True,
                 "generate_internal_path_id": True,
-                "cut_history_enabled": True,
             },
             # The deny list is Hive's, not ColumnShard's, and ColumnShard is on it by
             # default — which would disable the cutter for the tablets under test.

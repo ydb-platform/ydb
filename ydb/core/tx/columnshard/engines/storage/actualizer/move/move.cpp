@@ -131,15 +131,18 @@ void TMoveDataActualizer::DoExtractTasks(
     }
 }
 
+bool TMoveDataActualizer::HasBlobInGroups(const std::vector<TUnifiedBlobId>& blobIds, const THashSet<ui32>& groups) {
+    return AnyOf(blobIds, [&groups](const TUnifiedBlobId& blobId) {
+        return groups.contains(blobId.GetDsGroup());
+    });
+}
+
 void TMoveDataActualizer::ActualizePortionInfo(const TPortionDataAccessor& accessor) {
     const ui64 portionId = accessor.GetPortionInfo().GetPortionId();
     if (!PendingPortionIds.erase(portionId)) {
         return;
     }
-    const bool hasTargetBlob = AnyOf(accessor.GetBlobIds(), [this](const TUnifiedBlobId& blobId) {
-        return TargetGroups.contains(blobId.GetDsGroup());
-    });
-    if (!hasTargetBlob) {
+    if (!HasBlobInGroups(accessor.GetBlobIds(), TargetGroups)) {
         return;
     }
     auto portionSchema = accessor.GetPortionInfo().GetSchema(VersionedIndex);

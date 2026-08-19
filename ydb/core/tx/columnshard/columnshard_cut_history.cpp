@@ -177,7 +177,7 @@ void TColumnShard::Handle(TEvPrivate::TEvStartCutHistorySweep::TPtr& /*ev*/, con
         if (!granule) {
             continue;
         }
-        const auto portion = granule->GetPortionOptional(portionId, false);
+        const auto portion = granule->GetPortionOptional(portionId);
         if (!portion || portion->HasRemoveSnapshot()) {
             continue;
         }

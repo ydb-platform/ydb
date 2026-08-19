@@ -896,12 +896,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         });
     }
 
-    Y_UNIT_TEST(ConsistentCopyTableWithGeneratedColumns) {
+    Y_UNIT_TEST(ConsistentCopyTableWithDefaultFromExpressionColumns) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
 
         SetupLogging(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableDefaultFromExpression(true);
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
 
@@ -911,11 +912,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
             Columns { Name: "a"   Type: "Int32"  }
             Columns { Name: "b"   Type: "Int32"  }
             Columns {
+                Name: "default_value"
+                Type: "Uint64"
+                DefaultFromExpression {
+                    ExprText: "42u"
+                    Kind: DEFAULT
+                    Context: "USE `/MyRoot`;"
+                }
+            }
+            Columns {
                 Name: "sum"
                 Type: "Int32"
                 DefaultFromExpression {
                     ExprText: "a + b"
-                    Stored: true
+                    Kind: GENERATED_STORED
                     DependencyColumnNames: ["a", "b"]
                     Context: "USE `/MyRoot`;"
                 }
@@ -925,7 +935,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 Type: "Int32"
                 DefaultFromExpression {
                     ExprText: "a - b"
-                    Stored: false
+                    Kind: GENERATED_VIRTUAL
                     DependencyColumnNames: ["a", "b"]
                     Context: ""
                 }
@@ -954,16 +964,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
 
         auto describe = DescribePath(runtime, "/MyRoot/TableCopy");
 
+        const auto* defaultValue = findColumn(describe, "default_value");
+        UNIT_ASSERT_C(defaultValue && defaultValue->HasDefaultFromExpression(), describe.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(defaultValue->GetDefaultFromExpression().GetExprText(), "42u");
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(defaultValue->GetDefaultFromExpression().GetKind()),
+            static_cast<int>(NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT));
+        UNIT_ASSERT_VALUES_EQUAL(defaultValue->GetDefaultFromExpression().GetContext(), "USE `/MyRoot`;");
+        UNIT_ASSERT_VALUES_EQUAL(defaultValue->GetDefaultFromExpression().DependencyColumnNamesSize(), 0u);
+
         const auto* sum = findColumn(describe, "sum");
         UNIT_ASSERT_C(sum && sum->HasDefaultFromExpression(), describe.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetExprText(), "a + b");
-        UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetStored(), true);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(sum->GetDefaultFromExpression().GetKind()),
+            static_cast<int>(NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_STORED));
         UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().GetContext(), "USE `/MyRoot`;");
         UNIT_ASSERT_VALUES_EQUAL(sum->GetDefaultFromExpression().DependencyColumnNamesSize(), 2u);
 
         const auto* diff = findColumn(describe, "diff");
         UNIT_ASSERT_C(diff && diff->HasDefaultFromExpression(), describe.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetExprText(), "a - b");
-        UNIT_ASSERT_VALUES_EQUAL(diff->GetDefaultFromExpression().GetStored(), false);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(diff->GetDefaultFromExpression().GetKind()),
+            static_cast<int>(NKikimrSchemeOp::TDefaultExpressionColumnDescription::GENERATED_VIRTUAL));
     }
 }

@@ -321,6 +321,7 @@ public:
             const std::vector<std::pair<
                 NKikimrBlobStorage::NDDisk::NInternal::TChunkMapLogRecord, ui64>>& replay = {},
             TVector<TChunkIdx>* bootReclaimedChunks = nullptr) {
+        HeldBootstrapRefill.reset();
         const NPDisk::TOwner Owner = 1;
         const NPDisk::TOwnerRound OwnerRound = 1;
 
@@ -396,13 +397,11 @@ public:
                     auto raw = Runtime.WaitForEdgeActorEvent({disk.PDiskEdge});
                     if (raw->GetTypeRewrite() == NPDisk::TEvChunkReserve::EventType) {
                         UNIT_ASSERT(!HeldBootstrapRefill);
-                        HeldBootstrapRefill = std::unique_ptr<TEventHandle<NPDisk::TEvChunkReserve>>(
-                            reinterpret_cast<TEventHandle<NPDisk::TEvChunkReserve>*>(raw.release()));
+                        HeldBootstrapRefill = RecastEvent<NPDisk::TEvChunkReserve>(std::move(raw));
                         continue;
                     }
                     UNIT_ASSERT_VALUES_EQUAL(raw->GetTypeRewrite(), NPDisk::TEvLog::EventType);
-                    log = std::unique_ptr<TEventHandle<NPDisk::TEvLog>>(
-                        reinterpret_cast<TEventHandle<NPDisk::TEvLog>*>(raw.release()));
+                    log = RecastEvent<NPDisk::TEvLog>(std::move(raw));
                 }
             } else {
                 log = WaitPDiskRequest<NPDisk::TEvLog>(disk);
@@ -417,13 +416,11 @@ public:
                 auto raw = Runtime.WaitForEdgeActorEvent({disk.PDiskEdge});
                 if (raw->GetTypeRewrite() == NPDisk::TEvChunkReserve::EventType) {
                     UNIT_ASSERT(!HeldBootstrapRefill);
-                    HeldBootstrapRefill = std::unique_ptr<TEventHandle<NPDisk::TEvChunkReserve>>(
-                        reinterpret_cast<TEventHandle<NPDisk::TEvChunkReserve>*>(raw.release()));
+                    HeldBootstrapRefill = RecastEvent<NPDisk::TEvChunkReserve>(std::move(raw));
                     continue;
                 }
                 UNIT_ASSERT_VALUES_EQUAL(raw->GetTypeRewrite(), NPDisk::TEvCheckSpace::EventType);
-                checkSpace = std::unique_ptr<TEventHandle<NPDisk::TEvCheckSpace>>(
-                    reinterpret_cast<TEventHandle<NPDisk::TEvCheckSpace>*>(raw.release()));
+                checkSpace = RecastEvent<NPDisk::TEvCheckSpace>(std::move(raw));
             }
             UNIT_ASSERT(HeldBootstrapRefill);
         } else {

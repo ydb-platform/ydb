@@ -58,19 +58,6 @@ def _truthy(raw):
     return str(raw).lower() in ('1', 'true', 'yes', 'on')
 
 
-def _parse_feature_flags(raw):
-    flags = {}
-    for f in raw.split(','):
-        if not f:
-            continue
-        if '=' in f:
-            k, v = f.split('=', 1)
-            flags[k] = v.lower() not in ('false', '0', 'no', 'off')
-        else:
-            flags[f] = True
-    return flags
-
-
 def _coerce_config_value(v):
     # Coerce a string to bool/int/float so numeric config values serialize as
     # numbers, not strings.
@@ -126,6 +113,7 @@ def test_parse_and_merge_generic_config():
     overrides = _parse_config(
         'data_shard_config.stats_report_interval_seconds=1,'
         'table_service_config.resource_manager.enabled=true,'
+        'feature_flags.enable_vector_index=true,'
         'column_shard_config.disabled=false,'
         'memory_controller_config.hard_limit_bytes=1.5')
 
@@ -143,6 +131,7 @@ def test_parse_and_merge_generic_config():
         'table_service_config': {
             'resource_manager': {'sibling_default': 42, 'enabled': True},
         },
+        'feature_flags': {'enable_vector_index': True},
         'column_shard_config': {'disabled': False},
         'memory_controller_config': {'hard_limit_bytes': 1.5},
     }
@@ -272,10 +261,6 @@ class TestCompareIndexPerformance:
         self.vector_levels = _levels if _levels else None
 
         # Per-cluster config
-        self.baseline_flags = _parse_feature_flags(
-            yatest.common.get_param('compare_baseline_feature_flags', default=''))
-        self.current_flags = _parse_feature_flags(
-            yatest.common.get_param('compare_current_feature_flags', default=''))
         self.baseline_tsc = _parse_table_service_config(
             yatest.common.get_param('compare_baseline_table_service_config', default=''))
         self.current_tsc = _parse_table_service_config(
@@ -356,13 +341,12 @@ class TestCompareIndexPerformance:
         return f"current({self.current_ref})" if self.current_ref else "current"
 
     # --- cluster lifecycle + single workload run ---
-    def _run_one(self, label, ydbd_path, flags, tsc, config_overrides,
-                 run_workload, log_name, svg_name):
+    def _run_one(self, label, ydbd_path, tsc, config_overrides,
+                 run_workload, log_name, svg_name, required_feature_flags=()):
         config = KikimrConfigGenerator(
             binary_paths=[ydbd_path],
             erasure=Erasure.from_string(yatest.common.get_param('stress_default_erasure', default='NONE')),
-            extra_feature_flags=[k for k, on in flags.items() if on],
-            disabled_feature_flags=[k for k, on in flags.items() if not on],
+            extra_feature_flags=required_feature_flags,
         )
         # Merged here rather than via the KikimrConfigGenerator(table_service_config=...)
         # argument: that one does a shallow dict.update(), which would drop the
@@ -760,10 +744,10 @@ class TestCompareIndexPerformance:
                     ] + vector_index_args + s3_args)
 
                 collect_value(main_values, self._run_one(
-                    self.ref, baseline_ydbd, self.baseline_flags, self.baseline_tsc, self.main_config,
+                    self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
                     s3_baseline_workload, f"vector_main_{i}.log", f"vector_main_{i}.svg"))
                 collect_value(current_values, self._run_one(
-                    "current", current_ydbd, self.current_flags, self.current_tsc, self.current_config,
+                    "current", current_ydbd, self.current_tsc, self.current_config,
                     s3_current_workload, f"vector_current_{i}.log", f"vector_current_{i}.svg"))
                 if self.flamegraph:
                     self._flamegraph_diff("vector", i)
@@ -792,10 +776,10 @@ class TestCompareIndexPerformance:
                     ] + vector_index_args)
 
                 collect_value(main_values, self._run_one(
-                    self.ref, baseline_ydbd, self.baseline_flags, self.baseline_tsc, self.main_config,
+                    self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
                     baseline_workload, f"vector_main_{i}.log", f"vector_main_{i}.svg"))
                 collect_value(current_values, self._run_one(
-                    "current", current_ydbd, self.current_flags, self.current_tsc, self.current_config,
+                    "current", current_ydbd, self.current_tsc, self.current_config,
                     current_workload, f"vector_current_{i}.log", f"vector_current_{i}.svg"))
                 if self.flamegraph:
                     self._flamegraph_diff("vector", i)
@@ -809,10 +793,6 @@ class TestCompareIndexPerformance:
         baseline_ydbd = self._baseline_ydbd()
         current_ydbd = self._current_ydbd()
 
-        # Fulltext requires the feature flag enabled on both clusters.
-        baseline_flags = {**self.baseline_flags, "enable_fulltext_index": True}
-        current_flags = {**self.current_flags, "enable_fulltext_index": True}
-
         main_values = []
         current_values = []
         for i in range(1, self.iterations + 1):
@@ -825,11 +805,13 @@ class TestCompareIndexPerformance:
                 ])
 
             collect_value(main_values, self._run_one(
-                self.ref, baseline_ydbd, baseline_flags, self.baseline_tsc, self.main_config,
-                fulltext_workload, f"fulltext_main_{i}.log", f"fulltext_main_{i}.svg"))
+                self.ref, baseline_ydbd, self.baseline_tsc, self.main_config,
+                fulltext_workload, f"fulltext_main_{i}.log", f"fulltext_main_{i}.svg",
+                required_feature_flags=("enable_fulltext_index",)))
             collect_value(current_values, self._run_one(
-                "current", current_ydbd, current_flags, self.current_tsc, self.current_config,
-                fulltext_workload, f"fulltext_current_{i}.log", f"fulltext_current_{i}.svg"))
+                "current", current_ydbd, self.current_tsc, self.current_config,
+                fulltext_workload, f"fulltext_current_{i}.log", f"fulltext_current_{i}.svg",
+                required_feature_flags=("enable_fulltext_index",)))
             if self.flamegraph:
                 self._flamegraph_diff("fulltext", i)
 

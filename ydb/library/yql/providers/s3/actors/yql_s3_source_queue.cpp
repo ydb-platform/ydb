@@ -200,7 +200,6 @@ public:
         if (schedulerContext) {
             if (auto work = schedulerContext->CreateSchedulableWork()) {
                 HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(work->GetPoolId());
-                Work = std::move(work);
             }
         }
         for (size_t i = 0; i < paths.size(); ++i) {
@@ -650,7 +649,6 @@ private:
     const NS3Lister::ES3PatternVariant PatternVariant;
     const NS3Lister::ES3PatternType PatternType;
     const bool AllowLocalFiles;
-    std::unique_ptr<IDqSchedulableWork> Work;
     IHttpRequestContext::TPtr HttpRequestContext;
 
     static constexpr TDuration PoisonTimeout = TDuration::Minutes(30);

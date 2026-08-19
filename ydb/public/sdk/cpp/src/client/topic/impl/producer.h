@@ -191,6 +191,7 @@ private:
         void RebuildPendingMessagesIndex(std::uint32_t partition);
         void HandleAck();
         void HandleContinuationToken(std::uint32_t partition, TContinuationToken&& continuationToken);
+        void DropContinuationTokens(std::uint32_t partition);
         bool IsQueueEmpty() const;
         bool HasInFlightMessages() const;
         const TMessageInfo& GetFrontInFlightMessage() const;

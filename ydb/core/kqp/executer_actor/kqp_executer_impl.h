@@ -150,6 +150,7 @@ public:
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
         , EnableWatermarks(executerConfig.TableServiceConfig.GetEnableWatermarks())
+        , EnableResultChannelFlowControl(executerConfig.TableServiceConfig.GetEnableResultChannelFlowControl())
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
@@ -608,7 +609,29 @@ protected:
         }
     }
 
+    bool IsResultChannelPaused(ui32 channelId) const {
+        if (!EnableResultChannelFlowControl) {
+            return false;
+        }
+        auto it = ResultChannelFlow.find(channelId);
+        return it != ResultChannelFlow.end() && it->second.IsPaused();
+    }
+
+    void AccountResultChannelBytesSent(ui32 channelId, i64 bytes) {
+        if (!EnableResultChannelFlowControl) {
+            return;
+        }
+        auto& state = ResultChannelFlow[channelId];
+        if (state.EstimatedFreeSpace != Max<i64>()) {
+            state.EstimatedFreeSpace -= bytes;
+        }
+    }
+
     void ReadResultFromInputBuffer(ui32 channelId, const std::shared_ptr<NYql::NDq::IChannelBuffer>& buffer) {
+        if (IsResultChannelPaused(channelId)) {
+            return;
+        }
+
         auto& channel = TasksGraph.GetChannel(channelId);
         YQL_ENSURE(channel.DstTask == 0);
         auto& txResult = ResponseEv->TxResults[channel.DstInputIndex];
@@ -635,6 +658,7 @@ protected:
                 if (streamingAllowed && !trailingResults) {
                     ui32 seqNo = 1;
                     SendStreamData(txResult, std::move(batches), channel.Id, seqNo, data.Finished);
+                    AccountResultChannelBytesSent(channel.Id, data.Bytes);
                 } else {
                     ResponseEv->TakeResult(channel.DstInputIndex, std::move(batch));
                     if (streamingAllowed) {
@@ -657,6 +681,9 @@ protected:
             }
 
             if (data.Finished) {
+                break;
+            }
+            if (IsResultChannelPaused(channelId)) {
                 break;
             }
         }
@@ -762,8 +789,28 @@ protected:
 
         if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
             if (ev->Get()->Record.GetEnough()) {
-                for (auto& [channelId, inputBuffer] : ResultInputBuffers) {
+                for (auto& [chId, inputBuffer] : ResultInputBuffers) {
                     inputBuffer->EarlyFinish();
+                    if (EnableResultChannelFlowControl) {
+                        ResultChannelFlow.erase(chId);
+                    }
+                }
+                if (EnableResultChannelFlowControl) {
+                    for (auto& [chId, inputBuffer] : ResultInputBuffers) {
+                        ReadResultFromInputBuffer(chId, inputBuffer);
+                    }
+                }
+                return;
+            }
+
+            if (EnableResultChannelFlowControl) {
+                const ui32 channelId = ev->Get()->Record.GetChannelId();
+                auto& state = ResultChannelFlow[channelId];
+                state.EstimatedFreeSpace = ev->Get()->Record.GetFreeSpace();
+                if (state.EstimatedFreeSpace > 0) {
+                    if (auto it = ResultInputBuffers.find(channelId); it != ResultInputBuffers.end()) {
+                        ReadResultFromInputBuffer(channelId, it->second);
+                    }
                 }
             }
             return;
@@ -2067,6 +2114,15 @@ protected:
     NWilson::TSpan ExecuterStateSpan;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;
 
+    struct TResultChannelFlowState {
+        i64 EstimatedFreeSpace = Max<i64>();
+
+        bool IsPaused() const {
+            return EstimatedFreeSpace <= 0;
+        }
+    };
+    THashMap<ui32, TResultChannelFlowState> ResultChannelFlow;
+
     ui64 LastTaskId = 0;
     TString LastComputeActorId = "";
 
@@ -2116,6 +2172,7 @@ protected:
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     THolder<TPartitionPruner> PartitionPruner;
     bool EnableWatermarks = false;
+    bool EnableResultChannelFlowControl = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

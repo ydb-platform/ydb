@@ -70,6 +70,22 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         UNIT_ASSERT(!result.IsSuccess());
     }
 
+    Y_UNIT_TEST(ResultChannelFlowControlSmoke) {
+        TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableResultChannelFlowControl(true);
+
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
+
+        auto result = kikimr.RunCall([&] {
+            return db.ExecuteQuery("SELECT * FROM `/Root/EightShard`;",
+                NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSet(0).RowsCount(), 24);
+    }
+
     // TODO: Test shard write shuffle.
     /*
     Y_UNIT_TEST(BlindWriteDistributed) {

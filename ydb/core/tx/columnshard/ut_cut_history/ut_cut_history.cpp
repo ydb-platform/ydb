@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/size_literals.h>
 #include <util/generic/vector.h>
 
 namespace NKikimr {
@@ -45,9 +46,11 @@ TIntrusivePtr<TTabletStorageInfo> MakeTabletInfo(ui64 tabletId, ui32 nChannels, 
     return info;
 }
 
+static constexpr ui32 BlobSize = 1_KB;
+
 // Build a TLogoBlobID for a blob on a given tablet, channel, and generation.
 TLogoBlobID MakeBlob(ui64 tabletId, ui32 channel, ui32 gen, ui32 step = 1, ui32 cookie = 1) {
-    return TLogoBlobID(tabletId, gen, step, channel, 100, cookie);
+    return TLogoBlobID(tabletId, gen, step, channel, BlobSize, cookie);
 }
 
 // TUnifiedBlobId wrapper from a TLogoBlobID.
@@ -130,8 +133,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
 
     Y_UNIT_TEST(IncrementOnPortionAdded) {
         // Tablet: 3 channels, 2 history entries each.
-        const ui64 TabletId = 111;
-        const ui32 CurrentGen = 5;
+        static constexpr ui64 TabletId = 111;
+        static constexpr ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
         bm->InitHistoryCutter(bm, nullptr, TActorId());
@@ -160,8 +163,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     }
 
     Y_UNIT_TEST(DecrementToZeroOnPortionRemoved) {
-        const ui64 TabletId = 222;
-        const ui32 CurrentGen = 5;
+        static constexpr ui64 TabletId = 222;
+        static constexpr ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
         bm->InitHistoryCutter(bm, nullptr, TActorId());
@@ -185,9 +188,9 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
 
     Y_UNIT_TEST(ForeignBlobIgnored) {
         // Blob from a different tablet should be ignored.
-        const ui64 TabletId = 333;
-        const ui64 OtherTablet = 999;
-        const ui32 CurrentGen = 5;
+        static constexpr ui64 TabletId = 333;
+        static constexpr ui64 OtherTablet = 999;
+        static constexpr ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
         bm->InitHistoryCutter(bm, nullptr, TActorId());
@@ -209,8 +212,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
 
     Y_UNIT_TEST(ActiveEntryBlobIgnored) {
         // Blob at current generation should map to active entry and be ignored.
-        const ui64 TabletId = 444;
-        const ui32 CurrentGen = 5;
+        static constexpr ui64 TabletId = 444;
+        static constexpr ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { CurrentGen, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
         bm->InitHistoryCutter(bm, nullptr, TActorId());
@@ -228,8 +231,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
 
     Y_UNIT_TEST(BootCompleteWithEmptyMap) {
         // Boot with no portions is valid; cutter starts with zero counters.
-        const ui64 TabletId = 555;
-        const ui32 CurrentGen = 3;
+        static constexpr ui64 TabletId = 555;
+        static constexpr ui32 CurrentGen = 3;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 3, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
         bm->InitHistoryCutter(bm, nullptr, TActorId());
@@ -244,8 +247,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
 
     Y_UNIT_TEST(DoubleBlobPerPortionDeduplicates) {
         // Two blobs in the same portion mapping to the same entry → counter incremented only once.
-        const ui64 TabletId = 666;
-        const ui32 CurrentGen = 5;
+        static constexpr ui64 TabletId = 666;
+        static constexpr ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
         bm->InitHistoryCutter(bm, nullptr, TActorId());
@@ -332,8 +335,8 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
     Y_UNIT_TEST(SharedBlobsPinDrainGate) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
-        const ui64 TabletId = 888;
-        const ui64 BorrowerTabletId = 999;
+        static constexpr ui64 TabletId = 888;
+        static constexpr ui64 BorrowerTabletId = 999;
         // History: {fromGen=0, group=100}, {fromGen=5, group=200 (active)}.
         auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { 0, 100 }, { 5, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, /*gen=*/5, NOlap::TTabletId(TabletId));
@@ -350,6 +353,59 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         const NOlap::TUnifiedBlobId sharedOut(/*dsGroup=*/100, TLogoBlobID(TabletId, /*gen=*/1, /*step=*/1, /*channel=*/2, 100, 1));
         UNIT_ASSERT(shared->UpsertSharedBlobOnLoad(sharedOut, NOlap::TTabletId(BorrowerTabletId)));
         UNIT_ASSERT_C(!cutter.IsDrained(key), "shared-out blob in the old range must pin the entry");
+    }
+
+    // The blob-manager arm of the drain gate: an entry whose range still holds queued
+    // blobs must not be nominated. Remove HasNoBlobsInRange() from IsDrained() and this
+    // test must fail.
+    Y_UNIT_TEST(QueuedBlobsPinDrainGate) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        static constexpr ui64 TabletId = 888;
+        static constexpr ui32 ChannelCount = 3;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 ActiveFromGen = 5;
+        static constexpr ui32 ActiveGroup = 200;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OtherChannel = 1;
+        static constexpr ui32 GenInOldRange = 1;
+        const TVector<std::pair<ui32, ui32>> history{ { OldFromGen, OldGroup }, { ActiveFromGen, ActiveGroup } };
+        const TEntryKey key{ DataChannel, OldFromGen };
+
+        // Both owners must outlive the cutter: it keeps weak_ptrs to them, and IsDrained()
+        // answers false for an expired pointer, which would look exactly like "not drained".
+        auto makeCutter = [&](std::shared_ptr<NOlap::TBlobManager>& bmOut,
+                              std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager>& sharedOut) {
+            auto info = MakeTabletInfo(TabletId, ChannelCount, history);
+            bmOut = std::make_shared<NOlap::TBlobManager>(info, ActiveFromGen, NOlap::TTabletId(TabletId));
+            sharedOut = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+                NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+            return TTestableHistoryCutter(info, ActiveFromGen, bmOut, sharedOut, TActorId(), TestSignals());
+        };
+
+        std::shared_ptr<NOlap::TBlobManager> bm;
+        std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> shared;
+        auto cutter = makeCutter(bm, shared);
+        UNIT_ASSERT_C(cutter.IsDrained(key), "empty queues: the old entry starts drained");
+
+        // A blob still awaiting collection, inside the entry's range.
+        bm->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeUnifiedBlob(MakeBlob(TabletId, DataChannel, GenInOldRange)));
+        UNIT_ASSERT_C(!cutter.IsDrained(key), "a blob still in the delete queue must pin the entry");
+
+        // Same channel, but the active entry's generation — outside this range.
+        std::shared_ptr<NOlap::TBlobManager> bmOutside;
+        std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> sharedOutside;
+        auto cutterOutside = makeCutter(bmOutside, sharedOutside);
+        bmOutside->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeUnifiedBlob(MakeBlob(TabletId, DataChannel, ActiveFromGen)));
+        UNIT_ASSERT_C(cutterOutside.IsDrained(key), "a blob outside the range must not pin the entry");
+
+        // Another channel entirely.
+        std::shared_ptr<NOlap::TBlobManager> bmOtherChannel;
+        std::shared_ptr<NOlap::NDataSharing::TStorageSharedBlobsManager> sharedOtherChannel;
+        auto cutterOtherChannel = makeCutter(bmOtherChannel, sharedOtherChannel);
+        bmOtherChannel->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeUnifiedBlob(MakeBlob(TabletId, OtherChannel, GenInOldRange)));
+        UNIT_ASSERT_C(cutterOtherChannel.IsDrained(key), "a blob on another channel must not pin the entry");
     }
 
 }   // TCutHistoryCutterCounters

@@ -229,13 +229,18 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         TCmsTestEnv env(8);
         env.ConfigureDDiskPool(1);
 
+        const TActorId cmsActorId = ResolveTablet(env, env.CmsId);
+
         TVector<TAutoPtr<IEventHandle>> delayedResults;
         ui32 getRequests = 0;
+        ui32 capturedResults = 0;
         env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTablet) {
                 ++getRequests;
             } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult
-                    && ev->Recipient == MakeCmsID()) {
+                    && ev->Recipient == cmsActorId
+                    && capturedResults < 16) {
+                ++capturedResults;
                 delayedResults.emplace_back(ev.Release());
                 return TTestActorRuntime::EEventAction::DROP;
             }

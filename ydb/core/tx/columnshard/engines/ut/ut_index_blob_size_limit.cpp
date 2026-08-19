@@ -34,7 +34,7 @@ constexpr i64 MaxBlobSize = FilterSizeBytes / 2;
 // falsePositiveProbability set => new sizing mode (IsOldSizingMode() == false).
 ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version, const ui32 filterSizeBytes = FilterSizeBytes,
     const ui32 recordsCountBase = 1024, const TString& indexStorageId = IStoragesManager::DefaultStorageId,
-    const std::optional<double> falsePositiveProbability = std::nullopt) {
+    const std::optional<double> falsePositiveProbability = std::nullopt, const ui32 indexesCount = 1) {
     NKikimrSchemeOp::TColumnTableSchema proto;
     const std::vector<NArrow::NTest::TTestColumn> columns = {
         NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
@@ -54,11 +54,13 @@ ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version, const ui32 f
         request.DeprecatedFilterSizeBytes = filterSizeBytes;
         request.DeprecatedRecordsCount = recordsCountBase;
     }
-    *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
-        std::make_shared<NIndexes::NBloomNGramm::TIndexMeta>(NGrammIndexId, "ngramm_value", indexStorageId, false, ValueColumnId,
-            NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>()),
-            NIndexes::IBitsStorageConstructor::GetDefault(), request))
-                              .SerializeToProto();
+    for (ui32 i = 0; i < indexesCount; ++i) {
+        *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
+            std::make_shared<NIndexes::NBloomNGramm::TIndexMeta>(NGrammIndexId + i, "ngramm_value_" + ::ToString(i), indexStorageId, false,
+                ValueColumnId, NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>()),
+                NIndexes::IBitsStorageConstructor::GetDefault(), request))
+                                  .SerializeToProto();
+    }
 
     auto cache = std::make_shared<TSchemaObjectsCache>();
     auto indexInfo = TIndexInfo::BuildFromProto(version, proto, TTestStoragesManager::GetInstance(), cache);
@@ -310,6 +312,64 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
             recordsSum += chunk->GetRecordsCountVerified();
         }
         UNIT_ASSERT_VALUES_EQUAL(recordsSum, 512);
+    }
+
+    // Chunks of several indexes are distributed across blobs by the packer, so their aggregate cannot
+    // oversize a blob.
+    Y_UNIT_TEST(MultipleIndexesPackIntoBlobsUnderLimit) {
+        constexpr i64 blobLimit = 10_KB;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
+
+        // Three indexes with an 8 KB filter each: any two chunks together exceed the 10 KB blob limit.
+        const auto schema = MakeSchemaWithNGrammIndex(1, 8_KB, 128, IStoragesManager::DefaultStorageId, std::nullopt, 3);
+        const auto chunks = BuildColumnChunks(schema, { MakeTestBatch(1, 128) });
+
+        auto secondaryData = schema->GetIndexInfo()
+                                 .AppendIndexes(chunks, TTestStoragesManager::GetInstance(), 128, IStoragesManager::DefaultStorageId)
+                                 .DetachResult();
+        for (ui32 i = 0; i < 3; ++i) {
+            const auto it = secondaryData.GetExternalData().find(NGrammIndexId + i);
+            UNIT_ASSERT(it != secondaryData.GetExternalData().end());
+            for (const auto& chunk : it->second) {
+                UNIT_ASSERT_LE(chunk->GetPackedSize(), blobLimit);
+            }
+        }
+
+        auto schemaDetails = std::make_shared<TDefaultSchemaDetails>(schema, std::make_shared<NArrow::NSplitter::TSerializationStats>());
+        const auto splitterCounters = std::make_shared<NColumnShard::TIndexationCounters>("test")->SplitterCounters;
+        TGeneralSerializedSlice slice(secondaryData.GetExternalData(), schemaDetails, splitterCounters);
+        const NSplitter::TEntityGroups groups(
+            NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(), NBlobOperations::TGlobal::DefaultStorageId);
+        std::vector<TSplittedBlob> blobs;
+        UNIT_ASSERT(slice.GroupBlobs(blobs, groups));
+        UNIT_ASSERT_GT(blobs.size(), 1);
+        for (const auto& blob : blobs) {
+            UNIT_ASSERT_LE(blob.GetSize(), blobLimit);
+        }
+    }
+
+    // Inplace indexes are size-guarded individually: all are stored even when their sum exceeds the limit,
+    // the aggregate goes to the portion metadata row, not to a blob.
+    Y_UNIT_TEST(MultipleLocalIndexesAggregateAboveLimitIsStored) {
+        constexpr i64 blobLimit = 10_KB;
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
+
+        // Three local indexes with an 8 KB filter each: 24 KB in total, above the 10 KB limit.
+        const auto schema = MakeSchemaWithNGrammIndex(1, 8_KB, 128, IStoragesManager::LocalMetadataStorageId, std::nullopt, 3);
+        const auto chunks = BuildColumnChunks(schema, { MakeTestBatch(1, 128) });
+
+        auto secondaryData = schema->GetIndexInfo()
+                                 .AppendIndexes(chunks, TTestStoragesManager::GetInstance(), 128, IStoragesManager::DefaultStorageId)
+                                 .DetachResult();
+        UNIT_ASSERT_VALUES_EQUAL(secondaryData.GetSecondaryInplaceData().size(), 3);
+        ui64 sumSize = 0;
+        for (const auto& [indexId, chunk] : secondaryData.GetSecondaryInplaceData()) {
+            UNIT_ASSERT_LE(chunk->GetPackedSize(), blobLimit);
+            sumSize += chunk->GetPackedSize();
+        }
+        UNIT_ASSERT_GT(sumSize, blobLimit);
     }
 
     // An oversized inplace (_LOCAL) index cannot be split: it is dropped completely, leaving no chunks and

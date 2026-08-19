@@ -486,69 +486,6 @@ public:
     }
 };
 
-<<<<<<< HEAD:ydb/core/kafka_proxy/kafka_messages_int.h
-=======
-template<typename Meta>
-class TypeStrategy<Meta, TKafkaBytesHolder, TKafkaBytesDesc> {
-public:
-    inline static void DoWrite(TKafkaWritable& writable, TKafkaVersion version, const TKafkaBytesHolder& value) {
-        if (value) {
-            const auto& v = *value;
-            WriteArraySize<Meta>(writable, version, v.size());
-            writable.write(v.data(), v.size());
-        } else {
-            if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
-                WriteArraySize<Meta>(writable, version, -1);
-            } else {
-                ythrow yexception() << "non-nullable field " << Meta::Name << " serializing as null";
-            }
-        }
-    }
-
-    inline static void DoWriteTag(TKafkaWritable& writable, TKafkaVersion version, const TKafkaBytesHolder& value) {
-        const auto& v = *value;
-        WriteArraySize<Meta>(writable, version, v.size());
-        writable.write(v.data(), v.size());
-    }
-
-    inline static void DoRead(TKafkaReadable& readable, TKafkaVersion version, TKafkaBytesHolder& value) {
-        TKafkaInt32 length = ReadArraySize<Meta>(readable, version);
-        if (length < 0) {
-            if (VersionCheck<Meta::NullableVersions.Min, Meta::NullableVersions.Max>(version)) {
-                value = std::nullopt;
-            } else {
-                ythrow yexception() << "non-nullable field " << Meta::Name << " was serialized as null";
-            }
-        } else {
-            EnsureLengthFitsRemaining(readable, length, "bytes", Meta::Name);
-            TString data;
-            data.ReserveAndResize(length);
-            readable.read(const_cast<char*>(data.data()), length);
-            value = std::move(data);
-        }
-    }
-
-    inline static i64 DoSize(TKafkaVersion version, const TKafkaBytesHolder& value) {
-        if (value) {
-            return value->size() + ArraySize<Meta>(version, value->size());
-        } else {
-            if (VersionCheck<Meta::FlexibleVersions.Min, Meta::FlexibleVersions.Max>(version)) {
-                return 1;
-            } else {
-                return sizeof(TKafkaInt32);
-            }
-        }
-    }
-
-    inline static void DoLog(const TKafkaBytesHolder& value) {
-        if constexpr (DEBUG_ENABLED) {
-            Cerr << "Was read field '" << Meta::Name << "' type BytesHolder. Size " << (value ? value->size() : 0) << Endl;
-        }
-    }
-};
-
->>>>>>> ead9eb11d4e (Harden Kafka parser against OOM and OOB on untrusted lengths (#50358)):ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h
-
 //
 // TKafkaRecords
 //
@@ -575,10 +512,9 @@ public:
             EnsureLengthFitsRemaining(readable, length, "records", Meta::Name);
             char magic = readable.take(16);
             value.emplace();
+            const size_t end = readable.position() + static_cast<size_t>(length);
 
             if (magic < CURRENT_RECORD_VERSION) {
-                size_t end = readable.position() + length;
-
                 TKafkaRecordBatchV0 v0;
                 v0.Read(readable, magic);
 
@@ -610,10 +546,11 @@ public:
                     record.Value = v0.Record.Value;
                 }
             } else {
-                const auto data = readable.Bytes(static_cast<size_t>(length));
-                TBuffer buffer(data.data(), data.size());
-                TKafkaReadable batchReadable(buffer, readable);
-                (*value).Read(batchReadable, magic);
+                (*value).Read(readable, magic);
+                if (readable.position() > end) {
+                    ythrow yexception() << "records field " << Meta::Name << " overran declared length " << length;
+                }
+                readable.skip(end - readable.position());
             }
         } else {
             value = std::nullopt;

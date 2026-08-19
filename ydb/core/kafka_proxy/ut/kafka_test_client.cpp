@@ -4,11 +4,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/kafka_proxy/actors/kafka_api_versions_actor.h>
-#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
->>>>>>> ead9eb11d4e (Harden Kafka parser against OOM and OOB on untrusted lengths (#50358))
 #include <ydb/library/login/sasl/scram.h>
 
 #include <util/random/random.h>

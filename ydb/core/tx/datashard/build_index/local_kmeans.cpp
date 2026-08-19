@@ -155,15 +155,13 @@ public:
             {"debug", Debug()});
         NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
-        const bool toBuild = (request.GetUpload() == NKikimrTxDataShard::UPLOAD_MAIN_TO_BUILD
-            || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD);
         InForeign = OverlapClusters > 1 && (request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD
             || request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_POSTING);
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
 
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
-        ScanTags = MakeScanTags(table, embedding, data, toBuild,
+        ScanTags = MakeScanTags(table, embedding, data,
             EmbeddingPos, DataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
         {

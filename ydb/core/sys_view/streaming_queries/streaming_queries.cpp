@@ -110,6 +110,25 @@ public:
     }
 
 private:
+    NStructuredLog::TStructuredMessage LogPrefix() const {
+        auto result = YDB_LOG_CREATE_MESSAGE(
+            {"ownerId", Owner},
+            {"actorId", SelfId()},
+            {"actorClassName", "TStreamingQueryFetcherActor"},
+            {"prefix", "[StreamingQueries] [SysView]"});
+
+        if (Y_LIKELY(OperationName)) {
+            YDB_LOG_UPDATE_MESSAGE(result, {"operationName", OperationName});
+        }
+        if (Y_LIKELY(TraceId)) {
+            YDB_LOG_UPDATE_MESSAGE(result, {"traceId", TraceId});
+        }
+        if (StateDescription) {
+            YDB_LOG_UPDATE_MESSAGE(result, {"state", StateDescription});
+        }
+        return result;
+    }
+
     void OnRunQuery() final {
         YDB_LOG_DEBUG("TStreamingQueryFetcherActor::OnRunQuery: starting fetch",
             {"logPrefix", LogPrefix()},

@@ -138,6 +138,14 @@ void TPartitionActor::CleanupResources(const TActorContext& ctx)
         CleanupActor = {};
     }
 
+    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
+    if (AddHostInFlight) {
+        NTabletPipe::CloseAndForgetClient(
+            SelfId(),
+            AddHostInFlight->BSPipeClient);
+        AddHostInFlight.reset();
+    }
+
     GetNbsService()->VhostServer->DetachStorage(GetSocketPath());
 
     if (FastPathService) {
@@ -615,7 +623,7 @@ void TPartitionActor::HandleInitialAllocationResult(
             msg->Record.GetErrorReason().data());
     }
 
-    NTabletPipe::CloseClient(ctx, BSControllerPipeClient);
+    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
 }
 
 void TPartitionActor::HandleGetLoadActorAdapterActorId(

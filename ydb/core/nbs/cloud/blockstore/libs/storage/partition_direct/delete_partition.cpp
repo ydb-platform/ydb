@@ -220,6 +220,7 @@ void TPartitionActor::HandleAllocateResultDuringDelete(
         LogTitle.GetWithTime().c_str(),
         ev->Get()->Record.ShortDebugString().c_str());
 
+    NTabletPipe::CloseAndForgetClient(SelfId(), BSControllerPipeClient);
     if (AddHostInFlight) {
         NTabletPipe::CloseClient(ctx, AddHostInFlight->BSPipeClient);
         AddHostInFlight.reset();
@@ -338,6 +339,9 @@ STFUNC(TPartitionActor::StateDelete)
         HFunc(
             TEvPartitionDirectPrivate::TEvAddHostToDBG,
             HandleAddHostToDBGDuringDelete);
+        // The Run() future is not cancelled by Stop(); ignore a late ready
+        // signal
+        IgnoreFunc(TEvPartitionDirectPrivate::TEvFastPathServiceReady);
         default:
             HandleCommonEvents(ev);
             break;

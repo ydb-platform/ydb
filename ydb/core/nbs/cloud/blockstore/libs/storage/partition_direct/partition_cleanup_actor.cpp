@@ -198,7 +198,8 @@ private:
         const auto creds = NDDisk::TQueryCredentials::ForInternal(
             Params.TabletId,
             Params.Generation,
-            std::nullopt);
+            std::nullopt,
+            0);
 
         THashSet<TActorId> targets;
         for (const auto& group:
@@ -232,7 +233,8 @@ private:
         const auto creds = NDDisk::TQueryCredentials::ForInternal(
             Params.TabletId,
             Params.Generation,
-            std::nullopt);
+            std::nullopt,
+            0);
 
         THashSet<TActorId> targets;
         for (const auto& group:

@@ -90,20 +90,20 @@ private:
     };
 
     struct TWorkersUpdateState {
-        ui32 DesiredWorkersCount = 0;
-        THashSet<ui32> WorkersWaitingForLimitUpdate;
-        THashSet<ui32> WorkersWaitingForStop;
+        ui64 DesiredWorkersCount = 0;
+        THashSet<ui64> WorkersWaitingForLimitUpdate;
+        THashSet<ui64> WorkersWaitingForStop;
 
         bool IsFinished() const {
             return WorkersWaitingForLimitUpdate.empty() && WorkersWaitingForStop.empty();
         }
     };
 
-    ui32 WorkersCount = 0;
+    ui64 WorkersCount = 0;
     YDB_READONLY(double, MaxWorkerThreads, 0);
     std::vector<TWeightedCategory> Processes;
     std::vector<TWorkerInfo> Workers;
-    std::vector<ui32> ActiveWorkersIdx;
+    std::vector<ui64> ActiveWorkersIdx;
     std::shared_ptr<TWorkersPoolCounters> Counters;
     TAverageCalcer<TDuration> DeliveringDuration;
     ui64 MaxBatchSize = 30;
@@ -112,8 +112,8 @@ private:
     const ui64 WorkersPoolId;
     std::optional<TWorkersUpdateState> WorkersUpdate;
 
-    void RemoveFreeWorker(const ui32 workerIdx);
-    void UpdateWorkerCPULimit(const ui32 workerIdx, const double newLimit);
+    void RemoveFreeWorker(const ui64 workerIdx);
+    void UpdateWorkerCPULimit(const ui64 workerIdx, const double newLimit);
     void IncreaseWorkers(const std::vector<double>& desiredCPULimits);
     void DecreaseWorkers(const std::vector<double>& desiredCPULimits);
     bool TryFinishWorkersUpdate();
@@ -137,7 +137,7 @@ public:
 
     void PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId = 0, const ui64 workerIdx = 0);
     bool HasFreeWorker() const;
-    void ReleaseWorker(const ui32 workerIdx);
+    void ReleaseWorker(const ui64 workerIdx);
 
     bool StartWorkersUpdate(const std::vector<double>& desiredCPULimits);
     bool OnWorkerCPULimitUpdated(const TEvInternal::TEvWorkerCPULimitUpdated& ev);

@@ -17,13 +17,9 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
     for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
         Categories.emplace_back(TCategory(i));
     }
-    TWorkersPool* defWorkersPool = nullptr;
     WorkerPools.reserve(1 + config.GetWorkerPools().size());
-    if ((ui32)config.GetCategories().size() != GetEnumAllValues<ESpecialTaskCategory>().size()) {
-        TWorkersPool wp(WorkerPools.size());
-        WorkerPools.emplace_back(std::move(wp));
-        defWorkersPool = &WorkerPools.front();
-    }
+    WorkerPools.emplace_back(WorkerPools.size());
+    TWorkersPool* defWorkersPool = &WorkerPools.front();
     std::set<ESpecialTaskCategory> usedCategories;
     for (auto&& i : config.GetCategories()) {
         TCategory cat(ESpecialTaskCategory::Insert);
@@ -57,7 +53,6 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
     }
     for (auto&& i : Categories) {
         if (i.GetWorkerPools().empty()) {
-            AFL_VERIFY(defWorkersPool);
             AFL_VERIFY(defWorkersPool->AddLink(i.GetCategory()));
             AFL_VERIFY(i.AddWorkerPool(defWorkersPool->GetWorkersPoolId()));
         }

@@ -267,6 +267,15 @@ namespace {
                             }
                             continue;
                         }
+                        if (name.IsAtom("ShuffleMode")) {
+                            static const std::initializer_list<std::string_view> ShuffleModeValues = {"Default", "Off", "Map", "Hash"};
+                            if (!value.IsAtom(ShuffleModeValues)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(name.Pos()),
+                                            TStringBuilder() << "streamlookup(" << name.Content() << "...): Expected one of " << JoinSeq(", ", ShuffleModeValues) << ", but got: " << value.Content()));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            continue;
+                        }
                         if (!name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows", "FullscanLimit"})) {
                             ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
                                         "streamlookup(): Unsupported option: " << name.Content()));

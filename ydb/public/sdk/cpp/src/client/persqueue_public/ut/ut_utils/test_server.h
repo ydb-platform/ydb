@@ -63,6 +63,8 @@ public:
         CleverServer = MakeHolder<NKikimr::Tests::TServer>(ServerSettings);
         CleverServer->EnableGRpc(GrpcServerOptions);
 
+        // Unauthenticated: used by ModifyTopicACL/SDK sessions in UTs that rely on
+        // allow_unauthenticated_* and FullInit without a token on AnnoyingClient.
         auto driverConfig = NYdb::TDriverConfig()
             .SetEndpoint(Endpoint)
             .SetDatabase("/" + ServerSettings.DomainName);

@@ -47,6 +47,7 @@ public:
     virtual void IncRecvSyscalls(ui64 ns) = 0;
     virtual void AddTotalBytesRead(ui64 value) = 0;
     virtual void UpdatePingTimeHistogram(ui64 value) = 0;
+    virtual void UpdatePingTimeRdmaHistogram(ui64 value) = 0;
     virtual void UpdateIcQueueTimeHistogram(ui64 value) = 0;
     virtual void UpdateNumEventsInQueueHistogram(ui64 value) = 0;
     virtual void UpdateRdmaReadTimeHistogram(ui64 value) = 0;
@@ -54,6 +55,7 @@ public:
     virtual void UpdateOutputChannelEvents(ui16 channel) = 0;
     virtual void SetUtilization(ui32 total, ui32 starvation) = 0;
     virtual void IncRdmaMultipartEvents() = 0;
+    virtual void IncRdmaSendBufferAllocationFails() = 0;
     TString GetHumanFriendlyPeerHostName() const {
         return HumanFriendlyPeerHostName.value_or(TString());
     }

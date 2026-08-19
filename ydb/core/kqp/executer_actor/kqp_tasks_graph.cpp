@@ -26,6 +26,7 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/pq/common/yql_names.h>
+#include <ydb/services/udf_store/wasm/query_compartment_scope.h>
 
 #include <algorithm>
 
@@ -1233,8 +1234,6 @@ void TKqpTasksGraph::BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32
 
 void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
     ui32 outputIndex, const NKqpProto::TKqpPhyCnDqSourceStreamLookup& dqSourceStreamLookup, const TChannelLogFunc& logFunc) {
-    YQL_ENSURE(stageInfo.Tasks.size() == 1);
-
     auto* settings = GetMeta().Allocate<NDqProto::TDqInputTransformLookupSettings>();
     settings->SetLeftLabel(dqSourceStreamLookup.GetLeftLabel());
     settings->SetRightLabel(dqSourceStreamLookup.GetRightLabel());
@@ -1255,6 +1254,12 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
     } else if (dqSourceStreamLookup.HasFullscanLimit()) {
         settings->SetFullscanLimit(dqSourceStreamLookup.GetFullscanLimit());
     }
+    if (!AppData()->FeatureFlags.GetEnableDqSourceStreamLookupJoinShuffleMode()) {
+        Y_ENSURE(
+            dqSourceStreamLookup.GetShuffleMode() == NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_DEFAULT || dqSourceStreamLookup.GetShuffleMode() == NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_OFF,
+            TStringBuilder{} << "EnableDqSourceStreamLookupJoinShuffleMode disabled, but ShuffleMode is " << static_cast<NDq::EShuffleMode>(dqSourceStreamLookup.GetShuffleMode()));
+    }
+    /* ShuffleMode intentionally omitted */
 
     const auto& leftJointKeys = dqSourceStreamLookup.GetLeftJoinKeyNames();
     settings->MutableLeftJoinKeyNames()->Assign(leftJointKeys.begin(), leftJointKeys.end());
@@ -1289,8 +1294,24 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
             task.Meta.SecureParams.emplace(sourceName, structuredToken);
         }
     }
-
-    BuildUnionAllChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
+    switch (dqSourceStreamLookup.GetShuffleMode()) {
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_DEFAULT:
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_OFF:
+            BuildUnionAllChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
+            break;
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_MAP:
+            BuildMapChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
+            break;
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_HASH:
+            BuildHashShuffleChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex,
+                dqSourceStreamLookup.GetLeftJoinKeyNames(),
+                /* enableSpilling */false, logFunc);
+            break;
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_TKqpPhyCnDqSourceStreamLookup_EShuffleMode_INT_MIN_SENTINEL_DO_NOT_USE_:
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_TKqpPhyCnDqSourceStreamLookup_EShuffleMode_INT_MAX_SENTINEL_DO_NOT_USE_:
+            YQL_ENSURE(false, "Impossible");
+            break;
+    }
 }
 
 void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, bool enableSpilling, bool enableShuffleElimination) {
@@ -1910,6 +1931,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
 
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
     result->MutableProgram()->CopyFrom(stage.GetProgram());
+
+    if (stage.WasmUdfModulesSize() > 0) {
+        TVector<TString> modules = NUdfStore::NWasm::WasmUdfModulesFromRepeated(stage.GetWasmUdfModules());
+        (*result->MutableTaskParams())[TString(NUdfStore::NWasm::WasmUdfModulesTaskParam)] =
+            NUdfStore::NWasm::SerializeWasmUdfModulesTaskParam(modules);
+    }
 
     for (const auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result->MutableParameters();
@@ -4018,7 +4045,27 @@ void TKqpTasksGraph::CountComputeTasks(TStageInfo& stageInfo, const ui32 nodesCo
         const auto& inputStageId = NYql::NDq::TStageId(stageId.TxId, input.GetStageIndex());
         inputs.push_back(inputStageId);
 
-        switch (input.GetTypeCase()) {
+        auto inputTypeCase = input.GetTypeCase();
+        if (inputTypeCase == NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup) {
+            auto& dqSourceStreamLookup = input.GetDqSourceStreamLookup();
+            switch (dqSourceStreamLookup.GetShuffleMode()) {
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_DEFAULT:
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_OFF:
+                    inputTypeCase = NKqpProto::TKqpPhyConnection::kUnionAll;
+                    break;
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_MAP:
+                    inputTypeCase = NKqpProto::TKqpPhyConnection::kMap;
+                    break;
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_HASH:
+                    inputTypeCase = NKqpProto::TKqpPhyConnection::kHashShuffle;
+                    break;
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_TKqpPhyCnDqSourceStreamLookup_EShuffleMode_INT_MIN_SENTINEL_DO_NOT_USE_:
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_TKqpPhyCnDqSourceStreamLookup_EShuffleMode_INT_MAX_SENTINEL_DO_NOT_USE_:
+                    Y_ENSURE(false, "Impossible");
+                    break;
+            }
+        }
+        switch (inputTypeCase) {
             case NKqpProto::TKqpPhyConnection::kHashShuffle: {
                 inputTasks += MaxTasksGraph->GetStageTasksCount(inputStageId);
                 isShuffle = true;

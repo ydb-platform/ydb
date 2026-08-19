@@ -1030,6 +1030,9 @@ protected:
 // Lock / unlock query row in table .metadata/streaming/queries to prevent concurrent modifications.
 // Updates OperationName, OperationActorId and OperationStartedAt according to current operation.
 // If OperationActorId already filled, actor will be checked.
+//
+// **note:** Lock may be lost during operation execution, stale operation will be
+//           stopped on TUpdateStreamingQueryStateRequestActor fail.
 
 class TLockStreamingQueryRequestActor final : public TQueryBase<TLockStreamingQueryRequestActor, TEvPrivate::TEvLockStreamingQueryResult> {
     static constexpr TDuration LOCK_TIMEOUT = TDuration::Seconds(10);
@@ -1992,6 +1995,7 @@ private:
         ev->Generation = PreviousGeneration + 1;
         ev->CheckpointId = State.GetCheckpointId();
         ev->StreamingQueryPath = QueryPath;
+        ev->StreamingQueryOperationId = State.GetOperationActorId();
         ev->CustomerSuppliedId = State.GetCurrentExecutionId();
         ev->WatermarkLateEventsPolicy = Settings.WatermarkLateEventsPolicy;
         ev->StreamingDisposition = Settings.StreamingDisposition;
@@ -2012,6 +2016,7 @@ private:
 
         auto& request = *record.MutableRequest();
         request.SetDatabase(Context.GetDatabase());
+        request.SetDatabaseId(Context.GetDatabaseId());
         request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
         request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
         request.SetSyntax(Ydb::Query::SYNTAX_YQL_V1);
@@ -2118,6 +2123,7 @@ public:
             {"status", NKikimrKqp::TStreamingQueryState::EStatus_Name(State.GetStatus())});
 
         if (!Settings.SchemeInfo || State.GetStatus() == NKikimrKqp::TStreamingQueryState::STATUS_DELETING) {
+            // Continue registered drop operation
             RemoveQuery();
             return;
         }
@@ -2399,6 +2405,14 @@ private:
 // Describe -> Lock -> (perform actions) -> Unlock
 //                             |
 //          TableActors / RequestActors / SchemeActors
+//
+// Each operation execution includes stages:
+// - Register new operation
+// - Perform operation
+//
+// Operation may be registered as:
+// - Scheme shard path version increment
+// - Setting status DELETING to streaming query table row
 
 template <typename TDerived>
 class TRequestHandlerBase : public TActionActorBase<TDerived> {
@@ -2591,6 +2605,8 @@ protected:
 // [Base handler] -> Describe -> Sync -> (perform actions) -> [Base handler]
 //                                               |
 //                            TableActors / RequestActors / SchemeActors
+//
+// Each operation execution also include Complete previous registered and unfinished operations stage
 
 template <typename TDerived>
 class TRequestHandlerWithSync : public TRequestHandlerBase<TDerived> {
@@ -2661,10 +2677,14 @@ protected:
 
 protected:
     void OnQueryLocked(bool queryExists) final {
-        if ((TBase::SchemeInfo || queryExists) && (!TBase::SchemeInfo || !queryExists || TBase::SchemeInfo->IsChanged(TBase::QueryState))) {
+        const bool entryExists = TBase::SchemeInfo || queryExists;
+        const bool schemeInfoChanged = !TBase::SchemeInfo || !queryExists || TBase::SchemeInfo->IsChanged(TBase::QueryState);
+        const bool underDropOperation = queryExists && TBase::QueryState.GetStatus() == NKikimrKqp::TStreamingQueryState::STATUS_DELETING;
+        if ((entryExists && schemeInfoChanged) || underDropOperation) {
             // Query state changed between describe query and lock query:
             // - query exists either in SS or table
             // - query info in SS is not same as stored in table
+            // - there was successfully registered drop operation
             // In this case we should redescribe query before synchronization
             TBase::Become(&TRequestHandlerWithSync::StateFuncSync);
             TBase::DescribeQuery("sync previous state");

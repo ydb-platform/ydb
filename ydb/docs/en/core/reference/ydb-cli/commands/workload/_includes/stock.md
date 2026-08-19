@@ -31,7 +31,7 @@ See the description of the command to init the data load:
 ### Available parameters {#init_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--products <value>` | `-p <value>` | Number of products. Valid values: between 1 and 500000. Default: 100. |
 | `--quantity <value>` | `-q <value>` | Quantity of each product in stock. Default: 1000. |
 | `--orders <value>` | `-o <value>` | Initial number of orders in the database. Default: 100. |
@@ -108,7 +108,7 @@ To run this type of load, execute the command:
 ### Parameters for user-hist {#customer_history_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--limit <value>` | `-l <value>` | The required number of orders. Default: 10. |
 
 ## The rand-user-hist workload {#get-random-customer-history}
@@ -139,7 +139,7 @@ To run this type of load, execute the command:
 ### Parameters for rand-user-hist {#random_customer_history_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--limit <value>` | `-l <value>` | The required number of orders. Default: 10. |
 
 ## The add-rand-order workload {#insert-random-order}
@@ -172,7 +172,7 @@ To run this type of load, execute the command:
 ### Parameters for add-rand-order {#insert_random_order_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--products <value>` | `-p <value>` | Number of products in the test. Default: 100. |
 
 ## The put-rand-order workload {#submit-random-order}
@@ -229,7 +229,7 @@ To run this type of load, execute the command:
 ### Parameters for put-rand-order {#submit_random_order_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--products <value>` | `-p <value>` | Number of products in the test. Default: 100. |
 
 ## The put-same-order workload {#submit-same-order}
@@ -286,7 +286,7 @@ To run this type of load, execute the command:
 ### Parameters for put-same-order {#submit_same_order_options}
 
 | Parameter name | Short name | Parameter description |
----|---|---
+|---|---|---|
 | `--products <value>` | `-p <value>` | Number of products per order. Default: 100. |
 
 ## Examples of running the loads

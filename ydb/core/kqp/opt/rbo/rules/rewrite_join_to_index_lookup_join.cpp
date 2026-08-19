@@ -18,8 +18,9 @@ bool IsValidIndex(const TIndexDescription& index) {
         && index.State == TIndexDescription::EIndexState::Ready;
 }
 
-bool IsCoveringIndex(const TVector<TString>& readColumns, const TVector<TString>& indexColumns) {
-    THashSet<TString> indexColumnSet(indexColumns.begin(), indexColumns.end());
+bool IsCoveringIndex(const TVector<TString>& readColumns, const TVector<TString>& keyColumns, const TVector<TString>& dataColumns) {
+    THashSet<TString> indexColumnSet(keyColumns.begin(), keyColumns.end());
+    indexColumnSet.insert(dataColumns.begin(), dataColumns.end());
     for (const auto& column : readColumns) {
         if (!indexColumnSet.contains(column)) {
             return false;
@@ -35,7 +36,7 @@ TIntrusivePtr<TKikimrTableMetadata> TryToFindBestIndexForRightSide(const TKikimr
     ui32 bestPrefix = 0;
 
     for (const auto& index : meta.Indexes) {
-        if (!IsValidIndex(index) || !IsCoveringIndex(readColumns, index.KeyColumns)) {
+        if (!IsValidIndex(index) || !IsCoveringIndex(readColumns, index.KeyColumns, index.DataColumns)) {
             continue;
         }
 
@@ -226,8 +227,11 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         return input;
     }
 
-    // TODO: Add check for join algo specified by CBO.
     auto join = CastOperator<TOpJoin>(input);
+
+    if (join->Props.JoinAlgo.has_value() && *join->Props.JoinAlgo != EJoinAlgoType::LookupJoin){
+        return input;
+    }
 
     const auto joinKind = GetValidJoinKind(join->JoinKind);
     if (joinKind != "Inner" && joinKind != "Left" && joinKind != "LeftSemi" && joinKind != "LeftOnly") {
@@ -328,8 +332,14 @@ TIntrusivePtr<IOperator> TRewriteJoinToIndexLookupJoinRule::SimpleMatchAndApply(
         keys = MatchKeyPrefix(*join, *read, tableMeta->KeyColumnNames, 0);
     }
 
+    if (!keys) {
+        return input;
+    }
+
     // Different types for keys are not supported.
-    if (!keys || !KeyTypesMatch(*join->GetLeftInput(), *read, *keys)) {
+    if (!KeyTypesMatch(*join->GetLeftInput(), *read, *keys)) {
+        // This check is missing in CBO, so we need to change join implementation in this case
+        join->Props.JoinAlgo = EJoinAlgoType::MapJoin;
         return input;
     }
 

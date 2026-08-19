@@ -255,6 +255,9 @@ namespace NKikimr::NStorage {
         TControlWrapper FreshCompMaxInFlightWrites;
         TControlWrapper FreshCompMaxInFlightReads;
         TControlWrapper HullCompFreeSpaceThresholdPerMille;
+        TControlWrapper HullCompEmergencyMaxSsts;
+        TControlWrapper HullCompEmergencyChunkReserve;
+        TControlWrapper HullCompEmergencyEnableAtColor;
         TControlWrapper HullCompMaxInFlightWrites;
         TControlWrapper HullCompMaxInFlightReads;
         TControlWrapper HullCompFullCompPeriodSec;

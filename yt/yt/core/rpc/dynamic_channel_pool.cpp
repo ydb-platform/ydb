@@ -481,7 +481,7 @@ private:
                 FinishedPromise_.Set();
             } else {
                 auto error = owner->MakeNoAlivePeersError()
-                    << GetPeerDiscoveryErrors();
+                    .With(GetPeerDiscoveryErrors());
                 if (!globalDiscoveryError.IsOK()) {
                     error <<= globalDiscoveryError;
                 }
@@ -876,7 +876,7 @@ private:
 
         if (!LastGlobalDiscoveryError_.IsOK()) {
             return LastGlobalDiscoveryError_
-                << std::move(error);
+                .With(std::move(error));
         }
         return error;
     }

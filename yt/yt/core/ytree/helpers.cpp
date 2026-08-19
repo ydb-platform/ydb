@@ -349,7 +349,7 @@ void ValidateYTreeChildCount(
         NYTree::EErrorCode::ResolveError,
         "Path %v exceeds resolve depth limit",
         path)
-        << TErrorAttribute("limit", MaxYPathResolveIterations);
+        .With("limit", MaxYPathResolveIterations);
 }
 
 void ValidateYPathResolutionDepth(TYPathBuf path, int depth)

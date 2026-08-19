@@ -81,10 +81,12 @@ public:
     NThreading::TFuture<TEvDeleteTabletChunksResult> DeleteTabletChunks(
         const THostConnection& connection) override;
 
+protected:
+    NActors::TActorSystem* const ActorSystem;
+
 private:
     using EConnectionType = THostConnection::EConnectionType;
 
-    NActors::TActorSystem* const ActorSystem;
     const NActors::TActorId ICStorageTransportActorId;
 };
 

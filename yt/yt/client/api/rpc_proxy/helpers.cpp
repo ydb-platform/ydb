@@ -578,26 +578,26 @@ void FromProto(NTableClient::TColumnSchema* schema, const NProto::TColumnSchema&
         auto [v1Type, v1Required] = CastToV1Type(columnType);
         if (protoSchema.has_required() && protoSchema.required() != v1Required) {
             THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"required\" do not match")
-                << TErrorAttribute("type_v3", ToString(*columnType))
-                << TErrorAttribute("required", protoSchema.required());
+                .With("type_v3", ToString(*columnType))
+                .With("required", protoSchema.required());
         }
         if (protoSchema.has_logical_type() && v1Type != FromProto<ESimpleLogicalValueType>(protoSchema.logical_type())) {
             THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"logical_type\" do not match")
-                << TErrorAttribute("type_v3", ToString(*columnType))
-                << TErrorAttribute("logical_type", FromProto<ESimpleLogicalValueType>(protoSchema.logical_type()));
+                .With("type_v3", ToString(*columnType))
+                .With("logical_type", FromProto<ESimpleLogicalValueType>(protoSchema.logical_type()));
         }
         if (protoSchema.has_type() && GetPhysicalType(v1Type) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"type_v3\" and \"type\" do not match")
-                << TErrorAttribute("type_v3", ToString(*columnType))
-                << TErrorAttribute("type", protoSchema.type());
+                .With("type_v3", ToString(*columnType))
+                .With("type", protoSchema.type());
         }
     } else if (protoSchema.has_logical_type()) {
         auto logicalType = FromProto<ESimpleLogicalValueType>(protoSchema.logical_type());
         columnType = MakeLogicalType(logicalType, protoSchema.required());
         if (protoSchema.has_type() && GetPhysicalType(logicalType) != physicalType) {
             THROW_ERROR_EXCEPTION("Fields \"logical_type\" and \"type\" do not match")
-                << TErrorAttribute("logical_type", ToString(*columnType))
-                << TErrorAttribute("type", protoSchema.type());
+                .With("logical_type", ToString(*columnType))
+                .With("type", protoSchema.type());
         }
     } else if (protoSchema.has_type()) {
         columnType = MakeLogicalType(GetLogicalType(physicalType), protoSchema.required());

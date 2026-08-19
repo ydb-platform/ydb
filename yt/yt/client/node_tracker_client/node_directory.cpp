@@ -712,8 +712,8 @@ const std::string& GetAddressOrThrow(const TAddressMap& addresses, const TNetwor
     THROW_ERROR_EXCEPTION(EErrorCode::NoSuchNetwork,
         "Cannot select address for host %Qv since there is no compatible network",
         FindDefaultAddress(addresses))
-        << TErrorAttribute("remote_networks", GetKeys(addresses))
-        << TErrorAttribute("local_networks", networks);
+        .With("remote_networks", GetKeys(addresses))
+        .With("local_networks", networks);
 }
 
 const TAddressMap& GetAddressesOrThrow(const TNodeAddressMap& nodeAddresses, EAddressType type)
@@ -724,7 +724,7 @@ const TAddressMap& GetAddressesOrThrow(const TNodeAddressMap& nodeAddresses, EAd
     }
 
     THROW_ERROR_EXCEPTION("No addresses known for address type %Qlv", type)
-        << TErrorAttribute("known_types", GetKeys(nodeAddresses));
+        .With("known_types", GetKeys(nodeAddresses));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

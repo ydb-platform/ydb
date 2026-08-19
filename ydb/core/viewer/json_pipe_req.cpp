@@ -1,5 +1,6 @@
 #include "json_pipe_req.h"
 #include "log.h"
+#include <ydb/core/base/auth.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -167,20 +168,21 @@ void TViewerPipeClient::BuildParamsFromFormData(TStringBuf data) {
 }
 
 void TViewerPipeClient::SetupTracing(const TString& handlerName) {
+    constexpr ui8 viewerTraceMaxVerbosity = TComponentTracingLevels::DynamicNodesOnly;
+
     auto request = GetRequest();
     NWilson::TTraceId traceId;
     TString traceparent = request.GetHeader("traceparent");
     if (traceparent) {
-        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, TComponentTracingLevels::ProductionVerbose);
+        traceId = NWilson::TTraceId::FromTraceparentHeader(traceparent, viewerTraceMaxVerbosity);
     }
     TString wantTrace = request.GetHeader("X-Want-Trace");
     TString traceVerbosity = request.GetHeader("X-Trace-Verbosity");
     TString traceTTL = request.GetHeader("X-Trace-TTL");
     if (!traceId && (FromStringWithDefault<bool>(wantTrace) || !traceVerbosity.empty() || !traceTTL.empty())) {
-        ui8 verbosity = TComponentTracingLevels::ProductionVerbose;
+        ui8 verbosity = viewerTraceMaxVerbosity;
         if (traceVerbosity) {
-            verbosity = FromStringWithDefault<ui8>(traceVerbosity, verbosity);
-            verbosity = std::min(verbosity, NWilson::TTraceId::MAX_VERBOSITY);
+            verbosity = std::min(viewerTraceMaxVerbosity, FromStringWithDefault<ui8>(traceVerbosity, verbosity));
         }
         ui32 ttl = Max<ui32>();
         if (traceTTL) {
@@ -1020,6 +1022,21 @@ std::vector<TNodeId> TViewerPipeClient::GetDatabaseNodes() {
 
 bool TViewerPipeClient::IsDatabaseRequest() const {
     return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
+}
+
+bool TViewerPipeClient::IsStrictDatabaseOnlyRequest() {
+    if (!StrictDatabaseOnlyRequest.has_value()) {
+        StrictDatabaseOnlyRequest = IsStrictDatabaseOnlyToken(AppData(), GetRequest().GetUserTokenObject());
+    }
+    return *StrictDatabaseOnlyRequest;
+}
+
+TString TViewerPipeClient::GetUserSID() const {
+    NACLibProto::TUserToken userToken;
+    if (!userToken.ParseFromString(GetRequest().GetUserTokenObject())) {
+        return {};
+    }
+    return userToken.GetUserSID();
 }
 
 void TViewerPipeClient::InitConfig(const TCgiParameters& params) {

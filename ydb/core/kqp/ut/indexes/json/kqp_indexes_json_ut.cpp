@@ -143,7 +143,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
         }
     }
 
-    Y_UNIT_TEST(NoMultipleColumns) {
+    Y_UNIT_TEST(NoMultipleColumnsWithoutFeatureFlag) {
+        // With the prefix feature flag off, multi-column JSON indexes are rejected.
         auto kikimr = Kikimr();
         auto db = kikimr.GetQueryClient();
 
@@ -169,14 +170,19 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
             )";
             auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "JSON index requires exactly one key column, but 2 are requested");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Prefixed fulltext/json index support is disabled");
         }
     }
 
     Y_UNIT_TEST(NonIntegerPk) {
-        // With the unique-index feature OFF (the default), a JSON index over a non-integer PK can neither
+        // With the unique-index feature OFF, a JSON index over a non-integer PK can neither
         // use the PK as doc_id nor auto-provision the __ydb_row_id infrastructure, so it is rejected.
-        auto kikimr = Kikimr();
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableAddUniqueIndex(false);
+        featureFlags.SetEnableFulltextIndexRowId(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -432,8 +438,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     }
 
     Y_UNIT_TEST(NoCompositePk) {
-        // With the unique-index feature OFF (the default), a composite-PK table cannot host a JSON index.
-        auto kikimr = Kikimr();
+        // With the unique-index feature OFF, a composite-PK table cannot host a JSON index.
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableAddUniqueIndex(false);
+        featureFlags.SetEnableFulltextIndexRowId(true);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -3297,6 +3308,196 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
     Y_UNIT_TEST(TtlNotAllowed_AlterIndexTtl) {
         auto kikimr = Kikimr();
         TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), JsonTtlNotAllowedConfig);
+    }
+
+    Y_UNIT_TEST(PrefixedJsonCreate) {
+        auto kikimr = KikimrJsonPrefix();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/Docs` (
+                    Key Uint64,
+                    UserId Uint64,
+                    Text Json,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (UserId, Text)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                    (1, 100, Json('{"k1": "v1"}')),
+                    (2, 100, Json('{"k2": "v2"}')),
+                    (3, 200, Json('{"k1": "v1"}')),
+                    (4, 200, Json('{"k3": "v3"}'));
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Query with prefix equality + JSON predicate: user 100 sees only its own docs
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE UserId = 100 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[1u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // User 200 sees only its own docs with k1
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE UserId = 200 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[3u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // Prefix value passed as a parameter
+        {
+            auto params = TParamsBuilder().AddParam("$uid").Uint64(200).Build().Build();
+            auto result = db.ExecuteQuery(R"(
+                DECLARE $uid AS Uint64;
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE UserId = $uid AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[3u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+
+    Y_UNIT_TEST(PrefixedJsonQueryMissingPrefix) {
+        auto kikimr = KikimrJsonPrefix();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/Docs` (
+                    Key Uint64,
+                    UserId Uint64,
+                    Text Json,
+                    PRIMARY KEY (Key),
+                    INDEX json_idx GLOBAL USING json ON (UserId, Text)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Missing equality on the prefix column => error
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Prefixed JSON index requires an equality predicate");
+        }
+
+        // More complex expression (OR) => error
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE (UserId = 100 OR UserId = 200) AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Prefixed JSON index requires an equality predicate");
+        }
+
+        // More complex expression (sqrt :D) => error
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE (UserId * UserId) = 100 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+                "Prefixed JSON index requires an equality predicate");
+        }
+    }
+
+    Y_UNIT_TEST(PrefixedJsonAlterAdd) {
+        auto kikimr = KikimrJsonPrefix();
+        auto db = kikimr.GetQueryClient();
+
+        {
+            std::string query = R"(
+                CREATE TABLE `/Root/Docs` (
+                    Key Uint64,
+                    UserId Uint64,
+                    Text Json,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            std::string query = R"(
+                UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                    (1, 100, Json('{"k1": "v1"}')),
+                    (2, 100, Json('{"k2": "v2"}')),
+                    (3, 200, Json('{"k1": "v1"}')),
+                    (4, 200, Json('{"k3": "v3"}'));
+            )";
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // ALTER TABLE ADD INDEX with prefix columns
+        {
+            auto result = db.ExecuteQuery(R"(
+                ALTER TABLE `/Root/Docs` ADD INDEX json_idx GLOBAL USING json ON (UserId, Text)
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Query with prefix equality after ALTER
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE UserId = 100 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[1u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
+
+        // Insert more data after the index is built
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO `/Root/Docs` (Key, UserId, Text) VALUES
+                    (5, 100, Json('{"k1": "v5"}'));
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // Verify the new row is returned
+        {
+            auto result = db.ExecuteQuery(R"(
+                SELECT Key FROM `/Root/Docs` VIEW json_idx
+                WHERE UserId = 100 AND JSON_EXISTS(Text, '$.k1')
+                ORDER BY Key;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CompareYson("[[[1u]];[[5u]]]", FormatResultSetYson(result.GetResultSet(0)));
+        }
     }
 }
 

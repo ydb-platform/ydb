@@ -3478,7 +3478,9 @@ TImportInfo::TFillItemsFromSchemaMappingResult TImportInfo::FillItemsFromSchemaM
         result.AddError("no items to import");
     }
 
-    Items.swap(items);
+    if (result.Success) {
+        Items.swap(items);
+    }
 
     return result;
 }

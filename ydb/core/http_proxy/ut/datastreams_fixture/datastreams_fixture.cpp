@@ -458,21 +458,34 @@ TMaybe<NYdb::TResultSet> THttpProxyTestMock::RunYqlDataQuery(TString query) {
 
     TMaybe<NYdb::TResultSet> resultSet;
 
+    // Default GetSessionClientTimeout is 5s; under ASAN + UseRealThreads(false) CreateSession
+    // often exceeds that and flakes with "request deadline expired".
+    NYdb::NTable::TRetryOperationSettings retrySettings;
+    retrySettings.GetSessionClientTimeout(TDuration::Seconds(60));
+    retrySettings.MaxTimeout(TDuration::Seconds(120));
+
     auto operationResult = tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
+        NYdb::NTable::TExecDataQuerySettings execSettings;
+        execSettings.ClientTimeout(TDuration::Seconds(60));
+        execSettings.OperationTimeout(TDuration::Seconds(60));
+
         NYdb::TParamsBuilder paramsBuilder;
         auto queryResult = session.ExecuteDataQuery(
                 query,
                 NYdb::NTable::TTxControl::BeginTx(NYdb::NTable::TTxSettings::SerializableRW()).CommitTx(),
-                paramsBuilder.Build()
+                paramsBuilder.Build(),
+                execSettings
             ).GetValueSync();
 
         if (queryResult.IsSuccess() && queryResult.GetResultSets().size() > 0) {
             resultSet = queryResult.GetResultSet(0);
         }
         return queryResult;
-    });
+    }, retrySettings);
 
-    Y_ABORT_UNLESS(operationResult.IsSuccess());
+    UNIT_ASSERT_C(operationResult.IsSuccess(),
+        "RunYqlDataQuery failed: " << operationResult.GetIssues().ToOneLineString()
+        << " for query: " << query);
     return resultSet;
 }
 
@@ -1007,13 +1020,13 @@ void THttpProxyTestMock::InitHttpServer(bool yandexCloudMode, bool enableSqsTopi
     auto as = ActorRuntime->GetAnyNodeActorSystem();
     opts.SetLogger(NYdbGrpc::CreateActorSystemLogger(*as, NKikimrServices::GRPC_SERVER));
 
-    TActorId actorId = as->Register(CreateAccessServiceActor(config, enableAccessServiceV2Interface));
+    TActorId actorId = as->Register(CreateAccessServiceActor(config, "ydb-http_proxy-datastreams", enableAccessServiceV2Interface));
     as->RegisterLocalService(MakeAccessServiceID(), actorId);
 
-    actorId = as->Register(CreateAccessServiceActor(config, enableAccessServiceV2Interface));
+    actorId = as->Register(CreateAccessServiceActor(config, "ydb-http_proxy-datastreams", enableAccessServiceV2Interface));
     as->RegisterLocalService(NSQS::MakeSqsAccessServiceID(), actorId);
 
-    actorId = as->Register(CreateIamTokenServiceActor(config));
+    actorId = as->Register(CreateIamTokenServiceActor(config, "ydb-http_proxy-datastreams"));
     as->RegisterLocalService(MakeIamTokenServiceID(), actorId);
 
     actorId = as->Register(CreateDiscoveryProxyActor(credentialsProvider, config));

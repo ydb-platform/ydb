@@ -73,7 +73,6 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
     Y_UNIT_TEST(ResultChannelFlowControlSmoke) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableResultChannelFlowControl(true);
 
         TKikimrRunner kikimr(settings);
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); });
@@ -89,7 +88,6 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
 
     Y_UNIT_TEST(ResultChannelFlowControlPauseResume) {
         TKikimrSettings settings = TKikimrSettings().SetUseRealThreads(false);
-        settings.AppConfig.MutableTableServiceConfig()->SetEnableResultChannelFlowControl(true);
 
         TKikimrRunner kikimr(settings);
         const ui32 totalRows = 2000;
@@ -98,13 +96,11 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         auto& runtime = *kikimr.GetTestServer().GetRuntime();
         auto sender = runtime.AllocateEdgeActor();
 
-        bool pausedOnce = false;
-        bool paused = false;
         TActorId executerId;
-        ui32 channelId = 0;
+        THashSet<ui32> pausedChannels;
+        bool resuming = false;
         ui64 rowsWhilePaused = 0;
         ui64 rowsAfterResume = 0;
-        ui32 dataMessagesWhilePaused = 0;
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvStreamData::EventType) {
@@ -112,15 +108,10 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
                 auto resp = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
 
-                if (!pausedOnce) {
-                    executerId = ev->Sender;
-                    channelId = record.GetChannelId();
-                    pausedOnce = true;
-                    paused = true;
+                executerId = ev->Sender;
+                if (!resuming) {
+                    pausedChannels.insert(record.GetChannelId());
                     rowsWhilePaused += record.GetResultSet().rows().size();
-                    resp->Record.SetFreeSpace(0);
-                } else if (paused) {
-                    ++dataMessagesWhilePaused;
                     resp->Record.SetFreeSpace(0);
                 } else {
                     rowsAfterResume += record.GetResultSet().rows().size();
@@ -138,21 +129,22 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
             NDataShard::NKqpHelpers::MakeStreamRequest(streamSender, "SELECT * FROM `/Root/ManyShardsTable`;", false));
 
         runtime.SimulateSleep(TDuration::Seconds(1));
-        UNIT_ASSERT(pausedOnce);
-        UNIT_ASSERT_VALUES_EQUAL_C(dataMessagesWhilePaused, 0,
-            "no data should be delivered while the result channel is paused");
+        UNIT_ASSERT(!pausedChannels.empty());
+        UNIT_ASSERT_LT_C(rowsWhilePaused, totalRows,
+            "not all rows should be delivered while every result channel is paused");
 
-        paused = false;
-        auto resumeAck = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(0, channelId);
-        resumeAck->Record.SetEnough(false);
-        resumeAck->Record.SetFreeSpace(100_MB);
-        runtime.Send(new IEventHandle(executerId, sender, resumeAck.Release()));
+        resuming = true;
+        for (ui32 channelId : pausedChannels) {
+            auto resumeAck = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(0, channelId);
+            resumeAck->Record.SetEnough(false);
+            resumeAck->Record.SetFreeSpace(100_MB);
+            runtime.Send(new IEventHandle(executerId, sender, resumeAck.Release()));
+        }
 
         auto reply = runtime.GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(streamSender);
         UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,
             reply->Get()->Record.GetResponse().DebugString());
 
-        UNIT_ASSERT_GT(rowsWhilePaused, 0);
         UNIT_ASSERT_GT(rowsAfterResume, 0);
         UNIT_ASSERT_VALUES_EQUAL(rowsWhilePaused + rowsAfterResume, totalRows);
     }

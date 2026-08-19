@@ -150,7 +150,6 @@ public:
         , ChannelService(channelService)
         , PartitionPruner(MakeHolder<TPartitionPruner>(Request.TxAlloc->HolderFactory, Request.TxAlloc->TypeEnv, std::move(partitionPrunerConfig)))
         , EnableWatermarks(executerConfig.TableServiceConfig.GetEnableWatermarks())
-        , EnableResultChannelFlowControl(executerConfig.TableServiceConfig.GetEnableResultChannelFlowControl())
     {
         ArrayBufferMinFillPercentage = executerConfig.TableServiceConfig.GetArrayBufferMinFillPercentage();
         BufferPageAllocSize = executerConfig.TableServiceConfig.GetBufferPageAllocSize();
@@ -610,17 +609,11 @@ protected:
     }
 
     bool IsResultChannelPaused(ui32 channelId) const {
-        if (!EnableResultChannelFlowControl) {
-            return false;
-        }
         auto it = ResultChannelFlow.find(channelId);
         return it != ResultChannelFlow.end() && it->second.IsPaused();
     }
 
     void AccountResultChannelBytesSent(ui32 channelId, i64 bytes) {
-        if (!EnableResultChannelFlowControl) {
-            return;
-        }
         auto& state = ResultChannelFlow[channelId];
         if (state.EstimatedFreeSpace != Max<i64>()) {
             const bool wasPaused = state.IsPaused();
@@ -800,34 +793,30 @@ protected:
 
         if (TasksGraph.GetMeta().DqChannelVersion >= 2u) {
             if (ev->Get()->Record.GetEnough()) {
-                for (auto& [chId, inputBuffer] : ResultInputBuffers) {
+                for (auto& [channelId, inputBuffer] : ResultInputBuffers) {
                     inputBuffer->EarlyFinish();
-                    if (EnableResultChannelFlowControl) {
-                        ResultChannelFlow.erase(chId);
-                    }
+                    ResultChannelFlow.erase(channelId);
                 }
                 return;
             }
 
-            if (EnableResultChannelFlowControl) {
-                const ui32 channelId = ev->Get()->Record.GetChannelId();
-                auto& state = ResultChannelFlow[channelId];
-                const bool wasPaused = state.IsPaused();
-                state.EstimatedFreeSpace = ev->Get()->Record.GetFreeSpace();
-                if (wasPaused && !state.IsPaused()) {
-                    YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Result channel resumed",
-                        {"marker", "KQPEX"},
-                        {"actorId", SelfId()},
-                        {"txId", TxId},
-                        {"ctx", *GetUserRequestContext()},
-                        {"channelId", channelId},
-                        {"freeSpace", state.EstimatedFreeSpace},
-                        {"traceId", TraceId()});
-                }
-                if (state.EstimatedFreeSpace > 0) {
-                    if (auto it = ResultInputBuffers.find(channelId); it != ResultInputBuffers.end()) {
-                        ReadResultFromInputBuffer(channelId, it->second);
-                    }
+            const ui32 channelId = ev->Get()->Record.GetChannelId();
+            auto& state = ResultChannelFlow[channelId];
+            const bool wasPaused = state.IsPaused();
+            state.EstimatedFreeSpace = ev->Get()->Record.GetFreeSpace();
+            if (wasPaused && !state.IsPaused()) {
+                YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Result channel resumed",
+                    {"marker", "KQPEX"},
+                    {"actorId", SelfId()},
+                    {"txId", TxId},
+                    {"ctx", *GetUserRequestContext()},
+                    {"channelId", channelId},
+                    {"freeSpace", state.EstimatedFreeSpace},
+                    {"traceId", TraceId()});
+            }
+            if (state.EstimatedFreeSpace > 0) {
+                if (auto it = ResultInputBuffers.find(channelId); it != ResultInputBuffers.end()) {
+                    ReadResultFromInputBuffer(channelId, it->second);
                 }
             }
             return;
@@ -2189,7 +2178,6 @@ protected:
     std::shared_ptr<NYql::NDq::IDqChannelService> ChannelService;
     THolder<TPartitionPruner> PartitionPruner;
     bool EnableWatermarks = false;
-    bool EnableResultChannelFlowControl = false;
 private:
     static constexpr TDuration ResourceUsageUpdateInterval = TDuration::MilliSeconds(100);
 };

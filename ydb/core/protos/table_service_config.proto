@@ -566,5 +566,4 @@ message TTableServiceConfig {
 
     // Prune key columns
     optional bool EnablePruneKeyColumns = 144 [default = false];
-    optional bool EnableResultChannelFlowControl = 145 [default = false, (InvalidateCompileCache) = false];
 };

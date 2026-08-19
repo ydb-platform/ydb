@@ -9,9 +9,15 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/system/yassert.h>
+
 #include <cmath>
 
 namespace NKikimr::NConveyorComposite::NConfig {
+
+inline constexpr TStringBuf DefaultPoolId = "__DEFAULT_POOL__";
 
 class TWorkerPoolCategoryUsage {
 private:
@@ -64,12 +70,17 @@ public:
 class TWorkersPool {
 private:
     TString PoolName;
-    YDB_READONLY(ui32, WorkersPoolId, 0);
     YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
     YDB_READONLY(ui64, MaxBatchSize, 30);
 
 public:
+    struct THash {
+        size_t operator()(const TWorkersPool& pool) const {
+            return ::THash<TString>()(pool.GetName());
+        }
+    };
+
     const TString& GetName() const;
 
     double GetWorkerCPUUsage(const ui64 workerIdx, const ui64 totalThreadsCount) const;
@@ -87,12 +98,15 @@ public:
 
     TString DebugString() const;
 
-    TWorkersPool(const ui32 wpId)
-        : WorkersPoolId(wpId) {
-        PoolName = "WP::DEFAULT";
+    TWorkersPool() = default;
+
+    explicit TWorkersPool(const TString& poolName)
+        : PoolName(poolName) {
     }
 
-    TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction);
+    bool operator==(const TWorkersPool& other) const {
+        return PoolName == other.PoolName;
+    }
 
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto);
 };
@@ -101,19 +115,13 @@ class TCategory {
 private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
     YDB_READONLY(ui64, QueueSizeLimit, 256 * 1024);
-    YDB_READONLY_DEF(std::vector<ui32>, WorkerPools);
+    YDB_READONLY_DEF(THashSet<TString>, WorkerPools);
 
 public:
     TString DebugString() const;
 
-    [[nodiscard]] bool AddWorkerPool(const ui32 id) {
-        for (auto&& i : WorkerPools) {
-            if (i == id) {
-                return false;
-            }
-        }
-        WorkerPools.emplace_back(id);
-        return true;
+    [[nodiscard]] bool AddWorkerPool(const TString& id) {
+        return WorkerPools.emplace(id).second;
     }
 
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TCategory& proto) {
@@ -134,13 +142,23 @@ public:
 class TConfig {
 private:
     YDB_READONLY_DEF(std::vector<TCategory>, Categories);
-    YDB_READONLY_DEF(std::vector<TWorkersPool>, WorkerPools);
+    THashSet<TWorkersPool, TWorkersPool::THash> WorkerPools;
     YDB_READONLY_FLAG(Enabled, true);
 
     TConfig() = default;
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig& config);
 
 public:
+    const THashSet<TWorkersPool, TWorkersPool::THash>& GetWorkerPools() const {
+        return WorkerPools;
+    }
+
+    const TWorkersPool& GetWorkersPoolVerified(const TString& poolId) const {
+        const auto it = WorkerPools.find(TWorkersPool(poolId));
+        Y_ABORT_UNLESS(it != WorkerPools.end(), "unknown workers pool: %s", poolId.c_str());
+        return *it;
+    }
+
     static NKikimrConfig::TCompositeConveyorConfig BuildDefaultProto();
     static TConfig BuildDefault();
 

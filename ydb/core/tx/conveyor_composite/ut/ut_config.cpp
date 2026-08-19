@@ -44,7 +44,7 @@ void AssertCPUConfig(const NKikimrConfig::TCompositeConveyorConfig& proto, const
     auto config = NConfig::TConfig::BuildFromProto(proto);
     UNIT_ASSERT_C(!config.IsFail(), config.GetErrorMessage());
     const auto parsedConfig = config.DetachResult();
-    const auto& pool = parsedConfig.GetWorkerPools()[1];
+    const auto& pool = parsedConfig.GetWorkersPoolVerified("pool");
     UNIT_ASSERT_VALUES_EQUAL(pool.GetWorkersCount(totalThreadsCount), expectedLimits.size());
     for (ui64 workerIdx = 0; workerIdx < expectedLimits.size(); ++workerIdx) {
         UNIT_ASSERT_C(std::abs(pool.GetWorkerCPUUsage(workerIdx, totalThreadsCount) - expectedLimits[workerIdx]) < 1e-9,
@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorConfig) {
             NKikimrConfig::TCompositeConveyorConfig proto;
             AddPool(proto, name, {{ESpecialTaskCategory::Scan, 1}});
             auto config = NConfig::TConfig::BuildFromProto(proto).DetachResult();
-            UNIT_ASSERT_VALUES_EQUAL(config.GetWorkerPools()[1].GetName(), "WP::scan");
+            UNIT_ASSERT_VALUES_EQUAL(config.GetWorkersPoolVerified("WP::scan").GetName(), "WP::scan");
         }
     }
 

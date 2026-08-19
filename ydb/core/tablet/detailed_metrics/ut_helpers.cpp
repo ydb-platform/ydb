@@ -64,9 +64,17 @@ constexpr const char* APP_CUMULATIVE_COUNTER_NAMES[] = {
 };
 
 constexpr TTabletPercentileCounter::TRangeDef PERCENTILE_RANGES[] = {
-    {  0,   "0"},
-    { 10,  "10"},
-    {100, "100"},
+	    {      0,   "0%"},
+	    { 100000,  "10%"},
+	    { 200000,  "20%"},
+	    { 300000,  "30%"},
+	    { 400000,  "40%"},
+	    { 500000,  "50%"},
+	    { 600000,  "60%"},
+	    { 700000,  "70%"},
+	    { 800000,  "80%"},
+	    { 900000,  "90%"},
+	    {1000000, "100%"},
 };
 
 } // namespace

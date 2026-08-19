@@ -1,6 +1,7 @@
 #include "processor_database_metrics_aggregator.h"
 
 #include "detailed_metrics_counter_set.h"
+#include "detailed_metrics_tree.h"
 #include "ydb_metrics_aggregator.h"
 #include "ydb_metrics_mapper.h"
 
@@ -28,13 +29,27 @@ using EMetricsLevel = TMetricsSettings::EMetricsLevel;
 //      db_counters.cpp itself is untouched: this is a separate funnel (the
 //      detailed metrics one, step 08+), not on the same release cadence.
 
+// BucketsCount and CumulativeCount are uint64 straight off the wire
+// (NKikimrSysView::TDbCounters, ydb/core/protos/sys_view.proto), so an
+// unbounded Resize() driven by either is an allocation a hostile or
+// corrupted peer fully controls. A real counter set tops out at a few
+// hundred entries, so a few thousand is already far above anything
+// legitimate.
+constexpr size_t MAX_WIRE_COUNTER_COUNT = 4096;
+
 template <bool IsMax>
 struct TAggregateCumulative {
     static void Apply(NKikimrSysView::TDbCounters* dst, const NKikimrSysView::TDbCounters& src) {
-        auto cumulativeSize = src.GetCumulativeCount();
+        size_t cumulativeSize = src.GetCumulativeCount();
         auto histogramSize = src.HistogramSize();
 
-        if (dst->CumulativeSize() < cumulativeSize) {
+        if (cumulativeSize > MAX_WIRE_COUNTER_COUNT) {
+            // Verbatim clone of ydb/core/sys_view/processor/db_counters.cpp:53-56,
+            // which has the same defect and should get the same fix separately.
+            return;
+        }
+
+        if ((size_t)dst->CumulativeSize() < cumulativeSize) {
             dst->MutableCumulative()->Resize(cumulativeSize, 0);
         }
         if (dst->HistogramSize() < histogramSize) {
@@ -50,7 +65,7 @@ struct TAggregateCumulative {
         for (int i = 0; i < doubleDiffSize; ) {
             auto index = from[i++];
             auto value = from[i++];
-            if (index >= cumulativeSize) {
+            if ((size_t)index >= cumulativeSize) {
                 continue;
             }
             if constexpr (!IsMax) {
@@ -63,15 +78,20 @@ struct TAggregateCumulative {
             const auto& histogram = src.GetHistogram(i);
             const auto& from = histogram.GetBuckets();
             auto* to = dst->MutableHistogram(i)->MutableBuckets();
-            auto bucketCount = histogram.GetBucketsCount();
-            if (to->size() < (int)bucketCount) {
+            size_t bucketCount = histogram.GetBucketsCount();
+            if (bucketCount > MAX_WIRE_COUNTER_COUNT) {
+                // Same wire-controlled-allocation defect as cumulativeSize above,
+                // but per histogram: skip only this histogram, not the whole entry.
+                continue;
+            }
+            if ((size_t)to->size() < bucketCount) {
                 to->Resize(bucketCount, 0);
             }
             auto doubleDiffSize = from.size();
             for (int b = 0; b < doubleDiffSize; ) {
                 auto index = from[b++];
                 auto value = from[b++];
-                if (index >= bucketCount) {
+                if ((size_t)index >= bucketCount) {
                     continue;
                 }
                 if constexpr (!IsMax) {
@@ -136,16 +156,34 @@ void AggregateIncrementalTabletCounters(
 }
 
 /**
- * Sum one node's latest Simple snapshot and MAX (both its Simple and its
- * Cumulative per-second-rate parts) into the cross-node accumulator
+ * Fold one node's latest Simple snapshot, and MAX (both its Simple and its
+ * Cumulative per-second-rate parts), into the cross-node accumulator
  * (AggregateStatefulCounters convention, S2).
+ *
+ * @param[in] singleOwner Whether the bucket this snapshot belongs to has
+ *            exactly one legitimate contributing node at a time (a
+ *            PARTITION leaf, F1: the tablet is single-owner, two nodes
+ *            reporting it at once is only ever the transient of a partition
+ *            move) as opposed to many (a TABLE collapse bucket, S1'', with
+ *            disjoint per-node contributions). Simple/gauge values are
+ *            summed across nodes for the latter but MAX'd for the former —
+ *            summing two copies of the SAME leaf's row_count/size_bytes
+ *            during a move would double it. Cumulative/HIST MAX needs no
+ *            such branch: it is already a per-node latest-rate snapshot, and
+ *            taking the max of two copies of the same value is a no-op.
  */
 void AggregateStatefulTabletCounters(
     NKikimrSysView::TDbTabletCounters* dst,
-    const NKikimrSysView::TDbTabletCounters& src
+    const NKikimrSysView::TDbTabletCounters& src,
+    bool singleOwner
 ) {
-    TAggregateSimple<false>::Apply(dst->MutableExecutorCounters(), src.GetExecutorCounters());
-    TAggregateSimple<false>::Apply(dst->MutableAppCounters(), src.GetAppCounters());
+    if (singleOwner) {
+        TAggregateSimple<true>::Apply(dst->MutableExecutorCounters(), src.GetExecutorCounters());
+        TAggregateSimple<true>::Apply(dst->MutableAppCounters(), src.GetAppCounters());
+    } else {
+        TAggregateSimple<false>::Apply(dst->MutableExecutorCounters(), src.GetExecutorCounters());
+        TAggregateSimple<false>::Apply(dst->MutableAppCounters(), src.GetAppCounters());
+    }
 
     TAggregateSimple<true>::Apply(dst->MutableMaxExecutorCounters(), src.GetMaxExecutorCounters());
     TAggregateCumulative<true>::Apply(dst->MutableMaxExecutorCounters(), src.GetMaxExecutorCounters());
@@ -169,18 +207,49 @@ void ResetStatefulTabletCounters(NKikimrSysView::TDbTabletCounters* dst) {
  * scratch across the currently live nodes and hands the result to a
  * TCountersBucket to publish.
  *
- * @note Used identically for a TABLE bucket (many nodes, exactly one per
- *       node since S1'' gives it a single leader-side source) and for a
- *       PARTITION leaf (normally one contributing node — the tablet is
- *       single-owner, F1 — but summing across nodes is harmless and covers
- *       the transient window of a partition move without a special case).
+ * @note Cumulative/HIST is always summed across nodes, TABLE bucket or
+ *       PARTITION leaf alike: those are disjoint per-node deltas either way
+ *       (many leader-sourced tables for a TABLE bucket, S1''; at most one
+ *       node's worth of real delta plus a departing owner's tail for a
+ *       PARTITION leaf), so adding them is correct in both cases.
+ *
+ *       Simple/gauges are NOT: correct to sum across the many disjoint
+ *       nodes of a TABLE collapse bucket, but a PARTITION leaf's tablet is
+ *       single-owner (F1) — seeing it from two nodes at once is only ever
+ *       the transient of a partition move (old and new owner both still
+ *       reporting the same (tablet, follower) for up to one 5 s tick), and
+ *       summing would double row_count/size_bytes for that tick instead of
+ *       reporting either owner's real value. SingleOwner selects MAX
+ *       instead of SUM for exactly that case (AggregateStatefulTabletCounters).
  */
 class TCrossNodeEntry {
 public:
-    void ApplyDelta(ui32 nodeId, const NKikimrSysView::TDbTabletCounters& diff) {
+    explicit TCrossNodeEntry(bool singleOwner)
+        : SingleOwner(singleOwner)
+    {}
+
+    /**
+     * @return false, with nothing applied and nothing recorded, if
+     *         TabletType is already fixed (a previous ApplyDelta already set
+     *         it) and diff.GetType() disagrees — dropped rather than
+     *         asserted on, since this is remote input off the wire, same
+     *         reasoning as the follower-TABLE-partial comment in
+     *         ApplyFromNode. Mirrors the node side's explicit drift check
+     *         (node_database_metrics_aggregator.cpp:116-131): without it, a
+     *         mismatched layout would be silently misattributed by position
+     *         instead of caught, because TCountersBucket::FromProto always
+     *         hands EnsureInitialized() the bucket's own construction-time
+     *         type, so its Y_DEBUG_ABORT_UNLESS can never fire on this.
+     *         true otherwise.
+     */
+    bool ApplyDelta(ui32 nodeId, const NKikimrSysView::TDbTabletCounters& diff) {
+        if (TabletType != TTabletTypes::TypeInvalid && diff.GetType() != TabletType) {
+            return false;
+        }
         TabletType = diff.GetType();
         AggregateIncrementalTabletCounters(&Accumulator, diff);
         PerNodeSnapshot[nodeId] = diff;
+        return true;
     }
 
     void DropNode(ui32 nodeId) {
@@ -212,7 +281,7 @@ public:
     void Recalculate(TCountersBucket& bucket, const TTabletCountersBase* executorCountersTemplate) {
         ResetStatefulTabletCounters(&Accumulator);
         for (const auto& [_, snapshot] : PerNodeSnapshot) {
-            AggregateStatefulTabletCounters(&Accumulator, snapshot);
+            AggregateStatefulTabletCounters(&Accumulator, snapshot, SingleOwner);
         }
         Accumulator.SetType(TabletType);
 
@@ -220,6 +289,7 @@ public:
     }
 
 private:
+    const bool SingleOwner;
     TTabletTypes::EType TabletType = TTabletTypes::TypeInvalid;
     NKikimrSysView::TDbTabletCounters Accumulator;
     THashMap<ui32, NKikimrSysView::TDbTabletCounters> PerNodeSnapshot;
@@ -229,10 +299,9 @@ private:
  * A single (tablet_id, follower_id) leaf of a PARTITION-level table.
  */
 struct TLeafEntry {
-    TCrossNodeEntry Cross;
+    TCrossNodeEntry Cross{true}; // single-owner: the tablet behind a leaf, F1
 
     THolder<TCountersBucket> RawBucket;
-    NMonitoring::TDynamicCounterPtr PublicLeafGroup;
     TYdbMetricsMapperPtr Mapper;
 };
 
@@ -243,10 +312,14 @@ struct TLeafEntry {
  * one entry instead of aliasing one counter group).
  *
  * @note Only one of the two shapes is ever populated at a time, chosen by
- *       Level — enforced by GetOrCreateTableEntry() tearing the whole entry
- *       down and rebuilding it fresh the moment Level disagrees with what a
- *       message says now (a table's METRICS_LEVEL changed, or ITS OWN
- *       identity moved to another path and a new one arrived at this one).
+ *       Level. Kept stable, NOT torn down and rebuilt, for as long as an
+ *       incoming message's Level agrees with it: ApplyFromNode's LevelMatches()
+ *       guard keeps a message whose Level disagrees from ever touching this
+ *       entry at all, so it survives untouched until every contributor of
+ *       the OLD shape stops mentioning it (ReconcileStream's normal absence
+ *       detection) — a METRICS_LEVEL flip reaches nodes asynchronously, and
+ *       tearing the shared entry down on the first disagreeing node would
+ *       destroy every OTHER still-agreeing node's live contribution with it.
  */
 struct TTableEntry {
     EMetricsLevel Level = TMetricsSettings::MetricsLevelUnspecified;
@@ -280,7 +353,15 @@ public:
         , TargetCounterGroup(targetCounterGroup)
         , DatabasePrefix(ChopTrailingSlash(databasePath))
         , ExecutorCountersTemplate(std::move(executorCountersTemplate))
-    {}
+    {
+        // A local invariant on a constructor argument, not remote input (same
+        // precedent as TTabletCountersForDb::FromProto, tablet_counters_
+        // aggregator.cpp): TAggregatedTabletCounters::Initialize() guards its
+        // whole body on `if (counters)` and still sets IsInitialized = true
+        // with FullSize* == 0, so a null template would silently zero every
+        // executor metric forever instead of failing loudly here.
+        Y_ABORT_UNLESS(ExecutorCountersTemplate, "executorCountersTemplate must not be null");
+    }
 
     void ApplyFromNode(
         ui32 nodeId,
@@ -311,10 +392,31 @@ public:
                     continue;
                 }
 
-                ApplyTableLevel(relativePath, nodeId, table.GetTableCounters());
-                newTableContributions.insert(relativePath);
+                if (ApplyTableLevel(relativePath, nodeId, table.GetTableCounters())) {
+                    newTableContributions.insert(relativePath);
+                }
             } else if (level == TMetricsSettings::MetricsLevelPartition) {
-                auto& entry = GetOrCreateTableEntry(relativePath, level);
+                if (!LevelMatches(relativePath, level)) {
+                    // A METRICS_LEVEL flip reaches nodes asynchronously: this message
+                    // disagrees with the entry's current (TABLE) shape, which some
+                    // OTHER, not-yet-converged node may still be legitimately feeding.
+                    // Deliberately NOT touching the entry and NOT recording a
+                    // contribution here: leaving this table out of
+                    // newLeafContributions lets ReconcileStream's normal absence
+                    // detection retire the old shape one tick after its last
+                    // contributor stops feeding it, and the next message builds the
+                    // new (PARTITION) shape cleanly once nothing disagrees anymore.
+                    continue;
+                }
+
+                // Seeded from any already-existing entry (this table's Level was
+                // just confirmed to match, so it is safe to keep using as-is);
+                // stays null and is filled lazily inside GetOrCreateLeaf, on the
+                // first leaf that actually resolves, when the table is new — so a
+                // message whose leaves ALL fail to resolve (empty Leaves, or every
+                // GetOrCreateLeaf nullptr) never creates an entry nothing will ever
+                // reach again.
+                TTableEntry* entry = Tables.FindPtr(relativePath);
 
                 for (const auto& leafProto : table.GetLeaves()) {
                     const TTabletKey tabletKey(leafProto.GetTabletId(), leafProto.GetFollowerId());
@@ -322,7 +424,7 @@ public:
                     EvictMovedLeaf(tabletKey, relativePath);
 
                     const TTabletTypes::EType tabletType = leafProto.GetCounters().GetType();
-                    auto* leaf = GetOrCreateLeaf(entry, relativePath, tabletKey, tabletType);
+                    auto* leaf = GetOrCreateLeaf(entry, relativePath, level, tabletKey, tabletType);
                     if (!leaf) {
                         // An unpublished tablet type (GetDetailedMetricsCounterNames
                         // returned nullptr): matches the node's own AddCounters, which
@@ -331,7 +433,9 @@ public:
                         continue;
                     }
 
-                    leaf->Cross.ApplyDelta(nodeId, leafProto.GetCounters());
+                    if (!leaf->Cross.ApplyDelta(nodeId, leafProto.GetCounters())) {
+                        continue;
+                    }
                     newLeafContributions.insert(tabletKey);
                 }
             }
@@ -370,18 +474,30 @@ private:
     using TStreamKey = std::pair<ui32, bool>;
 
     /**
-     * @return The existing entry for relativePath, rebuilt from scratch if
-     *         its stored Level disagrees with level (a METRICS_LEVEL change,
-     *         or this path being reused by a different table altogether) —
-     *         a fresh entry otherwise.
+     * @return Whether relativePath's stored Level (if it has an entry at
+     *         all) agrees with level — the guard callers run BEFORE ever
+     *         touching an entry, so a message that disagrees never creates,
+     *         rebuilds, or otherwise mutates it (see the PARTITION-branch
+     *         and ApplyTableLevel comments on why: an in-flight METRICS_LEVEL
+     *         change must not let one asynchronously-arriving node tear down
+     *         another still-agreeing node's live contribution).
+     */
+    bool LevelMatches(const TString& relativePath, EMetricsLevel level) const {
+        auto it = Tables.find(relativePath);
+        return it == Tables.end() || it->second.Level == level;
+    }
+
+    /**
+     * @return The entry for relativePath, creating (and labeling with
+     *         `level`) a fresh one if none exists yet — the existing one
+     *         otherwise. Callers are responsible for checking LevelMatches()
+     *         first: by the time this runs, level is assumed to already
+     *         agree with any existing entry's Level.
      */
     TTableEntry& GetOrCreateTableEntry(const TString& relativePath, EMetricsLevel level) {
         auto it = Tables.find(relativePath);
         if (it != Tables.end()) {
-            if (it->second.Level == level) {
-                return it->second;
-            }
-            DropTableEntryCompletely(it);
+            return it->second;
         }
 
         auto& entry = Tables[relativePath];
@@ -391,13 +507,27 @@ private:
         return entry;
     }
 
-    void ApplyTableLevel(const TString& relativePath, ui32 nodeId, const NKikimrSysView::TDbTabletCounters& diff) {
+    /**
+     * @return Whether the delta was applied and should count as nodeId's
+     *         contribution to relativePath's TABLE-level entry for this
+     *         tick: false, with nothing applied and nothing recorded, when
+     *         relativePath's stored Level disagrees with TABLE (see
+     *         LevelMatches) or when TCrossNodeEntry::ApplyDelta rejected the
+     *         message for a tablet type mismatch (see its own doc comment).
+     */
+    bool ApplyTableLevel(const TString& relativePath, ui32 nodeId, const NKikimrSysView::TDbTabletCounters& diff) {
+        if (!LevelMatches(relativePath, TMetricsSettings::MetricsLevelTable)) {
+            return false;
+        }
+
         auto& entry = GetOrCreateTableEntry(relativePath, TMetricsSettings::MetricsLevelTable);
 
         if (!entry.TableCross) {
-            entry.TableCross = MakeHolder<TCrossNodeEntry>();
+            entry.TableCross = MakeHolder<TCrossNodeEntry>(false); // many disjoint leader-sourced nodes, S1''
         }
-        entry.TableCross->ApplyDelta(nodeId, diff);
+        if (!entry.TableCross->ApplyDelta(nodeId, diff)) {
+            return false;
+        }
 
         if (!entry.TableRawBucket) {
             const TTabletTypes::EType tabletType = entry.TableCross->GetTabletType();
@@ -411,23 +541,36 @@ private:
                 );
             }
         }
+        return true;
     }
 
     /**
      * @return The leaf's state, creating it (and its raw/public groups and
      *         its source registration in the table's TYdbMetricsAggregator)
      *         on first sight — or nullptr if tabletType publishes no
-     *         detailed metrics at all (GetDetailedMetricsCounterNames)
+     *         detailed metrics at all (GetDetailedMetricsCounterNames).
+     *
+     * @param[in,out] tableEntry In: nullptr means relativePath has no entry
+     *            yet. Out: filled in with relativePath's entry (creating it
+     *            via GetOrCreateTableEntry, lazily, only now that tabletType
+     *            is known to resolve) whenever this call returns non-null;
+     *            left as it was on a nullptr return, so a leaf that fails to
+     *            resolve never creates an entry for it. Non-null in is
+     *            reused as is (the caller already confirmed relativePath's
+     *            Level agrees before ever obtaining a tableEntry to pass).
      */
     TLeafEntry* GetOrCreateLeaf(
-        TTableEntry& tableEntry,
+        TTableEntry*& tableEntry,
         const TString& relativePath,
+        EMetricsLevel level,
         const TTabletKey& tabletKey,
         TTabletTypes::EType tabletType
     ) {
-        auto it = tableEntry.Leaves.find(tabletKey);
-        if (it != tableEntry.Leaves.end()) {
-            return it->second.Get();
+        if (tableEntry) {
+            auto it = tableEntry->Leaves.find(tabletKey);
+            if (it != tableEntry->Leaves.end()) {
+                return it->second.Get();
+            }
         }
 
         const TDetailedMetricsCounterNames* counterNames = GetDetailedMetricsCounterNames(tabletType);
@@ -435,12 +578,16 @@ private:
             return nullptr;
         }
 
-        NMonitoring::TDynamicCounterPtr rawLeafGroup = tableEntry.RawTableGroup
+        if (!tableEntry) {
+            tableEntry = &GetOrCreateTableEntry(relativePath, level);
+        }
+
+        NMonitoring::TDynamicCounterPtr rawLeafGroup = tableEntry->RawTableGroup
             ->GetSubgroup(DETAILED_METRICS_LABEL, PER_PARTITION_VALUE)
             ->GetSubgroup(TABLET_ID_LABEL, ToString(tabletKey.first))
             ->GetSubgroup(FOLLOWER_ID_LABEL, ToString(tabletKey.second));
 
-        NMonitoring::TDynamicCounterPtr publicLeafGroup = tableEntry.PublicTableGroup
+        NMonitoring::TDynamicCounterPtr publicLeafGroup = tableEntry->PublicTableGroup
             ->GetSubgroup(TABLET_ID_LABEL, ToString(tabletKey.first))
             ->GetSubgroup(FOLLOWER_ID_LABEL, ToString(tabletKey.second));
 
@@ -448,23 +595,22 @@ private:
         holder->RawBucket = MakeHolder<TCountersBucket>(
             rawLeafGroup, tabletType, *counterNames, RawCounterGroup->Visibility()
         );
-        holder->PublicLeafGroup = publicLeafGroup;
         holder->Mapper = CreateYdbMetricsMapperByTabletType(tabletType, publicLeafGroup, rawLeafGroup);
 
-        if (!tableEntry.TableAggregator) {
-            tableEntry.TableAggregator = CreateYdbMetricsAggregatorByTabletType(tabletType, tableEntry.PublicTableGroup);
+        if (!tableEntry->TableAggregator) {
+            tableEntry->TableAggregator = CreateYdbMetricsAggregatorByTabletType(tabletType, tableEntry->PublicTableGroup);
         }
         // step 09.5: a follower leaf leaves every LeaderOnly metric's slot empty,
         // so table.datashard.row_count and friends are not inflated by summing
         // every replica's copy of the very same absolute value/accumulated delta
-        tableEntry.TableAggregator->AddSourceCountersGroup(
+        tableEntry->TableAggregator->AddSourceCountersGroup(
             LeafSourceId(tabletKey), publicLeafGroup, tabletKey.second != 0 /* isFollowerSource */
         );
 
         LeafToTableMap[tabletKey] = relativePath;
 
         auto* leaf = holder.Get();
-        tableEntry.Leaves[tabletKey] = std::move(holder);
+        tableEntry->Leaves[tabletKey] = std::move(holder);
         return leaf;
     }
 
@@ -601,9 +747,12 @@ private:
 
     /**
      * Tear the whole entry down regardless of shape (TABLE bucket or
-     * PARTITION leaves) and regardless of whether it is actually empty:
-     * used both for a clean empty-teardown and for GetOrCreateTableEntry's
-     * Level-changed rebuild.
+     * PARTITION leaves): the empty-teardown case only — RemoveTableContribution
+     * calls this once TableCross has lost its last node, RemoveLeafContribution
+     * once Leaves has lost its last leaf. (No longer used for a Level-changed
+     * rebuild: LevelMatches() now keeps a disagreeing message from ever
+     * reaching GetOrCreateTableEntry in the first place, see TTableEntry's
+     * class doc.)
      */
     void DropTableEntryCompletely(THashMap<TString, TTableEntry>::iterator it) {
         auto& entry = it->second;

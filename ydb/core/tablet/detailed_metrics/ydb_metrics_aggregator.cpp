@@ -84,7 +84,7 @@ public:
     virtual void AddSourceCountersGroup(
         const TString& sourceGroupId,
         NMonitoring::TDynamicCounterPtr sourceCounterGroup,
-        bool isFollowerSource = false
+        bool isFollowerSource
     ) override {
         const auto result = SourceCounterGroups.try_emplace(sourceGroupId);
 

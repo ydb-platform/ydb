@@ -34,9 +34,11 @@ void CalculateCountersDiff(
 /**
  * The TDbTabletCounters-level overload: ExecutorCounters/AppCounters diffed the
  * same way as the TDbCounters overload above (Simple absolute, Cumulative/
- * Histogram delta); MaxExecutorCounters/MaxAppCounters copied absolute (the
- * existing CopyCounters()'s treatment of the Max* pair, since a max has no
- * meaningful delta); Type copied as is.
+ * Histogram delta); MaxExecutorCounters/MaxAppCounters diffed against an empty
+ * baseline through that very same TDbCounters overload (Simple absolute,
+ * Cumulative sparse with CumulativeCount) - the dense->sparse conversion the
+ * receiver requires - so with no baseline the values come out as absolute
+ * maxima, since a max has no meaningful delta; Type copied as is.
  *
  * @param[out] diff The freshly filled delta, ready to ship on the wire
  * @param[in] current The current absolute values

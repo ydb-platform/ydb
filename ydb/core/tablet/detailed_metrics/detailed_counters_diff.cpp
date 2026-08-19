@@ -36,7 +36,7 @@ void CalculateCountersDiff(
 
     diff->SetCumulativeCount(cumulativeSize);
     for (size_t i = 0; i < cumulativeSize; ++i) {
-        auto value = current.GetCumulative(i) - prev.GetCumulative(i);
+        auto value = current.GetCumulative(i) >= prev.GetCumulative(i) ? current.GetCumulative(i) - prev.GetCumulative(i) : 0;
         if (!value) {
             continue;
         }
@@ -55,7 +55,10 @@ void CalculateCountersDiff(
         histogram->MutableBuckets()->Reserve(bucketCount);
         histogram->SetBucketsCount(bucketCount);
         for (size_t b = 0; b < bucketCount; ++b) {
-            auto value = currentH.GetBuckets(b) - prevH.GetBuckets(b);
+            // A tablet leaving a TABLE-level collapse bucket can shrink an integral
+            // percentile aggregate between two packed generations, so the current
+            // absolute value can be below the previous one: clamp instead of underflow.
+            auto value = currentH.GetBuckets(b) >= prevH.GetBuckets(b) ? currentH.GetBuckets(b) - prevH.GetBuckets(b) : 0;
             if (!value) {
                 continue;
             }
@@ -75,10 +78,15 @@ void CalculateCountersDiff(
     CalculateCountersDiff(diff->MutableExecutorCounters(), current.GetExecutorCounters(), *prev.MutableExecutorCounters());
     CalculateCountersDiff(diff->MutableAppCounters(), current.GetAppCounters(), *prev.MutableAppCounters());
 
-    // A max has no meaningful delta: copied absolute, same as CopyCounters() does
-    // for the very first report in the funnel this is ported from.
-    *diff->MutableMaxExecutorCounters() = current.GetMaxExecutorCounters();
-    *diff->MutableMaxAppCounters() = current.GetMaxAppCounters();
+    // The Max pair goes through the very same encoding as the sum pair above
+    // (Simple absolute, Cumulative sparse with CumulativeCount) because that is
+    // what the receiver decodes. Diffing against an empty baseline is precisely
+    // the dense->sparse conversion, with no baseline: a max still has no
+    // meaningful delta, so the values come out as absolute maxima.
+    NKikimrSysView::TDbCounters emptyExecutor;
+    NKikimrSysView::TDbCounters emptyApp;
+    CalculateCountersDiff(diff->MutableMaxExecutorCounters(), current.GetMaxExecutorCounters(), emptyExecutor);
+    CalculateCountersDiff(diff->MutableMaxAppCounters(), current.GetMaxAppCounters(), emptyApp);
 }
 
 } // namespace NKikimr

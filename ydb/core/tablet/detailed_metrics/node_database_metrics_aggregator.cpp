@@ -212,15 +212,7 @@ public:
         TGuard<TMutex> guard(DetailedMetricsLock());
 
         for (auto& [relativePath, entry] : Tables) {
-            if (!entry.TableBucket && entry.Leaves.empty()) {
-                // Nothing this instance holds for the table (for example, a table
-                // level table whose only tablets belong to the other role)
-                continue;
-            }
-
             auto* tableCounters = out.Add();
-            tableCounters->SetOwnerId(entry.Info.TableId.OwnerId);
-            tableCounters->SetPathId(entry.Info.TableId.LocalPathId);
             tableCounters->SetTablePath(entry.Info.TablePath);
             tableCounters->SetLevel(entry.Info.MetricsLevel);
 

@@ -367,7 +367,7 @@ bool FillCreateTableColumnDesc(NKikimrSchemeOp::TTableDescription& tableDesc, co
             auto& generated = *columnDesc.MutableDefaultFromExpression();
             generated.SetExprText(cMeta.DefaultExpression->ExprText);
             generated.SetContext(cMeta.DefaultExpression->Context);
-            generated.SetStored(cMeta.DefaultExpression->Stored);
+            generated.SetKind(ColumnExpressionKindToSchemeProto(cMeta.DefaultExpression->Kind));
             for (const auto& dependency : cMeta.DefaultExpression->Dependencies) {
                 generated.AddDependencyColumnNames(dependency);
             }
@@ -570,7 +570,9 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
 
         if (columnIt->second.IsDefaultFromExpression()) {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Generated columns are not supported in column tables";
+            error = columnIt->second.DefaultExpression->IsGenerated()
+                ? "Generated columns are not supported in column tables"
+                : "DEFAULT expressions are not supported in column tables";
             return false;
         }
 

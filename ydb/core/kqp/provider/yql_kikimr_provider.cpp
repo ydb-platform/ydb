@@ -704,6 +704,15 @@ bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral) {
         maybeLiteral.Ptr()->Child(0)->IsCallable() && maybeLiteral.Ptr()->Child(0)->Content() == "Null";
 }
 
+bool IsLiteralDefaultValue(NNodes::TExprBase maybeLiteral) {
+    while (auto maybeJust = maybeLiteral.Maybe<TCoJust>()) {
+        maybeLiteral = maybeJust.Cast().Input();
+    }
+    return maybeLiteral.Maybe<TCoDataCtor>().IsValid()
+        || maybeLiteral.Maybe<TCoPgConst>().IsValid()
+        || IsPgNullExprNode(maybeLiteral);
+}
+
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto)
 {
     if (auto maybeJust = maybeLiteral.Maybe<TCoJust>()) {

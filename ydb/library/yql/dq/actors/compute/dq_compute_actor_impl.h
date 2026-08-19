@@ -871,7 +871,7 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
             << ". Last run time: " << ProcessOutputsState.LastRunTime
             << ". Last run status: " << ProcessOutputsState.LastRunStatus
             << ". Continue execution scheduled: " << ResumeEventScheduled
-            << ". Has pending watermark: " << WatermarksTracker.HasPendingWatermark()
+            << ". Pending watermark: " << (WatermarksTracker.HasPendingWatermark() ? ToString(*WatermarksTracker.GetPendingWatermark()) : "<null>")
             << "] ";
 
         return diagnostics;

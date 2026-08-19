@@ -3739,7 +3739,9 @@ Y_UNIT_TEST(SelectWithFulltextMatchPrefixed) {
 }
 
 Y_UNIT_TEST(CreatePrefixedFulltextIndexDisabled) {
-    auto kikimr = Kikimr(); // EnableFulltextIndexPrefix is off
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndexPrefix(false);
+    auto kikimr = Kikimr(std::move(featureFlags));
     auto db = kikimr.GetQueryClient();
 
     TString query = R"sql(
@@ -3756,7 +3758,7 @@ Y_UNIT_TEST(CreatePrefixedFulltextIndexDisabled) {
     )sql";
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "prefix columns support is disabled");
+    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Prefixed fulltext/json index support is disabled");
 }
 
 Y_UNIT_TEST(CreatePrefixedFulltextIndexOnPrimaryKey) {
@@ -3783,6 +3785,7 @@ Y_UNIT_TEST(CreatePrefixedFulltextIndexOnPrimaryKey) {
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "must not be a primary key column");
 }
 
+/*
 Y_UNIT_TEST(SelectWithFulltextRelevancePrefixed) {
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
@@ -3893,6 +3896,7 @@ Y_UNIT_TEST(SelectWithFulltextMatchMultiPrefixReversedOrder) {
         WHERE Region = 10 AND UserId = 200 AND FulltextScore(Text, "cats") > 0 ORDER BY Key;
     )sql"));
 }
+*/
 
 Y_UNIT_TEST(SelectWithFulltextMatchPrefixedBuild) {
     // Exercises the index-build scan path (ALTER ADD INDEX over populated data) with prefix columns.
@@ -4217,23 +4221,51 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedMultiColumnTyped, Compact) {
         WHERE Tenant = "acme" AND UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
 }
 
-Y_UNIT_TEST(CreateCompactRelevancePrefixedRejected) {
-    // Compact relevance + prefix is not supported: the corpus-global dictionary keyed by token only
-    // cannot be aggregated when the prefix is the leading sort key. The combination must be rejected.
-    auto kikimr = KikimrPrefixCompact();
+Y_UNIT_TEST_TWIN(PrefixedRelevanceRejected, Compact) {
+    // Prefixed indexes with relevance are not supported yet: aggregation of the corpus-global dictionary
+    // is not implemented. The combination must be rejected.
+    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
 
-    // With EnableCompactFulltextIndex, fulltext_relevance is built in the compact relevance format.
-    TString query = R"sql(
-        CREATE TABLE `/Root/Docs` (
-            Key Uint64, UserId Uint64, Text Utf8, PRIMARY KEY (Key),
-            INDEX fulltext_idx GLOBAL USING fulltext_relevance ON (UserId, Text)
-                WITH (tokenizer=standard, use_filter_lowercase=true)
-        );
-    )sql";
-    auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-    UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
-    UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "compact relevance");
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/Docs` (
+                Key Uint64,
+                UserId Uint64,
+                Text Utf8,
+                PRIMARY KEY (Key),
+                INDEX fulltext_idx GLOBAL USING fulltext_relevance ON (UserId, Text)
+                    WITH (tokenizer=standard, use_filter_lowercase=true)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Prefixed fulltext indexes with relevance are not supported");
+    }
+
+    {
+        TString query = R"sql(
+            CREATE TABLE `/Root/Docs` (
+                Key Uint64,
+                UserId Uint64,
+                Text Utf8,
+                PRIMARY KEY (Key)
+            );
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/Docs` ADD INDEX fulltext_idx GLOBAL USING fulltext_relevance
+            ON (UserId, Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Prefixed fulltext indexes with relevance are not supported");
+    }
 }
 
 // Creates an integer-PK table with an inline prefixed fulltext index (online write maintenance path),
@@ -4264,10 +4296,10 @@ static void SetupPrefixedDocs(NYdb::NQuery::TQueryClient& db, bool covered = fal
     )sql", covered ? "fulltext_relevance" : "fulltext_plain", covered ? "COVER (Data)" : ""));
 }
 
-Y_UNIT_TEST_QUAD(PrefixedInsert, Compact, Covered) {
+Y_UNIT_TEST_TWIN(PrefixedInsert, Compact) {
     auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
-    SetupPrefixedDocs(db, Covered);
+    SetupPrefixedDocs(db, false);
 
     auto exec = [&](const TString& q) {
         auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4288,17 +4320,17 @@ Y_UNIT_TEST_QUAD(PrefixedInsert, Compact, Covered) {
     CompareYson("[[[2u];[\"milk data\"]]]", selectKeys(R"sql(
         SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-    if (Covered) {
+    if (0) {
         CompareYson("[[[1u];[\"play data\"]];[[2u];[\"milk data\"]];[[3u];[\"fast data\"]]]", selectKeys(R"sql(
             SELECT Key, Data FROM `/Root/Docs/fulltext_idx/indexImplDocsTable`
             ORDER BY Key;)sql"));
     }
 }
 
-Y_UNIT_TEST_QUAD(PrefixedUpsert, Compact, Covered) {
+Y_UNIT_TEST_TWIN(PrefixedUpsert, Compact) {
     auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
-    SetupPrefixedDocs(db, Covered);
+    SetupPrefixedDocs(db, false);
 
     auto exec = [&](const TString& q) {
         auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4327,17 +4359,17 @@ Y_UNIT_TEST_QUAD(PrefixedUpsert, Compact, Covered) {
     CompareYson("[[[2u];[\"milk data\"]]]", selectKeys(R"sql(
         SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-    if (Covered) {
+    if (0) {
         CompareYson("[[[1u];[\"sing data\"]];[[2u];[\"milk data\"]];[[3u];[\"sleep data\"]]]", selectKeys(R"sql(
             SELECT Key, Data FROM `/Root/Docs/fulltext_idx/indexImplDocsTable`
             ORDER BY Key;)sql"));
     }
 }
 
-Y_UNIT_TEST_QUAD(PrefixedUpdate, Compact, Covered) {
+Y_UNIT_TEST_TWIN(PrefixedUpdate, Compact) {
     auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
-    SetupPrefixedDocs(db, Covered);
+    SetupPrefixedDocs(db, false);
 
     auto exec = [&](const TString& q) {
         auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4364,17 +4396,17 @@ Y_UNIT_TEST_QUAD(PrefixedUpdate, Compact, Covered) {
     CompareYson("[[[2u];[\"love data\"]]]", selectKeys(R"sql(
         SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-    if (Covered) {
+    if (0) {
         CompareYson("[[[1u];[\"play data\"]];[[2u];[\"love data\"]]]", selectKeys(R"sql(
             SELECT Key, Data FROM `/Root/Docs/fulltext_idx/indexImplDocsTable`
             ORDER BY Key;)sql"));
     }
 }
 
-Y_UNIT_TEST_QUAD(PrefixedReplace, Compact, Covered) {
+Y_UNIT_TEST_TWIN(PrefixedReplace, Compact) {
     auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
     auto db = kikimr.GetQueryClient();
-    SetupPrefixedDocs(db, Covered);
+    SetupPrefixedDocs(db, false);
 
     auto exec = [&](const TString& q) {
         auto r = db.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
@@ -4402,7 +4434,7 @@ Y_UNIT_TEST_QUAD(PrefixedReplace, Compact, Covered) {
     CompareYson("[[[2u];[\"milk data\"]]]", selectKeys(R"sql(
         SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-    if (Covered) {
+    if (0) {
         CompareYson("[[[1u];[\"sing data\"]];[[2u];[\"milk data\"]];[[3u];[\"fast data\"]]]", selectKeys(R"sql(
             SELECT Key, Data FROM `/Root/Docs/fulltext_idx/indexImplDocsTable`
             ORDER BY Key;)sql"));

@@ -1457,9 +1457,8 @@ private:
         if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson ||
             buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact) {
             auto *settings = ev->Record.MutableSettings();
-            for (auto& column: buildInfo.IndexColumns) {
-                settings->add_columns()->set_column(column);
-            }
+            // Only the last key column is the JSON column; prefix columns are handled separately.
+            settings->add_columns()->set_column(buildInfo.IndexColumns.back());
         } else {
             *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(
                 buildInfo.SpecializedIndexDescription).GetSettings();

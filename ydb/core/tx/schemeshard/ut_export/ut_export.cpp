@@ -2699,7 +2699,7 @@ partitioning_settings {
               Type: "Int32"
               DefaultFromExpression {
                 ExprText: "a + b"
-                Stored: true
+                Kind: GENERATED_STORED
                 DependencyColumnNames: ["a", "b"]
               }
             }
@@ -2717,6 +2717,39 @@ partitioning_settings {
               }
             }
         )",
+                S3Port()),
+            Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST(ShouldRejectExportOfTableWithDefaultExpression) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableDefaultFromExpression(true);
+
+        const TVector<TString> tables = { R"pb(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns {
+              Name: "ts"
+              Type: "Timestamp"
+              DefaultFromExpression {
+                ExprText: "CurrentUtcTimestamp()"
+                Kind: DEFAULT
+              }
+            }
+            KeyColumnNames: ["key"]
+        )pb" };
+
+        Run(Runtime(), Env(), tables,
+            Sprintf(R"pb(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )pb",
                 S3Port()),
             Ydb::StatusIds::CANCELLED);
     }

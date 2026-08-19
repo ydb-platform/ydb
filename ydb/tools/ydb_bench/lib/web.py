@@ -677,7 +677,7 @@ _JS = (
     'splayError(error))}\n'
     '}\n'
     'function affinityPath(mode){if(mode===\'none\')return [\'No pinning\'];const parts=mode.split(\'-\'),result=[],labels={num'
-    "a:'NUMA',chiplet:'Chiplet',core:'Core'};for(let index=0;index<parts.length;index+=2)result.push(labels[parts[index+1]]+'"
+    "a:'NUMA',chiplet:'Chiplet',core:'Core'};for(let index=0;index<parts.length;index+=2)result.push((labels[parts[index+1]]||parts[index+1])+'"
     ": '+parts[index]);return result}\n"
     'function affinityTree(items){const root={children:new Map};for(const item of items){let node=root;for(const label of affi'
     'nityPath(item.mode)){if(!node.children.has(label))node.children.set(label,{children:new Map,item:null});node=node.childr'

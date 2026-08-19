@@ -22,7 +22,7 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from unittest import mock
 
-from ydb.tools.ydb_bench.lib import actors_core, cli, import_results, runner, web
+from ydb.tools.ydb_bench.lib import actors_core, cli, import_results, runner, topology, web
 from ydb.tools.ydb_bench.lib.actors_core import (
     PING_BENCHMARK,
     STAR_PING_BENCHMARK,
@@ -1226,6 +1226,7 @@ class YdbBenchTest(unittest.TestCase):
                     "cluster-type": kind.encode("ascii") + b"\0",
                 }
             )
+        entries.append(entries[0].copy())
         topology = _parse_darwin_topology(
             plistlib.dumps([{"IORegistryEntryChildren": entries}]),
             (0, 1, 2, 3, 4),
@@ -1243,6 +1244,29 @@ class YdbBenchTest(unittest.TestCase):
         self.assertEqual(topology.physical_cores, ((0,), (1,), (2,), (3,), (4,)))
         self.assertEqual(topology.smt_siblings, topology.physical_cores)
         self.assertEqual(topology_record(topology)["chiplets"][0]["label"], "Efficiency cluster")
+
+    def test_darwin_topology_rejects_conflicting_cpu_entries(self):
+        entries = [
+            {"logical-cpu-id": 0, "cluster-id": 0, "cluster-type": b"E\0"},
+            {"logical-cpu-id": 0, "cluster-id": 1, "cluster-type": b"P\0"},
+        ]
+
+        self.assertIsNone(
+            _parse_darwin_topology(
+                plistlib.dumps([{"IORegistryEntryChildren": entries}]),
+                (0,),
+            )
+        )
+
+    def test_darwin_topology_discovery_times_out(self):
+        with mock.patch.object(
+            topology.subprocess,
+            "run",
+            side_effect=topology.subprocess.TimeoutExpired("ioreg", 10),
+        ) as run:
+            self.assertIsNone(topology._discover_darwin_topology((0,)))
+
+        self.assertEqual(run.call_args.kwargs["timeout"], 10)
 
     def test_topology_discovery_intersects_sysfs_with_allowed_cpus(self):
         sys_root = self.root / "sys" / "devices" / "system"

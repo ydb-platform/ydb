@@ -112,7 +112,7 @@ def _parse_darwin_topology(data, allowed):
         return None
 
     allowed_set = set(allowed)
-    cpus = []
+    cpus = {}
     for entry in entries:
         cpu = _device_tree_integer(entry.get("logical-cpu-id"))
         cluster = _device_tree_integer(entry.get("cluster-id"))
@@ -120,12 +120,15 @@ def _parse_darwin_topology(data, allowed):
         if isinstance(cluster_type, bytes):
             cluster_type = cluster_type.rstrip(b"\0").decode("ascii", errors="replace")
         if cpu in allowed_set and cluster is not None and cluster_type in ("E", "P"):
-            cpus.append((cpu, cluster, cluster_type))
-    if {cpu for cpu, _, _ in cpus} != allowed_set:
+            placement = (cluster, cluster_type)
+            if cpu in cpus and cpus[cpu] != placement:
+                return None
+            cpus[cpu] = placement
+    if set(cpus) != allowed_set:
         return None
 
     groups = {}
-    for cpu, cluster, cluster_type in cpus:
+    for cpu, (cluster, cluster_type) in cpus.items():
         groups.setdefault((cluster, cluster_type), []).append(cpu)
     ordered_groups = sorted(groups.items())
     type_counts = {kind: sum(1 for (_, current), _ in ordered_groups if current == kind) for kind in ("E", "P")}
@@ -157,8 +160,9 @@ def _discover_darwin_topology(allowed):
             ("ioreg", "-a", "-l", "-p", "IODeviceTree", "-r", "-n", "cpus"),
             check=True,
             capture_output=True,
+            timeout=10,
         )
-    except (OSError, subprocess.CalledProcessError):
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return None
     return _parse_darwin_topology(result.stdout, allowed)
 

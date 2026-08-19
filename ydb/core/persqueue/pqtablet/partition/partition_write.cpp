@@ -317,9 +317,10 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
         }
         const auto& writeResponse = pending.GetWrite();
         const auto& scVersion = writeResponse.Msg.SchemaChangeVersion;
-        // Recompute each iteration: RegisterSourceId below can advance the committed version.
-        const auto committedSchemaChange = Max(LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion());
-        if (!scVersion || *scVersion > committedSchemaChange) {
+        // Recompute each iteration / after RegisterSourceId: committed may advance mid-scan.
+        if (!scVersion || !IsSchemaChangeVersionReleased(
+                *scVersion, LastEmittedSchemaChange, SourceIdStorage.GetCommittedSchemaChangeVersion()))
+        {
             ++it;
             continue;
         }
@@ -340,10 +341,9 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             // Change-sender stalls until ReplyWrite, so SeqNo/version should not advance while deferred.
             // Still take Max / keep newer LastSchemaChange if that invariant ever breaks.
             const ui64 registerSeqNo = Max(seqNo, sit->second.SeqNo);
-            TSchemaChangeInfo scInfo{*scVersion, writeResponse.Msg.Data};
-            if (sit->second.LastSchemaChange && sit->second.LastSchemaChange->Version > scInfo.Version) {
-                scInfo = *sit->second.LastSchemaChange;
-            }
+            auto scInfo = SelectSchemaChangeForAck(
+                TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data},
+                sit->second.LastSchemaChange);
             // Keep the source's last data offset: schema changes do not advance the log.
             SourceIdStorage.RegisterSourceId(s, sit->second.Updated(
                 registerSeqNo, maxOffset, CurrentTimestamp,
@@ -357,6 +357,8 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
             TDuration::Zero(), TDuration::Zero(), queueTime, writeTime, pending.Span
         ); // quota tracking is not meaningful for deferred replies
         it = PendingSchemaChangeResponses.erase(it);
+        // RegisterSourceId may advance committed; re-scan so earlier skipped items can release.
+        it = PendingSchemaChangeResponses.begin();
     }
 
     ui64 offset = BlobEncoder.EndOffset;

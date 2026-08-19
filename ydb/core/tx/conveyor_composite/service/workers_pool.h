@@ -109,6 +109,7 @@ private:
     ui64 MaxBatchSize = 30;
     const TString PoolName;
     const NActors::TActorId DistributorId;
+    const ui64 WorkersPoolId;
     std::optional<TWorkersUpdateState> WorkersUpdate;
 
     void RemoveFreeWorker(const ui64 workerIdx);
@@ -134,9 +135,7 @@ public:
         DeliveringDuration.Add(d);
     }
 
-    bool CanExecuteCategory(const ESpecialTaskCategory category) const;
-
-    void PutTaskResults(std::vector<TWorkerTaskResult>&& result, const TString& workersPoolId, const ui64 workerIdx = 0);
+    void PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId = 0, const ui64 workerIdx = 0);
     bool HasFreeWorker() const;
     void ReleaseWorker(const ui64 workerIdx);
 

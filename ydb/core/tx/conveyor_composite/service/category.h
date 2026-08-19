@@ -18,7 +18,6 @@ private:
     THashMap<TString, std::shared_ptr<TProcessScope>> Scopes;
     THashMap<ui64, std::shared_ptr<TProcess>> Processes;
     std::map<TDuration, std::deque<std::shared_ptr<TProcess>>> WeightedProcesses;
-    YDB_READONLY(ui64, QueueSizeLimit, 256 * 1024);
 
     [[nodiscard]] bool RemoveWeightedProcess(const std::shared_ptr<TProcess>& process);
 
@@ -28,11 +27,9 @@ public:
     }
 
     TProcessCategory(const NConfig::TCategory& config, TCounters& counters)
-        : Category(config.GetCategory())
-        , QueueSizeLimit(config.GetQueueSizeLimit()) {
+        : Category(config.GetCategory()) {
         Counters = counters.GetCategorySignals(Category);
         RegisterProcess(0, RegisterScope("DEFAULT", TCPULimitsConfig(1000, 1000)));
-        Counters->WaitingQueueSizeLimit->Set(QueueSizeLimit);
     }
 
     ~TProcessCategory() {
@@ -73,11 +70,6 @@ public:
     }
 
     bool HasTasks() const;
-    void UpdateConfig(const NConfig::TCategory& config) {
-        AFL_VERIFY(config.GetCategory() == Category);
-        QueueSizeLimit = config.GetQueueSizeLimit();
-        Counters->WaitingQueueSizeLimit->Set(QueueSizeLimit);
-    }
     std::optional<TWorkerTask> ExtractTaskWithPrediction(const std::shared_ptr<TWPCategorySignals>& counters, THashSet<TString>& scopeIds);
     TProcessScope& MutableProcessScope(const TString& scopeName);
     TProcessScope* MutableProcessScopeOptional(const TString& scopeName);

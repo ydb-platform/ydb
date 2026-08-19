@@ -133,7 +133,7 @@ struct TEvInternal {
         std::vector<TWorkerTaskResult> Results;
         YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
         YDB_READONLY(ui64, WorkerIdx, 0);
-        YDB_READONLY_DEF(TString, WorkersPoolId);
+        YDB_READONLY(ui64, WorkersPoolId, 0);
 
     public:
         const std::vector<TWorkerTaskResult>& GetResults() const {
@@ -145,7 +145,7 @@ struct TEvInternal {
         }
 
         TEvTaskProcessedResult(
-            std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const TString& workersPoolId);
+            std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId);
     };
 
     class TEvUpdateWorkerCPULimit: public NActors::TEventLocal<TEvUpdateWorkerCPULimit, EvUpdateWorkerCPULimit> {
@@ -159,10 +159,10 @@ struct TEvInternal {
 
     class TEvWorkerCPULimitUpdated: public NActors::TEventLocal<TEvWorkerCPULimitUpdated, EvWorkerCPULimitUpdated> {
     public:
-        const TString WorkersPoolId;
+        const ui64 WorkersPoolId;
         const ui64 WorkerIdx;
 
-        TEvWorkerCPULimitUpdated(const TString& workersPoolId, const ui64 workerIdx)
+        TEvWorkerCPULimitUpdated(const ui64 workersPoolId, const ui64 workerIdx)
             : WorkersPoolId(workersPoolId)
             , WorkerIdx(workerIdx) {
         }
@@ -172,10 +172,10 @@ struct TEvInternal {
 
     class TEvWorkerStopped: public NActors::TEventLocal<TEvWorkerStopped, EvWorkerStopped> {
     public:
-        const TString WorkersPoolId;
+        const ui64 WorkersPoolId;
         const ui64 WorkerIdx;
 
-        TEvWorkerStopped(const TString& workersPoolId, const ui64 workerIdx)
+        TEvWorkerStopped(const ui64 workersPoolId, const ui64 workerIdx)
             : WorkersPoolId(workersPoolId)
             , WorkerIdx(workerIdx) {
         }

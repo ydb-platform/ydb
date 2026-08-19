@@ -607,7 +607,9 @@ void AuditExactScalarExpression(const NJson::TJsonValue& root) {
             push(expression["missing"]);
             continue;
         }
-        if (kind == "opaque" || kind == "opaque_double") {
+        if (kind == "opaque" || kind == "opaque_double" ||
+            kind == "checked_concat")
+        {
             pushArray("args");
             continue;
         }
@@ -5552,16 +5554,20 @@ public:
     {
     }
 
-    NJson::TJsonValue ExportAsOpaque(
+    NJson::TJsonValue Export(
         const TExprNode& root,
         TExactScalarBudget& budget,
         size_t argumentDepth)
     {
         Audit(root);
-        return TOpaqueExpressionEncoder(
+        auto result = TOpaqueExpressionEncoder(
             TRestrictedConcatAuditToken{},
             RowArgument,
             VisibleColumns).Export(root, budget, argumentDepth);
+        if (MaximumBytes > MaxConcatResultBytes) {
+            result["kind"] = "checked_concat";
+        }
+        return result;
     }
 
 private:
@@ -5596,8 +5602,8 @@ private:
     }
 
     void AddMaximumBytes(ui64 bytes) {
-        if (bytes > MaxConcatResultBytes - MaximumBytes) {
-            Fail("maximum byte length exceeds the Concat result bound");
+        if (bytes > std::numeric_limits<ui64>::max() - MaximumBytes) {
+            Fail("maximum byte length overflows the audit accumulator");
         }
         MaximumBytes += bytes;
     }
@@ -6982,7 +6988,7 @@ NJson::TJsonValue ExportExpr(
     auto result = TRestrictedConcatAuditor(
         arguments->Child(0),
         visibleColumns,
-        storedStringColumns).ExportAsOpaque(*body, budget, 2);
+        storedStringColumns).Export(*body, budget, 2);
     AuditExactScalarExpression(result);
     return result;
 }
@@ -8124,6 +8130,7 @@ public:
             ExportNode(subplan.ExportedRoot);
         }
         RootId = ExportNode(Root.GetInput());
+        ValidateCheckedConcatProjectionTopology();
         ValidateErrorOnNullProjectionTopology();
         const auto rootNames = OutputNames(*Root.GetInput());
         auto output = JsonArray();
@@ -9405,6 +9412,141 @@ private:
             }
         }
         return false;
+    }
+
+    void ValidateCheckedConcatProjectionTopology() {
+        // This is the structural half of the checked-error contract.  For a
+        // logical Sort/Limit corridor, the verifier independently proves at
+        // its requested row bound that every pull-driven Limit is nonbinding;
+        // a staged snapshot is admitted only with the checked Project at the
+        // result root, after every materializing stage edge.
+        size_t markedCount = 0;
+        for (const auto& [_, outputs] : CheckedConcatProjectionOutputs) {
+            markedCount += outputs.size();
+        }
+        if (markedCount == 0) {
+            return;
+        }
+        if (markedCount != 1) {
+            Unsupported(
+                "Checked Concat requires exactly one audited projection output");
+        }
+
+        THashSet<const IOperator*> mainNodes;
+        THashMap<const IOperator*, TVector<IOperator*>> parents;
+        VisitOperators(
+            Root.GetInput(),
+            mainNodes,
+            [&](IOperator& op) {
+                for (const auto& child : op.GetChildren()) {
+                    parents[child.Get()].push_back(&op);
+                }
+            });
+
+        const auto& [producer, outputs] =
+            *CheckedConcatProjectionOutputs.begin();
+        if (!mainNodes.contains(producer) || outputs.size() != 1) {
+            Unsupported(
+                "Checked Concat must be a private main-plan projection");
+        }
+
+        IOperator* current = const_cast<TOpMap*>(producer);
+        TString column = *outputs.begin();
+        THashSet<const IOperator*> path;
+        while (current != Root.GetInput().Get()) {
+            if (!path.insert(current).second) {
+                Unsupported("Checked Concat demand path contains a cycle");
+            }
+            if (StageGraphPresent) {
+                Unsupported(
+                    "A staged checked Concat Project must be the main result root");
+            }
+
+            const auto* consumers = parents.FindPtr(current);
+            if (!consumers || consumers->size() != 1) {
+                Unsupported(
+                    "Checked Concat must have exactly one rootward consumer");
+            }
+            IOperator* parent = consumers->front();
+            if (parent->GetKind() == EOperator::Limit) {
+                const auto& limit = static_cast<const TOpLimit&>(*parent);
+                if (limit.HasOffset()) {
+                    Unsupported(
+                        "Checked Concat may not cross a Limit with an offset");
+                }
+                if (limit.Props.EnsureAtMostOne) {
+                    Unsupported(
+                        "Checked Concat may not cross an error-bearing Limit");
+                }
+                if (!OutputNames(*parent).contains(column)) {
+                    Unsupported(
+                        "Checked Concat is not preserved by its Limit consumer");
+                }
+                current = parent;
+                continue;
+            }
+            if (parent->GetKind() == EOperator::Sort) {
+                auto& sort = static_cast<TOpSort&>(*parent);
+                for (const auto& element : sort.GetSortElements()) {
+                    if (element.SortColumn.GetFullName() == column) {
+                        Unsupported(
+                            "Checked Concat may not be demanded as a Sort key");
+                    }
+                }
+                if (!OutputNames(sort).contains(column)) {
+                    Unsupported(
+                        "Checked Concat is not preserved by its Sort consumer");
+                }
+                current = parent;
+                continue;
+            }
+            if (parent->GetKind() == EOperator::Map) {
+                auto& map = static_cast<TOpMap&>(*parent);
+                size_t aliases = 0;
+                TString nextColumn = column;
+                for (const auto& element : map.MapElements) {
+                    const bool directAlias =
+                        element.IsRename() &&
+                        element.GetRename().GetFullName() == column;
+                    for (const auto& input :
+                        element.GetExpression().GetInputIUs(false, true))
+                    {
+                        if (input.GetFullName() != column) {
+                            continue;
+                        }
+                        if (!directAlias) {
+                            Unsupported(
+                                "Checked Concat may only cross a direct Project alias");
+                        }
+                    }
+                    if (directAlias) {
+                        if (++aliases != 1) {
+                            Unsupported(
+                                "Checked Concat may not fan out through Project aliases");
+                        }
+                        nextColumn =
+                            element.GetElementName().GetFullName();
+                    }
+                }
+                if (!OutputNames(map).contains(nextColumn)) {
+                    Unsupported(
+                        "Checked Concat is not preserved by its Project consumer");
+                }
+                column = std::move(nextColumn);
+                current = parent;
+                continue;
+            }
+            Unsupported(
+                "Checked Concat demand path permits only Project aliases, Sort, and Limit");
+        }
+
+        if (!THashSet<TString>(
+                Root.ColumnOrder.begin(),
+                Root.ColumnOrder.end()).contains(column))
+        {
+            Unsupported(
+                "Checked Concat must terminate in a main result output");
+        }
     }
 
     void ValidateErrorOnNullProjectionTopology() {
@@ -11101,10 +11243,16 @@ private:
                         column["expression"] = std::move(*exactUnwrap);
                         column["error_on_null"] = true;
                     } else {
-                        column["expression"] = ExportExpr(
+                        auto expression = ExportExpr(
                             element.GetExpression(),
                             inputNames,
                             StoredStringOutputs(*map.GetInput()));
+                        if (expression["kind"].GetStringSafe() ==
+                            "checked_concat")
+                        {
+                            CheckedConcatProjectionOutputs[&map].insert(output);
+                        }
+                        column["expression"] = std::move(expression);
                     }
                     columns.AppendValue(std::move(column));
                 }
@@ -11696,6 +11844,8 @@ private:
         DecimalAverageCarrierOutputMap;
     THashMap<const TMapElement*, TString>
         CertifiedDecimalAveragePads;
+    THashMap<const TOpMap*, THashSet<TString>>
+        CheckedConcatProjectionOutputs;
     THashMap<const IOperator*, TVector<IOperator*>>
         MainConsumers;
     THashMap<const IOperator*, TString> Ids;

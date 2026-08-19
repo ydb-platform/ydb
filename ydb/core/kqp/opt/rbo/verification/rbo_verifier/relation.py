@@ -748,6 +748,34 @@ class Evaluator:
                 for projection in node.columns
                 if projection.error_on_null
             )
+            checked_concats = tuple(
+                projection.expression
+                for projection in node.columns
+                if projection.expression.kind == "checked_concat"
+            )
+
+            def project_error(relation: Relation) -> smt.Term:
+                return smt.or_(
+                    *(
+                        smt.and_(
+                            row.present,
+                            row.values[source].is_null,
+                        )
+                        for row in relation.rows
+                        for source in marked_sources
+                    ),
+                    *(
+                        smt.and_(
+                            row.present,
+                            self.scalar.checked_concat_failure(
+                                expression,
+                                row.values,
+                            ),
+                        )
+                        for row in relation.rows
+                        for expression in checked_concats
+                    ),
+                )
 
             return self._with_consumer_subplans(
                 node.id,
@@ -755,17 +783,8 @@ class Evaluator:
                 project,
                 local_error=(
                     None
-                    if not marked_sources
-                    else lambda relation: smt.or_(
-                        *(
-                            smt.and_(
-                                row.present,
-                                row.values[source].is_null,
-                            )
-                            for row in relation.rows
-                            for source in marked_sources
-                        )
-                    )
+                    if not marked_sources and not checked_concats
+                    else project_error
                 ),
             )
 

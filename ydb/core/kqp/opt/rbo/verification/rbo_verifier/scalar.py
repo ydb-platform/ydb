@@ -98,10 +98,18 @@ class _OpaqueFunctions:
     value: smt.Function
 
 
+@dataclass(frozen=True, slots=True)
+class _OpaqueApplication:
+    key: tuple[object, ...]
+    sorts: tuple[str, ...]
+    arguments: tuple[smt.Term, ...]
+
+
 class Encoder:
     def __init__(self, script: smt.Script) -> None:
         self.script = script
         self._opaque: dict[tuple[object, ...], _OpaqueFunctions] = {}
+        self._checked_concat_failure: dict[tuple[object, ...], smt.Function] = {}
         self._integral_average: smt.Function | None = None
 
     def integral_int64_average(
@@ -397,7 +405,7 @@ class Encoder:
                 bound,
             )
 
-        if expression.kind in {"opaque", "opaque_double"}:
+        if expression.kind in {"opaque", "opaque_double", "checked_concat"}:
             return self._evaluate_opaque(expression, row, bindings)
 
         raise AssertionError(f"unknown expression kind {expression.kind!r}")
@@ -446,31 +454,17 @@ class Encoder:
         row: Mapping[str, Value],
         bindings: tuple[Value, ...],
     ) -> Value:
+        application = self._opaque_application(expression, row, bindings)
         assert expression.fingerprint is not None
         assert expression.result_type is not None
         assert expression.nullable is not None
-        arguments = tuple(
-            self._evaluate(argument, row, bindings)
-            for argument in expression.args
-        )
-        key = (
-            expression.fingerprint,
-            expression.result_type,
-            expression.nullable,
-            tuple(argument.type for argument in arguments),
-        )
-        functions = self._opaque.get(key)
-        flat_sorts = tuple(
-            sort
-            for argument in arguments
-            for sort in (smt.BOOL, smt_sort(argument.type))
-        )
+        functions = self._opaque.get(application.key)
         if functions is None:
             functions = _OpaqueFunctions(
                 is_null=(
                     self.script.fresh_function(
                         f"opaque_null:{expression.fingerprint}",
-                        flat_sorts,
+                        application.sorts,
                         smt.BOOL,
                     )
                     if expression.nullable
@@ -478,23 +472,19 @@ class Encoder:
                 ),
                 value=self.script.fresh_function(
                     f"opaque_value:{expression.fingerprint}",
-                    flat_sorts,
+                    application.sorts,
                     smt_sort(expression.result_type),
                 ),
             )
-            self._opaque[key] = functions
-        flat_arguments = tuple(
-            term
-            for argument in arguments
-            for term in (
-                argument.is_null,
-                smt.ite(argument.is_null, _default(argument.type), argument.value),
-            )
-        )
+            self._opaque[application.key] = functions
         result = Value(
             expression.result_type,
-            functions.is_null(*flat_arguments) if functions.is_null is not None else smt.FALSE,
-            functions.value(*flat_arguments),
+            (
+                functions.is_null(*application.arguments)
+                if functions.is_null is not None
+                else smt.FALSE
+            ),
+            functions.value(*application.arguments),
         )
         if family(result.type) == "string":
             self.script.register_string_term(result.value)
@@ -515,6 +505,69 @@ class Encoder:
             # arithmetic or ordering domain is attached to its SMT integer.
             pass
         return result
+
+    def checked_concat_failure(
+        self,
+        expression: Expr,
+        row: Mapping[str, Value],
+    ) -> smt.Term:
+        """Return the shared arbitrary failure predicate for one audited Concat."""
+
+        assert expression.kind == "checked_concat"
+        assert expression.fingerprint is not None
+        assert expression.result_type == "String"
+        assert expression.nullable is False
+        application = self._opaque_application(expression, row, ())
+        function = self._checked_concat_failure.get(application.key)
+        if function is None:
+            function = self.script.fresh_function(
+                f"checked_concat_failure:{expression.fingerprint}",
+                application.sorts,
+                smt.BOOL,
+            )
+            self._checked_concat_failure[application.key] = function
+        return function(*application.arguments)
+
+    def _opaque_application(
+        self,
+        expression: Expr,
+        row: Mapping[str, Value],
+        bindings: tuple[Value, ...],
+    ) -> _OpaqueApplication:
+        """Canonical shared identity and arguments for every opaque UF."""
+
+        assert expression.fingerprint is not None
+        assert expression.result_type is not None
+        assert expression.nullable is not None
+        arguments = tuple(
+            self._evaluate(argument, row, bindings)
+            for argument in expression.args
+        )
+        return _OpaqueApplication(
+            key=(
+                expression.fingerprint,
+                expression.result_type,
+                expression.nullable,
+                tuple(argument.type for argument in arguments),
+            ),
+            sorts=tuple(
+                sort
+                for argument in arguments
+                for sort in (smt.BOOL, smt_sort(argument.type))
+            ),
+            arguments=tuple(
+                term
+                for argument in arguments
+                for term in (
+                    argument.is_null,
+                    smt.ite(
+                        argument.is_null,
+                        _default(argument.type),
+                        argument.value,
+                    ),
+                )
+            ),
+        )
 
     def _literal(
         self,

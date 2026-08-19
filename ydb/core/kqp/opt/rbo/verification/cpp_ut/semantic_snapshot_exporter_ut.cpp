@@ -6076,7 +6076,7 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
 
         {
             TExportTestContext ctx;
-            const auto& table = AddTable(ctx, "/Root/OlapTwoCellsAndComma", {
+            const auto& table = AddTable(ctx, "/Root/OlapExactResultBound", {
                 {"text", "String", false},
             });
             table.Metadata->Kind = EKikimrTableKind::Olap;
@@ -6093,14 +6093,300 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                     StringConcat(
                         ctx,
                         CoalescedStoredString(ctx, "a.text"),
-                        StringLiteral(ctx, ", ")),
+                        StringLiteral(ctx, ",")),
                     CoalescedStoredString(ctx, "a.text")));
             TOpRoot root(map, TPositionHandle(), {"result"});
-            const auto result = ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            UNIT_ASSERT_VALUES_EQUAL(
+                FindNode(snapshot, "project")["columns"].GetArraySafe().back()
+                    ["expression"]["kind"].GetStringSafe(),
+                "opaque");
+        }
+
+        {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/OlapTwoCellsAndComma", {
+                {"first", "String", false},
+                {"last", "String", false},
+            });
+            table.Metadata->Kind = EKikimrTableKind::Olap;
+            auto read = MakeRead(ctx, table, "a", {"first", "last"});
+            SetOutputType(ctx, *read, {
+                {"a.first", NUdf::EDataSlot::String, true},
+                {"a.last", NUdf::EDataSlot::String, true},
+            });
+            auto map = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringConcat(
+                        ctx,
+                        CoalescedStoredString(ctx, "a.last"),
+                        StringLiteral(ctx, ", ")),
+                    CoalescedStoredString(ctx, "a.first")));
+            TOpRoot root(map, TPositionHandle(), {"result"});
+            const auto snapshot = ParseSupported(
+                ExportSemanticSnapshotV1(root, ctx.RboCtx));
+            const auto& expression =
+                FindNode(snapshot, "project")["columns"]
+                    .GetArraySafe().back()["expression"];
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["kind"].GetStringSafe(),
+                "checked_concat");
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["type"].GetStringSafe(),
+                "String");
+            UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+            UNIT_ASSERT_VALUES_EQUAL(
+                expression["args"].GetArraySafe().size(),
+                2);
+        }
+    }
+
+    Y_UNIT_TEST(CheckedStoredStringConcatUsesOnlyResultCorridors) {
+        enum class EShape {
+            ResultCorridor,
+            DirectAlias,
+            SortKey,
+            Unobserved,
+            ComputedConsumer,
+            FilterConsumer,
+            JoinConsumer,
+            Fanout,
+            Offset,
+            EnsureAtMostOne,
+            StagedNonRoot,
+        };
+        const auto exportShape = [](EShape shape) {
+            TExportTestContext ctx;
+            const auto& table = AddTable(ctx, "/Root/CheckedConcat", {
+                {"id", "Int32", true},
+                {"text", "String", false},
+            });
+            table.Metadata->Kind = EKikimrTableKind::Olap;
+            auto read = MakeRead(ctx, table, "a", {"id", "text"});
+            SetOutputType(ctx, *read, {
+                {"a.id", NUdf::EDataSlot::Int32},
+                {"a.text", NUdf::EDataSlot::String, true},
+            });
+            auto checked = MakeComputedMap(
+                ctx,
+                read,
+                "result",
+                StringConcat(
+                    ctx,
+                    StringConcat(
+                        ctx,
+                        CoalescedStoredString(ctx, "a.text"),
+                        StringLiteral(ctx, ", ")),
+                    CoalescedStoredString(ctx, "a.text")));
+            const TVector<TOutputTypeSpec> columns = {
+                {"a.id", NUdf::EDataSlot::Int32},
+                {"a.text", NUdf::EDataSlot::String, true},
+                {"result", NUdf::EDataSlot::String},
+            };
+            SetOutputType(ctx, *checked, columns);
+
+            const auto pos = TPositionHandle();
+            if (shape == EShape::ComputedConsumer) {
+                auto consumer = MakeIntrusive<TOpMap>(
+                    checked,
+                    pos,
+                    TVector<TMapElement>{TMapElement(
+                        TInfoUnit("observed"),
+                        MakeColumnAccess(
+                            TInfoUnit("result"),
+                            pos,
+                            &ctx.ExprCtx,
+                            &ctx.ExpressionProps))});
+                SetOutputType(ctx, *consumer, {
+                    {"a.id", NUdf::EDataSlot::Int32},
+                    {"a.text", NUdf::EDataSlot::String, true},
+                    {"result", NUdf::EDataSlot::String},
+                    {"observed", NUdf::EDataSlot::String},
+                });
+                TOpRoot root(consumer, pos, {"result"});
+                return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            }
+            if (shape == EShape::FilterConsumer) {
+                auto consumer = MakeIntrusive<TOpFilter>(
+                    checked,
+                    pos,
+                    TExpression(
+                        TypedLiteral(
+                            ctx,
+                            "Bool",
+                            "true",
+                            ScalarType(ctx, NUdf::EDataSlot::Bool)),
+                        &ctx.ExprCtx,
+                        &ctx.ExpressionProps));
+                SetOutputType(ctx, *consumer, columns);
+                TOpRoot root(consumer, pos, {"result"});
+                return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            }
+            if (shape == EShape::JoinConsumer) {
+                auto right = MakeRead(ctx, table, "b", {"id"});
+                SetOutputType(ctx, *right, {
+                    {"b.id", NUdf::EDataSlot::Int32},
+                });
+                auto consumer = MakeIntrusive<TOpJoin>(
+                    checked,
+                    right,
+                    pos,
+                    "Cross",
+                    TVector<std::pair<TInfoUnit, TInfoUnit>>{},
+                    TVector<TExpression>{});
+                SetOutputType(ctx, *consumer, {
+                    {"a.id", NUdf::EDataSlot::Int32},
+                    {"a.text", NUdf::EDataSlot::String, true},
+                    {"result", NUdf::EDataSlot::String},
+                    {"b.id", NUdf::EDataSlot::Int32},
+                });
+                TOpRoot root(consumer, pos, {"result"});
+                return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            }
+            if (shape == EShape::Fanout) {
+                auto branch = MakeIntrusive<TOpMap>(
+                    checked,
+                    pos,
+                    TVector<TMapElement>{
+                        TMapElement(
+                            TInfoUnit("b.id"),
+                            TInfoUnit("a.id"),
+                            pos,
+                            &ctx.ExprCtx,
+                            &ctx.ExpressionProps),
+                        TMapElement(
+                            TInfoUnit("b.text"),
+                            TInfoUnit("a.text"),
+                            pos,
+                            &ctx.ExprCtx,
+                            &ctx.ExpressionProps),
+                        TMapElement(
+                            TInfoUnit("right_result"),
+                            TInfoUnit("result"),
+                            pos,
+                            &ctx.ExprCtx,
+                            &ctx.ExpressionProps),
+                    });
+                SetOutputType(ctx, *branch, {
+                    {"b.id", NUdf::EDataSlot::Int32},
+                    {"b.text", NUdf::EDataSlot::String, true},
+                    {"right_result", NUdf::EDataSlot::String},
+                });
+                auto consumer = MakeIntrusive<TOpJoin>(
+                    checked,
+                    branch,
+                    pos,
+                    "Cross",
+                    TVector<std::pair<TInfoUnit, TInfoUnit>>{},
+                    TVector<TExpression>{});
+                SetOutputType(ctx, *consumer, {
+                    {"a.id", NUdf::EDataSlot::Int32},
+                    {"a.text", NUdf::EDataSlot::String, true},
+                    {"result", NUdf::EDataSlot::String},
+                    {"b.id", NUdf::EDataSlot::Int32},
+                    {"b.text", NUdf::EDataSlot::String, true},
+                    {"right_result", NUdf::EDataSlot::String},
+                });
+                TOpRoot root(consumer, pos, {"result"});
+                return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+            }
+
+            TIntrusivePtr<IOperator> sortInput = checked;
+            TString resultColumn = "result";
+            TVector<TOutputTypeSpec> corridorColumns = columns;
+            if (shape == EShape::DirectAlias) {
+                auto alias = MakeCopyMap(ctx, checked, "renamed", "result");
+                corridorColumns = {
+                    {"a.id", NUdf::EDataSlot::Int32},
+                    {"a.text", NUdf::EDataSlot::String, true},
+                    {"renamed", NUdf::EDataSlot::String},
+                };
+                SetOutputType(ctx, *alias, corridorColumns);
+                sortInput = alias;
+                resultColumn = "renamed";
+            }
+            auto sort = MakeIntrusive<TOpSort>(
+                sortInput,
+                pos,
+                TVector<TSortElement>{TSortElement(
+                    TInfoUnit(
+                        shape == EShape::SortKey ? "result" : "a.id"),
+                    true,
+                    true)});
+            SetOutputType(ctx, *sort, corridorColumns);
+            TIntrusivePtr<TOpLimit> limit;
+            if (shape == EShape::Offset) {
+                limit = MakeIntrusive<TOpLimit>(
+                    sort,
+                    pos,
+                    MakeConstant("Uint64", "100", pos, &ctx.ExprCtx),
+                    MakeConstant("Uint64", "0", pos, &ctx.ExprCtx),
+                    EOpPhase::Undefined);
+            } else {
+                limit = MakeIntrusive<TOpLimit>(
+                    sort,
+                    pos,
+                    MakeConstant("Uint64", "100", pos, &ctx.ExprCtx),
+                    EOpPhase::Undefined);
+            }
+            if (shape == EShape::EnsureAtMostOne) {
+                limit->Props.EnsureAtMostOne = true;
+            }
+            SetOutputType(ctx, *limit, corridorColumns);
+            TOpRoot root(
+                limit,
+                pos,
+                {shape == EShape::Unobserved ? "a.id" : resultColumn});
+            if (shape == EShape::StagedNonRoot) {
+                auto& graph = root.PlanProps.StageGraph;
+                const ui32 source = graph.AddSourceStage(
+                    NYql::EStorageType::ColumnStorage);
+                const ui32 consumer = graph.AddStage();
+                read->Props.StageId = source;
+                checked->Props.StageId = source;
+                sort->Props.StageId = consumer;
+                limit->Props.StageId = consumer;
+                graph.Connect(
+                    source,
+                    consumer,
+                    MakeIntrusive<TMapConnection>(
+                        graph.GetOutputIndex(source)));
+            }
+            return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+        };
+
+        for (const auto shape : {
+            EShape::ResultCorridor,
+            EShape::DirectAlias,
+        }) {
+            const auto accepted = ParseSupported(exportShape(shape));
+            UNIT_ASSERT_VALUES_EQUAL(
+                FindNode(accepted, "project")["columns"]
+                    .GetArraySafe().back()["expression"]["kind"].GetStringSafe(),
+                "checked_concat");
+        }
+
+        for (const auto& [shape, reason] : {
+            std::pair{EShape::SortKey, TStringBuf("Sort key")},
+            std::pair{EShape::Unobserved, TStringBuf("main result output")},
+            std::pair{EShape::ComputedConsumer, TStringBuf("direct Project alias")},
+            std::pair{EShape::FilterConsumer, TStringBuf("permits only Project aliases")},
+            std::pair{EShape::JoinConsumer, TStringBuf("permits only Project aliases")},
+            std::pair{EShape::Fanout, TStringBuf("exactly one rootward consumer")},
+            std::pair{EShape::Offset, TStringBuf("Limit with an offset")},
+            std::pair{EShape::EnsureAtMostOne, TStringBuf("error-bearing Limit")},
+            std::pair{EShape::StagedNonRoot, TStringBuf("main result root")},
+        }) {
+            const auto result = exportShape(shape);
             UNIT_ASSERT(!result.IsSupported());
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
-                "Concat result bound");
+                reason);
         }
     }
 

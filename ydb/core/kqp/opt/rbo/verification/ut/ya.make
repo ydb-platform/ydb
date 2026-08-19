@@ -3,6 +3,7 @@ PY3TEST()
 SIZE(MEDIUM)
 
 TEST_SRCS(
+    test_checked_concat.py
     test_ir.py
     test_decimal.py
     test_limit.py

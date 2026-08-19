@@ -1986,6 +1986,8 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
 {
     YDB_LOG_WARN_CTX(ctx, "BS Controller connection error");
 
+    DDiskInfoRequestsInFlight = 0;
+
     if (State->BSControllerPipe) {
         NTabletPipe::CloseClient(ctx, State->BSControllerPipe);
         State->BSControllerPipe = TActorId();
@@ -2012,6 +2014,27 @@ void TCms::StartDDiskSync(const TActorContext& ctx) {
 
 void TCms::Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxPersistDDiskInfo(ev), ctx);
+}
+
+void TCms::QueueDDiskInfoRequest(ui64 tabletId, ui64 knownRevision, const TActorContext& ctx) {
+    auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
+    request->Record.SetTabletId(tabletId);
+    request->Record.SetKnownRevision(knownRevision);
+    DDiskInfoRequestQueue.push(std::move(request));
+    SendQueuedDDiskInfoRequests(ctx);
+}
+
+void TCms::SendQueuedDDiskInfoRequests(const TActorContext& ctx) {
+    if (!State->BSControllerPipe) {
+        return;
+    }
+
+    while (DDiskInfoRequestsInFlight < MaxDDiskInfoRequestsInFlight && !DDiskInfoRequestQueue.empty()) {
+        auto request = std::move(DDiskInfoRequestQueue.front());
+        DDiskInfoRequestQueue.pop();
+        NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
+        ++DDiskInfoRequestsInFlight;
+    }
 }
 
 void TCms::Handle(TEvCms::TEvDDiskInfoListRequest::TPtr& ev, const TActorContext& ctx) {
@@ -2053,15 +2076,21 @@ void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr&
         const bool isNewTablet = it == State->DDiskInfo.end();
         const ui64 knownRevision = isNewTablet ? 0 : it->second.Revision;
         if (isNewTablet || tablet.GetRevision() > knownRevision) {
-            auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
-            request->Record.SetTabletId(tablet.GetTabletId());
-            request->Record.SetKnownRevision(knownRevision);
-            NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
+            QueueDDiskInfoRequest(tablet.GetTabletId(), knownRevision, ctx);
         }
     }
 }
 
 void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult::TPtr& ev, const TActorContext& ctx) {
+    if (ev->Sender != State->BSControllerPipe) {
+        return;
+    }
+
+    if (DDiskInfoRequestsInFlight > 0) {
+        --DDiskInfoRequestsInFlight;
+    }
+    SendQueuedDDiskInfoRequests(ctx);
+
     if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
         auto persist = MakeHolder<TEvPrivate::TEvPersistDDiskInfo>();
         persist->Record.CopyFrom(ev->Get()->Record);
@@ -2078,10 +2107,7 @@ void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged::T
         return;
     }
 
-    auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
-    request->Record.SetTabletId(record.GetTabletId());
-    request->Record.SetKnownRevision(knownRevision);
-    NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
+    QueueDDiskInfoRequest(record.GetTabletId(), knownRevision, ctx);
 }
 
 void TCms::Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx) {
@@ -2786,6 +2812,7 @@ void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
         OnBSCPipeDestroyed(ctx);
     } else {
         StartDDiskSync(ctx);
+        SendQueuedDDiskInfoRequests(ctx);
     }
 }
 

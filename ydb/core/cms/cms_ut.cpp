@@ -224,6 +224,45 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         UNIT_ASSERT_VALUES_EQUAL(after.GetGroups(0).GetDirectBlockGroupId(), 1);
     }
 
+    Y_UNIT_TEST(DDiskInfoSyncLimitsInFlightRequests)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(1);
+
+        TVector<TAutoPtr<IEventHandle>> delayedResults;
+        ui32 getRequests = 0;
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTablet) {
+                ++getRequests;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult
+                    && ev->Recipient == MakeCmsID()) {
+                delayedResults.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        for (ui64 tabletId = 1; tabletId <= 17; ++tabletId) {
+            const auto allocation = env.AllocateDDiskBlockGroup(tabletId, tabletId);
+            UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+                allocation.ShortDebugString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(getRequests, 16);
+        UNIT_ASSERT_VALUES_EQUAL(delayedResults.size(), 16);
+
+        env.Send(delayedResults.front().Release(), 0, true);
+        delayedResults.erase(delayedResults.begin());
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back([&getRequests] (IEventHandle&) {
+            return getRequests == 17;
+        });
+        env.DispatchEvents(options);
+
+        UNIT_ASSERT_VALUES_EQUAL(getRequests, 17);
+    }
+
     Y_UNIT_TEST(StateRequest)
     {
         TCmsTestEnv env(8);

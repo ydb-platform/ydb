@@ -437,6 +437,8 @@ private:
 
     void OnBSCPipeDestroyed(const TActorContext &ctx);
     void StartDDiskSync(const TActorContext &ctx);
+    void QueueDDiskInfoRequest(ui64 tabletId, ui64 knownRevision, const TActorContext &ctx);
+    void SendQueuedDDiskInfoRequests(const TActorContext &ctx);
 
     void Handle(TEvCms::TEvDDiskInfoListRequest::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr &ev, const TActorContext &ctx);
@@ -491,6 +493,10 @@ private:
 
     TQueue<TRequestsQueueItem> Queue;
     TQueue<TRequestsQueueItem> NextQueue;
+
+    static constexpr ui32 MaxDDiskInfoRequestsInFlight = 16;
+    ui32 DDiskInfoRequestsInFlight = 0;
+    TQueue<THolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>> DDiskInfoRequestQueue;
 
     TCmsStatePtr State;
     TLogger Logger;

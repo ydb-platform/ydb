@@ -197,9 +197,23 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     LWPROBE(NewTask, ConveyorName, ToString(event.GetCategory()), event.GetInternalProcessId(), d);
     Counters.ReceiveTaskDuration->Add(d.MicroSeconds());
     Counters.ReceiveTaskHistogram->Collect(d.MicroSeconds());
-    auto& cat = Manager->MutableCategoryVerified(ev->Get()->GetCategory());
-    cat.RegisterTask(ev->Get()->GetInternalProcessId(), ev->Get()->DetachTask());
-    Y_UNUSED(Manager->DrainTasks());
+    const auto category = ev->Get()->GetCategory();
+    auto& cat = Manager->MutableCategoryVerified(category);
+    auto task = ev->Get()->DetachTask();
+    if (Manager->HasFreeWorkerForCategory(category) || cat.GetWaitingQueueSize() < cat.GetQueueSizeLimit()) {
+        cat.RegisterTask(ev->Get()->GetInternalProcessId(), std::move(task));
+        Y_UNUSED(Manager->DrainTasks());
+    } else {
+        cat.GetCounters()->OverlimitRate->Inc();
+        YDB_LOG_ERROR("",
+            {"action", "queue_overlimit"},
+            {"sender", ev->Sender},
+            {"category", ::ToString(category)},
+            {"queue", cat.GetWaitingQueueSize()},
+            {"limit", cat.GetQueueSizeLimit()});
+        task->OnCannotExecute("composite conveyor overloaded for category " + ::ToString(category) + " (" +
+            ::ToString(cat.GetWaitingQueueSize()) + " >= " + ::ToString(cat.GetQueueSizeLimit()) + ")");
+    }
     cat.GetCounters()->WaitingQueueSize->Set(cat.GetWaitingQueueSize());
 }
 

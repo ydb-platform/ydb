@@ -135,6 +135,8 @@ public:
         DeliveringDuration.Add(d);
     }
 
+    bool CanExecuteCategory(const ESpecialTaskCategory category) const;
+
     void PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId = 0, const ui64 workerIdx = 0);
     bool HasFreeWorker() const;
     void ReleaseWorker(const ui64 workerIdx);
@@ -153,6 +155,10 @@ public:
 
     ui64 GetMaxBatchSize() const {
         return MaxBatchSize;
+    }
+
+    void UpdateMaxBatchSize(const ui64 maxBatchSize) {
+        MaxBatchSize = maxBatchSize;
     }
 
     void ApplyTopologyUpdate(const NConfig::TWorkersPool& config,

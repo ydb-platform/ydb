@@ -118,12 +118,18 @@ void TPartition::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& 
         {"logPrefix", NPQ_LOG_PREFIX},
         {"consumer", ev->Get()->Record.GetConsumer()},
         {"getPartitionId", ev->Get()->GetPartitionId()});
-    auto it = MLPConsumers.find(ev->Get()->GetConsumer());
+    const TString& consumer = ev->Get()->GetConsumer();
+    auto it = MLPConsumers.find(consumer);
     if (it == MLPConsumers.end()) {
-        YDB_LOG_DEBUG("Queue TEvMLPUpdateExternalLockedMessageGroupsId until consumer is created",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"consumer", ev->Get()->Record.GetConsumer()});
-        MLPPendingEvents.emplace_back(ev);
+        const auto* consumerConfig = GetConsumer(Config, consumer);
+        if (consumerConfig && consumerConfig->GetType() == NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            YDB_LOG_DEBUG("Queue TEvMLPUpdateExternalLockedMessageGroupsId until consumer is created",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"consumer", consumer});
+            MLPPendingEvents.emplace_back(ev);
+            return;
+        }
+        ForwardToMLPConsumer(consumer, ev);
         return;
     }
     Forward(ev, it->second.ActorId);

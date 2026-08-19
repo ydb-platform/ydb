@@ -292,7 +292,7 @@ Y_UNIT_TEST(MlpRequestsWaitForConfigThenDeliver) {
 
 Y_UNIT_TEST_SUITE(TMLPPartitionQueueTests) {
 
-Y_UNIT_TEST(UpdateExternalWaitsForConsumerThenForwards) {
+Y_UNIT_TEST(UpdateExternalUnknownConsumerReturnsError) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     tc.Prepare();
@@ -300,33 +300,10 @@ Y_UNIT_TEST(UpdateExternalWaitsForConsumerThenForwards) {
 
     PQTabletPrepare({.partitions = 1, .AddDefaultConsumer = false}, TVector<TConsumerPreparationParameters>{}, *tc.Runtime, tc.TabletId, tc.Edge);
 
-    ui32 updateExternalSeen = 0;
-    bool dropAfterQueue = false;
-    tc.Runtime->SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
-        if (ev->GetTypeRewrite() == TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::EventType) {
-            ++updateExternalSeen;
-            if (dropAfterQueue) {
-                return TTestActorRuntime::EEventAction::DROP;
-            }
-        }
-        return TTestActorRuntime::EEventAction::PROCESS;
-    });
-
     tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, MakeUpdateExternal(0).Release(), 0, GetPipeConfigWithRetries());
-    auto earlyError = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(TDuration::MilliSeconds(200));
-    UNIT_ASSERT_C(!earlyError, "UpdateExternal must wait for the MLP consumer instead of Consumer does not exist");
-    const ui32 beforeCreate = updateExternalSeen;
-    dropAfterQueue = true;
-
-    PrepareMlpTablet(tc);
-
-    for (int i = 0; i < 50 && updateExternalSeen <= beforeCreate; ++i) {
-        tc.Runtime->DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
-    }
-    UNIT_ASSERT_GT(updateExternalSeen, beforeCreate);
-
-    auto lateError = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(TDuration::MilliSeconds(200));
-    UNIT_ASSERT_C(!lateError, "Queued UpdateExternal must be forwarded after the consumer is created");
+    auto error = tc.Runtime->GrabEdgeEvent<TEvPQ::TEvMLPErrorResponse>(TDuration::Seconds(10));
+    UNIT_ASSERT(error);
+    UNIT_ASSERT(TString(error->Record.GetErrorMessage()).Contains("does not exist"));
 }
 
 } // Y_UNIT_TEST_SUITE(TMLPPartitionQueueTests)

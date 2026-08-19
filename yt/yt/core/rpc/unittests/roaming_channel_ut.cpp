@@ -30,7 +30,7 @@ public:
 
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override
     {
-        YT_UNIMPLEMENTED();
+        return Channel_->GetEndpointAttributes();
     }
 
     TFuture<IChannelPtr> GetChannel(const IClientRequestPtr& /*request*/) override
@@ -75,7 +75,7 @@ public:
 
     const NYTree::IAttributeDictionary& GetEndpointAttributes() const override
     {
-        YT_UNIMPLEMENTED();
+        return *EndpointAttributes_;
     }
 
     TFuture<IChannelPtr> GetChannel(const IClientRequestPtr& /*request*/) override
@@ -101,6 +101,7 @@ public:
 private:
     const TPromise<IChannelPtr> Channel_ = NewPromise<IChannelPtr>();
     const std::string EndpointAddress_;
+    const NYTree::IAttributeDictionaryPtr EndpointAttributes_ = NYTree::CreateEphemeralAttributes();
 };
 
 class TNeverProvider
@@ -263,6 +264,15 @@ TYPED_TEST(TRpcTest, RoamingChannelEndpointAddressPropogation)
         return;
     }
 
+    auto retryingConfig = New<TRetryingChannelConfig>();
+    retryingConfig->Load(ConvertTo<NYTree::INodePtr>(NYson::TYsonString(TStringBuf("{}"))));
+    channel = CreateRetryingChannel(
+        std::move(retryingConfig),
+        std::move(channel),
+        BIND([] (const TError&) {
+            return false;
+        }));
+
     TTestProxy proxy(std::move(channel));
     for (bool recorded : {true, false}) {
         auto tracer = New<TTracer>();
@@ -273,6 +283,9 @@ TYPED_TEST(TRpcTest, RoamingChannelEndpointAddressPropogation)
         auto contextGuard = NTracing::TTraceContextGuard(rootTraceContext);
 
         auto req = proxy.DoNothing();
+        req->SetResponseHeavy(true);
+        req->SetMultiplexingBand(NRpc::EMultiplexingBand::Interactive);
+        req->TracingTags().emplace_back("yt.query", "test query");
         auto asyncRspOrError = req->Invoke()
             .WithTimeout(TDuration::Seconds(1));
 
@@ -281,6 +294,21 @@ TYPED_TEST(TRpcTest, RoamingChannelEndpointAddressPropogation)
             << ToString(responseOrError);
 
         auto endpoint = tracer->FindTraceTag("RpcClient:TestService.DoNothing", EndpointAddressAnnotation);
+        if (recorded) {
+            EXPECT_EQ(endpointAddress, endpoint);
+        } else {
+            EXPECT_EQ(std::nullopt, endpoint);
+        }
+
+        auto slowReq = proxy.SlowCall();
+        slowReq->SetResponseHeavy(true);
+        slowReq->SetMultiplexingBand(NRpc::EMultiplexingBand::Interactive);
+        slowReq->TracingTags().emplace_back("yt.query", "test query");
+        slowReq->SetTimeout(TDuration::MilliSeconds(100));
+        auto error = NConcurrency::WaitFor(slowReq->Invoke());
+        ASSERT_FALSE(error.IsOK());
+
+        endpoint = tracer->FindTraceTag("RpcClient:TestService.SlowCall", EndpointAddressAnnotation);
         if (recorded) {
             EXPECT_EQ(endpointAddress, endpoint);
         } else {

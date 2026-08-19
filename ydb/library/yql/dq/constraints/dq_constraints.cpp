@@ -71,6 +71,10 @@ TStatus ConstraintDqBlockHashJoin(const TExprNode::TPtr& input, TExprContext& ct
 }
 
 TStatus ConstraintDqBlockHashJoinCore(const TExprNode::TPtr& input, TExprContext& ctx) {
+    if (const auto status = UpdateAllChildLambdasConstraints(*input); status != TStatus::Ok) {
+        return status;
+    }
+
     const auto& leftInputNode = *input->Child(0);
     const auto& rightInputNode = *input->Child(1);
     if (leftInputNode.GetConstraint<TStreamingConstraintNode>() || rightInputNode.GetConstraint<TStreamingConstraintNode>()) {

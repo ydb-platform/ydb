@@ -1,6 +1,6 @@
 # Importing from S3-compatible storage
 
-The `import s3` command starts the process of importing data and schema object information from an S3-compatible storage on the server side, in the format described in the article [File structure](../file-structure.md):
+The `import s3` command starts a server-side process of importing data and schema object information from an S3-compatible storage in the format described in the article [File structure](../file-structure.md):
 
 
 ```bash
@@ -16,11 +16,11 @@ Importing tables from an S3-compatible storage in other formats is possible usin
 
 {% include [conn_options_ref.md](../../commands/_includes/conn_options_ref.md) %}
 
-Unlike the [`tools restore` command](../tools-restore.md), the `import s3` command always creates objects entirely, so for it to succeed, none of the imported objects (neither directories nor tables) should exist.
+Unlike the [`tools restore` command](../tools-restore.md), the `import s3` command always creates objects entirely, so for it to succeed, none of the imported objects (neither directories nor tables) must exist.
 
-If you need to load additional data into existing tables from S3, you can copy the S3 contents to the file system (for example, using [S3cmd](https://s3tools.org/s3cmd)) and use the [`tools restore` command](../tools-restore.md).
+If you need to load additional data into existing tables from S3, you can copy the S3 contents to a file system (for example, using [S3cmd](https://s3tools.org/s3cmd)) and use the [`tools restore` command](../tools-restore.md).
 
-## Command-line parameters {#pars}
+## Command line parameters {#pars}
 
 `[options]` — command parameters:
 
@@ -39,7 +39,7 @@ The S3 import command requires specifying [S3 connection parameters](../auth-s3.
 {% include [import-alternative-syntax.md](./import-alternative-syntax.md) %}
 
 - `source`, `src`, or `s` — the S3 key prefix with the imported directory or table.
-- `destination`, `dst`, or `d` — the path in the database for placing the imported directory or table. The final path element must not exist. All directories along the path will be created if they do not exist.
+- `destination`, `dst`, or `d` — the path in the database for placing the imported directory or table. The final path element must not exist. All directories on the path will be created if they do not exist.
 
 {% include [import-alternative-syntax-warning.md](./import-alternative-syntax-warning.md) %}
 
@@ -47,9 +47,14 @@ The S3 import command requires specifying [S3 connection parameters](../auth-s3.
 
 ### Additional parameters {#aux}
 
-{% include [import-additional-params.md](import-additional-params.md) %}
-
-- `--list`: List objects in an existing export.
+| Parameter | Description |
+| --- | --- |
+| `--description STRING` | Text description of the operation, saved in the operation history. |
+| `--retries NUM` | Number of retry attempts the server will make.<br/>Default value: `10`. |
+| `--skip-checksum-validation` | Skip the validation stage of [checksums](../file-structure.md#checksums) of imported objects. |
+| `--encryption-key-file PATH` | Path to the file containing the encryption key (only for encrypted exports). This file is binary and must contain the exact number of bytes corresponding to the key length in the selected encryption algorithm (16 bytes for `AES-128-GCM`, 32 bytes for `AES-256-GCM` and `ChaCha20-Poly1305`). The key can also be passed via the `YDB_ENCRYPTION_KEY` environment variable, in hexadecimal string representation. |
+| `--list` | List objects in an existing export. |
+| `--format STRING` | Output format.<br/>Allowed values:<br/><ul><li>`pretty` — human-readable format (default);</li><li>`proto-json-base64` — [Protocol Buffers](https://en.wikipedia.org/wiki/Protocol_Buffers) in [JSON](https://en.wikipedia.org/wiki/JSON) format, binary strings encoded in [Base64](https://en.wikipedia.org/wiki/Base64).</li></ul> |
 
 ## Running the import {#exec}
 
@@ -93,7 +98,7 @@ Upon successful execution, the `import s3` command outputs summary information a
 
 {% include [import-operation-status-after-get.md](import-operation-status-after-get.md) %}
 
-### Completing the import operation {#forget}
+### Completing an import operation {#forget}
 
 {% include [import-operation-forget-intro.md](import-operation-forget-intro.md) %}
 
@@ -121,7 +126,7 @@ To get a list of import operations, use the `operation list import/s3` command:
 
 ### Importing to the database root {#example-full-db}
 
-Importing the contents of the `export1` directory in the `mybucket` bucket to the database root, using S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
+Importing the contents of the `export1` directory in the `mybucket` bucket to the database root using S3 authentication parameters from environment variables or the `~/.aws/credentials` file:
 
 
 ```bash
@@ -133,7 +138,7 @@ Importing the contents of the `export1` directory in the `mybucket` bucket to th
 
 ### Importing multiple directories {#example-specific-dirs}
 
-Importing objects from the `dir1` and `dir2` directories of the export located in the `export1` directory in the `mybucket` bucket, into the identically named directories of the database, using explicitly specified S3 authentication parameters:
+Importing objects from the `dir1` and `dir2` directories of the export located in the `export1` directory in the `mybucket` bucket, into the identically named database directories using explicitly specified S3 authentication parameters:
 
 
 ```bash
@@ -162,7 +167,7 @@ Listing the paths of all objects in an existing encrypted export located in the 
 
 ### Importing an encrypted export {#example-encryption}
 
-Importing a single table that was exported along the `dir/my_table` path, to the `dir1/dir/my_table` path, from an encrypted export located under the `export1` prefix in the `mybucket` bucket, using the secret key from the `~/my_secret_key` file.
+Importing a single table that was exported at path `dir/my_table`, to path `dir1/dir/my_table` from an encrypted export located at prefix `export1` in bucket `mybucket`, using the secret key from file `~/my_secret_key`.
 
 
 ```bash
@@ -195,7 +200,7 @@ ydb://import/8?id=281474976788779&kind=s3
 ```
 
 
-These IDs can be used, for example, to run a loop to complete all current operations:
+Using these IDs, you can, for example, run a loop to terminate all current operations:
 
 
 ```bash

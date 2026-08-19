@@ -2,6 +2,8 @@
 
 PY3_LIBRARY()
 
+SUBSCRIBER(g:python-contrib)
+
 VERSION(0.2.0)
 
 LICENSE(BSD-3-Clause)

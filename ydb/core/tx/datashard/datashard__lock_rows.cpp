@@ -416,12 +416,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
         setWaiting(true);
         const auto& protoSnapshot = msg->Record.GetSnapshot();
         snapshot = TRowVersion(protoSnapshot.GetStep(), protoSnapshot.GetTxId());
-        bool success = co_await Pipeline.WaitForSnapshot(snapshot);
-        if (!success) {
-            sendError(NKikimrDataEvents::TEvLockRowsResult::STATUS_OVERLOADED, TStringBuilder()
-                << "Shard " << TabletID() << " has too many concurrent requests");
-            co_return;
-        }
+        co_await Pipeline.WaitForSnapshot(snapshot);
     }
 
     setWaiting(false);
@@ -536,8 +531,9 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
     TRuntimeLockHolder runtimeLock;
     TVector<TRawTypeValue> typedKey;
     size_t processedKeys = 0;
+    TRowVersion maxVersionOfLockedRow = TRowVersion::Min();
 
-    auto success = std::make_unique<NEvents::TDataEvents::TEvLockRowsResult>(
+    auto pendingResult = std::make_unique<NEvents::TDataEvents::TEvLockRowsResult>(
             TabletID(), requestId.RequestId, NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS);
 
     ui64 globalTxId = 0;
@@ -553,6 +549,7 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
     while (!state.Result) {
         bool reschedule = false;
         bool needGlobalTxId = false;
+        bool pendingResultReady = false;
         TLockInfo::TPtr waitForLock;
 
         // We need to run each iteration in a transaction
@@ -650,13 +647,6 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     return ETxLockRows::Restart;
                 }
 
-                if (skipAbsent && (row.Ready == NTable::EReady::Gone || row.RowOp == NTable::ERowOp::Erase)) {
-                    success->Record.AddSkippedAbsentKeys(processedKeys);
-                    runtimeLock.Reset();
-                    ++processedKeys;
-                    continue;
-                }
-
                 // Undecided volatile transactions will have non-zero VolatileVersion
                 // We don't wait until they are decided and return a modified flag
                 // instead. A subsequent re-read will wait for the decision.
@@ -682,16 +672,18 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     for (ui64 txId : observer->ReadConflicts) {
                         SysLocksTable().AddReadConflict(txId);
                     }
-                    success->Record.AddLockedKeys(processedKeys);
+                    pendingResult->Record.AddLockedKeys(processedKeys);
                     if (modified) {
-                        success->Record.AddModifiedKeys(processedKeys);
+                        pendingResult->Record.AddModifiedKeys(processedKeys);
                     }
+                    maxVersionOfLockedRow = std::max(maxVersionOfLockedRow, row.RowVersion);
+                    maxVersionOfLockedRow = std::max(maxVersionOfLockedRow, observer->VolatileVersion);
                     runtimeLock.Reset();
                     ++processedKeys;
                 };
 
                 auto finishSkippedLocked = [&]() {
-                    success->Record.AddSkippedLockedKeys(processedKeys);
+                    pendingResult->Record.AddSkippedLockedKeys(processedKeys);
                     runtimeLock.Reset();
                     ++processedKeys;
                 };
@@ -774,6 +766,19 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
                     if (currentOwner) {
                         currentLockMode = row.LockMode;
                     }
+                }
+
+                // Note: we run the skipAbsent check *after* we check that we already have the lock
+                // for this key. The purpose of skipAbsent is to allow other transactions to lock and
+                // insert a row to this key if this transaction is trying to update/delete a row that
+                // is not there. If we already locked the key, this means that previously in this
+                // transaction we inserted the row, so it should be able to do other operations
+                // to it, and we shouldn't skip even if no committed row exists.
+                if (skipAbsent && (row.Ready == NTable::EReady::Gone || row.RowOp == NTable::ERowOp::Erase)) {
+                    pendingResult->Record.AddSkippedAbsentKeys(processedKeys);
+                    runtimeLock.Reset();
+                    ++processedKeys;
+                    continue;
                 }
 
                 // Don't bother waiting in skipLocked mode when current owner conflicts with us
@@ -874,15 +879,30 @@ void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr e
             applyLocks();
 
             for (const auto& lock : takenLocks) {
-                success->AddLock(lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
-                                lock.SchemeShard, lock.PathId, lock.HasWrites);
+                pendingResult->AddLock(
+                    lock.LockId, lock.DataShard, lock.Generation, lock.Counter,
+                    lock.SchemeShard, lock.PathId, lock.HasWrites);
                 if (lock.IsError()) {
-                    success->Record.SetStatus(NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
+                    pendingResult->Record.SetStatus(NKikimrDataEvents::TEvLockRowsResult::STATUS_LOCKS_BROKEN);
                 }
             }
-            state.Result = std::move(success);
+            pendingResultReady = true;
             return ETxLockRows::CommitSync;
         });
+
+        if (pendingResultReady) {
+            if (pendingResult->Record.GetStatus() == NKikimrDataEvents::TEvLockRowsResult::STATUS_SUCCESS) {
+                // We may have encountered rows committed by immediate writes "in the future"
+                // relative to the mediator time. For any external observer those rows are still
+                // invisible and datashard will delay sending confirmations for those writes
+                // (see also: ImmediateWriteEdgeReplied version). If the current request encountered
+                // such rows and locked the corresponding keys, we must delay sending the successful
+                // response as well until the corresponding version is visible to head reads.
+                setWaiting(true);
+                co_await Pipeline.WaitForSnapshot(maxVersionOfLockedRow);
+            }
+            state.Result = std::move(pendingResult);
+        }
 
         if (state.Result) {
             break;

@@ -1,5 +1,6 @@
 #pragma once
 #include "json_pipe_req.h"
+#include "log.h"
 #include "viewer.h"
 #include "viewer_helper.h"
 #include "wb_group.h"
@@ -129,6 +130,7 @@ class TJsonNodes : public TViewerPipeClient {
     std::vector<TString> FilterStoragePools;
     std::vector<std::pair<ui64, ui64>> FilterStoragePoolsIds;
     std::unordered_set<TNodeId> RestrictedNodeIds; // due to access rights
+    bool RestrictToDatabaseNodes = false; // the filter by RestrictedNodeIds is required, even if the set is empty
     std::unordered_set<TNodeId> FilterNodeIds;
     std::unordered_set<ui32> FilterGroupIds;
     std::optional<std::size_t> Offset;
@@ -410,6 +412,7 @@ class TJsonNodes : public TViewerPipeClient {
                     pDiskState.SetTotalSize(pdisk.GetTotalSize());
                     pDiskState.SetAvailableSize(pdisk.GetAvailableSize());
                     pDiskState.SetExpectedSlotCount(pdisk.GetExpectedSlotCount());
+                    pDiskState.SetExpectedSlotSize(pdisk.GetExpectedSlotSize());
                 }
             }
             if (VDisks.empty() && !SysViewVDisks.empty()) {
@@ -1169,6 +1172,9 @@ public:
         if (IsDatabaseRequest() && !Viewer->CheckAccessViewer(TBase::GetRequest())) {
             auto nodes = GetDatabaseNodes();
             RestrictedNodeIds = std::unordered_set<TNodeId>(nodes.begin(), nodes.end());
+            // The filter must be applied even when the database has no nodes at all,
+            // otherwise a database user would get the nodes of the whole cluster.
+            RestrictToDatabaseNodes = true;
             NeedFilter = true;
         }
 
@@ -1366,7 +1372,12 @@ public:
             InvalidateNodes();
             AddEvent("Type Filter Applied");
         }
-        if (!RestrictedNodeIds.empty() && FieldsAvailable.test(+ENodeFields::NodeId)) {
+        if (RestrictToDatabaseNodes && FieldsAvailable.test(+ENodeFields::NodeId)) {
+            if (RestrictedNodeIds.empty()) {
+                YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Empty response: the database has no nodes to show",
+                    {"logPrefix", GetLogPrefix()},
+                    {"database", Database});
+            }
             TNodeView nodeView;
             for (TNode* node : NodeView) {
                 if (RestrictedNodeIds.count(node->GetNodeId()) > 0) {
@@ -1377,6 +1388,7 @@ public:
             FoundNodes = TotalNodes = NodeView.size();
             InvalidateNodes();
             RestrictedNodeIds.clear();
+            RestrictToDatabaseNodes = false;
             AddEvent("Restricted Filter Applied");
         }
 
@@ -1489,7 +1501,7 @@ public:
                 InvalidateNodes();
                 AddEvent("Group Filter Applied");
             }
-            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || !RestrictedNodeIds.empty();
+            NeedFilter = (With != EWith::Everything) || (Type != EType::Any) || !Filter.empty() || !FilterNodeIds.empty() || ProblemNodesOnly || UptimeSeconds > 0 || !FilterGroup.empty() || RestrictToDatabaseNodes;
             FoundNodes = NodeView.size();
         }
     }

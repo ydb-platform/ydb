@@ -63,7 +63,14 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
         return {data.ReadResult};
     }
 
-    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
+    // Bad on-disk/client data: throw yexception (catchable in UT and callers), not AFL_ENSURE
+    // which aborts outside an actor activation context.
+    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec(),
+        "unexpected data chunk codec for kafka batch cutter"
+        << " has_codec=" << dataChunk.HasCodec()
+        << " codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
+        << " expected_codec=" << static_cast<int>(KafkaBatchCodec())
+        << " offset=" << data.ReadResult.GetOffset());
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     if (batch.Records.empty()) {
@@ -100,7 +107,11 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
             itemChunk.ClearData();
         }
         TString serializedChunk;
-        Y_ENSURE(itemChunk.SerializeToString(&serializedChunk));
+        Y_ENSURE(itemChunk.SerializeToString(&serializedChunk),
+            "failed to serialize data chunk"
+            << " offset=" << offset
+            << " seq_no=" << seqNo
+            << " codec=" << static_cast<int>(codec));
         item.SetData(std::move(serializedChunk));
 
         if (record.Key) {
@@ -124,7 +135,12 @@ THashMap<TString, ui64> TKafkaBatchCutter::GetKeys(const TBatchCutterData& data,
         return result;
     }
 
-    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
+    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec(),
+        "unexpected data chunk codec for kafka batch cutter"
+        << " has_codec=" << dataChunk.HasCodec()
+        << " codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
+        << " expected_codec=" << static_cast<int>(KafkaBatchCodec())
+        << " offset=" << data.ReadResult.GetOffset());
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     const ui64 baseOffset = data.ReadResult.GetOffset();

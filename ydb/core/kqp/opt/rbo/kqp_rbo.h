@@ -128,6 +128,7 @@ public:
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
 void ComputePlanLiveness(TOpRoot& root);
+const TInfoUnitSet& GetLiveIn(IOperator* op, ui32 childIndex);
 const TInfoUnitSet& GetLiveOut(IOperator* op);
 void ComputePlanAliases(TOpRoot& root);
 const TPlanAliases::TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu);

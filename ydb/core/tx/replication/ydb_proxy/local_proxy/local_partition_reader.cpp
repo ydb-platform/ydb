@@ -1,13 +1,26 @@
 #include "local_partition_actor.h"
 #include "local_proxy.h"
-#include "logging.h"
 
 #include <ydb/core/persqueue/writer/common.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
+
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_YDB_PROXY
 
 namespace NKikimr::NReplication {
+
+namespace {
+
+bool IsKafkaBatchDataChunk(const NKikimrPQClient::TDataChunk& proto) {
+    return proto.HasCodec() && proto.GetCodec() + 1 == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH);
+}
+
+} // namespace
 
 class TLocalTopicPartitionReaderActor: public TBaseLocalTopicPartitionActor {
     using TBase = TBaseLocalTopicPartitionActor;
@@ -52,8 +65,12 @@ protected:
         PassAway();
     }
 
-    TString MakeLogPrefix() override {
-        return TStringBuilder() << "Reader[" << SelfId() << ":/" << Database << TopicPath <<" ] ";
+    NActors::NStructuredLog::TStructuredMessage MakeLogPrefix() override {
+        return YDB_LOG_CREATE_MESSAGE(
+            {"actorClassName", "LocalTopicPartitionReaderActor"},
+            {"selfId", SelfId()},
+            {"database", Database},
+            {"topicPath", TopicPath});
     }
 
     static std::unique_ptr<TEvYdbProxy::TEvTopicReaderGone> MakeError(NYdb::EStatus status, const TString& error) {
@@ -63,6 +80,8 @@ protected:
     }
 
     STATEFN(OnInitEvent) override {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "OnInitEvent"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvReadTopicRequest, HandleInit);
             hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
@@ -79,12 +98,14 @@ private:
     }
 
     void HandleInit(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-        LOG_T("Handle on init " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle on init",
+            {"ev", ev->Get()->ToString()});
         RequestsQueue.emplace_back(ev->Sender, ev->Cookie, GetSkipCommit(ev));
     }
 
     void Handle(TEvYdbProxy::TEvCommitOffsetRequest::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
     }
 
 private:
@@ -94,7 +115,8 @@ private:
     }
 
     void HandleOnInitOffset(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         auto& record = ev->Get()->Record;
         if (record.GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
@@ -137,6 +159,8 @@ private:
     }
 
     STATEFN(StateInitOffset) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateInitOffset"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, HandleOnInitOffset);
             hFunc(TEvents::TEvWakeup, HandleOnInitOffset);
@@ -158,7 +182,8 @@ private:
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         HandleInit(ev);
         Handle(RequestsQueue.front());
@@ -204,6 +229,8 @@ private:
     }
 
     STATEFN(StateWork) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWork"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvYdbProxy::TEvReadTopicRequest, Handle);
             hFunc(TEvYdbProxy::TEvCommitOffsetRequest, Handle);
@@ -226,7 +253,8 @@ private:
     }
 
     void HandleOnWaitData(TEvPersQueue::TEvResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
 
@@ -290,6 +318,9 @@ private:
             );
 
             TString data;
+            if (IsKafkaBatchDataChunk(proto)) {
+                NKafka::SetKafkaBatchBaseOffset(*proto.MutableData(), result.GetOffset());
+            }
             bool isCompressed = proto.has_codec() && proto.codec() != Ydb::Topic::CODEC_RAW - 1;
             if (isCompressed && !AppData()->FeatureFlags.GetTransferInternalDataDecompression()) {
                 const auto* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(proto.codec() + 1));
@@ -316,6 +347,8 @@ private:
     }
 
     STATEFN(StateWaitData) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix,
+            {"actorState", "StateWaitData"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPersQueue::TEvResponse, HandleOnWaitData);
 
@@ -339,7 +372,8 @@ private:
 }; // TLocalTopicPartitionReaderActor
 
 void TLocalProxyActor::Handle(TEvYdbProxy::TEvCreateTopicReaderRequest::TPtr& ev) {
-    LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"ev", ev->Get()->ToString()});
 
     auto args = std::move(ev->Get()->GetArgs());
     auto& settings = std::get<TEvYdbProxy::TTopicReaderSettings>(args);

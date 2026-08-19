@@ -499,6 +499,7 @@ public:
                 .NumSlots = pair.second.NumSlots,
                 .MaxSlots = equalSlots || location.Rack < 8 ? maxSlots : 2 * maxSlots,
                 .SlotSizeInUnits = pair.second.SlotSizeInUnits,
+                .SlotSizeInBytes = 0,
                 .Groups{g.begin(), g.end()},
                 .SpaceAvailable = 0,
                 .Operational = !nonoperationalDisks.contains(pair.first),
@@ -608,6 +609,15 @@ public:
     }
 };
 
+static TNodeLocation MakeTestLocation(ui32 nodeId, ui32 rackId = 0) {
+    NActorsInterconnect::TNodeLocation proto;
+    proto.SetDataCenter("1");
+    proto.SetModule("1");
+    proto.SetRack(ToString(rackId ? rackId : nodeId));
+    proto.SetUnit(ToString(nodeId));
+    return TNodeLocation(proto);
+}
+
 Y_UNIT_TEST_SUITE(TGroupMapperTest) {
 
     Y_UNIT_TEST(SimplestErasureNone) {
@@ -630,6 +640,394 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         Ctest << "group after allocation:" << Endl;
         context.DumpGroup(g1);
         context.DumpGroup(g2);
+    }
+
+    Y_UNIT_TEST(SlotSizeInBytesLimitsRequiredSpace) {
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+        UNIT_ASSERT(mapper.RegisterPDisk({
+            .PDiskId = TPDiskId(1, 1),
+            .Location = MakeTestLocation(1),
+            .Usable = true,
+            .NumSlots = 0,
+            .MaxSlots = 2,
+            .SlotSizeInUnits = 1,
+            .SlotSizeInBytes = 100,
+            .Groups{},
+            .SpaceAvailable = 1000,
+            .Operational = true,
+            .Decommitted = false,
+        }));
+
+        TGroupMapper::TGroupDefinition group;
+        TGroupMapperError error;
+        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 2, 150, false, TBridgePileId(), error), error.ErrorMessage);
+    }
+
+    Y_UNIT_TEST(PlacementSnapshotAppliesPDiskEligibilityAndSpacePolicies) {
+        auto canAllocate = [](TGroupMapper::TOptions options, bool ready, bool operational,
+                              NKikimrBlobStorage::TMaintenanceStatus::E maintenanceStatus) {
+            NKikimrBlobStorage::TPDiskMetrics metrics;
+            metrics.SetTotalSize(1000);
+            metrics.SetAvailableSize(300);
+
+            TGroupMapper::TPlacementSnapshot state;
+            state.PDisks.push_back({
+                .PDiskId = TPDiskId(1, 1),
+                .Location = MakeTestLocation(1),
+                .MaxSlots = 2,
+                .SlotSizeInUnits = 1,
+                .Space = TGroupMapper::CapturePDiskSpace(metrics),
+                .Operational = operational,
+                .MaintenanceStatus = maintenanceStatus,
+            });
+            state.Groups.push_back({
+                .GroupId = 10,
+                .MaxVDiskAllocatedSize = 250,
+            });
+            state.VSlots.push_back({
+                .VSlotId = TVSlotId(TPDiskId(1, 1), 1),
+                .PDiskId = TPDiskId(1, 1),
+                .GroupId = 10,
+                .Ready = ready,
+                .AllocatedSize = 100,
+                .SpaceUsed = 100,
+            });
+
+            TGroupMapper::TReassignmentRequest request;
+            request.GroupId = 1;
+            request.MinimumRequiredSpace = 200;
+            request.ExistingGroup = false;
+            auto geometry = TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1);
+            return TGroupMapper::PlanGroupReassignment(std::move(geometry), options, std::move(state),
+                                                       std::move(request)).Success;
+        };
+
+        const auto noMaintenance = NKikimrBlobStorage::TMaintenanceStatus::NO_REQUEST;
+        UNIT_ASSERT(!canAllocate({}, false, true, noMaintenance));
+        UNIT_ASSERT(canAllocate({}, true, true, noMaintenance));
+        UNIT_ASSERT(canAllocate({.IgnoreVSlotQuotaCheck = true}, false, true, noMaintenance));
+        UNIT_ASSERT(!canAllocate({.SettleOnlyOnOperationalDisks = true}, true, false, noMaintenance));
+        UNIT_ASSERT(!canAllocate({}, true, true, NKikimrBlobStorage::TMaintenanceStatus::NO_NEW_VDISKS));
+
+        auto getRejectedPDisk = [](bool isSelfHealReasonDecommit) {
+            TGroupMapper::TPlacementSnapshot state;
+            state.PDisks.push_back({
+                .PDiskId = TPDiskId(1, 1),
+                .Location = MakeTestLocation(1),
+                .MaxSlots = 1,
+                .SlotSizeInUnits = 1,
+                .Operational = true,
+                .DecommitStatus = NKikimrBlobStorage::DECOMMIT_REJECTED,
+            });
+
+            TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1),
+                                {.IsSelfHealReasonDecommit = isSelfHealReasonDecommit});
+            mapper.Populate(std::move(state));
+            return mapper.UnregisterPDisk(TPDiskId(1, 1));
+        };
+
+        const auto regularPDisk = getRejectedPDisk(false);
+        UNIT_ASSERT(regularPDisk.Usable);
+        UNIT_ASSERT(regularPDisk.Decommitted);
+
+        const auto selfHealPDisk = getRejectedPDisk(true);
+        UNIT_ASSERT(!selfHealPDisk.Usable);
+        UNIT_ASSERT(selfHealPDisk.Decommitted);
+    }
+
+    Y_UNIT_TEST(CapturesPDiskOperationalAndSpaceState) {
+        NKikimrBlobStorage::TPDiskMetrics metrics;
+
+        UNIT_ASSERT(TGroupMapper::IsPDiskOperational(true, nullptr));
+        UNIT_ASSERT(TGroupMapper::IsPDiskOperational(true, &metrics));
+        UNIT_ASSERT(!TGroupMapper::IsPDiskOperational(false, &metrics));
+
+        metrics.SetState(NKikimrBlobStorage::TPDiskState::Normal);
+        UNIT_ASSERT(TGroupMapper::IsPDiskOperational(true, &metrics));
+        metrics.SetState(NKikimrBlobStorage::TPDiskState::OpenFileError);
+        UNIT_ASSERT(!TGroupMapper::IsPDiskOperational(true, &metrics));
+
+        metrics.SetAvailableSize(800);
+        metrics.SetTotalSize(1000);
+        auto space = TGroupMapper::CapturePDiskSpace(metrics);
+        metrics.SetAvailableSize(100);
+        UNIT_ASSERT_VALUES_EQUAL(TGroupMapper::CalculateSpaceAvailable(space, NKikimrBlobStorage::TPDiskSpaceColor::GREEN, 150), 650);
+
+        metrics.SetEnforcedDynamicSlotSize(500);
+        space = TGroupMapper::CapturePDiskSpace(metrics);
+        UNIT_ASSERT_VALUES_EQUAL(TGroupMapper::CalculateSpaceAvailable(space, NKikimrBlobStorage::TPDiskSpaceColor::YELLOW, 150), 425);
+    }
+
+    Y_UNIT_TEST(ReassignmentRackScoreIgnoresUnusablePDisks) {
+        const TNodeLocation rackOne = MakeTestLocation(1, 1);
+        const TNodeLocation rackTwo = MakeTestLocation(2, 2);
+
+        TGroupMapper::TPlacementSnapshot state;
+        state.PDisks = {
+            {
+                .PDiskId = TPDiskId(1, 1),
+                .Location = rackOne,
+                .MaxSlots = 1,
+                .SlotSizeInUnits = 1,
+                .Operational = true,
+            },
+            {
+                .PDiskId = TPDiskId(2, 1),
+                .Location = rackTwo,
+                .MaxSlots = 2,
+                .SlotSizeInUnits = 1,
+                .Operational = true,
+            },
+            {
+                .PDiskId = TPDiskId(3, 1),
+                .Location = MakeTestLocation(3, 1),
+                .Usable = false,
+                .MaxSlots = 100,
+                .SlotSizeInUnits = 1,
+                .Operational = true,
+            },
+        };
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1),
+                            {.PreferLessOccupiedRack = true, .IgnoreVSlotQuotaCheck = true});
+        mapper.Populate(std::move(state));
+
+        const auto& slotTracker = mapper.GetPDiskSlotTracker();
+        UNIT_ASSERT_VALUES_EQUAL(slotTracker.GetFreeSlotsOnRack(rackOne.GetRackId()), 1);
+        UNIT_ASSERT_VALUES_EQUAL(slotTracker.GetFreeSlotsOnRack(rackTwo.GetRackId()), 2);
+
+        TGroupMapper::TReassignmentRequest request;
+        request.GroupId = 1;
+        request.ExistingGroup = false;
+        const auto outcome = mapper.PlanGroupReassignment(std::move(request));
+        UNIT_ASSERT_C(outcome.Success, outcome.Error.ErrorMessage);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Group[0][0][0], TPDiskId(2, 1));
+    }
+
+    Y_UNIT_TEST(PlacementBuilderBuildsTrackers) {
+        const TPDiskId pdiskId(1, 1);
+        const TVSlotId vslotId(pdiskId, 1);
+        const TNodeLocation rackOne = MakeTestLocation(1, 1);
+        const TNodeLocation rackTwo = MakeTestLocation(2, 2);
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1), {
+            .PreferLessOccupiedRack = true,
+            .WithAttentionToReplication = true,
+            .IgnoreVSlotQuotaCheck = true,
+        });
+        TGroupMapper::TPlacementBuilder builder(mapper);
+        builder.AddGroup({
+            .GroupId = 1,
+            .GroupGeneration = 1,
+            .GroupSizeInUnits = 3,
+            .MaxVDiskAllocatedSize = 100,
+        });
+        builder.AddPDisk({
+            .PDiskId = pdiskId,
+            .Location = rackOne,
+            .MaxSlots = 10,
+            .SlotSizeInUnits = 1,
+            .Operational = true,
+        });
+        builder.AddPDisk({
+            .PDiskId = TPDiskId(2, 1),
+            .Location = rackTwo,
+            .MaxSlots = 10,
+            .SlotSizeInUnits = 1,
+            .Operational = true,
+        });
+        builder.AddVSlot({
+            .VSlotId = vslotId,
+            .PDiskId = pdiskId,
+            .GroupId = 1,
+            .GroupGeneration = 1,
+            .VDiskId = TVDiskIdShort(0, 0, 0),
+            .Ready = false,
+            .Replicating = true,
+            .AllocatedSize = 100,
+            .SpaceUsed = 100,
+        });
+        builder.Finish();
+
+        const auto& tracker = mapper.GetPDiskSlotTracker();
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetFreeSlotsOnRack(rackOne.GetRackId()), 7);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetFreeSlotsOnRack(rackTwo.GetRackId()), 10);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetReplicatingVDisksOnNode(pdiskId.NodeId), 1);
+        UNIT_ASSERT_VALUES_EQUAL(tracker.GetReplicatingVDisksOnPDisk(pdiskId), 1);
+
+        TGroupMapper precomputedMapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1),
+                                       {.WithAttentionToReplication = true});
+        TGroupMapper::TPlacementBuilder precomputedBuilder(precomputedMapper);
+        TPDiskSlotTracker precomputedTracker;
+        precomputedTracker.AddReplicatingVSlot(pdiskId);
+        precomputedBuilder.SetPrecomputedReplicationTracker(std::move(precomputedTracker));
+        precomputedBuilder.AddVSlot({
+            .VSlotId = vslotId,
+            .PDiskId = pdiskId,
+            .Replicating = true,
+        });
+        precomputedBuilder.Finish();
+        const auto& resultingPrecomputedTracker = precomputedMapper.GetPDiskSlotTracker();
+        UNIT_ASSERT_VALUES_EQUAL(resultingPrecomputedTracker.GetReplicatingVDisksOnNode(pdiskId.NodeId), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resultingPrecomputedTracker.GetReplicatingVDisksOnPDisk(pdiskId), 1);
+
+        TGroupMapper::TReassignmentRequest request;
+        request.GroupId = 1;
+        request.GroupGeneration = 1;
+        request.VDisks.push_back({
+            .VDiskId = TVDiskIdShort(0, 0, 0),
+            .PDiskId = pdiskId,
+        });
+        const auto outcome = mapper.PlanGroupReassignment(std::move(request));
+        UNIT_ASSERT_C(outcome.Success, outcome.Error.ErrorMessage);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.RequiredSpace, 100);
+    }
+
+    Y_UNIT_TEST(ReassignmentDestroyedVSlotIsNotOccupiedByGroup) {
+        TGroupMapper::TPlacementSnapshot state;
+        state.PDisks.push_back({
+            .PDiskId = TPDiskId(1, 1),
+            .Location = MakeTestLocation(1),
+            .MaxSlots = 2,
+            .SlotSizeInUnits = 1,
+            .Operational = true,
+        });
+
+        state.VSlots.push_back({
+            .VSlotId = TVSlotId(TPDiskId(1, 1), 1),
+            .PDiskId = TPDiskId(1, 1),
+            .GroupId = 1,
+            .GroupGeneration = 1,
+            .VDiskId = TVDiskIdShort(0, 0, 0),
+            .OccupiedByGroup = false,
+            .Ready = true,
+        });
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+        mapper.Populate(std::move(state));
+        const auto pdisk = mapper.UnregisterPDisk(TPDiskId(1, 1));
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.NumSlots, 1);
+        UNIT_ASSERT(pdisk.Groups.empty());
+    }
+
+    Y_UNIT_TEST(ReassignmentPlannerAppliesTargetPolicies) {
+        TVector<TGroupMapper::TVDiskPlacement> disks{
+            {.AllocatedSize = 300},
+            {.AllocatedSize = 500, .Reassignment = TGroupMapper::TReplaceVDisk{}},
+        };
+        UNIT_ASSERT_VALUES_EQUAL(TGroupMapper::CalculateRequiredSpace(disks), 300);
+        const TVector<TGroupMapper::TVDiskPlacement> allReplacedDisks{disks.back()};
+        UNIT_ASSERT_VALUES_EQUAL(TGroupMapper::CalculateRequiredSpace(allReplacedDisks), Min<i64>());
+
+        auto reassign = [&](TGroupMapper::TVDiskReassignment reassignment, bool tryToRelocateLocallyFirst,
+                            ui32 secondLocalPDiskSlots = 0) {
+            TGroupMapper::TPlacementSnapshot snapshot;
+            auto addPDisk = [&](TPDiskId pdiskId, ui32 numSlots) {
+                snapshot.PDisks.push_back({
+                    .PDiskId = pdiskId,
+                    .Location = MakeTestLocation(pdiskId.NodeId),
+                    .NumSlots = numSlots,
+                    .MaxSlots = 2,
+                    .SlotSizeInUnits = 1,
+                    .Operational = true,
+                });
+            };
+            addPDisk(TPDiskId(1, 1), 1);
+            addPDisk(TPDiskId(1, 2), secondLocalPDiskSlots);
+            addPDisk(TPDiskId(2, 1), 0);
+            snapshot.VSlots.push_back({
+                .VSlotId = TVSlotId(TPDiskId(1, 1), 1),
+                .PDiskId = TPDiskId(1, 1),
+                .GroupId = 1,
+                .GroupGeneration = 1,
+                .CountedInNumSlots = false,
+                .AllocatedSize = 500,
+            });
+
+            TGroupMapper::TReassignmentRequest request;
+            request.GroupId = 1;
+            request.GroupGeneration = 1;
+            request.MinimumRequiredSpace = 200;
+            request.TryToRelocateLocallyFirst = tryToRelocateLocallyFirst;
+            request.VDisks.push_back({
+                .VDiskId = TVDiskIdShort(0, 0, 0),
+                .PDiskId = TPDiskId(1, 1),
+                .Reassignment = std::move(reassignment),
+            });
+
+            auto geometry = TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1);
+            auto outcome = TGroupMapper::PlanGroupReassignment(std::move(geometry), {.IgnoreVSlotQuotaCheck = true},
+                                                               std::move(snapshot), std::move(request));
+            UNIT_ASSERT_C(outcome.Success, outcome.Error.ErrorMessage);
+            UNIT_ASSERT(outcome.Error.ErrorMessage.empty());
+            UNIT_ASSERT_VALUES_EQUAL(outcome.RequiredSpace, 200);
+            return outcome.Group[0][0][0];
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(reassign(TGroupMapper::TReplaceVDisk{}, true), TPDiskId(1, 2));
+        UNIT_ASSERT_VALUES_EQUAL(reassign(TGroupMapper::TReplaceVDiskOnPDisk{TPDiskId(2, 1)}, true), TPDiskId(2, 1));
+        UNIT_ASSERT_VALUES_EQUAL(reassign(TGroupMapper::TReplaceVDisk{.RequireSameNode = true}, false), TPDiskId(1, 2));
+        UNIT_ASSERT_VALUES_EQUAL(reassign(TGroupMapper::TForceVDiskOnPDisk{TPDiskId(1, 2)}, false, 2), TPDiskId(1, 2));
+    }
+
+    Y_UNIT_TEST(ReassignmentRequiredSpaceFromUntouchedVDiskState) {
+        TGroupMapper::TPlacementSnapshot state;
+        auto addPDisk = [&](TPDiskId pdiskId, ui32 numSlots) {
+            state.PDisks.push_back({
+                .PDiskId = pdiskId,
+                .Location = MakeTestLocation(pdiskId.NodeId),
+                .NumSlots = numSlots,
+                .MaxSlots = 2,
+                .SlotSizeInUnits = 1,
+                .Operational = true,
+            });
+        };
+        addPDisk(TPDiskId(1, 1), 1);
+        addPDisk(TPDiskId(2, 1), 1);
+        addPDisk(TPDiskId(3, 1), 0);
+
+        state.VSlots = {
+            {
+                .VSlotId = TVSlotId(TPDiskId(1, 1), 1),
+                .PDiskId = TPDiskId(1, 1),
+                .GroupId = 1,
+                .GroupGeneration = 1,
+                .VDiskId = TVDiskIdShort(0, 0, 0),
+                .CountedInNumSlots = false,
+                .AllocatedSize = 500,
+            },
+            {
+                .VSlotId = TVSlotId(TPDiskId(2, 1), 1),
+                .PDiskId = TPDiskId(2, 1),
+                .GroupId = 1,
+                .GroupGeneration = 1,
+                .VDiskId = TVDiskIdShort(0, 1, 0),
+                .CountedInNumSlots = false,
+                .AllocatedSize = 100,
+            },
+        };
+
+        TGroupMapper::TReassignmentRequest request;
+        request.GroupId = 1;
+        request.GroupGeneration = 1;
+        request.VDisks = {
+            {
+                .VDiskId = TVDiskIdShort(0, 0, 0),
+                .PDiskId = TPDiskId(1, 1),
+            },
+            {
+                .VDiskId = TVDiskIdShort(0, 1, 0),
+                .PDiskId = TPDiskId(2, 1),
+                .Reassignment = TGroupMapper::TReplaceVDisk{},
+            },
+        };
+
+        auto geometry = TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 2, 1);
+        const auto outcome = TGroupMapper::PlanGroupReassignment(std::move(geometry), {.IgnoreVSlotQuotaCheck = true},
+                                                                 std::move(state), std::move(request));
+        UNIT_ASSERT_C(outcome.Success, outcome.Error.ErrorMessage);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.RequiredSpace, 500);
+        UNIT_ASSERT_VALUES_EQUAL(outcome.Group[0][1][0], TPDiskId(3, 1));
     }
 
     Y_UNIT_TEST(SimplestMirror3dc) {

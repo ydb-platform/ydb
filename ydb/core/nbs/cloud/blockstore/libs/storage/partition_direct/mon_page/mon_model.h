@@ -23,6 +23,16 @@ enum class EMonPage
     Overview,
     Dbg,
     LocalDb,
+    VChunk,
+    Latency,
+};
+
+enum class ELatencyPercentile
+{
+    P50,
+    P90,
+    P99,
+    Max,
 };
 
 struct TTabletInfo
@@ -36,6 +46,9 @@ struct TTabletInfo
 struct TFastPathServiceInfo
 {
     ui64 LsnCounter = 0;
+    // Minimum safe barrier across all DBGs from the last finished cleanup
+    // round; 0 until the first round finishes.
+    ui64 LastSafeBarrier = 0;
     size_t TotalVChunks = 0;
     size_t DbgCount = 0;
 };
@@ -48,6 +61,7 @@ struct THostSnapshot
     TInflightByOperation InflightByOperation{};
     THostStat::TErrorsInfo Errors;
     ui64 PBufferUsedSize = 0;
+    TLatencyByOperation LatencyByOperation{};
 };
 
 struct TConnectionSnapshot
@@ -65,6 +79,15 @@ struct TDbgSnapshot
     size_t VChunkCount = 0;
     TVector<THostSnapshot> Hosts;
     TVector<TConnectionSnapshot> Connections;
+    // OracleConfig.TimePredictionHistorySize for this DBG (0 => disabled).
+    size_t LatencyHistoryCapacity = 0;
+};
+
+struct TVChunkSnapshot
+{
+    TVChunkConfig VChunkConfig;
+    std::optional<ui64> SafeBarrier;
+    TString DirtyMapDump;
 };
 
 // Persisted tablet state (local DB). Protos are pre-dumped to text; an absent
@@ -91,6 +114,14 @@ struct TMonPageData
     std::optional<ui32> SelectedDbg;
     // Local DB tab.
     std::optional<TLocalDbContents> LocalDb;
+    // VChunk tab: the requested index (absent => only the input form) and the
+    // snapshot (absent => no such vchunk).
+    std::optional<ui32> SelectedVChunk;
+    std::optional<TVChunkSnapshot> VChunk;
+    // Latency tab: which percentile colors the heatmap / slot grid, and
+    // which operation filters the slot grid (absent => worst across ops).
+    ELatencyPercentile SelectedPercentile = ELatencyPercentile::P99;
+    std::optional<EOperation> SelectedLatencyOperation;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

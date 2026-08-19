@@ -260,6 +260,7 @@ struct Schema : NIceDb::Schema {
         struct SlotSizeInUnits                 : Column<19, NScheme::NTypeIds::Uint32> {};
         // struct InferPDiskSlotCountFromUnitSize : Column<20, NScheme::NTypeIds::Uint64> {};
         struct MaintenanceStatus               : Column<21, NScheme::NTypeIds::Utf8> {};
+        struct ExpectedSlotSize                : Column<22, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<NodeId, PDiskId>;
         using TColumns = TableColumns<
@@ -278,6 +279,7 @@ struct Schema : NIceDb::Schema {
             State,
             StatusChangeTimestamp,
             ExpectedSlotCount,
+            ExpectedSlotSize,
             NumActiveSlots,
             DecommitStatus,
             SlotSizeInUnits,
@@ -779,6 +781,7 @@ struct Schema : NIceDb::Schema {
         struct Action       : Column<7, NScheme::NTypeIds::Utf8> {};
         struct HasFullScan  : Column<8, NScheme::NTypeIds::Utf8> {};
         struct HasPath      : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct HasStream    : Column<10, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -789,7 +792,8 @@ struct Schema : NIceDb::Schema {
             HasAppName,
             Action,
             HasFullScan,
-            HasPath>;
+            HasPath,
+            HasStream>;
     };
 
     struct ShowCreate : Table<21> {
@@ -939,6 +943,38 @@ struct Schema : NIceDb::Schema {
             SuspendedUntil,
             LastExecutionId,
             PreviousExecutionIds>;
+    };
+
+    struct UdfModules : Table<27> {
+        struct Uid               : Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Md5               : Column<2, NScheme::NTypeIds::Utf8> {};
+        struct Name              : Column<3, NScheme::NTypeIds::Utf8> {};
+        struct ModuleType        : Column<4, NScheme::NTypeIds::Utf8> {};
+        struct Version           : Column<5, NScheme::NTypeIds::Uint64> {};
+        struct Size              : Column<6, NScheme::NTypeIds::Uint64> {};
+        struct ChunkCount        : Column<7, NScheme::NTypeIds::Uint64> {};
+        struct CompileStatus     : Column<8, NScheme::NTypeIds::Utf8> {};
+        struct CompileError      : Column<9, NScheme::NTypeIds::Utf8> {};
+        struct CreatedAt         : Column<10, NScheme::NTypeIds::Timestamp> {};
+        struct CompileStartedAt  : Column<11, NScheme::NTypeIds::Timestamp> {};
+        struct CompileFinishedAt : Column<12, NScheme::NTypeIds::Timestamp> {};
+        struct Manifest          : Column<13, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Uid>;
+        using TColumns = TableColumns<
+            Uid,
+            Md5,
+            Name,
+            ModuleType,
+            Version,
+            Size,
+            ChunkCount,
+            CompileStatus,
+            CompileError,
+            CreatedAt,
+            CompileStartedAt,
+            CompileFinishedAt,
+            Manifest>;
     };
 };
 

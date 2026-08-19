@@ -51,6 +51,7 @@ struct TFinishInfo {
 
     std::optional<Ydb::StatusIds::StatusCode> Status;
     NYql::TIssues Issues;
+    NYql::TIssues TransientIssues;
 };
 
 struct TEvRunScriptPrivate {

@@ -64,6 +64,7 @@ public:
     void SetFileStorage(TFileStoragePtr fileStorage);
     void SetUrlPreprocessing(IUrlPreprocessing::TPtr urlPreprocessing);
     void EnableRangeComputeFor();
+    void EnableAutoUseYqlLibs();
     void SetArrowResolver(IArrowResolver::TPtr arrowResolver);
     void SetUdfResolverLogfile(const TString& path);
     void AddRemoteLayersProvider(const TString& alias, NLayers::IRemoteLayerProviderPtr provider);
@@ -104,6 +105,7 @@ private:
     IUrlPreprocessing::TPtr UrlPreprocessing_;
     TString Runner_;
     bool EnableRangeComputeFor_ = false;
+    bool AutoUseYqlLibs_ = false;
     IArrowResolver::TPtr ArrowResolver_;
     TMaybe<TString> UdfResolverLogfile_;
     THashMap<TString, NLayers::IRemoteLayerProviderPtr> RemoteLayersProviders_;
@@ -403,6 +405,7 @@ private:
         TString sessionId,
         const TString& runner,
         bool enableRangeComputeFor,
+        bool autoUseYqlLibs,
         IArrowResolver::TPtr arrowResolver,
         EHiddenMode hiddenMode,
         const TQContext& qContext,

@@ -59,6 +59,32 @@ bool EnsurePayloadMatchesAlternative(const TExprNode& payloadNode, const TTypeAn
     return false;
 }
 
+const TTypeAnnotationNode* ResolveCommonVariantAlternativeType(const TExprNode& input, const TVariantExprType& variantType, TContext& ctx) {
+    if (variantType.GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+        auto tupleType = variantType.GetUnderlyingType()->Cast<TTupleExprType>();
+        auto firstType = tupleType->GetItems()[0];
+        for (size_t i = 1; i < tupleType->GetSize(); ++i) {
+            if (firstType != tupleType->GetItems()[i]) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input.Pos()), TStringBuilder()
+                    << "All Variant item types should be equal: " << GetTypeDiff(*firstType, *tupleType->GetItems()[i])));
+                return nullptr;
+            }
+        }
+        return firstType;
+    } else {
+        auto structType = variantType.GetUnderlyingType()->Cast<TStructExprType>();
+        auto firstType = structType->GetItems()[0]->GetItemType();
+        for (size_t i = 1; i < structType->GetSize(); ++i) {
+            if (firstType != structType->GetItems()[i]->GetItemType()) {
+                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input.Pos()), TStringBuilder()
+                    << "All Variant item types should be equal: " << GetTypeDiff(*firstType, *structType->GetItems()[i]->GetItemType())));
+                return nullptr;
+            }
+        }
+        return firstType;
+    }
+}
+
 } // namespace
 
 IGraphTransformer::TStatus AsScalarWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
@@ -499,6 +525,92 @@ IGraphTransformer::TStatus BlockVariantWrapper(const TExprNode::TPtr& input, TEx
     }
 
     input->SetTypeAnn(MakeBlockOrScalarType(variantType, payloadIsScalar, ctx.Expr));
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus BlockVariantItemWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto variantNode = input->Child(0);
+    if (!EnsureBlockOrScalarType(*variantNode, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    bool isScalar;
+    const TTypeAnnotationNode* itemType = GetBlockItemType(*variantNode->GetTypeAnn(), isScalar);
+
+    bool isOptional = itemType->GetKind() == ETypeAnnotationKind::Optional;
+    const TTypeAnnotationNode* innerItemType = isOptional ? itemType->Cast<TOptionalExprType>()->GetItemType() : itemType;
+    if (!EnsureVariantType(variantNode->Pos(), *innerItemType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    auto variantType = innerItemType->Cast<TVariantExprType>();
+
+    const TTypeAnnotationNode* alternativeType = ResolveCommonVariantAlternativeType(*input, *variantType, ctx);
+    if (!alternativeType) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (isOptional) {
+        alternativeType = ctx.Expr.MakeType<TOptionalExprType>(alternativeType);
+    }
+    input->SetTypeAnn(MakeBlockOrScalarType(alternativeType, isScalar, ctx.Expr));
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus BlockDynamicVariantWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 3, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto payloadNode = input->Child(0);
+    if (!EnsureBlockOrScalarType(*payloadNode, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto indexNode = input->Child(1);
+    if (!EnsureBlockOrScalarType(*indexNode, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (auto status = EnsureTypeRewrite(input->ChildRef(2), ctx.Expr); status != IGraphTransformer::TStatus::Ok) {
+        return status;
+    }
+    auto variantType = input->Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+    if (!EnsureVariantType(input->Child(2)->Pos(), *variantType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* alternativeType = ResolveCommonVariantAlternativeType(*input, *variantType->Cast<TVariantExprType>(), ctx);
+    if (!alternativeType) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool payloadIsScalar;
+    const TTypeAnnotationNode* blockPayloadItemType = GetBlockItemType(*payloadNode->GetTypeAnn(), payloadIsScalar);
+    if (!EnsurePayloadMatchesAlternative(*payloadNode, *blockPayloadItemType, *alternativeType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    bool indexIsScalar;
+    const TTypeAnnotationNode* blockIndexItemType = GetBlockItemType(*indexNode->GetTypeAnn(), indexIsScalar);
+    const TTypeAnnotationNode* indexDataType = blockIndexItemType;
+    if (indexDataType->GetKind() == ETypeAnnotationKind::Optional) {
+        indexDataType = indexDataType->Cast<TOptionalExprType>()->GetItemType();
+    }
+
+    const EDataSlot expectedIndexSlot = variantType->Cast<TVariantExprType>()->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple
+        ? EDataSlot::Uint32
+        : EDataSlot::Utf8;
+    if (!EnsureSpecificDataType(indexNode->Pos(), *indexDataType, expectedIndexSlot, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* resultType = ctx.Expr.MakeType<TOptionalExprType>(variantType);
+    input->SetTypeAnn(MakeBlockOrScalarType(resultType, payloadIsScalar && indexIsScalar, ctx.Expr));
     return IGraphTransformer::TStatus::Ok;
 }
 

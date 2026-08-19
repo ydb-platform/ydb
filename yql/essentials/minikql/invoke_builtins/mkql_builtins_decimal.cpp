@@ -1,14 +1,14 @@
 #include "mkql_builtins_decimal.h" // Y_IGNORE
 
-namespace NKikimr {
-namespace NMiniKQL {
-namespace NDecimal {
+#include <array>
+
+namespace NKikimr::NMiniKQL::NDecimal {
 #ifndef MKQL_DISABLE_CODEGEN
 
 ConstantInt* GenConstant(NYql::NDecimal::TInt128 value, LLVMContext& context) {
     const auto& pair = NYql::NDecimal::MakePair(value);
-    const uint64_t init[] = {pair.first, pair.second};
-    return ConstantInt::get(context, APInt(128, 2, init));
+    const std::array<uint64_t, 2> init = {pair.first, pair.second};
+    return ConstantInt::get(context, APInt(128, 2, init.data()));
 }
 
 template <bool IncludeBounds>
@@ -67,6 +67,4 @@ Value* GenIsNonComparable(Value* val, LLVMContext& context, BasicBlock* block) {
     return bad;
 }
 #endif
-} // namespace NDecimal
-} // namespace NMiniKQL
-} // namespace NKikimr
+} // namespace NKikimr::NMiniKQL::NDecimal

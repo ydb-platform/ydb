@@ -11,6 +11,8 @@
 
 namespace NKikimr::NRpcService {
 
+Ydb::StatusIds::StatusCode GrpcStatusToYdbStatus(grpc::StatusCode status);
+
 template<typename TResponse>
 class TPromiseWrapper {
 public:
@@ -261,11 +263,19 @@ public:
     void SetRuHeader(ui64) override {
     }
 
-    // Unimplemented methods
-    void ReplyWithRpcStatus(grpc::StatusCode, const TString&, const TString&) override {
-        ReplyWithYdbStatus(Ydb::StatusIds::GENERIC_ERROR);
+    void ReplyWithRpcStatus(grpc::StatusCode status, const TString& reason, const TString& details) override {
+        if (reason) {
+            TBase::IssueManager.RaiseIssue(NYql::TIssue(reason));
+        }
+
+        if (details) {
+            TBase::IssueManager.RaiseIssue(NYql::TIssue(TStringBuilder() << "gRPC Details: " << details));
+        }
+
+        ReplyWithYdbStatus(GrpcStatusToYdbStatus(status));
     }
 
+    // Unimplemented methods
     void SetStreamingNotify(NYdbGrpc::IRequestContextBase::TOnNextReply&&) override {
         Y_ABORT("Unimplemented for local rpc");
     }

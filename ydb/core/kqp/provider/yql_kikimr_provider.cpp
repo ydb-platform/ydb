@@ -986,6 +986,7 @@ constexpr auto ShowCreateSettingsMap = std::to_array<TShowCreateSettingMapping>(
     {"showCreateTable", "Table"},
     {"showCreateView", "View"},
     {"showCreateExternalDataSource", "ExternalDataSource"},
+    {"showCreateExternalTable", "ExternalTable"},
 });
 
 } // anonymous namespace

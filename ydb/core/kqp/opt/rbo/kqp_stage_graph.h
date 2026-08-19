@@ -31,6 +31,9 @@ struct TConnection: TSimpleRefCount<TConnection> {
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) = 0;
     template <typename T>
     NYql::TExprNode::TPtr BuildConnectionImpl(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
+    virtual TVector<TInfoUnit> GetUsedIUs() const {
+        return {};
+    }
     ui32 GetOutputIndex() const {
         return OutputIndex;
     }
@@ -76,6 +79,7 @@ struct TShuffleConnection: public TConnection {
     }
 
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual TVector<TInfoUnit> GetUsedIUs() const override;
     virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TInfoUnit> Keys;
@@ -90,6 +94,7 @@ struct TMergeConnection: public TConnection {
     }
 
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+    virtual TVector<TInfoUnit> GetUsedIUs() const override;
     virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TSortElement> Order;
@@ -100,6 +105,29 @@ struct TSourceConnection: public TConnection {
         : TConnection("Source", 0) {
     }
     virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+};
+
+struct TStreamLookupConnection: public TConnection {
+    TStreamLookupConnection(ui32 outputIndex, NYql::TExprNode::TPtr table, NYql::TExprNode::TPtr columns,
+                            NYql::TExprNode::TPtr inputType, NYql::TExprNode::TPtr settings)
+        : TConnection("StreamLookup", outputIndex)
+        , Table(table)
+        , Columns(columns)
+        , InputType(inputType)
+        , Settings(settings) {
+    }
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
+
+    // In join mode the input type describes the tuples that the physical conversion builds at the
+    // end of the input stage, so it can only be filled in once that expression exists.
+    void SetInputType(NYql::TExprNode::TPtr inputType) {
+        InputType = std::move(inputType);
+    }
+
+    NYql::TExprNode::TPtr Table;
+    NYql::TExprNode::TPtr Columns;
+    NYql::TExprNode::TPtr InputType;
+    NYql::TExprNode::TPtr Settings;
 };
 
 template <typename T>

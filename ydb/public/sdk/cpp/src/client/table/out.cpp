@@ -97,6 +97,9 @@ Y_DECLARE_OUT_SPEC(, NYdb::NTable::TFulltextIndexSettings::ETokenizer, stream, v
         case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Keyword:
             stream << "keyword";
             break;
+        case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Alphanumeric:
+            stream << "alphanumeric";
+            break;
         case NYdb::NTable::TFulltextIndexSettings::ETokenizer::Unspecified:
             stream << "unspecified";
             break;

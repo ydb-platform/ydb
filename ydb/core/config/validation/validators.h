@@ -54,6 +54,10 @@ EValidationResult ValidateMonitoringConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
 
+EValidationResult ValidateClientCertificateAuthorization(
+    const NKikimrConfig::TAppConfig& config,
+    std::vector<TString>& msg);
+
 EValidationResult ValidateDatabaseConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
@@ -62,6 +66,6 @@ EValidationResult ValidateConfig(
     const NKikimrConfig::TAppConfig& config,
     std::vector<TString>& msg);
 
-TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TDomainsConfig::TStateStorage& oldSSConfig, const NKikimrConfig::TDomainsConfig::TStateStorage& newSSConfig);
+TString ValidateStateStorageConfig(const char* name, const NKikimrConfig::TStateStorageConfig& oldSSConfig, const NKikimrConfig::TStateStorageConfig& newSSConfig);
 
 } // namespace NKikimr::NConfig

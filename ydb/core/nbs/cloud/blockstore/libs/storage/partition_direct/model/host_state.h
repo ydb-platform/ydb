@@ -33,7 +33,7 @@ public:
     [[nodiscard]] virtual ui64 GetHostPBufferUsedSize(
         THostIndex hostIndex) const = 0;
 
-    virtual void QueryAddHost() = 0;
+    virtual void QueryAddHost(THostIndex newHostIndex) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

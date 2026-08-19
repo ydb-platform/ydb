@@ -2,6 +2,7 @@
 import os
 import pytest
 import yatest
+import library.python.port_manager
 from ydb.tests.library.common.types import Erasure
 
 from ydb.tests.library.stress.fixtures import StressFixture
@@ -18,15 +19,16 @@ class TestYdbTestShardWorkload(StressFixture):
         )
 
     def test(self):
-        pool_name = list(self.cluster.default_channel_bindings.values())[0]
-        channels = f"{pool_name},{pool_name},{pool_name}"
+        port_manager = library.python.port_manager.PortManager()
+        tsserver_port = str(port_manager.get_port())
         mon_port = str(self.cluster.nodes[1].mon_port)
 
         yatest.common.execute([
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
             "--endpoint", self.endpoint,
             "--database", self.database,
+            "--path", "testshard_workload",
             "--duration", self.base_duration,
-            "--channels", channels,
             "--monitoring-port", mon_port,
+            "--tsserver-port", tsserver_port,
         ])

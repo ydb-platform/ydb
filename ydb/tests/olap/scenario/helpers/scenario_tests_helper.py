@@ -773,7 +773,7 @@ class ScenarioTestHelper:
 
     def get_volumes_columns(self, table_name: str, name_column: str) -> tuple[int, int]:
         path = table_name if table_name.startswith('/') else self.get_full_path(table_name)
-        query = f'''SELECT * FROM `{path}/.sys/primary_index_stats` WHERE Activity == 1'''
+        query = f'''SELECT SUM(RawBytes) AS RawBytes, SUM(BlobRangeSize) AS BlobRangeSize FROM `{path}/.sys/primary_index_stats` WHERE Activity == 1'''
         if (len(name_column)):
             query += f' AND EntityName = \"{name_column}\"'
         result_sets = self.execute_query(query)

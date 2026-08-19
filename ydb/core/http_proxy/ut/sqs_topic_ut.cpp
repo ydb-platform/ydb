@@ -1436,6 +1436,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 });
 
             const TVector<char> expectedFills = {'a', 'b', 'c'};
+            const TVector<ui64> expectedBaseOffsets = {0, 3, 6};
             size_t receivedCount = 0;
             while (receivedCount < 3) {
                 auto jsonReceived = ReceiveMessage({
@@ -1451,7 +1452,12 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                     UNIT_ASSERT_VALUES_EQUAL(
                         message["Attributes"]["BodyEncoding"].GetString(),
                         ToString(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH)));
-                    NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, expectedFills[receivedCount], dataSize);
+                    NKafka::NTest::AssertKafkaBatchPayload(
+                        Base64Decode(message["Body"].GetString()),
+                        3,
+                        expectedFills[receivedCount],
+                        dataSize,
+                        expectedBaseOffsets[receivedCount]);
                     ++receivedCount;
                 }
             }
@@ -1489,7 +1495,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto messageId = NKikimr::NSqsTopic::V1::DeserializeReceipt(receiptHandle);
             UNIT_ASSERT_C(messageId.has_value(), messageId.error());
 
-            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, 'a', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, 'a', dataSize, 0);
 
             const TString middleReceiptHandle = NKikimr::NSqsTopic::V1::SerializeReceipt({
                 .PartitionId = messageId->PartitionId,
@@ -1508,7 +1514,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"WaitTimeSeconds", 20},
             });
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
-            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(jsonReceived["Messages"][0]["Body"].GetString()), 3, 'a', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(jsonReceived["Messages"][0]["Body"].GetString()), 3, 'a', dataSize, 0);
 
             DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", jsonReceived["Messages"][0]["ReceiptHandle"].GetString()}});
 
@@ -2700,7 +2706,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         auto json = CreateQueue({
             {"QueueName", queueName},
-            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
         });
         UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
 
@@ -2713,11 +2719,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+            NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+            NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
 
         driver.Stop(true);
@@ -2747,11 +2753,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT
+            NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST
+            NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
 
         driver.Stop(true);
@@ -2781,11 +2787,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteSpeedMessagesPerSecond(),
-            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+            NPQ::FIFO_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
         );
         UNIT_ASSERT_VALUES_EQUAL(
             description.GetPartitionWriteBurstMessages(),
-            NPQ::DEFAULT_PARTITION_WRITE_SPEED_MESSAGES_PER_SECOND
+            NPQ::FIFO_PARTITION_WRITE_BURST_MESSAGES
         );
 
         driver.Stop(true);

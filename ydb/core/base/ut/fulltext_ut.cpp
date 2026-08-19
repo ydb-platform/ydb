@@ -2,6 +2,8 @@
 #include "fulltext_query.h"
 #include "table_index.h"
 
+#include <library/cpp/json/json_reader.h>
+#include <library/cpp/resource/resource.h>
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
 
@@ -293,6 +295,9 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced-dog_cat", "0123,456@"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced", "dog_cat", "0123,456"}));
+
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::ALPHANUMERIC);
         UNIT_ASSERT_VALUES_EQUAL(Analyze(text, analyzers), (TVector<TString>{"apple", "WaLLet", "spaced", "dog", "cat", "0123", "456"}));
 
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
@@ -533,6 +538,78 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
         UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("foo bar", analyzers),
             (TVector<T>{{"foo bar", false}}));
+    }
+
+    Y_UNIT_TEST(MidNumberChainedStandard) {
+        // Regression test: after consuming a MidNumber separator + digit, prev was
+        // incorrectly set to LETTER instead of DIGIT, so a second separator would not
+        // satisfy the (prev == DIGIT || prev == MID_DIGIT) guard and the token was cut short.
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+
+        // Two separators: "1,2,3" must be one token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3", analyzers), (TVector<TString>{"1,2,3"}));
+
+        // Mix of MidNumber chars (comma and period).
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2.3", analyzers), (TVector<TString>{"1,2.3"}));
+
+        // Trailing separator does not join — "1," ends at safeEnd before the comma.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,", analyzers), (TVector<TString>{"1,2"}));
+
+        // Longer chain.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3,4,5", analyzers), (TVector<TString>{"1,2,3,4,5"}));
+
+        // Multiple tokens separated by whitespace — each chained number is its own token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3 4,5,6", analyzers), (TVector<TString>{"1,2,3", "4,5,6"}));
+
+        // Mixed: a word token followed by a chained number token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("price 1,234,567", analyzers), (TVector<TString>{"price", "1,234,567"}));
+
+        // Chained number token followed by a letter token.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2,3 end", analyzers), (TVector<TString>{"1,2,3", "end"}));
+
+        // Punctuation breaks tokens: "1,2.foo" — the period before a letter is MidLetter territory,
+        // but here it follows digits so the chain stops at "1,2" and "foo" is separate.
+        UNIT_ASSERT_VALUES_EQUAL(Analyze("1,2.foo", analyzers), (TVector<TString>{"1,2", "foo"}));
+    }
+
+    Y_UNIT_TEST(WordBreakTest) {
+        // Generated from
+        // http://www.unicode.org/Public/12.1.0/ucd/auxiliary/WordBreakTest.txt
+        // and
+        // http://www.unicode.org/Public/12.1.0/ucd/auxiliary/WordBreakProperty.txt
+        TString tests = NResource::Find("word_break_test.json");
+        NJson::TJsonValue out;
+        ReadJsonTree(tests, &out, true);
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+        int ok = 0, failed = 0;
+        for (auto& test: out.GetArray()) {
+            TString in = test["input"].GetString();
+            TVector<TString> expected;
+            for (auto& token: test["tokens"].GetArray()) {
+                expected.push_back(token.GetString());
+            }
+            TVector<TString> out = Analyze(in, analyzers);
+            if (out != expected) {
+                Cerr << "Input: " << in << "\nTokens:";
+                for (auto& token: out) {
+                    Cerr << " " << token;
+                }
+                Cerr << "\nExpected:";
+                for (auto& token: expected) {
+                    Cerr << " " << token;
+                }
+                Cerr << "\n\n";
+                failed++;
+            } else {
+                ok++;
+            }
+        }
+        if (failed > 0) {
+            Cerr << "Ok " << ok << "/" << (ok+failed) << " tests\n";
+        }
+        UNIT_ASSERT(!failed);
     }
 }
 

@@ -1,12 +1,16 @@
 import array
 import asyncio
+import logging
 import struct
 import sys
 from collections.abc import Callable, Generator, MutableSequence, Sequence
+from io import IOBase
 from typing import Any
 
 from clickhouse_connect.driver.exceptions import DataError, ProgrammingError, StreamClosedError
 from clickhouse_connect.driver.types import Closable
+
+logger = logging.getLogger(__name__)
 
 must_swap = sys.byteorder == "big"
 int_size = array.array("i").itemsize
@@ -102,12 +106,52 @@ def decimal_size(prec: int):
 
 
 def unescape_identifier(x: str) -> str:
-    if x.startswith("`") and x.endswith("`"):
-        return x[1:-1]
-    return x
+    """
+    Remove backtick quoting from a ClickHouse identifier, including compound
+    identifiers such as `directory`.`id` (the wire form of a Nested sub-column),
+    which normalizes to directory.id. Dots outside of backticks are treated as
+    separators between identifier parts, while dots inside backticks are kept.
+
+    Inside a quoted part the escapes produced by quote_identifier are reversed:
+    a doubled backtick and a backslash-escaped character each yield the single
+    literal character they encode, so both `a``b` and `a\\`b` normalize to a`b.
+    """
+    parts = []
+    buf = ""
+    in_quote = False
+    i = 0
+    length = len(x)
+    while i < length:
+        ch = x[i]
+        if in_quote:
+            if ch == "`":
+                # A doubled backtick is an escaped literal backtick; a lone
+                # backtick closes the quoted part.
+                if i + 1 < length and x[i + 1] == "`":
+                    buf += "`"
+                    i += 2
+                    continue
+                in_quote = False
+            elif ch == "\\" and i + 1 < length:
+                # A backslash escapes the next character (for example \` or \\).
+                buf += x[i + 1]
+                i += 2
+                continue
+            else:
+                buf += ch
+        elif ch == "`":
+            in_quote = True
+        elif ch == ".":
+            parts.append(buf)
+            buf = ""
+        else:
+            buf += ch
+        i += 1
+    parts.append(buf)
+    return ".".join(parts)
 
 
-def dict_copy(source: dict = None, update: dict | None = None) -> dict:
+def dict_copy(source: dict | None = None, update: dict | None = None) -> dict:
     copy = source.copy() if source else {}
     if update:
         copy.update(update)
@@ -136,6 +180,30 @@ def coerce_bool(val: str | bool | None) -> bool:
     return val is True or (isinstance(val, str) and val.lower() in ("true", "1", "y", "yes"))
 
 
+def version_at_least(server_version: str | None, required_version: str) -> bool:
+    """
+    Determine whether server_version is at least required_version.
+    Non-numeric version parts are ignored so Altinity Stable versions
+    like 22.8.15.25.altinitystable compare correctly.
+    """
+    try:
+        server_parts = [int(x) for x in (server_version or "").split(".") if x.isnumeric()]
+        server_parts.extend([0] * (4 - len(server_parts)))
+        required_parts = [int(x) for x in required_version.split(".")]
+        required_parts.extend([0] * (4 - len(required_parts)))
+    except ValueError:
+        logger.warning(
+            "Server %s or requested version %s does not match format of numbers separated by dots", server_version, required_version
+        )
+        return False
+    for server_part, required_part in zip(server_parts, required_parts):
+        if server_part > required_part:
+            return True
+        if server_part < required_part:
+            return False
+    return True
+
+
 def first_value(column: Sequence, nullable: bool = True):
     if nullable:
         return next((x for x in column if x is not None), None)
@@ -153,10 +221,13 @@ class SliceView(Sequence):
 
     slots = ("_source", "_range")
 
+    _source: Sequence
+    _range: range
+
     def __init__(self, source: Sequence, source_slice: slice | None = None):
         if isinstance(source, SliceView):
             self._source = source._source
-            self._range = source._range[source_slice]
+            self._range = source._range if source_slice is None else source._range[source_slice]
         else:
             self._source = source
             if source_slice is None:
@@ -200,7 +271,7 @@ class StreamContext:
 
     __slots__ = "source", "gen", "_in_context"
 
-    def __init__(self, source: Closable, gen: Generator):
+    def __init__(self, source: Closable | IOBase, gen: Generator):
         self.source = source
         self.gen = gen
         self._in_context = False

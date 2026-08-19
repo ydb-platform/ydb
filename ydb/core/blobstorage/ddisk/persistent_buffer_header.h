@@ -73,9 +73,21 @@ namespace NKikimr::NDDisk {
         static constexpr ui32 MaxSectorsPerBufferRecord = 128;
         static constexpr ui32 MaxSectorsPerPackBufferRecord = 8;
 
+        enum EFlags : ui32 {
+            NONE = 0,
+            // When set, a ui64 payload checksum (sender-computed, unsalted XXH3-64 per MinSectorSize
+            // block - see CalculatePayloadChecksums) immediately follows this record's
+            // TPersistentBufferSectorInfo[] location array, one entry per data sector, same order.
+            // Opt-in per record: only present when the write that produced it carried sender-supplied
+            // checksums (TEvWritePersistentBuffer.Checksums). Legacy/internal records without checksums
+            // have this flag clear (the field was always zero-initialized via the full-sector memset
+            // that precedes header assembly, so old on-disk records are unaffected by this rename).
+            HAS_PAYLOAD_CHECKSUMS = 1,
+        };
+
         ui64 TabletId;
         ui32 Generation;
-        ui32 Reserved1;
+        ui32 Flags;
         ui64 VChunkIndex;
         ui32 OffsetInBytes;
         ui32 Size;
@@ -83,8 +95,10 @@ namespace NKikimr::NDDisk {
     };
 
     static_assert(sizeof(TPersistentBufferLsnRecordHeader) <= DataAlignment);
+    // Worst case: a single record spanning MaxSectorsPerBufferRecord sectors, all carrying a
+    // persisted payload checksum.
     static_assert(DataAlignment >= sizeof(TPersistentBufferHeader) + sizeof(TPersistentBufferLsnRecordHeader)
-        + TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord * sizeof(TPersistentBufferSectorInfo)
+        + TPersistentBufferLsnRecordHeader::MaxSectorsPerBufferRecord * (sizeof(TPersistentBufferSectorInfo) + sizeof(ui64))
     );
 #pragma pack(pop)
 }

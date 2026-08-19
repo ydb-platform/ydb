@@ -70,6 +70,7 @@ def _process_hyperlink(
     fillchar: str,
     tabsize: int,
     ambiguous_width: int,
+    term_program: bool | str,
     control_codes: Literal['parse', 'strict', 'ignore'],
     *,
     params: HyperlinkParams,
@@ -82,7 +83,7 @@ def _process_hyperlink(
     Finds the matching close sequence, measures the inner text width, and determines whether the
     hyperlink is empty, outside the clip window, or visible (requiring inner-text clipping).
     """
-    # pylint: disable=too-many-locals,too-many-positional-arguments
+    # pylint: disable=too-many-locals,too-many-positional-arguments,too-many-arguments
     close_start, close_end = Hyperlink.find_close(text, match_end)
     if (close_start, close_end) == (-1, -1):
         return _HyperlinkResult(_HyperlinkAction.NO_CLOSE)
@@ -90,6 +91,7 @@ def _process_hyperlink(
     inner_width = width(
         inner_text, control_codes=control_codes,
         tabsize=tabsize, ambiguous_width=ambiguous_width,
+        term_program=term_program,
     )
 
     if inner_width == 0:
@@ -108,6 +110,7 @@ def _process_hyperlink(
         inner_text, inner_clip_start, inner_clip_end,
         fillchar=fillchar, tabsize=tabsize,
         ambiguous_width=ambiguous_width,
+        term_program=term_program,
         propagate_sgr=False,
         control_codes=control_codes,
     )
@@ -115,6 +118,7 @@ def _process_hyperlink(
     clipped_width = width(
         clipped_inner, control_codes=control_codes,
         tabsize=tabsize, ambiguous_width=ambiguous_width,
+        term_program=term_program,
     )
 
     return _HyperlinkResult(
@@ -191,6 +195,7 @@ def _clip_simple(
     *,
     propagate_sgr: bool,
     ambiguous_width: int,
+    term_program: bool | str,
     fillchar: str,
     tabsize: int,
     strict: bool,
@@ -253,6 +258,7 @@ def _clip_simple(
             if hl_state := HyperlinkParams.parse(m.group()):
                 r = _process_hyperlink(
                     text, start, end, fillchar, tabsize, ambiguous_width,
+                    term_program,
                     control_codes,
                     params=hl_state, match_end=m.end(), col=col,
                 )
@@ -296,6 +302,7 @@ def _clip_simple(
                         ts_parts.append(s)
                     col = _text_sizing_clip(
                         ts, col, start, end, fillchar, ambiguous_width,
+                        term_program,
                         _ts_write)
                     output.extend(ts_parts)
                     if propagate_sgr and captured_style is None:
@@ -334,7 +341,8 @@ def _clip_simple(
             continue
 
         grapheme = next(iter_graphemes(text, start=idx))
-        grapheme_w = width(grapheme, ambiguous_width=ambiguous_width)
+        grapheme_w = width(grapheme, ambiguous_width=ambiguous_width,
+                           term_program=term_program)
 
         # Emit grapheme or fillchar depending on visibility within clip window.
         if grapheme_w == 0:
@@ -362,6 +370,7 @@ def _text_sizing_clip(
     end: int,
     fillchar: str,
     ambiguous_width: int,
+    term_program: bool | str,
     write_cells: Callable[[str, int, int], None],
 ) -> int:
     """
@@ -394,7 +403,9 @@ def _text_sizing_clip(
             units.append(('', scale))
     else:
         for g in iter_graphemes(ts.text):
-            units.append((g, width(g, ambiguous_width=ambiguous_width) * scale))
+            units.append(
+                (g, width(g, ambiguous_width=ambiguous_width,
+                          term_program=term_program) * scale))
 
     pending_units: list[tuple[str, int]] = []
 
@@ -447,6 +458,7 @@ def _clip_painter(
     *,
     propagate_sgr: bool,
     ambiguous_width: int,
+    term_program: bool | str,
     fillchar: str,
     tabsize: int,
     strict: bool,
@@ -527,6 +539,7 @@ def _clip_painter(
             if hl_state := HyperlinkParams.parse(m.group()):
                 r = _process_hyperlink(
                     text, start, end, fillchar, tabsize, ambiguous_width,
+                    term_program,
                     control_codes,
                     params=hl_state, match_end=m.end(), col=col,
                 )
@@ -565,6 +578,7 @@ def _clip_painter(
                     ts_text, ts_term)
                 col = _text_sizing_clip(
                     ts, col, start, end, fillchar, ambiguous_width,
+                    term_program,
                     _write_cells)
                 if propagate_sgr and captured_style is None:
                     captured_style = current_style
@@ -605,7 +619,9 @@ def _clip_painter(
                         f"{n_backward} cells left from column {col}, "
                         f"exceeding string start"
                     )
-                col = max(0, col - n_backward)
+                col -= n_backward
+                if col < 0:
+                    col = 0
                 idx = m.end()
                 continue
 
@@ -648,7 +664,8 @@ def _clip_painter(
 
         # Grapheme cluster.
         grapheme = next(iter_graphemes(text, start=idx))
-        grapheme_w = width(grapheme, ambiguous_width=ambiguous_width)
+        grapheme_w = width(grapheme, ambiguous_width=ambiguous_width,
+                           term_program=term_program)
 
         # Emit grapheme or fillchar depending on visibility within clip window.
         if grapheme_w == 0:
@@ -681,6 +698,7 @@ def clip(
     propagate_sgr: bool = True,
     control_codes: Literal['parse', 'strict', 'ignore'] = 'parse',
     overtyping: Optional[bool] = None,
+    term_program: bool | str = False,
 ) -> str:
     r"""
     Clip text to display columns (start, end) while preserving all terminal sequences.
@@ -736,6 +754,13 @@ def clip(
         performance when the caller knows *text* contains no cursor movement
         characters.  Set to ``True`` to force the painter's algorithm (useful
         for testing).  Has no effect when ``control_codes='ignore'``.
+    :param term_program: Terminal software identifier for table correction.
+        ``False`` (default) disables override lookup.  ``True`` reads the
+        ``TERM_PROGRAM`` or ``TERM`` environment variable for auto-detection.
+        Accepts a canonical terminal name matching :func:`list_term_programs`,
+        such as from XTVERSION_, ENQ_, or ``TERM_PROGRAM``.
+
+        .. versionadded:: 0.8.0
 
     :returns: Substring of ``text`` spanning display columns (start, end),
         with all terminal sequences preserved and wide characters at boundaries
@@ -802,6 +827,7 @@ def clip(
         end=end,
         propagate_sgr=propagate_sgr,
         ambiguous_width=ambiguous_width,
+        term_program=term_program,
         fillchar=fillchar,
         tabsize=tabsize,
         strict=(control_codes == 'strict'),

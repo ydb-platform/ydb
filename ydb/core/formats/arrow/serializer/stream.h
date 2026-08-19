@@ -9,17 +9,19 @@
 
 namespace NKikimr::NArrow::NSerialization {
 
-// Arrow internally keeps references to Buffer objects with the data
-// This helper class implements arrow::Buffer over TString that owns
-// the actual memory
-// Its use for no-compression mode, where RecordBatch dont own memory
+// Arrow internally keeps references to Buffer objects with the data.
+// This helper owns a TString and exposes its memory as an arrow::Buffer
+// (needed for no-compression mode, where RecordBatch may reference input
+// memory instead of copying into the MemoryPool).
 class TBufferOverString: public arrow::Buffer {
     TString Str;
 public:
     explicit TBufferOverString(TString str)
-        : arrow::Buffer((const unsigned char*)str.data(), str.size())
-        , Str(str) {
-        Y_ABORT_UNLESS(data() == (const unsigned char*)Str.data());
+        : arrow::Buffer(static_cast<const uint8_t*>(nullptr), 0)
+        , Str(std::move(str)) {
+        data_ = reinterpret_cast<const uint8_t*>(Str.data());
+        size_ = static_cast<int64_t>(Str.size());
+        capacity_ = size_;
     }
 };
 

@@ -3,13 +3,18 @@ import doctest
 import unittest
 import decimal
 import inspect
-from asyncio import get_event_loop
+import functools
+import asyncio
 from collections import defaultdict, ChainMap, abc as c
 from decorator import dispatch_on, contextmanager, decorator
 try:
     from . import documentation as doc  # good with pytest
 except ImportError:
     import documentation as doc  # good with `python src/tests/test.py`
+from typing import TYPE_CHECKING  # introduced in 3.5
+if TYPE_CHECKING:  # only inside mypy
+    from datetime import date
+PYVER = sys.version_info[:2]
 
 
 @contextmanager
@@ -30,7 +35,7 @@ async def before_after(coro, *args, **kwargs):
 
 @decorator
 def coro_to_func(coro, *args, **kw):
-    return get_event_loop().run_until_complete(coro(*args, **kw))
+    return asyncio.run(coro(*args, **kw))
 
 
 class CoroutineTestCase(unittest.TestCase):
@@ -39,7 +44,7 @@ class CoroutineTestCase(unittest.TestCase):
         async def coro(x):
             return x
         self.assertTrue(inspect.iscoroutinefunction(coro))
-        out = get_event_loop().run_until_complete(coro('x'))
+        out = asyncio.run(coro('x'))
         self.assertEqual(out, '<before>x<after>')
 
     def test_coro_to_func(self):
@@ -507,6 +512,28 @@ class TestSingleDispatch(unittest.TestCase):
         # There is no preference for registered versus inferred ABCs.
         with assertRaises(RuntimeError):
             h(u)
+
+
+@decorator
+def partial_before_after(func, *args, **kwargs):
+    return "<before>" + func(*args, **kwargs) + "<after>"
+
+
+class PartialTestCase(unittest.TestCase):
+    def test_before_after(self):
+        def origin_func(x, y):
+            return x + y
+        _func = functools.partial(origin_func, "x")
+        partial_func = partial_before_after(_func)
+        out = partial_func("y")
+        self.assertEqual(out, '<before>xy<after>')
+
+
+if PYVER >= (3, 14):
+    # testing forward references in python 3.14+
+    @decorator
+    def get_dob() -> date:
+        pass
 
 
 if __name__ == '__main__':

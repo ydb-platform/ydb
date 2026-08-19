@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: aiohappyeyeballs
-Version: 2.6.2
+Version: 2.7.1
 Summary: Happy Eyeballs for asyncio
 License: PSF-2.0
 License-File: LICENSE
@@ -17,6 +17,7 @@ Classifier: Programming Language :: Python :: 3.10
 Classifier: Programming Language :: Python :: 3.11
 Classifier: Programming Language :: Python :: 3.12
 Classifier: Programming Language :: Python :: 3.13
+Classifier: Programming Language :: Python :: 3.14
 Classifier: License :: OSI Approved :: Python Software Foundation License
 Project-URL: Bug Tracker, https://github.com/aio-libs/aiohappyeyeballs/issues
 Project-URL: Changelog, https://github.com/aio-libs/aiohappyeyeballs/blob/main/CHANGELOG.md

@@ -21,6 +21,12 @@ namespace NKikimr {
             : Func(std::move(func))
         { }
 
+        ~TWorkerThread() override {
+            // It is essential to join here, because the spawned thread may access Func
+            // after the destructor of this object if not joined.
+            Join();
+        }
+
         double GetTime() const {
             return Time;
         }

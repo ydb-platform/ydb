@@ -412,10 +412,9 @@ void TFiber::ReleaseFiber(TFiber* fiber)
 void TFiber::SetRunning()
 {
     if (auto delay = TFiberBase::SetRunning()) {
-        YT_LOG_WARNING(
-            "Fiber execution was delayed due to introspection (FiberId: %x, Delay: %v)",
-            GetFiberId(),
-            *delay);
+        YT_TLOG_WARNING("Fiber execution was delayed due to introspection")
+            .WithFormat("FiberId", "%x", GetFiberId())
+            .With("Delay", *delay);
     }
 }
 

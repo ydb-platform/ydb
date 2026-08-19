@@ -154,6 +154,485 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexesCount(0), NLs::PathVersionEqual(8)});
     }
 
+    Y_UNIT_TEST(RebuildVectorIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "data"      Type: "String" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Build initial vector index
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
+            {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+
+        // Write more data
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 200, 400);
+
+        // Rebuild the same index
+        ui64 rebuildIndexTx = ++txId;
+        TestRebuildVectorIndex(runtime, rebuildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, rebuildIndexTx, tenantSchemeShard);
+
+        auto rebuildOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(rebuildOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
+            {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+    }
+
+    Y_UNIT_TEST(RebuildVectorIndexPreservesDataColumns) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "data"      Type: "String" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Build initial vector index with a covered data column
+        ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table",
+            TBuildIndexConfig{
+                "index1", NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, {"embedding"}, {"value"}, {}
+            });
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // The freshly built index must expose the covered data column
+        {
+            auto describe = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+            const auto& dataColumns = describe.GetPathDescription().GetTableIndex().GetDataColumnNames();
+            UNIT_ASSERT_VALUES_EQUAL(dataColumns.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(dataColumns[0], "value");
+        }
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+
+        // Write more data
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 200, 400);
+
+        // Rebuild the index specifying only index columns (no data columns).
+        // The existing covered data column must be inherited, not silently dropped.
+        ui64 rebuildIndexTx = ++txId;
+        TestRebuildVectorIndex(runtime, rebuildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, rebuildIndexTx, tenantSchemeShard);
+
+        auto rebuildOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(rebuildOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // The rebuilt index must still expose the covered data column
+        {
+            auto describe = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+            TestDescribeResult(describe,
+                {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+            const auto& dataColumns = describe.GetPathDescription().GetTableIndex().GetDataColumnNames();
+            UNIT_ASSERT_VALUES_EQUAL(dataColumns.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(dataColumns[0], "value");
+        }
+    }
+
+    Y_UNIT_TEST(RebuildVectorIndexOverrideSettings) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "data"      Type: "String" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Build initial vector index
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // Remember auto-detected settings from describe
+        auto describeResult = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+        const auto& origSettings = describeResult.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+        const auto origMetric = origSettings.settings().metric();
+        const auto origVectorType = origSettings.settings().vector_type();
+        const auto origVectorDimension = origSettings.settings().vector_dimension();
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+
+        // Rebuild with overridden clusters and levels
+        {
+            ui64 rebuildTx = ++txId;
+
+            Ydb::Table::TableIndex index;
+            index.set_name("index1");
+            auto* vectorSettings = index.mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+            vectorSettings->set_clusters(100);
+            vectorSettings->set_levels(1);
+
+            NKikimrIndexBuilder::TIndexBuildSettings settings;
+            settings.set_source_path("/MyRoot/ServerLessDB/Table");
+            settings.MutableScanSettings()->SetMaxBatchRows(1);
+            settings.set_max_shards_in_flight(2);
+            settings.set_is_rebuild(true);
+            *settings.mutable_index() = index;
+
+            auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, tenantSchemeShard, sender, new TEvIndexBuilder::TEvCreateRequest(rebuildTx, "/MyRoot/ServerLessDB", std::move(settings)));
+
+            TAutoPtr<IEventHandle> handle;
+            auto* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+                "rebuild with overridden settings failed: " << event->Record.GetIssues());
+
+            env.TestWaitNotification(runtime, rebuildTx, tenantSchemeShard);
+
+            auto rebuildOp = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildTx);
+            UNIT_ASSERT_VALUES_EQUAL(rebuildOp.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+            // Verify clusters and levels changed, but metric/vector_type/dimension preserved
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
+                {NLs::PathExist,
+                 NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+                 NLs::KMeansTreeDescription(origMetric, origVectorType, origVectorDimension, 100, 1)});
+
+            TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildTx);
+        }
+    }
+
+    Y_UNIT_TEST(RebuildPrefixedVectorIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "data"      Type: "String" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Build initial prefixed vector index on (data, embedding)
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"data", "embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        // Remember auto-detected settings
+        auto describeResult = DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true);
+        const auto& origSettings = describeResult.GetPathDescription().GetTableIndex().GetVectorIndexKmeansTreeDescription().GetSettings();
+        const auto origMetric = origSettings.settings().metric();
+        const auto origVectorType = origSettings.settings().vector_type();
+        const auto origVectorDimension = origSettings.settings().vector_dimension();
+
+        // Verify prefixed: should have 3 impl tables (level + posting + prefix)
+        TestDescribeResult(describeResult,
+            {NLs::PathExist,
+             NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+             NLs::IndexKeys({"data", "embedding"})});
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+
+        // Write more data
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 200, 400);
+
+        // Rebuild the prefixed index with overridden clusters and levels
+        {
+            ui64 rebuildTx = ++txId;
+
+            Ydb::Table::TableIndex index;
+            index.set_name("index1");
+            index.add_index_columns("data");
+            index.add_index_columns("embedding");
+            auto* vectorSettings = index.mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+            vectorSettings->set_clusters(100);
+            vectorSettings->set_levels(1);
+
+            NKikimrIndexBuilder::TIndexBuildSettings settings;
+            settings.set_source_path("/MyRoot/ServerLessDB/Table");
+            settings.MutableScanSettings()->SetMaxBatchRows(1);
+            settings.set_max_shards_in_flight(2);
+            settings.set_is_rebuild(true);
+            *settings.mutable_index() = index;
+
+            auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, tenantSchemeShard, sender, new TEvIndexBuilder::TEvCreateRequest(rebuildTx, "/MyRoot/ServerLessDB", std::move(settings)));
+
+            TAutoPtr<IEventHandle> handle;
+            auto* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+            UNIT_ASSERT(event);
+            UNIT_ASSERT_VALUES_EQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+                "rebuild prefixed index failed: " << event->Record.GetIssues());
+
+            env.TestWaitNotification(runtime, rebuildTx, tenantSchemeShard);
+
+            auto rebuildOp = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildTx);
+            UNIT_ASSERT_VALUES_EQUAL(rebuildOp.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+            // Verify settings changed, vector settings preserved
+            TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
+                {NLs::PathExist,
+                 NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+                 NLs::IndexKeys({"data", "embedding"}),
+                 NLs::KMeansTreeDescription(origMetric, origVectorType, origVectorDimension, 100, 1)});
+
+            TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", rebuildTx);
+        }
+    }
+
+    Y_UNIT_TEST(RebuildVectorIndexRejectVectorSettingsChange) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "data"      Type: "String" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Build initial vector index (will auto-detect as DISTANCE_COSINE, VECTOR_TYPE_UINT8, dim=4)
+        ui64 buildIndexTx = ++txId;
+        TestBuildVectorIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "index1", {"embedding"});
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+
+        auto sendRebuild = [&](std::function<void(Ydb::Table::KMeansTreeSettings&)> configure) {
+            ui64 rebuildTx = ++txId;
+
+            Ydb::Table::TableIndex index;
+            index.set_name("index1");
+            auto* vectorSettings = index.mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+            configure(*vectorSettings);
+
+            NKikimrIndexBuilder::TIndexBuildSettings settings;
+            settings.set_source_path("/MyRoot/ServerLessDB/Table");
+            settings.MutableScanSettings()->SetMaxBatchRows(1);
+            settings.set_max_shards_in_flight(2);
+            settings.set_is_rebuild(true);
+            *settings.mutable_index() = index;
+
+            auto sender = runtime.AllocateEdgeActor();
+            ForwardToTablet(runtime, tenantSchemeShard, sender, new TEvIndexBuilder::TEvCreateRequest(rebuildTx, "/MyRoot/ServerLessDB", std::move(settings)));
+
+            TAutoPtr<IEventHandle> handle;
+            auto* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+            UNIT_ASSERT(event);
+            return event->Record.GetStatus();
+        };
+
+        // Reject: change metric
+        UNIT_ASSERT_VALUES_EQUAL(sendRebuild([](auto& s) {
+            s.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_MANHATTAN);
+        }), Ydb::StatusIds::BAD_REQUEST);
+
+        // Reject: change vector_type
+        UNIT_ASSERT_VALUES_EQUAL(sendRebuild([](auto& s) {
+            s.mutable_settings()->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+        }), Ydb::StatusIds::BAD_REQUEST);
+
+        // Reject: change vector_dimension
+        UNIT_ASSERT_VALUES_EQUAL(sendRebuild([](auto& s) {
+            s.mutable_settings()->set_vector_dimension(128);
+        }), Ydb::StatusIds::BAD_REQUEST);
+
+        // Accept: same metric is fine
+        UNIT_ASSERT_VALUES_EQUAL(sendRebuild([](auto& s) {
+            s.mutable_settings()->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+        }), Ydb::StatusIds::SUCCESS);
+
+        // Wait for the accepted rebuild to complete before test ends
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1", true, true, true),
+            {NLs::PathExist, NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady)});
+    }
+
+    Y_UNIT_TEST(RebuildNonExistentVectorIndex) {
+        // Rebuilding an index that does not exist must be rejected at request creation time.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "data"      Type: "String" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        ui64 rebuildTx = ++txId;
+
+        Ydb::Table::TableIndex index;
+        index.set_name("no_such_index");
+        index.add_index_columns("embedding");
+        index.mutable_global_vector_kmeans_tree_index();
+
+        NKikimrIndexBuilder::TIndexBuildSettings settings;
+        settings.set_source_path("/MyRoot/ServerLessDB/Table");
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
+        settings.set_max_shards_in_flight(2);
+        settings.set_is_rebuild(true);
+        *settings.mutable_index() = index;
+
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, tenantSchemeShard, sender, new TEvIndexBuilder::TEvCreateRequest(rebuildTx, "/MyRoot/ServerLessDB", std::move(settings)));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+        UNIT_ASSERT(event);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+            "rebuild of a non-existent index must fail");
+        UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()), "REBUILD INDEX");
+    }
+
+    Y_UNIT_TEST(RebuildNonVectorIndex) {
+        // REBUILD INDEX is only supported for vector_kmeans_tree indexes; rebuilding a
+        // plain secondary index must be rejected on the schemeshard side too.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        TestCreateTable(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB", R"(
+            Name: "Table"
+            Columns { Name: "key"       Type: "Uint32" }
+            Columns { Name: "embedding" Type: "String" }
+            Columns { Name: "data"      Type: "String" }
+            Columns { Name: "value"     Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId, tenantSchemeShard);
+
+        WriteVectorTableRows(runtime, tenantSchemeShard, ++txId, "/MyRoot/ServerLessDB/Table", 0, 0, 200);
+
+        // Build a plain secondary index (not a vector index)
+        ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, tenantSchemeShard, "/MyRoot/ServerLessDB", "/MyRoot/ServerLessDB/Table", "secondary_idx", {"data"});
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+
+        auto buildIndexOperation = TestGetBuildIndex(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+        UNIT_ASSERT_VALUES_EQUAL(buildIndexOperation.GetIndexBuild().GetState(), Ydb::Table::IndexBuildState::STATE_DONE);
+
+        TestForgetBuildIndex(runtime, ++txId, tenantSchemeShard, "/MyRoot/ServerLessDB", buildIndexTx);
+
+        // Attempt to rebuild the secondary index as a vector index
+        ui64 rebuildTx = ++txId;
+
+        Ydb::Table::TableIndex index;
+        index.set_name("secondary_idx");
+        index.add_index_columns("data");
+        index.mutable_global_vector_kmeans_tree_index();
+
+        NKikimrIndexBuilder::TIndexBuildSettings settings;
+        settings.set_source_path("/MyRoot/ServerLessDB/Table");
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
+        settings.set_max_shards_in_flight(2);
+        settings.set_is_rebuild(true);
+        *settings.mutable_index() = index;
+
+        auto sender = runtime.AllocateEdgeActor();
+        ForwardToTablet(runtime, tenantSchemeShard, sender, new TEvIndexBuilder::TEvCreateRequest(rebuildTx, "/MyRoot/ServerLessDB", std::move(settings)));
+
+        TAutoPtr<IEventHandle> handle;
+        auto* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+        UNIT_ASSERT(event);
+        UNIT_ASSERT_VALUES_UNEQUAL_C(event->Record.GetStatus(), Ydb::StatusIds::SUCCESS,
+            "rebuild of a non-vector index must fail");
+        UNIT_ASSERT_STRING_CONTAINS((TStringBuilder() << event->Record.GetIssues()),
+            "only supported for vector_kmeans_tree");
+    }
+
     Y_UNIT_TEST(VectorIndexAutodetect) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

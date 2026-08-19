@@ -3,6 +3,7 @@
 #include <memory>
 #include <type_traits>
 
+#include <ydb/core/base/appdata_fwd.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/common/last_counter.h>
 #include <ydb/core/persqueue/common/partition_id.h>
@@ -12,7 +13,11 @@
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h> // TODO move to pubcli or common
 
+#include <library/cpp/time_provider/time_provider.h>
+
 #include <util/generic/strbuf.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
 
 namespace NKikimr::NPQ {
 
@@ -20,7 +25,7 @@ using TSlidingWindow = NSlidingWindow::TSlidingWindow<NSlidingWindow::TSumOperat
 
 namespace {
     void DoCleanUp(std::unordered_map<TString, TSlidingWindow>& writtenBytes) {
-        auto now = TInstant::Now();
+        auto now = TAppData::TimeProvider->Now();
 
         for (auto it = writtenBytes.begin(); it != writtenBytes.end();) {
             auto& counter = it->second;
@@ -90,13 +95,14 @@ public:
 
 protected:
     void OnWriteImpl(const TString& sourceId, ui64 delta, const TString& key = "") {
-        PQ_LOG_D("TAutopartitioningManager::OnWrite"
-            << " sourceId# " << sourceId
-            << " delta# " << delta
-            << " key# " << key
-            << " isEnabled# " << IsEnabled()
-            << " SumMetric# " << SumMetric->GetValue()
-            << " Tag# " << static_cast<int>(Tag));
+        YDB_LOG_DEBUG("TAutopartitioningManager::OnWrite",
+            {"logPrefix", LogPrefix()},
+            {"sourceId", sourceId},
+            {"delta", delta},
+            {"key", key},
+            {"isEnabled", IsEnabled()},
+            {"sumMetric", SumMetric->GetValue()},
+            {"tag", static_cast<int>(Tag)});
         if (!IsEnabled()) {
             return;
         }
@@ -111,7 +117,7 @@ protected:
         }
 
         auto key128 = NKikimr::NPQ::AsInt<TUint128>(key);
-        auto now = TInstant::Now();
+        auto now = TAppData::TimeProvider->Now();
 
         SumMetric->Update(delta, now);
 
@@ -168,9 +174,8 @@ protected:
             auto* partition = GetPartition();
             const auto& keyRange = partition->GetKeyRange();
 
-            PQ_LOG_D(
-                TStringBuilder()
-                << "TAutopartitioningManager::SplitBoundary KLL sketch enabled, no median key found, will split by middle of key range");
+            YDB_LOG_DEBUG("TAutopartitioningManager::SplitBoundary KLL sketch enabled, no median key found, will split by middle of key range",
+                {"logPrefix", LogPrefix()});
             return MiddleOf(keyRange.GetFromBound(), keyRange.GetToBound());
         }
 
@@ -182,7 +187,7 @@ protected:
             return NKikimrPQ::EScaleStatus::NORMAL;
         }
 
-        auto now = TInstant::Now();
+        auto now = TAppData::TimeProvider->Now();
         const auto usagePercent = SumMetric->GetValue() * 100.0 / Config.GetPartitionStrategy().GetScaleThresholdSeconds() / MaxUsagePerSec;
         const auto sourceIdWindow = TDuration::Seconds(std::min<ui32>(5, Config.GetPartitionStrategy().GetScaleThresholdSeconds()));
         const auto sourceIdCount = SourceIdCounter.Count(now - sourceIdWindow);
@@ -195,26 +200,28 @@ protected:
             || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
         auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
-        PQ_LOG_D("TPartition::CheckScaleStatus"
-            << " splitMergeAvgWriteBytes# " << SumMetric->GetValue()
-            << " usagePercent# " << usagePercent
-            << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
-            << " totalPartitionWriteSpeed# " << MaxUsagePerSec
-            << " sourceIdCount=" << sourceIdCount
-            << " canSplit=" << canSplit
-            << " tag# " << static_cast<int>(Tag)
-            << " verdict=" << (splitEnabled && canSplit && usagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent() ? "NEED_SPLIT" : "NORMAL")
-        );
+        YDB_LOG_DEBUG("TPartition::CheckScaleStatus",
+            {"logPrefix", LogPrefix()},
+            {"splitMergeAvgWriteBytes", SumMetric->GetValue()},
+            {"usagePercent", usagePercent},
+            {"scaleThresholdSeconds", Config.GetPartitionStrategy().GetScaleThresholdSeconds()},
+            {"totalPartitionWriteSpeed", MaxUsagePerSec},
+            {"sourceIdCount", sourceIdCount},
+            {"canSplit", canSplit},
+            {"tag", static_cast<int>(Tag)},
+            {"verdict", (splitEnabled && canSplit && usagePercent >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent() ? "NEED_SPLIT" : "NORMAL")});
 
         auto shouldSplit = usagePercent
                 >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent();
 
         if (splitEnabled && canSplit && shouldSplit) {
-            PQ_LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
+            YDB_LOG_DEBUG("TPartition::CheckScaleStatus NEED_SPLIT",
+                {"logPrefix", LogPrefix()});
             return NKikimrPQ::EScaleStatus::NEED_SPLIT;
         } else if (mergeEnabled && usagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
-            PQ_LOG_D("TPartition::CheckScaleStatus NEED_MERGE."
-                << " usagePercent: " << usagePercent);
+            YDB_LOG_DEBUG("TPartition::CheckScaleStatus NEED_MERGE",
+                {"logPrefix", LogPrefix()},
+                {"usagePercent", usagePercent});
             return NKikimrPQ::EScaleStatus::NEED_MERGE;
         }
         return NKikimrPQ::EScaleStatus::NORMAL;
@@ -266,7 +273,7 @@ protected:
     }
 
     std::vector<std::pair<TString, ui64>> GetSerializedMetrics() {
-        auto  now = TInstant::Now();
+        auto  now = TAppData::TimeProvider->Now();
         std::vector<std::pair<TString, ui64>> result;
 
         for (auto& [sourceIdHash, counter] : PerSourceMetrics) {

@@ -1698,6 +1698,8 @@ class TestDatabaseBackup(BaseTestClusterBackupInFiles):
             ".sys/top_queries_by_request_units_one_hour/permissions.pb",
             ".sys/top_queries_by_request_units_one_minute/system_view.pb",
             ".sys/top_queries_by_request_units_one_minute/permissions.pb",
+            ".sys/udf_modules/system_view.pb",
+            ".sys/udf_modules/permissions.pb",
         ])
 
 
@@ -1907,6 +1909,8 @@ class TestDatabaseBackupRestore(BaseTestMultipleClusterBackupInFiles):
             ".sys/top_queries_by_request_units_one_hour/permissions.pb",
             ".sys/top_queries_by_request_units_one_minute/system_view.pb",
             ".sys/top_queries_by_request_units_one_minute/permissions.pb",
+            ".sys/udf_modules/system_view.pb",
+            ".sys/udf_modules/permissions.pb",
         ])
 
         self.restore_cluster_backup(input="cluster_backup")
@@ -2096,7 +2100,7 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
         # Backup the domain
         backup_files_dir = output_path(self.test_name, 'test_replace_sys_acl_disabled', 'backup_files_dir')
         self.ydb_cli(['tools', 'dump', '--path', '/Root', '--output', backup_files_dir])
-        assert_that(os.listdir(backup_files_dir), is_(['.sys', 'folder']))
+        assert_that(os.listdir(backup_files_dir), contains_inanyorder('.sys', 'folder'))
 
         # Remove directory
         self.driver.scheme_client.remove_directory('/Root/folder')
@@ -2177,7 +2181,7 @@ class TestReplaceSysACLOption(BaseTestBackupInFiles):
         # Backup the domain
         backup_files_dir = output_path(self.test_name, 'test_replace_sys_acl_disabled', 'backup_files_dir')
         self.ydb_cli(['tools', 'dump', '--path', '/Root', '--output', backup_files_dir])
-        assert_that(os.listdir(backup_files_dir), is_(['.sys', 'folder']))
+        assert_that(os.listdir(backup_files_dir), contains_inanyorder('.sys', 'folder'))
 
         # Remove directory
         self.driver.scheme_client.remove_directory('/Root/folder')

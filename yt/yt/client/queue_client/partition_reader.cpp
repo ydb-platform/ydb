@@ -38,7 +38,10 @@ public:
         , QueuePath_(std::move(queuePath))
         , PartitionIndex_(partitionIndex)
         , RowBatchReadOptions_({Config_->MaxRowCount, Config_->MaxDataWeight, Config_->DataWeightPerRowHint})
-        , Logger(QueueClientLogger().WithTag("Consumer: %v, Queue: %v, Partition: %v", ConsumerPath_, QueuePath_, PartitionIndex_))
+        , Logger(QueueClientLogger()
+            .WithTag("Consumer", ConsumerPath_)
+            .WithTag("Queue", QueuePath_)
+            .WithTag("Partition", PartitionIndex_))
     {
         PullQueueConsumerOptions_.UseNativeTabletNodeApi = Config_->UseNativeTabletNodeApi;
     }
@@ -140,17 +143,16 @@ private:
 
     IPersistentQueueRowsetPtr DoRead()
     {
-        YT_LOG_DEBUG("Reading rowset");
+        YT_TLOG_DEBUG("Reading rowset");
         TWallTimer timer;
 
         auto currentOffset = FetchCurrentOffset();
 
-        YT_LOG_DEBUG(
-            "Pulling from queue (Offset: %v, MaxRowCount: %v, MaxDataWeight: %v, DataWeightPerRowHint: %v)",
-            currentOffset,
-            RowBatchReadOptions_.MaxRowCount,
-            RowBatchReadOptions_.MaxDataWeight,
-            RowBatchReadOptions_.DataWeightPerRowHint);
+        YT_TLOG_DEBUG("Pulling from queue")
+            .With("Offset", currentOffset)
+            .With("MaxRowCount", RowBatchReadOptions_.MaxRowCount)
+            .With("MaxDataWeight", RowBatchReadOptions_.MaxDataWeight)
+            .With("DataWeightPerRowHint", RowBatchReadOptions_.DataWeightPerRowHint);
         auto asyncRowset = (Config_->UsePullQueueConsumer
             ? Client_->PullQueueConsumer(
                 ConsumerPath_,
@@ -170,7 +172,8 @@ private:
 
         HandleRowset(rowset);
 
-        YT_LOG_DEBUG("Rowset read (WallTime: %v)", timer.GetElapsedTime());
+        YT_TLOG_DEBUG("Rowset read")
+            .With("WallTime", timer.GetElapsedTime());
 
         return New<TPersistentQueueRowset>(rowset, MakeWeak(this), currentOffset);
 
@@ -183,12 +186,11 @@ private:
         auto dataWeight = static_cast<i64>(GetDataWeight(rowset->GetRows()));
         i64 rowCount = std::ssize(rowset->GetRows());
 
-        YT_LOG_DEBUG(
-            "Rowset obtained (RowCount: %v, DataWeight: %v, StartOffset: %v, FinishOffset: %v)",
-            rowCount,
-            dataWeight,
-            rowset->GetStartOffset(),
-            rowset->GetFinishOffset());
+        YT_TLOG_DEBUG("Rowset obtained")
+            .With("RowCount", rowCount)
+            .With("DataWeight", dataWeight)
+            .With("StartOffset", rowset->GetStartOffset())
+            .With("FinishOffset", rowset->GetFinishOffset());
     }
 
     // NB: Can throw.
@@ -209,13 +211,15 @@ private:
             currentOffset = partitions[0].NextRowIndex;
         }
 
-        YT_LOG_DEBUG("Fetched current offset (Offset: %v, WallTime: %v)", currentOffset, timer.GetElapsedTime());
+        YT_TLOG_DEBUG("Fetched current offset")
+            .With("Offset", currentOffset)
+            .With("WallTime", timer.GetElapsedTime());
         return currentOffset;
     }
 
     void DoOpen()
     {
-        YT_LOG_DEBUG("Opening partition reader");
+        YT_TLOG_DEBUG("Opening partition reader");
 
         auto queueCluster = QueuePath_.GetCluster();
         if (!queueCluster) {
@@ -231,7 +235,7 @@ private:
 
         Opened_ = true;
 
-        YT_LOG_DEBUG("Partition reader opened");
+        YT_TLOG_DEBUG("Partition reader opened");
     }
 };
 

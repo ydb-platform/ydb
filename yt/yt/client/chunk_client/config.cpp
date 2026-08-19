@@ -187,6 +187,8 @@ void TReplicationReaderConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("io_consumed_report_window", &TThis::IoConsumedReportWindow)
         .Default(TDuration::Minutes(5));
+    registrar.Parameter("io_fair_share_weight", &TThis::IoFairShareWeight)
+        .Default();
 
     registrar.Postprocessor([] (TThis* config) {
         // Seems unreasonable to make backoff greater than half of total session timeout.
@@ -367,6 +369,8 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("io_consumed_report_window", &TThis::IoConsumedReportWindow)
         .Default(TDuration::Minutes(1));
+    registrar.Parameter("io_fair_share_weight", &TThis::IoFairShareWeight)
+        .Default();
 
     registrar.Preprocessor([] (TThis* config) {
         config->NodeChannel->RetryBackoffTime = TDuration::Seconds(10);

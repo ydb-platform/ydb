@@ -16,8 +16,8 @@ from clickhouse_connect.driver.query import QueryContext
 from clickhouse_connect.driver.types import ByteSource
 
 logger = logging.getLogger(__name__)
-ch_read_formats = {}
-ch_write_formats = {}
+ch_read_formats: dict[type, str] = {}
+ch_write_formats: dict[type, str] = {}
 
 
 class TypeDef(NamedTuple):
@@ -45,10 +45,10 @@ class ClickHouseType(ABC):  # noqa: B024
     np_type = "O"  # Default to Numpy Object type
     nano_divisor = 0  # Only relevant for date like objects
     byte_size = 0
-    valid_formats = "native"
+    valid_formats: str | tuple[str, ...] = "native"
 
-    python_type = None
-    base_type = None
+    python_type: type | None = None
+    base_type: str | None = None
 
     @property
     def _null_time_unit(self):
@@ -110,7 +110,7 @@ class ClickHouseType(ABC):  # noqa: B024
     def insert_name(self):
         return self.name
 
-    def data_size(self, sample: Sequence) -> int:
+    def data_size(self, sample: Collection) -> int:
         if self.low_card:
             values = set(sample)
             d_size = self._data_size(values) + 2
@@ -126,7 +126,7 @@ class ClickHouseType(ABC):  # noqa: B024
         total = 0
         for x in sample:
             total += len(str(x))
-        return total / len(sample) + 1
+        return total // len(sample) + 1
 
     def write_column_prefix(self, dest: bytearray):
         """
@@ -264,9 +264,9 @@ class ClickHouseType(ABC):  # noqa: B024
     def _write_column_low_card(self, column: Sequence, dest: bytearray, ctx: InsertContext):
         if len(column) == 0:
             return
-        keys = []
-        index = []
-        rev_map = {}
+        keys: list[int] = []
+        index: list[Any] = []
+        rev_map: dict[Any, int] = {}
         rmg = rev_map.get
         if self.nullable:
             index.append(None)
@@ -319,15 +319,16 @@ class ArrayType(ClickHouseType, ABC, registered=False):
     """
 
     _signed = True
-    _array_type = None
-    _struct_type = None
+    _array_type: str | None = None
+    _struct_type: str | None = None
     valid_formats = "string", "native"
-    python_type = int
+    python_type: type = int
 
     def __init_subclass__(cls, registered: bool = True):
         super().__init_subclass__(registered)
         if cls._array_type in ("i", "I") and int_size == 2:
-            cls._array_type = "L" if cls._array_type.isupper() else "l"
+            array_type_char = cls._array_type
+            cls._array_type = "L" if array_type_char.isupper() else "l"
         if isinstance(cls._array_type, str) and cls._array_type:
             cls._struct_type = "<" + cls._array_type
             cls.byte_size = array.array(cls._array_type).itemsize
@@ -335,14 +336,17 @@ class ArrayType(ClickHouseType, ABC, registered=False):
     def _read_column_binary(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any):
         if ctx.use_numpy:
             return driver_ctypes.numpy_conv.read_numpy_array(source, self.np_type, num_rows)
+        assert self._array_type is not None
         return source.read_array(self._array_type, num_rows)
 
     def _read_nullable_column(self, source: ByteSource, num_rows: int, ctx: QueryContext, _read_state: Any) -> Sequence:
+        assert self._array_type is not None
         return data_conv.read_nullable_array(source, self._array_type, num_rows, self._active_null(ctx))
 
     def _build_lc_column(self, index: Sequence, keys: array.array, ctx: QueryContext):
         if ctx.use_numpy:
-            return options.np.fromiter((index[key] for key in keys), dtype=index.dtype, count=len(index))
+            # index is a numpy array when ctx.use_numpy is True
+            return options.np.fromiter((index[key] for key in keys), dtype=index.dtype, count=len(index))  # type: ignore[attr-defined]
         return super()._build_lc_column(index, keys, ctx)
 
     def _finalize_column(self, column: Sequence, ctx: QueryContext) -> Sequence:
@@ -357,6 +361,7 @@ class ArrayType(ClickHouseType, ABC, registered=False):
     def _write_column_binary(self, column: Sequence | MutableSequence, dest: bytearray, ctx: InsertContext):
         if len(column) and self.nullable:
             column = [0 if x is None else x for x in column]
+        assert self._array_type is not None
         write_array(self._array_type, column, dest, ctx.column_name)
 
     def _active_null(self, ctx: QueryContext):
@@ -377,7 +382,7 @@ class UnsupportedType(ClickHouseType, ABC, registered=False):
         super().__init__(type_def)
         self._name_suffix = type_def.arg_str
 
-    def _read_column_binary(self, source: Sequence, num_rows: int, ctx: QueryContext, read_state: Any):
+    def _read_column_binary(self, _source: ByteSource, _num_rows: int, _ctx: QueryContext, _read_state: Any):
         raise NotSupportedError(f"{self.name} deserialization not supported")
 
     def _write_column_binary(self, column: Sequence | MutableSequence, dest: bytearray, ctx: InsertContext):

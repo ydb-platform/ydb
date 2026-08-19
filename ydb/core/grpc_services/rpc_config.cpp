@@ -15,6 +15,8 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/library/services/services.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRPC_SERVER
+
 namespace {
 
 TString DescribeConfigIdentity(const Ydb::DynamicConfig::ConfigIdentity& id)
@@ -55,7 +57,7 @@ bool ConvertGetConfigToFetchConfigResult(
     if (identityCount < configCount) {
         TStringBuilder descr;
         descr << (configCount - identityCount)
-              << " extra 'config' field with no corresponding 'identity' field";
+              << " extra 'config' field(s) with no corresponding 'identity' field(s)";
         error = descr;
         return false;
     }
@@ -122,11 +124,10 @@ bool ConvertGetConfigToFetchConfigResult(
                 // TYPE_NOT_SET is rejected with error by pre-validation above
                 break;
             default:
-                // Any other value comes from a newer Console is skipped with a warning
+                // Any other value that comes from a newer Console is skipped with a warning
                 // so we don't fail on forward-compatible additions
-                ALOG_NOTICE(NKikimrServices::GRPC_SERVER,
-                    "Convert Ydb::DynamicConfig::ConfigIdentity to Ydb::Config::FetchConfigResult: "
-                    << "skipped unknown config identity '" << DescribeConfigIdentity(srcIdentity) << "'" );
+                YDB_LOG_NOTICE("Convert Ydb::DynamicConfig::ConfigIdentity to Ydb::Config::FetchConfigResult: skipped unknown config identity",
+                    {"srcIdentity", DescribeConfigIdentity(srcIdentity)});
                 break;
         }
     }
@@ -227,7 +228,15 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
             newDrive->set_shared_with_os(drive.GetSharedWithOs());
             newDrive->set_read_centric(drive.GetReadCentric());
             newDrive->set_kind(drive.GetKind());
-            newDrive->set_expected_slot_count(hostConfig.GetDefaultHostPDiskConfig().GetExpectedSlotCount());
+            const auto& pdiskConfig = drive.HasPDiskConfig()
+                ? drive.GetPDiskConfig()
+                : hostConfig.GetDefaultHostPDiskConfig();
+            if (pdiskConfig.GetExpectedSlotSize()) {
+                newDrive->set_expected_slot_size(pdiskConfig.GetExpectedSlotSize());
+                newDrive->set_max_slots(pdiskConfig.GetMaxSlots());
+            } else {
+                newDrive->set_expected_slot_count(pdiskConfig.GetExpectedSlotCount());
+            }
         }
     }
     auto boxes = boxStatus.GetBox();

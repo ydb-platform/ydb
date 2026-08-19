@@ -489,7 +489,7 @@ private:
                     right->Stats.LogicalOrderings.GetShuffleHashFuncArgsCount() == static_cast<std::int64_t>(edge->RightJoinKeys.size());
 
                 if (lhsShuffled && rhsShuffled /* we don't support not shuffling two inputs in the execution, so we must shuffle at least one*/) {
-                    if (left->Stats.Nrows < right->Stats.Nrows) {
+                    if (left->Stats.ByteSize < right->Stats.ByteSize) {
                         lhsShuffled = false;
                     } else {
                         rhsShuffled = false;

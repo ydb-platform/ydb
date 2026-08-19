@@ -6,6 +6,7 @@ PEERDIR(
 
 SRCS(
     console_dumper_ut.cpp
+    config_migration_ut.cpp
     yaml_config_helpers_ut.cpp
     yaml_config_ut.cpp
     yaml_config_parser_ut.cpp

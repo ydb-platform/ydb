@@ -6,6 +6,7 @@ exclude:
   - psutil/_psutil_bsd.c
   - psutil/_psutil_sunos.c
   - psutil/arch/aix/*
+  - psutil/arch/bsd/*
   - psutil/arch/freebsd/*
   - psutil/arch/netbsd/*
   - psutil/arch/openbsd/*

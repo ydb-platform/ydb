@@ -174,6 +174,8 @@ class KikimrConfigGenerator(object):
             pg_compatible_expirement=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             kafka_api_port=None,
+            kafka_listen_address=None,
+            kafka_auto_create_topics=False,
             metadata_section=None,
             column_shard_config=None,
             use_config_store=False,
@@ -256,6 +258,9 @@ class KikimrConfigGenerator(object):
         self.monitoring_tls_cert_path = None
         self.monitoring_tls_key_path = None
         self.monitoring_tls_ca_path = None
+        self.monitoring_tls_admin_client_cert_path = None
+        self.monitoring_tls_admin_client_key_path = None
+        self._monitoring_tls_client_certificate_required = False
         self.enable_topic_cloud_events = enable_topic_cloud_events
 
         self.__binary_paths = binary_paths
@@ -597,6 +602,10 @@ class KikimrConfigGenerator(object):
             kafka_proxy_config = dict()
             kafka_proxy_config['enable_kafka_proxy'] = True
             kafka_proxy_config["listening_port"] = self.get_kafka_api_port(node_id)
+            if kafka_listen_address is not None:
+                kafka_proxy_config["listening_address"] = kafka_listen_address
+            if kafka_auto_create_topics:
+                kafka_proxy_config["auto_create_topics_enable"] = True
 
             self.yaml_config["kafka_proxy_config"] = kafka_proxy_config
 
@@ -671,6 +680,14 @@ class KikimrConfigGenerator(object):
 
         if self.system_tablets:
             self.yaml_config["system_tablets"] = self.system_tablets
+
+        if enable_nbs:
+            # Enable DbsController tablet
+            self.yaml_config.setdefault("system_tablets", {})["dbs_controller"] = [
+                {
+                    "info": {}
+                }
+            ]
 
         if system_tablet_backup_config:
             self.yaml_config["system_tablet_backup_config"] = system_tablet_backup_config
@@ -855,6 +872,19 @@ class KikimrConfigGenerator(object):
 
     def set_binary_paths(self, binary_paths):
         self.__binary_paths = binary_paths
+
+    @property
+    def monitoring_tls_client_certificate_required(self):
+        return self._monitoring_tls_client_certificate_required
+
+    @monitoring_tls_client_certificate_required.setter
+    def monitoring_tls_client_certificate_required(self, value):
+        self._monitoring_tls_client_certificate_required = bool(value)
+        monitoring_config = self.yaml_config.setdefault('monitoring_config', {})
+        if self._monitoring_tls_client_certificate_required:
+            monitoring_config['client_certificate_required'] = True
+        else:
+            monitoring_config.pop('client_certificate_required', None)
 
     def write_tls_data(self):
         if self.__grpc_ssl_enable:

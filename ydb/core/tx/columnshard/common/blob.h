@@ -6,6 +6,8 @@
 
 #include <util/generic/string.h>
 
+#include <tuple>
+
 namespace NKikimrColumnShardProto {
 class TBlobRange;
 class TBlobRangeLink16;
@@ -224,13 +226,14 @@ struct TBlobRange {
     TBlobRange BuildSubset(const ui32 offset, const ui32 size) const;
 
     bool operator<(const TBlobRange& br) const {
-        if (BlobId != br.BlobId) {
-            return BlobId.GetLogoBlobId().Compare(br.BlobId.GetLogoBlobId()) < 0;
-        } else if (Offset != br.Offset) {
-            return Offset < br.Offset;
-        } else {
-            return Size < br.Size;
-        }
+        // Must be consistent with operator== (LogoBlobId + DsGroup). Ordering by LogoBlobId
+        // only when BlobId differs breaks strict weak ordering for std::sort when the same
+        // LogoBlobId appears with different DsGroup values (see #47871).
+        const TLogoBlobID logo = BlobId.GetLogoBlobId();
+        const TLogoBlobID otherLogo = br.BlobId.GetLogoBlobId();
+        const ui32 dsGroup = BlobId.GetDsGroup();
+        const ui32 otherDsGroup = br.BlobId.GetDsGroup();
+        return std::tie(logo, dsGroup, Offset, Size) < std::tie(otherLogo, otherDsGroup, br.Offset, br.Size);
     }
 
     const TUnifiedBlobId& GetBlobId() const {
@@ -245,13 +248,13 @@ struct TBlobRange {
         if (GetBlobId() != br.GetBlobId()) {
             return false;
         }
-        const ui32 right = std::max<ui32>(Offset + Size, br.Offset + br.Size);
+        const ui64 right = std::max<ui64>(static_cast<ui64>(Offset) + Size, static_cast<ui64>(br.Offset) + br.Size);
         const ui32 offset = std::min<ui32>(Offset, br.Offset);
-        const ui32 size = right - offset;
+        const ui64 size = right - offset;
         if (size > limit) {
             return false;
         }
-        Size = size;
+        Size = static_cast<ui32>(size);
         Offset = offset;
         return true;
     }

@@ -36,6 +36,12 @@ EMonPage ParsePage(const TCgiParameters& cgi)
     if (page == "localdb") {
         return EMonPage::LocalDb;
     }
+    if (page == "vchunk") {
+        return EMonPage::VChunk;
+    }
+    if (page == "latency") {
+        return EMonPage::Latency;
+    }
     return EMonPage::Overview;
 }
 
@@ -44,6 +50,42 @@ std::optional<size_t> ParseSelectedDbg(const TCgiParameters& cgi)
     ui32 dbgIndex = 0;
     if (cgi.Has("dbg") && TryFromString(cgi.Get("dbg"), dbgIndex)) {
         return dbgIndex;
+    }
+    return std::nullopt;
+}
+
+std::optional<ui32> ParseSelectedVChunk(const TCgiParameters& cgi)
+{
+    ui32 vchunkIndex = 0;
+    if (cgi.Has("vchunk") && TryFromString(cgi.Get("vchunk"), vchunkIndex)) {
+        return vchunkIndex;
+    }
+    return std::nullopt;
+}
+
+ELatencyPercentile ParseSelectedPercentile(const TCgiParameters& cgi)
+{
+    const TString& p = cgi.Get("p");
+    if (p == "50") {
+        return ELatencyPercentile::P50;
+    }
+    if (p == "90") {
+        return ELatencyPercentile::P90;
+    }
+    if (p == "max") {
+        return ELatencyPercentile::Max;
+    }
+    return ELatencyPercentile::P99;
+}
+
+std::optional<EOperation> ParseSelectedLatencyOperation(
+    const TCgiParameters& cgi)
+{
+    ui32 opIndex = 0;
+    if (cgi.Has("op") && TryFromString(cgi.Get("op"), opIndex) &&
+        opIndex < OperationCount)
+    {
+        return static_cast<EOperation>(opIndex);
     }
     return std::nullopt;
 }
@@ -72,7 +114,7 @@ TLocalDbContents MakeLocalDbContents(const TTxPartition::TMonitoring& args)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTabletInfo TPartitionActor::MakeMonTabletInfo()
+TTabletInfo TPartitionActor::MakeMonTabletInfo() const
 {
     return {
         .TabletId = TabletID(),
@@ -82,10 +124,16 @@ TTabletInfo TPartitionActor::MakeMonTabletInfo()
     };
 }
 
-void TPartitionActor::HandleHttpInfo(
-    NMon::TEvRemoteHttpInfo::TPtr& ev,
+bool TPartitionActor::OnRenderAppHtmlPage(
+    NMon::TEvRemoteHttpInfo::TPtr ev,
     const TActorContext& ctx)
 {
+    if (!ev) {
+        // Probe from the standard tablet page: report that the App page exists
+        // so its link is shown.
+        return true;
+    }
+
     const auto& cgi = ev->Get()->Cgi();
     const EMonPage page = ParsePage(cgi);
 
@@ -103,17 +151,60 @@ void TPartitionActor::HandleHttpInfo(
         ctx.Send(
             ev->Sender,
             new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
-        return;
+        return true;
     }
 
     // Local DB page: read the persisted state in a transaction;
     // CompleteMonitoring renders and replies.
     if (page == EMonPage::LocalDb) {
         ExecuteTx(ctx, CreateTx<TMonitoring>(ev->Sender));
-        return;
+        return true;
     }
 
-    const std::optional<size_t> selectedDbg = ParseSelectedDbg(cgi);
+    // VChunk page: no index - just the input form (synchronous); with an
+    // index - gather the snapshot from the owning DBG's executor.
+    if (page == EMonPage::VChunk) {
+        const std::optional<ui32> selectedVChunk = ParseSelectedVChunk(cgi);
+        if (!selectedVChunk) {
+            TMonPageData data{
+                .Page = page,
+                .TabletInfo = MakeMonTabletInfo(),
+            };
+            ctx.Send(
+                ev->Sender,
+                new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+            return true;
+        }
+
+        auto* actorSystem = TActivationContext::ActorSystem();
+        const TActorId requester = ev->Sender;
+        FastPathService->GatherVChunkMonSnapshot(*selectedVChunk)
+            .Subscribe(
+                [tabletInfo = MakeMonTabletInfo(),
+                 page,
+                 selectedVChunk,
+                 requester,
+                 actorSystem](const auto& future)
+                {
+                    TMonPageData data{
+                        .Page = page,
+                        .TabletInfo = tabletInfo,
+                        .SelectedVChunk = selectedVChunk,
+                        .VChunk = future.GetValue(),
+                    };
+                    actorSystem->Send(
+                        requester,
+                        new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
+                });
+        return true;
+    }
+
+    // Latency page always gathers every DBG (needs the full node map).
+    const std::optional<size_t> selectedDbg =
+        (page == EMonPage::Latency) ? std::nullopt : ParseSelectedDbg(cgi);
+    const ELatencyPercentile selectedPercentile = ParseSelectedPercentile(cgi);
+    const std::optional<EOperation> selectedLatencyOperation =
+        ParseSelectedLatencyOperation(cgi);
 
     // The "Add host" button. POST only: link prefetching must not add hosts.
     //
@@ -134,7 +225,7 @@ void TPartitionActor::HandleHttpInfo(
                 LogTitle.GetWithTime().c_str(),
                 *selectedDbg);
 
-            FastPathService->RequestAddHost(*selectedDbg);
+            FastPathService->QueryAddHost(*selectedDbg, 0);
         }
 
         TStringBuilder reply;
@@ -148,11 +239,12 @@ void TPartitionActor::HandleHttpInfo(
         reply << "<meta http-equiv='refresh' content='0; ?TabletID="
               << TabletID() << "&page=dbg&dbg=" << *selectedDbg << "'/>";
         ctx.Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(reply));
-        return;
+        return true;
     }
 
-    // DBG page: gather snapshots, then render + reply in the callback. Safe
-    // off-thread - captures are taken here and RenderMonPage is pure.
+    // DBG / Latency page: gather snapshots, then render + reply in the
+    // callback. Safe off-thread - captures are taken here and RenderMonPage
+    // is pure.
     auto* actorSystem = TActivationContext::ActorSystem();
     const TActorId requester = ev->Sender;
 
@@ -161,6 +253,8 @@ void TPartitionActor::HandleHttpInfo(
             [tabletInfo = MakeMonTabletInfo(),
              page,
              selectedDbg,
+             selectedPercentile,
+             selectedLatencyOperation,
              requester,
              actorSystem](const auto& future)
             {
@@ -168,6 +262,8 @@ void TPartitionActor::HandleHttpInfo(
                     .Page = page,
                     .TabletInfo = tabletInfo,
                     .Dbgs = future.GetValue(),
+                    .SelectedPercentile = selectedPercentile,
+                    .SelectedLatencyOperation = selectedLatencyOperation,
                 };
                 if (selectedDbg) {
                     data.SelectedDbg = static_cast<ui32>(*selectedDbg);
@@ -180,6 +276,7 @@ void TPartitionActor::HandleHttpInfo(
                     requester,
                     new NMon::TEvRemoteHttpInfoRes(RenderMonPage(data)));
             });
+    return true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -19,14 +19,29 @@ TString FormatKeyRow(const TString& binaryYsonRow) {
 TReducePartitioner::TReducePartitioner(
     const std::unordered_map<TFmrTableId, std::vector<TString>>& partIdsForTables,
     const std::unordered_map<TString, std::vector<TChunkStats>>& partIdStats,
-    const TSortingColumns& reduceBy,
+    const TSortingColumns& sortColumns,
+    const TSortingColumns& groupColumns,
     const TReducePartitionSettings& settings
 )
-    : TSortedPartitionerBase(partIdsForTables, partIdStats, reduceBy, settings.FmrPartitionSettings)
-    , ReduceBy_(reduceBy)
+    : TSortedPartitionerBase(partIdsForTables, partIdStats, sortColumns, settings.FmrPartitionSettings)
+    , SortColumns_(sortColumns)
+    , GroupColumns_(groupColumns)
+    , NumGroupColumns_(groupColumns.Columns.size())
+    , GroupIsFullKey_(groupColumns.Columns.size() == sortColumns.Columns.size())
     , Settings_(settings)
 {
     YQL_ENSURE(Settings_.MaxKeySizePerPart <= Settings_.FmrPartitionSettings.MaxDataWeightPerPart);
+    YQL_ENSURE(GroupColumns_.Columns.size() <= SortColumns_.Columns.size(),
+        "reduce group columns must be a prefix of sort columns");
+}
+
+bool TReducePartitioner::InSameReduceGroup(const TFmrTableKeysBoundary& lhs, const TFmrTableKeysBoundary& rhs) const {
+    // Fast path when there is no SortBy tail: the group key is the whole sort key, so an exact
+    // compare is both correct and cheapest. Otherwise compare only the group prefix, reusing the
+    // already-parsed markups (no YSON round-trip).
+    return GroupIsFullKey_
+        ? lhs == rhs
+        : CompareKeyRowPrefix(lhs, rhs, NumGroupColumns_) == 0;
 }
 
 TFmrTableKeysRange TReducePartitioner::GetReadRangeFromSlices(const std::vector<TSlice>& slices, bool isLastRange) {
@@ -47,7 +62,11 @@ TFmrTableKeysRange TReducePartitioner::GetReadRangeFromSlices(const std::vector<
     bool taskRangeRightBorderInclusive = maxSliceReadRange.IsLastBoundInclusive;
     LeftBoundary_ = Nothing();
     if (maxSliceReadRange.IsLastBoundInclusive) {
-        // don't take last key if inclusive, because we need to guarantee that all reduce keys are in the same job.
+        // Carry the full last key to the next job and make this job's right border exclusive. The
+        // reduce reader constrains task boundaries on the reduce-group prefix only (see
+        // numBoundaryKeyColumns), so a full key here still keeps the whole reduce group together in
+        // the next job - we only additionally have to carry that group's chunks (see the
+        // group-aware collection below), which the previous exact-key match failed to do.
         LeftBoundary_ = *maxSliceReadRange.LastKeysBound;
         if (!isLastRange) {
             taskRangeRightBorderInclusive = false;
@@ -63,6 +82,9 @@ TFmrTableKeysRange TReducePartitioner::GetReadRangeFromSlices(const std::vector<
     taskRange.SetFirstKeysBound(taskRangeLeftBorder, taskRangeLeftBorderInclusive);
     taskRange.SetLastKeysBound(taskRangeRightBorder, taskRangeRightBorderInclusive);
 
+    // Carry every chunk that reaches into the boundary reduce group (compared on the group prefix,
+    // not the full sort key) so the next job - which now owns the whole group - gets all of its
+    // chunks, including build-side chunks whose last row is an early sortBy tiebreaker value.
     std::unordered_map<TString, std::vector<TChunkUnit>> chunksByTable;
     std::unordered_map<TString, std::unordered_set<TString>> seenChunksByTable;
 
@@ -71,7 +93,7 @@ TFmrTableKeysRange TReducePartitioner::GetReadRangeFromSlices(const std::vector<
             auto& out = chunksByTable[tableId];
             auto& seen = seenChunksByTable[tableId];
             for (const auto& chunk : sliceChunks) {
-                if (chunk.KeyRange.LastKeysBound != taskRangeRightBorder || !chunk.KeyRange.IsLastBoundInclusive) {
+                if (!chunk.KeyRange.IsLastBoundInclusive || !InSameReduceGroup(*chunk.KeyRange.LastKeysBound, taskRangeRightBorder)) {
                     continue;
                 }
 

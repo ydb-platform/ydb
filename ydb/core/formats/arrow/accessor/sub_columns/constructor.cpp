@@ -76,9 +76,10 @@ TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     return conclusion.DetachResult();
 }
 
-TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
+TBlobWithAdditionalAccessorData TConstructor::DoSerializeToBlobAndMeta(
+    const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {
     const std::shared_ptr<TSubColumnsArray> arr = std::static_pointer_cast<TSubColumnsArray>(columnData);
-    return arr->SerializeToString(externalInfo);
+    return { arr->SerializeToString(externalInfo), std::make_shared<TEmptyAdditionalData>() };
 }
 
 TConclusion<std::shared_ptr<TGeneralContainer>> TConstructor::BuildOthersContainer(const TStringBuf data,

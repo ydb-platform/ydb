@@ -221,7 +221,7 @@ void SetupServices(TTestActorRuntime &runtime) {
             static_cast<IPDiskServiceFactory*>(new TStrandedPDiskServiceFactory(runtime)) :
             static_cast<IPDiskServiceFactory*>(new TRealPDiskServiceFactory())));
 //            nodeWardenConfig->Monitoring = monitoring;
-        google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig.MutableServiceSet());
+        google::protobuf::TextFormat::ParseFromString(staticConfig, nodeWardenConfig->BlobStorageConfig->MutableServiceSet());
 
         app.SetKeyForNode(keyfile, nodeIndex);
         ObtainTenantKey(&nodeWardenConfig->TenantKey, app.Keys[nodeIndex]);
@@ -230,7 +230,7 @@ void SetupServices(TTestActorRuntime &runtime) {
         if (nodeIndex == 0) {
             static TTempDir tempDir;
             TString pDiskPath = tempDir() + "/pdisk0.dat";
-            nodeWardenConfig->BlobStorageConfig.MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath);
+            nodeWardenConfig->BlobStorageConfig->MutableServiceSet()->MutablePDisks(0)->SetPath(pDiskPath);
 
             ui64 pDiskGuid = 1;
             static ui64 iteration = 0;

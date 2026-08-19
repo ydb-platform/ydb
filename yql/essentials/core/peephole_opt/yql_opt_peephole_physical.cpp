@@ -652,7 +652,7 @@ void GetKeys(const TJoinLabels& joinLabels, const TExprNode& keys, TExprContext&
     }
 }
 
-TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
+TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx, const TTypeAnnotationContext& types) {
     if (node.ChildrenSize() > 4U) {
         return SplitEquiJoinToPairs(node, ctx);
     }
@@ -743,7 +743,7 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
         } else if (rightKind){
             keyTypeItems.emplace_back(JoinDryKeyType(keyType2, keyType1, optKey, ctx));
         } else {
-            keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(keyType1, optKey, ctx), DryType(keyType2, optKey, ctx), ctx));
+            keyTypeItems.emplace_back(CommonType<true>(node.Pos(), DryType(keyType1, optKey, ctx), DryType(keyType2, optKey, ctx), ctx, types));
             optKey = optKey && !filter;
         }
         badKey = !keyTypeItems.back();
@@ -987,9 +987,9 @@ TExprNode::TPtr PeepHoleDictFromKeysToDict(const TExprNode::TPtr& node, TExprCon
         .Ptr();
 }
 
-TExprNode::TPtr ExpandEquiJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
+TExprNode::TPtr ExpandEquiJoin(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& types) {
     YQL_ENSURE(input->ChildrenSize() >= 4);
-    return ExpandEquiJoinImpl(*input, ctx);
+    return ExpandEquiJoinImpl(*input, ctx, types);
 }
 
 template <bool Strong>
@@ -2079,7 +2079,7 @@ TExprNode::TPtr BuildDictOverList(TPositionHandle pos, const TExprNode::TPtr& co
         .Build();
 }
 
-TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnnotationNode*& dictKeyType, TExprContext& ctx)
+TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnnotationNode*& dictKeyType, TExprContext& ctx, const TTypeAnnotationContext& typesCtx)
 {
     const auto pos = collection->Pos();
     const auto tupleType = collection->GetTypeAnn()->Cast<TTupleExprType>();
@@ -2088,7 +2088,7 @@ TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnno
         return nullptr;
     }
     TTypeAnnotationNode::TListType types(tupleType->GetItems());
-    dictKeyType = CommonType(pos, types, ctx);
+    dictKeyType = CommonType(pos, types, ctx, typesCtx);
     YQL_ENSURE(dictKeyType, "Uncompatible collection elements.");
 
     TExprNode::TPtr tuple;
@@ -2111,7 +2111,7 @@ TExprNode::TPtr BuildDictOverTuple(TExprNode::TPtr&& collection, const TTypeAnno
     return ctx.NewCallable(pos, "DictFromKeys", {ExpandType(pos, *dictKeyType, ctx), std::move(tuple)});
 }
 
-TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
+TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx, TTypeAnnotationContext& types) {
     auto collection = input->HeadPtr();
     auto lookup = input->ChildPtr(1);
     auto options = input->ChildPtr(2);
@@ -2160,7 +2160,7 @@ TExprNode::TPtr ExpandSqlIn(const TExprNode::TPtr& input, TExprContext& ctx) {
         }
     } else if (collectionType->GetKind() == ETypeAnnotationKind::Tuple) {
         YQL_CLOG(DEBUG, CorePeepHole) << "IN Tuple";
-        dict = BuildDictOverTuple(std::move(collection), dictKeyType, ctx);
+        dict = BuildDictOverTuple(std::move(collection), dictKeyType, ctx, types);
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyDict) {
         YQL_CLOG(DEBUG, CorePeepHole) << "IN EmptyDict";
     } else if (collectionType->GetKind() == ETypeAnnotationKind::EmptyList) {
@@ -3233,41 +3233,24 @@ TExprNode::TPtr ExpandMux(const TExprNode::TPtr& node, TExprContext& ctx) {
     return node;
 }
 
-bool IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(const TTypeAnnotationContext& types) {
-    static const char Flag[] = "ExpandLMapOrShuffleByKeysViaBlock";
-    return !IsOptimizerDisabled<Flag>(types);
-}
-
-TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
+TExprNode::TPtr ExpandLMapOrShuffleByKeys(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
-    if (IsOptimizerExpandLMapOrShuffleByKeysViaBlockAllowed(types)) {
-        return ctx.Builder(node->Pos())
-            .Callable("Block")
-                .Lambda(0)
-                    .Param("parent")
-                    .Callable("Collect")
-                        .Apply(0, node->Tail())
-                            .With(0)
-                                .Callable("Iterator")
-                                    .Add(0, node->HeadPtr())
-                                    .Callable(1, "DependsOn")
-                                        .Arg(0, "parent")
-                                    .Seal()
+    return ctx.Builder(node->Pos())
+        .Callable("Block")
+            .Lambda(0)
+                .Param("parent")
+                .Callable("Collect")
+                    .Apply(0, node->Tail())
+                        .With(0)
+                            .Callable("Iterator")
+                                .Add(0, node->HeadPtr())
+                                .Callable(1, "DependsOn")
+                                    .Arg(0, "parent")
                                 .Seal()
-                            .Done()
-                        .Seal()
+                            .Seal()
+                        .Done()
                     .Seal()
                 .Seal()
-            .Seal().Build();
-    }
-    return ctx.Builder(node->Pos())
-        .Callable("Collect")
-            .Apply(0, node->Tail())
-                .With(0)
-                    .Callable("Iterator")
-                        .Add(0, node->HeadPtr())
-                    .Seal()
-                .Done()
             .Seal()
         .Seal().Build();
 }
@@ -3279,14 +3262,14 @@ bool IsExpandLMapOrShuffleByKeysPromoted(const TTypeAnnotationContext& types) {
 
 TExprNode::TPtr ExpandLMapOrShuffleByKeysAtCommonStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (IsExpandLMapOrShuffleByKeysPromoted(types)) {
-        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+        return ExpandLMapOrShuffleByKeys(node, ctx);
     }
     return node;
 }
 
 TExprNode::TPtr ExpandLMapOrShuffleByKeysAtFinalStage(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     if (!IsExpandLMapOrShuffleByKeysPromoted(types)) {
-        return ExpandLMapOrShuffleByKeys(node, ctx, types);
+        return ExpandLMapOrShuffleByKeys(node, ctx);
     }
     return node;
 }
@@ -6429,6 +6412,68 @@ private:
         return nullptr;
     }
 
+    class TIsSuitableScalarRewriteHelper {
+        static constexpr ui32 MinVersion = NKikimr::NMiniKQL::TRuntimeVersion::MinSupportedRuntimeVersion;
+
+    public:
+        TIsSuitableScalarRewriteHelper()
+            : RewriteMap_({
+                  {"Guess", 79},
+                  {"Way", 80},
+                  {"Variant", 81},
+                  {"VariantItem", 82},
+                  {"DynamicVariant", 83},
+                  {"DecimalMul", MinVersion},
+                  {"DecimalDiv", MinVersion},
+                  {"DecimalMod", MinVersion},
+                  {"And", MinVersion},
+                  {"Or", MinVersion},
+                  {"Xor", MinVersion},
+                  {"Not", MinVersion},
+                  {"Coalesce", MinVersion},
+                  {"Exists", MinVersion},
+                  {"If", MinVersion},
+                  {"Just", MinVersion},
+                  {"AsStruct", MinVersion},
+                  {"Member", MinVersion},
+                  {"Nth", MinVersion},
+                  {"ToPg", MinVersion},
+                  {"FromPg", MinVersion},
+                  {"PgResolvedCall", MinVersion},
+                  {"PgResolvedOp", MinVersion},
+                  {"AssumeStrict", MinVersion},
+                  {"AssumeNonStrict", MinVersion},
+                  {"NoPush", MinVersion},
+                  {"Likely", MinVersion},
+              })
+        {
+        }
+
+        bool IsSuitable(const TExprNode::TPtr& node) const {
+            if (node->IsList()) {
+                return true;
+            }
+
+            if (!node->IsCallable()) {
+                return false;
+            }
+
+            auto it = RewriteMap_.find(node->Content());
+            if (it == RewriteMap_.end()) {
+                return false;
+            }
+
+            return NKikimr::NMiniKQL::RuntimeVersion >= it->second;
+        }
+
+    private:
+        THashMap<TStringBuf, ui32> RewriteMap_;
+    };
+
+    bool IsSuitableForBlockScalarRewrite(const TExprNode::TPtr& node) const {
+        return Singleton<TIsSuitableScalarRewriteHelper>()->IsSuitable(node);
+    }
+
     void FigureOutRewriteForEachNode(const TExprNode::TPtr& node, TRewritesMap& rewrites, const TNodeSet& nodesToSkip, const TNodeSet& nonStrictNodes) {
         YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Rewriting node";
         Y_DEFER {
@@ -6474,12 +6519,7 @@ private:
 
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
-        const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "NoPush", "Likely"});
-        bool isSuitableGuess = NKikimr::NMiniKQL::RuntimeVersion >= 79 && node->IsCallable("Guess");
-        bool isSuitableWay = NKikimr::NMiniKQL::RuntimeVersion >= 80 && node->IsCallable("Way");
-        bool isSuitableVariant = NKikimr::NMiniKQL::RuntimeVersion >= 81 && node->IsCallable("Variant");
-        if (node->IsList() || rewriteAsIs || isSuitableGuess || isSuitableWay || isSuitableVariant ||
-            node->IsCallable({"DecimalMul", "DecimalDiv", "DecimalMod", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"})) {
+        if (IsSuitableForBlockScalarRewrite(node)) {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, /*reportUnspported=*/true)) {
                 YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Type are not supported";
                 return;
@@ -6538,6 +6578,7 @@ private:
                 }
             }
 
+            const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "NoPush", "Likely"});
             const TString blockFuncName = rewriteAsIs ? ToString(node->Content()) : (TString("Block") + (node->IsList() ? "AsTuple" : node->Content()));
             if (node->IsCallable({"And", "Or", "Xor"}) && funcArgs.size() > 2) {
                 // Split original argument list by pairs (since the order is not important balanced tree is used)
@@ -9348,11 +9389,9 @@ ui64 ToTimestamp(ui64 now) { return std::min<ui64>(NUdf::MAX_TIMESTAMP - 1ULL, n
 
 struct TPeepHoleRules {
     const TPeepHoleOptimizerMap CommonStageRules = {
-        {"EquiJoin", &ExpandEquiJoin},
         {"SafeCast", &ExpandCast<false>},
         {"StrictCast", &ExpandCast<true>},
         {"AlterTo", &ExpandAlterTo},
-        {"SqlIn", &ExpandSqlIn},
         {"Lookup", &RewriteSearchByKeyForTypesMismatch<false>},
         {"Contains", &RewriteSearchByKeyForTypesMismatch<true>},
         {"ListHas", &ExpandListHas},
@@ -9434,6 +9473,8 @@ struct TPeepHoleRules {
     };
 
     const TExtPeepHoleOptimizerMap CommonStageExtRules = {
+        {"EquiJoin", &ExpandEquiJoin},
+        {"SqlIn", &ExpandSqlIn},
         {"Aggregate", &ExpandAggregatePeephole},
         {"AggregateCombine", &ExpandAggregatePeephole},
         {"AggregateCombineState", &ExpandAggregatePeephole},

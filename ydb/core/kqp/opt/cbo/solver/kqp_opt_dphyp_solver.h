@@ -1131,7 +1131,7 @@ template<typename TNodeSet> void TDPHypSolverShuffleElimination<TNodeSet>::EmitC
             // TODO: we can remove shuffle from here, joinkeys.size() == getshufflehashargscount() isn't nescesary condition. GetShuffleHashFuncArgsCount must be equal, otherwise we will reshuffle.
             // bool sameHashFuncArgCount = (lhsHashFuncArgCnt == rhsHashFuncArgCnt);
             if (lhsShuffled && rhsShuffled /* we don't support not shuffling two inputs in the execution, so we must shuffle at least one*/) {
-                if (leftNode->Stats.Nrows < rightNode->Stats.Nrows) {
+                if (leftNode->Stats.ByteSize < rightNode->Stats.ByteSize) {
                     lhsShuffled = false;
                 } else {
                     rhsShuffled = false;

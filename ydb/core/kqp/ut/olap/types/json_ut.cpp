@@ -1699,6 +1699,29 @@ Y_UNIT_TEST_SUITE(KqpOlapJsonNativeScalars) {
         Variator::ToExecutor(Variator::SingleScript(script)).Execute();
     }
 
+    // A full cycle test for doubles near max magnitude. The stored value stays exact; reading back renders
+    // it with fewer digits (17 in, 16 out) on BinaryJson level.
+    Y_UNIT_TEST(CompactionNearMaxDouble) {
+        const TString script = TStringBuilder() << NativeTableSetup() << R"(
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (1u, JsonDocument('{"n" : 1.7976931348623157e308}')),
+                                                             (2u, JsonDocument('{"n" : -1.7976931348623157e308}'))
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"n\":1.797693134862316e+308}"]];[2u;["{\"n\":-1.797693134862316e+308}"]]]
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES (3u, JsonDocument('{"n" : 1.5}'))
+        ------
+        ONE_COMPACTION
+        ------
+        READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+        EXPECTED: [[1u;["{\"n\":1.797693134862316e+308}"]];[2u;["{\"n\":-1.797693134862316e+308}"]];[3u;["{\"n\":1.5}"]]]
+        ------
+        )" << NativeValueTypeCheck(EValueType::Double);
+        Variator::ToExecutor(Variator::SingleScript(script)).Execute();
+    }
+
     Y_UNIT_TEST(CompactionDivergentTypesFallback) {
         const TString script = TStringBuilder() << NativeTableSetup() << R"(
         DATA:

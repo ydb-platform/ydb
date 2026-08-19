@@ -6,7 +6,7 @@ from ymake import macro, Unit
 @macro
 def COPY(
     unit: Unit,
-    *args: tuple[str, ...],
+    *args: str,
     RESULT: str = '',
     FROM: str = '',
     DESTINATION: str = '',

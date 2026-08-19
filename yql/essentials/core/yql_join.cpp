@@ -267,6 +267,15 @@ namespace {
                             }
                             continue;
                         }
+                        if (name.IsAtom("ShuffleMode")) {
+                            static const std::initializer_list<std::string_view> ShuffleModeValues = {"Default", "Off", "Map", "Hash"};
+                            if (!value.IsAtom(ShuffleModeValues)) {
+                                ctx.AddError(TIssue(ctx.GetPosition(name.Pos()),
+                                            TStringBuilder() << "streamlookup(" << name.Content() << "...): Expected one of " << JoinSeq(", ", ShuffleModeValues) << ", but got: " << value.Content()));
+                                return IGraphTransformer::TStatus::Error;
+                            }
+                            continue;
+                        }
                         if (!name.IsAtom({"TTL", "MaxCachedRows", "MaxDelayedRows", "FullscanLimit"})) {
                             ctx.AddError(TIssue(ctx.GetPosition(name.Pos()), TStringBuilder() <<
                                         "streamlookup(): Unsupported option: " << name.Content()));
@@ -951,7 +960,8 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
     const TJoinLabels& labels,
     TExprNode& joins,
     const TJoinOptions& options,
-    TExprContext& ctx
+    TExprContext& ctx,
+    const TTypeAnnotationContext& typesCtx
 ) {
     auto position = ctx.GetPosition(positionHandle);
 
@@ -1041,7 +1051,7 @@ IGraphTransformer::TStatus EquiJoinAnnotation(
 
     if (options.Flatten) {
         for (auto& x : flattenFields) {
-            if (const auto commonType = CommonType(positionHandle, x.second.AllTypes, ctx)) {
+            if (const auto commonType = CommonType(positionHandle, x.second.AllTypes, ctx, typesCtx)) {
                 const bool unwrap = ETypeAnnotationKind::Optional == commonType->GetKind() &&
                     std::any_of(x.second.AllTypes.cbegin(), x.second.AllTypes.cend(), [](const TTypeAnnotationNode* type) { return ETypeAnnotationKind::Optional != type->GetKind(); });
                 resultFields.emplace_back(ctx.MakeType<TItemExprType>(x.first, unwrap ? commonType->Cast<TOptionalExprType>()->GetItemType() : commonType));

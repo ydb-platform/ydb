@@ -11,6 +11,9 @@
 #include <library/cpp/resource/resource.h>
 #include <util/system/tempfile.h>
 #include <util/system/condvar.h>
+#include <util/network/address.h>
+#include <util/network/sock.h>
+#include <netinet/in.h>
 #include <thread>
 #include <atomic>
 
@@ -38,6 +41,22 @@ void EatPartialString(TIntrusivePtr<HttpType>& request, const TString& data) {
         memcpy(request->Pos(), &c, 1);
         request->Advance(1);
     }
+}
+
+std::pair<TString, ui16> BoundHostAndPort(const TIntrusivePtr<NHttp::TSocketDescriptor>& socket) {
+    sockaddr_storage ss{};
+    socklen_t slen = sizeof(ss);
+    Y_ABORT_UNLESS(getsockname(socket->GetDescriptor(), reinterpret_cast<sockaddr*>(&ss), &slen) == 0);
+    if (ss.ss_family == AF_INET6) {
+        return {"::1", ntohs(reinterpret_cast<sockaddr_in6*>(&ss)->sin6_port)};
+    }
+    return {"127.0.0.1", ntohs(reinterpret_cast<sockaddr_in*>(&ss)->sin_port)};
+}
+
+void AssertCanConnect(const TString& host, ui16 port) {
+    TNetworkAddress addr(host, port);
+    TSocket sock(addr);
+    UNIT_ASSERT(static_cast<SOCKET>(sock) != INVALID_SOCKET);
 }
 
 }
@@ -1619,7 +1638,8 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         TMtlsTestSetup(
             const bool useRealThreads = false,
             const bool secureConnection = true,
-            TAutoPtr<TLogBackend> customLogBackend = nullptr
+            TAutoPtr<TLogBackend> customLogBackend = nullptr,
+            const bool clientCertificateRequired = false
         )
             : ActorSystem(1, useRealThreads)
         {
@@ -1664,6 +1684,7 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
                 add->CertificateFile = ServerCertFile.Name();
                 add->PrivateKeyFile = ServerKeyFile.Name();
                 add->CaFile = CaCertFile.Name(); // enables mTLS
+                add->ClientCertificateRequired = clientCertificateRequired;
             }
             ActorSystem.Send(new NActors::IEventHandle(ProxyId, ActorSystem.AllocateEdgeActor(), add.Release()), 0, true);
             TAutoPtr<NActors::IEventHandle> handle;
@@ -1686,15 +1707,15 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         });
 
         TAutoPtr<NActors::IEventHandle> handle;
-        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request1 = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
-        UNIT_ASSERT_EQUAL(request1->Request->URL, "/test");
-        UNIT_ASSERT(!request1->Request->MTlsClientCertificate.empty());
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        UNIT_ASSERT(!request->Request->MTlsClientCertificate.empty());
 
         clientThread.join();
     }
 
     Y_UNIT_TEST(UntrustedClientCertificate) {
-        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("connection closed - error in Accept"));
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("Connection closed - error in Accept"));
         auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
         bool expectedMessageLogged = false;
 
@@ -1734,6 +1755,43 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         clientThread.join();
     }
 
+    Y_UNIT_TEST(RequiredNoClientCertificate) {
+        TAutoPtr<TLogBackend> backend(new TSignalingLogBackend("Connection closed - error in Accept"));
+        auto* signalingBackend = dynamic_cast<TSignalingLogBackend*>(backend.Get());
+        bool expectedMessageLogged = false;
+
+        {
+            TMtlsTestSetup setup(/* useRealThreads */ true, /* secureConnection */ true, std::move(backend), /* clientCertificateRequired */ true);
+
+            const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+            std::thread clientThread([&setup, httpRequest]() {
+                NHttp::NTest::SendTlsRequest(setup.Port, "", "", setup.CaCertFile.Name(), httpRequest);
+            });
+            clientThread.join();
+
+            signalingBackend->WaitFor(TDuration::Seconds(2));
+            expectedMessageLogged = signalingBackend->Seen();
+        }
+
+        UNIT_ASSERT_C(expectedMessageLogged, "No connection error happened without client certificate");
+    }
+
+    Y_UNIT_TEST(RequiredValidClientCertificate) {
+        TMtlsTestSetup setup(/* useRealThreads */ false, /* secureConnection */ true, nullptr, /* clientCertificateRequired */ true);
+
+        const TString httpRequest = "GET /test HTTP/1.1\r\nHost: 127.0.0.1:" + ToString(setup.Port) + "\r\nConnection: close\r\n\r\n";
+        std::thread clientThread([&setup, httpRequest]() {
+            NHttp::NTest::SendTlsRequest(setup.Port, setup.ClientCertFile.Name(), setup.ClientKeyFile.Name(), setup.CaCertFile.Name(), httpRequest);
+        });
+
+        TAutoPtr<NActors::IEventHandle> handle;
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+        UNIT_ASSERT(!request->Request->MTlsClientCertificate.empty());
+
+        clientThread.join();
+    }
+
     Y_UNIT_TEST(NotSecureConnection) {
         TMtlsTestSetup setup(/* useRealThreads */ false, /* secureConnection */ false);
 
@@ -1750,6 +1808,51 @@ Y_UNIT_TEST_SUITE(THttpProxyWithMTls) {
         setup.ActorSystem.Send(new NActors::IEventHandle(handle->Sender, setup.ServerId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
         NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = setup.ActorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
         UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+    }
+
+    Y_UNIT_TEST(SyncBindListensImmediately) {
+        auto socket = NHttp::TryBindListeningSocket(TString(), 0);
+        UNIT_ASSERT(socket);
+        const auto [host, port] = BoundHostAndPort(socket);
+        UNIT_ASSERT(port != 0);
+        AssertCanConnect(host, port);
+    }
+
+    Y_UNIT_TEST(PreboundSocketServesHttp) {
+        auto socket = NHttp::TryBindListeningSocket(TString(), 0);
+        UNIT_ASSERT(socket);
+        const auto [host, port] = BoundHostAndPort(socket);
+
+        NActors::TTestActorRuntimeBase actorSystem(1, true);
+        TAutoPtr<NActors::IEventHandle> handle;
+        actorSystem.Initialize();
+
+        NActors::TActorId proxyId = actorSystem.Register(NHttp::CreateHttpProxy());
+        auto* addPort = new NHttp::TEvHttpProxy::TEvAddListeningPort(port);
+        addPort->PreboundSocket = socket;
+        actorSystem.Send(new NActors::IEventHandle(proxyId, actorSystem.AllocateEdgeActor(), addPort), 0, true);
+        actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvConfirmListen>(handle);
+        UNIT_ASSERT(handle);
+
+        NActors::TActorId serverId = actorSystem.AllocateEdgeActor();
+        actorSystem.Send(new NActors::IEventHandle(proxyId, serverId, new NHttp::TEvHttpProxy::TEvRegisterHandler("/test", serverId)), 0, true);
+
+        NActors::TActorId clientId = actorSystem.AllocateEdgeActor();
+        const TString url = host == "::1"
+            ? "http://[::1]:" + ToString(port) + "/test"
+            : "http://127.0.0.1:" + ToString(port) + "/test";
+        NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
+        actorSystem.Send(new NActors::IEventHandle(proxyId, clientId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingRequest* request = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingRequest>(handle);
+        UNIT_ASSERT_EQUAL(request->Request->URL, "/test");
+
+        NHttp::THttpOutgoingResponsePtr httpResponse = request->Request->CreateResponseString("HTTP/1.1 200 Found\r\nConnection: Close\r\nTransfer-Encoding: chunked\r\n\r\n6\r\npassed\r\n0\r\n\r\n");
+        actorSystem.Send(new NActors::IEventHandle(handle->Sender, serverId, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(httpResponse)), 0, true);
+
+        NHttp::TEvHttpProxy::TEvHttpIncomingResponse* response = actorSystem.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(handle);
+        UNIT_ASSERT_EQUAL(response->Response->Status, "200");
+        UNIT_ASSERT_EQUAL(response->Response->Body, "passed");
     }
 
 }

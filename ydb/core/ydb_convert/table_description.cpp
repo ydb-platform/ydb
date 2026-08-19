@@ -339,6 +339,10 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
         settings->set_if_not_exist(true);
     }
 
+    if (flags & NKqpProto::TKqpSchemeOperation::FLAG_REBUILD_INDEX) {
+        settings->set_is_rebuild(true);
+    }
+
     if (desc.parallel()) {
         settings->set_max_shards_in_flight(desc.parallel());
     }
@@ -1515,6 +1519,10 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         for (const auto& alter : req->alter_columns()) {
             auto alterColumn = alterColumnTable->MutableAlterSchema()->AddAlterColumns();
             alterColumn->SetName(alter.Getname());
+
+            if (alter.has_not_null()) {
+                alterColumn->SetNotNull(alter.not_null());
+            }
 
             if (!alter.family().empty()) {
                 alterColumn->SetColumnFamilyName(alter.family());

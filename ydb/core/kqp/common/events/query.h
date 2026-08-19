@@ -18,7 +18,7 @@
 
 #include <memory>
 
-namespace NKikimr::NKqp::NWorkload {
+namespace NKikimr::NWorkloadManager {
 class ISessionUpdater;
 class IQueryClassifier;
 }
@@ -368,19 +368,19 @@ public:
         return UserRequestContext;
     }
 
-    void SetWmSessionUpdater(const std::shared_ptr<NWorkload::ISessionUpdater>& wmSessionUpdater) {
+    void SetWmSessionUpdater(const std::shared_ptr<NWorkloadManager::ISessionUpdater>& wmSessionUpdater) {
         WmSessionUpdater = wmSessionUpdater;
     }
 
-    std::shared_ptr<NWorkload::ISessionUpdater> GetWmSessionUpdater() const {
+    std::shared_ptr<NWorkloadManager::ISessionUpdater> GetWmSessionUpdater() const {
         return WmSessionUpdater;
     }
 
-    void SetWmQueryClassifier(std::shared_ptr<NWorkload::IQueryClassifier> classifier) {
+    void SetWmQueryClassifier(std::shared_ptr<NWorkloadManager::IQueryClassifier> classifier) {
         WmQueryClassifier = std::move(classifier);
     }
 
-    std::shared_ptr<NWorkload::IQueryClassifier> GetWmQueryClassifier() const {
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> GetWmQueryClassifier() const {
         return WmQueryClassifier;
     }
 
@@ -521,8 +521,8 @@ private:
     std::shared_ptr<const NKikimrKqp::TQueryPhysicalGraph> QueryPhysicalGraph;
     i64 Generation = 0;
     bool DisableDefaultTimeout = false;
-    std::shared_ptr<NWorkload::ISessionUpdater> WmSessionUpdater;
-    std::shared_ptr<NWorkload::IQueryClassifier> WmQueryClassifier;
+    std::shared_ptr<NWorkloadManager::ISessionUpdater> WmSessionUpdater;
+    std::shared_ptr<NWorkloadManager::IQueryClassifier> WmQueryClassifier;
 };
 
 struct TEvDataQueryStreamPart: public TEventPB<TEvDataQueryStreamPart,

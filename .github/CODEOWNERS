@@ -1,7 +1,5 @@
 /*.md @ydb-platform/docs
 
-/CHANGELOG.md @ydb-platform/changelog-reviewers
-
 /AGENTS.md @ydb-platform/ai-reviewers
 
 /BUILD.md @ydb-platform/ci
@@ -11,24 +9,24 @@
 /.cursorindexingignore-personal @ydb-platform/ai-reviewers
 
 /.github/ @ydb-platform/ci
-/.github/workflows/docs_*
-/.github/workflows/ydbdoc-*
+/.github/workflows/docs_* @ydb-platform/docs
+/.github/workflows/ydbdoc-* @ydb-platform/docs
 /.github/config/muted_ya*
 /.github/CODEOWNERS
 /.github/TESTOWNERS
 /.github/docker @ydb-platform/appteam
 
-/build @ydb-platform/ci
-/certs @ydb-platform/ci
-/contrib @ydb-platform/ci
-/devtools @ydb-platform/ci
-/library @ydb-platform/ci
-/scripts @ydb-platform/ci
-/tools @ydb-platform/ci
-/util @ydb-platform/ci
-/vendor @ydb-platform/ci
-/yql @ydb-platform/ci
-/yt @ydb-platform/ci
+/build @ydb-platform/synced-dirs
+/certs @ydb-platform/synced-dirs
+/contrib @ydb-platform/synced-dirs
+/devtools @ydb-platform/synced-dirs
+/library @ydb-platform/synced-dirs
+/scripts @ydb-platform/synced-dirs
+/tools @ydb-platform/synced-dirs
+/util @ydb-platform/synced-dirs
+/vendor @ydb-platform/synced-dirs
+/yql @ydb-platform/synced-dirs
+/yt @ydb-platform/synced-dirs
 
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/kqp/ @ydb-platform/qp
@@ -62,11 +60,18 @@
 /ydb/library/yql/tools/solomon_emulator_grpc @ydb-platform/fq
 /ydb/library/yql/udfs/common/clickhouse/client @ydb-platform/fq
 /ydb/library/yql/udfs/common/knn @ydb-platform/datashard
-/ydb/services/fq/ @ydb-platform/fq
+/ydb/services/fq @ydb-platform/fq
+/ydb/services/metadata @ydb-platform/fq
+/ydb/services/udf_store @ydb-platform/fq
+/ydb/library/wasm @ydb-platform/fq
+/ydb/services/workload_manager @ydb-platform/fq
+/ydb/core/resource_pools @ydb-platform/fq
+/ydb/tests/fq @ydb-platform/fq
 
 /ydb/core/http_proxy @ydb-platform/Topics
 /ydb/core/kafka_proxy @ydb-platform/Topics
 /ydb/core/persqueue @ydb-platform/Topics
+/ydb/library/persqueue @ydb-platform/Topics
 /ydb/services/datastreams @ydb-platform/Topics
 /ydb/services/deprecated/persqueue_v0 @ydb-platform/Topics
 /ydb/services/persqueue_v1 @ydb-platform/Topics
@@ -119,6 +124,8 @@
 /ydb/core/tx/schemeshard/ut_olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
 /ydb/core/tx/tiering @ydb-platform/cs
+/ydb/core/keyvalue @ydb-platform/cs
+/ydb/services/keyvalue @ydb-platform/cs
 
 /ydb/library/actors/core @ydb-platform/blobstorage
 /ydb/library/actors/interconnect @ydb-platform/blobstorage

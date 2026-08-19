@@ -2,6 +2,9 @@
 #include "read_balancer_log.h"
 
 #include <ydb/core/protos/schemeshard/operations.pb.h>
+#include <ydb/library/actors/core/events.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE_READ_BALANCER
 
 namespace NKikimr {
 namespace NPQ {
@@ -76,7 +79,8 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
         }
         logMessage << ".";
     }
-    PQ_LOG_D( logMessage);
+    YDB_LOG_DEBUG(logMessage,
+        {"logPrefix", LogPrefix()});
 
     for(const auto& merge: Merges) {
         auto* newMerge = groupDescription.AddMerge();
@@ -89,29 +93,50 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
 void TPartitionScaleRequest::PassAway() {
     if (SchemePipeActorId) {
         NTabletPipe::CloseClient(this->SelfId(), SchemePipeActorId);
+        SchemePipeActorId = {};
     }
 
     TBase::PassAway();
 }
 
+bool TPartitionScaleRequest::IsOurPipe(const TActorId& clientId) const {
+    return SchemePipeActorId && clientId == SchemePipeActorId;
+}
+
+void TPartitionScaleRequest::ReplyAndDie(
+    TEvTxUserProxy::TEvProposeTransactionStatus::EStatus status,
+    const TActorContext& ctx)
+{
+    if (!ReplySent) {
+        ReplySent = true;
+        Send(ParentActorId, new TEvPartitionScaleRequestDone(status));
+    }
+    Die(ctx);
+}
+
+void TPartitionScaleRequest::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
+    ReplySent = true;
+    Die(ctx);
+}
+
 void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
+    if (!IsOurPipe(ev->Get()->ClientId)) {
+        return;
+    }
     if (ev->Get()->Status != NKikimrProto::OK) {
-        auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable);
-        Send(ParentActorId, scaleRequestResult.release());
-        Die(ctx);
+        ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, ctx);
     }
 }
 
-void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&, const TActorContext &ctx) {
-    auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable);
-    Send(ParentActorId, scaleRequestResult.release());
-    Die(ctx);
+void TPartitionScaleRequest::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext &ctx) {
+    if (!IsOurPipe(ev->Get()->ClientId)) {
+        return;
+    }
+    ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ProxyShardNotAvailable, ctx);
 }
 
 void TPartitionScaleRequest::Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& /*ev*/, const TActorContext& ctx) {
-    auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete);
-    Send(ParentActorId, scaleRequestResult.release());
-    Die(ctx);
+    ReplyAndDie(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecComplete, ctx);
 }
 
 void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev, const NActors::TActorContext& ctx) {
@@ -119,14 +144,14 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
 
     auto status = static_cast<TEvTxUserProxy::TEvProposeTransactionStatus::EStatus>(msg->Record.GetStatus());
     if (status != TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::ExecInProgress) {
-        auto scaleRequestResult = std::make_unique<TEvPartitionScaleRequestDone>(status);
         TStringBuilder issues;
         for (auto& issue : ev->Get()->Record.GetIssues()) {
             issues << issue.ShortDebugString() + ", ";
         }
-        PQ_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a split request: " << issues);
-        Send(ParentActorId, scaleRequestResult.release());
-        Die(ctx);
+        YDB_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a split",
+            {"logPrefix", LogPrefix()},
+            {"request", issues});
+        ReplyAndDie(status, ctx);
     } else {
         NTabletPipe::TClientConfig clientConfig;
         clientConfig.RetryPolicy = {.RetryLimitCount = 3};

@@ -2,7 +2,7 @@
 
 Data enrichment means augmenting stream events with extra fields from a lookup dataset. For example, an event may contain only an identifier, and the lookup adds a human-readable name or other attributes. The lookup can be a [local table](#enrichment-local-table) or [object storage (S3)](#enrichment-s3).
 
-In [streaming queries](../../concepts/streaming-query.md), the lookup is attached with a `JOIN`. The stream must be on the left side of the join, the lookup on the right.
+In [streaming queries](../../concepts/streaming-query/streaming-query.md), the lookup is attached with a `JOIN`. The stream must be on the left side of the join, the lookup on the right.
 
 {% note warning %}
 
@@ -33,13 +33,14 @@ Functions used in the queries:
 
 In this example the lookup is stored in a [table](../../concepts/datamodel/table.md) `services_dict` in the current database.
 
-Create a [streaming query](../../concepts/streaming-query.md) that performs enrichment:
+Create a [streaming query](../../concepts/streaming-query/streaming-query.md) that performs enrichment:
+
 
 ```yql
 CREATE STREAMING QUERY query_with_table_join AS
 DO BEGIN
 
--- Read events from the input topic
+-- Reading events from the input topic
 $topic_data = SELECT
     *
 FROM
@@ -53,7 +54,7 @@ WITH (
     )
 );
 
--- Join the lookup to the stream on ServiceId
+-- Joining reference data to the stream by ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -64,7 +65,7 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Write to the output topic (JSON)
+-- Writing to the output topic (JSON)
 INSERT INTO
     output_topic -- or external topic ext_source.output_topic
 SELECT
@@ -82,8 +83,9 @@ The lookup is stored in S3 and connected via an [external data source](../../con
 
 Create an additional [external data source](../../yql/reference/syntax/create-external-data-source.md) to read the lookup from S3:
 
+
 ```yql
--- S3 data source for reading the lookup
+-- S3 data source for reading reference data
 CREATE EXTERNAL DATA SOURCE s3_source WITH (
     SOURCE_TYPE = "ObjectStorage",
     LOCATION = "<s3_endpoint>",
@@ -96,13 +98,14 @@ Where:
 
 - `<s3_endpoint>` is the S3 endpoint URL, for example `https://storage.yandexcloud.net/<bucket>/` in Yandex Cloud.
 
-Create a [streaming query](../../concepts/streaming-query.md) that performs enrichment:
+Create a [streaming query](../../concepts/streaming-query/streaming-query.md) that performs enrichment:
+
 
 ```yql
 CREATE STREAMING QUERY query_with_join AS
 DO BEGIN
 
--- Read events from the input topic
+-- Reading events from the input topic
 $topic_data = SELECT
     *
 FROM
@@ -116,7 +119,7 @@ WITH (
     )
 );
 
--- Read the service lookup from S3
+-- Reading service reference data from S3
 $s3_data = SELECT
     *
 FROM
@@ -129,7 +132,7 @@ WITH (
     )
 );
 
--- Join the lookup to the stream on ServiceId
+-- Joining reference data to the stream by ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -140,7 +143,7 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Write the result to the output topic as JSON
+-- Writing the result to the output topic in JSON format
 INSERT INTO
     ext_source.output_topic -- or local topic output_topic
 SELECT
@@ -150,5 +153,6 @@ FROM
 
 END DO
 ```
+
 
 For supported data formats (`json_each_row`, `csv_with_names`, and others), see [{#T}](streaming-query-formats.md).

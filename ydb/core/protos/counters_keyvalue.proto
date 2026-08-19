@@ -908,6 +908,40 @@ enum EPercentileCounters {
         Ranges: { Value: 33554432     Name: "33554432"    }
         Ranges: { Value: 67108864     Name: "67108864"    }
     }];
+
+    COUNTER_WRITE_LATENCY_CHANNEL_0 = 44                             [(CounterOpts) = {Name: "WriteLatencyChannel0"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_1 = 45                             [(CounterOpts) = {Name: "WriteLatencyChannel1"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_2 = 46                             [(CounterOpts) = {Name: "WriteLatencyChannel2"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_3 = 47                             [(CounterOpts) = {Name: "WriteLatencyChannel3"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_4 = 48                             [(CounterOpts) = {Name: "WriteLatencyChannel4"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_5 = 49                             [(CounterOpts) = {Name: "WriteLatencyChannel5"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_6 = 50                             [(CounterOpts) = {Name: "WriteLatencyChannel6"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_7 = 51                             [(CounterOpts) = {Name: "WriteLatencyChannel7"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_8 = 52                             [(CounterOpts) = {Name: "WriteLatencyChannel8"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_9 = 53                             [(CounterOpts) = {Name: "WriteLatencyChannel9"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_10 = 54                            [(CounterOpts) = {Name: "WriteLatencyChannel10"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_11 = 55                            [(CounterOpts) = {Name: "WriteLatencyChannel11"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_12 = 56                            [(CounterOpts) = {Name: "WriteLatencyChannel12"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_13 = 57                            [(CounterOpts) = {Name: "WriteLatencyChannel13"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_14 = 58                            [(CounterOpts) = {Name: "WriteLatencyChannel14"}];
+    COUNTER_WRITE_LATENCY_CHANNEL_15 = 59                            [(CounterOpts) = {Name: "WriteLatencyChannel15"}];
+
+    COUNTER_READ_LATENCY_CHANNEL_0 = 60                              [(CounterOpts) = {Name: "ReadLatencyChannel0"}];
+    COUNTER_READ_LATENCY_CHANNEL_1 = 61                              [(CounterOpts) = {Name: "ReadLatencyChannel1"}];
+    COUNTER_READ_LATENCY_CHANNEL_2 = 62                              [(CounterOpts) = {Name: "ReadLatencyChannel2"}];
+    COUNTER_READ_LATENCY_CHANNEL_3 = 63                              [(CounterOpts) = {Name: "ReadLatencyChannel3"}];
+    COUNTER_READ_LATENCY_CHANNEL_4 = 64                              [(CounterOpts) = {Name: "ReadLatencyChannel4"}];
+    COUNTER_READ_LATENCY_CHANNEL_5 = 65                              [(CounterOpts) = {Name: "ReadLatencyChannel5"}];
+    COUNTER_READ_LATENCY_CHANNEL_6 = 66                              [(CounterOpts) = {Name: "ReadLatencyChannel6"}];
+    COUNTER_READ_LATENCY_CHANNEL_7 = 67                              [(CounterOpts) = {Name: "ReadLatencyChannel7"}];
+    COUNTER_READ_LATENCY_CHANNEL_8 = 68                              [(CounterOpts) = {Name: "ReadLatencyChannel8"}];
+    COUNTER_READ_LATENCY_CHANNEL_9 = 69                              [(CounterOpts) = {Name: "ReadLatencyChannel9"}];
+    COUNTER_READ_LATENCY_CHANNEL_10 = 70                             [(CounterOpts) = {Name: "ReadLatencyChannel10"}];
+    COUNTER_READ_LATENCY_CHANNEL_11 = 71                             [(CounterOpts) = {Name: "ReadLatencyChannel11"}];
+    COUNTER_READ_LATENCY_CHANNEL_12 = 72                             [(CounterOpts) = {Name: "ReadLatencyChannel12"}];
+    COUNTER_READ_LATENCY_CHANNEL_13 = 73                             [(CounterOpts) = {Name: "ReadLatencyChannel13"}];
+    COUNTER_READ_LATENCY_CHANNEL_14 = 74                             [(CounterOpts) = {Name: "ReadLatencyChannel14"}];
+    COUNTER_READ_LATENCY_CHANNEL_15 = 75                             [(CounterOpts) = {Name: "ReadLatencyChannel15"}];
 }
 
 enum ETxTypes {

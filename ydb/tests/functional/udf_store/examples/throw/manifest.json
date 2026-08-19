@@ -1,0 +1,13 @@
+{
+  "module_name": "Throw",
+  "calling_convention": "unversioned_value",
+  "module_extension": "wasm",
+  "required_libraries": ["sdk"],
+  "functions": [
+    {
+      "name": "fail",
+      "argument_types": [],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    }
+  ]
+}

@@ -6,6 +6,7 @@ PROVIDES(
 
 PEERDIR(
     yql/essentials/ast
+    yql/essentials/core/langver
     yql/essentials/core/sql_types
     yql/essentials/parser/pg_catalog
     yql/essentials/minikql

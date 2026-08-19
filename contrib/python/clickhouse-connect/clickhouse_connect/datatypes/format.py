@@ -63,7 +63,7 @@ def _convert_arguments(*args, **kwargs) -> dict[str, str]:
     return fmt_map
 
 
-def _matching_types(pattern: str, fmt: str = None) -> Sequence[type[ClickHouseType]]:
+def _matching_types(pattern: str, fmt: str | None = None) -> Sequence[type[ClickHouseType]]:
     re_pattern = re.compile(pattern.replace("*", ".*"), re.IGNORECASE)
     matches = [ch_type for type_name, ch_type in type_map.items() if re_pattern.match(type_name)]
     if not matches:

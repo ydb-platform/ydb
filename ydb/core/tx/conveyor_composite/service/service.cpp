@@ -56,7 +56,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
 
     workersPool.AddDeliveryDuration(ev.GetForwardSendDuration() + backSendDuration);
     workersPool.ReleaseWorker(ev.GetWorkerIdx());
-    workersPool.PutTaskResults(ev.DetachResults());
+    workersPool.PutTaskResults(ev.DetachResults(), ev.GetWorkersPoolId(), ev.GetWorkerIdx());
     if (workersPool.HasTasks()) {
         AFL_VERIFY(workersPool.DrainTasks());
     }

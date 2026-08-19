@@ -1,9 +1,16 @@
 #include "impl.h"
 #include "group_layout_checker.h"
 
+#include <ydb/core/protos/blobstorage_ddisk.pb.h>
+
 #include <util/generic/yexception.h>
 
 namespace NKikimr::NBsController {
+
+    // Thrown when a DDisk or PersistentBuffer referenced by a DeleteDDisks/DeletePersistentBuffers
+    // command can't be found; caught separately from generic errors to report NKikimrProto::NOT_FOUND
+    // instead of NKikimrProto::ERROR.
+    struct TDDiskNotFoundException : yexception {};
 
     class TBlobStorageController::TTxAllocateDDiskBlockGroup : public TTransactionBase<TBlobStorageController> {
         std::unique_ptr<TEventHandle<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>> RequestEv;
@@ -549,7 +556,7 @@ namespace NKikimr::NBsController {
                         auto it = std::ranges::find(persistentBufferIds, pbId);
 
                         if (it == persistentBufferIds.end()) {
-                            ythrow yexception() << "PersistentBuffer not found";
+                            ythrow TDDiskNotFoundException() << "PersistentBuffer not found";
                         }
                         getPersistentBufferPool().ReleasePersistentBuffer(*it);
                         {
@@ -573,7 +580,7 @@ namespace NKikimr::NBsController {
                             }
                         }
                         if (index < 0) {
-                            ythrow yexception() << "DDisk not found";
+                            ythrow TDDiskNotFoundException() << "DDisk not found";
                         }
 
                         auto *item = ddiskRecord->Mutable(index);
@@ -627,6 +634,10 @@ namespace NKikimr::NBsController {
                         updates.emplace_back(key, std::move(allocation));
                     }
                 }
+            } catch (const TDDiskNotFoundException& e) {
+                rr.SetStatus(NKikimrProto::NOT_FOUND);
+                rr.SetErrorReason(e.what());
+                return true;
             } catch (const std::exception& e) {
                 rr.SetStatus(NKikimrProto::ERROR);
                 rr.SetErrorReason(e.what());

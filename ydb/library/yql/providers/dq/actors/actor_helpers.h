@@ -10,6 +10,13 @@
 
 namespace NYql {
 
+enum class EActorFutureCallbackFailureReason {
+    None,
+    Undelivered,
+    NodeDisconnected,
+    Timeout,
+};
+
 enum EExecutorPoolType {
     Main,
     FullResultWriter,
@@ -25,17 +32,27 @@ struct TRichActorFutureCallback : public TRichActor<TRichActorFutureCallback<Eve
 
     static constexpr char ActorName[] = "YQL_DQ_ACTOR_FUTURE_CALLBACK";
 
-    TRichActorFutureCallback(TCallback&& callback, TFailure&& failure, TDuration timeout)
+    TRichActorFutureCallback(
+        TCallback&& callback,
+        TFailure&& failure,
+        TDuration timeout,
+        TString context = {},
+        NActors::TActorId targetActorId = {})
         : TBase(&TRichActorFutureCallback::StateWaitForEvent)
         , Callback(std::move(callback))
         , Failure(std::move(failure))
         , Timeout(timeout)
+        , Context(std::move(context))
+        , TargetActorId(targetActorId)
     { }
 
 private:
     const TCallback Callback;
     const TFailure Failure;
     const TDuration Timeout;
+    const TString Context;
+    const NActors::TActorId TargetActorId;
+    EActorFutureCallbackFailureReason FailureReason = EActorFutureCallbackFailureReason::None;
     bool TimerStarted = false;
     NActors::TSchedulerCookieHolder TimerCookieHolder;
 
@@ -47,11 +64,26 @@ private:
         })
         hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, [this] (NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) mutable {
             this->Unsubscribe(ev->Get()->NodeId);
+            FailureReason = EActorFutureCallbackFailureReason::NodeDisconnected;
+            YQL_CLOG(DEBUG, ProviderDq) << "ActorFutureCallback failed: interconnect node disconnected"
+                << " context=" << Context
+                << " disconnectedNodeId=" << ev->Get()->NodeId
+                << " targetActorId=" << TargetActorId
+                << " callbackActorId=" << this->SelfId();
             TimerStarted = true;
             OnFailure();
         })
         hFunc(NActors::TEvents::TEvUndelivered, [this] (NActors::TEvents::TEvUndelivered::TPtr& ev) mutable {
+            const auto* undelivered = ev->Get();
             this->Unsubscribe(ev->Sender.NodeId());
+            FailureReason = EActorFutureCallbackFailureReason::Undelivered;
+            YQL_CLOG(DEBUG, ProviderDq) << "ActorFutureCallback failed: event undelivered (fast failure, not a timeout)"
+                << " context=" << Context
+                << " undeliveredReason=" << static_cast<int>(undelivered->Reason)
+                << " sourceEventType=" << undelivered->SourceType
+                << " unsure=" << undelivered->Unsure
+                << " targetActorId=" << TargetActorId
+                << " callbackActorId=" << this->SelfId();
             TimerStarted = true;
             OnFailure();
         })
@@ -69,6 +101,14 @@ private:
 
     void OnFailure() {
         if (TimerStarted) {
+            if (FailureReason == EActorFutureCallbackFailureReason::None) {
+                FailureReason = EActorFutureCallbackFailureReason::Timeout;
+                YQL_CLOG(DEBUG, ProviderDq) << "ActorFutureCallback failed: response timeout"
+                    << " context=" << Context
+                    << " timeout=" << Timeout
+                    << " targetActorId=" << TargetActorId
+                    << " callbackActorId=" << this->SelfId();
+            }
             Failure();
             this->PassAway();
         } else {

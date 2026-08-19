@@ -2,11 +2,15 @@
 #include "schema_operation.h"
 #include "schema_propose.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/rpc_calls.h>
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
+#include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NSchema {
 
@@ -42,13 +46,15 @@ public:
 
 private:
     void DoGetClustersList() {
-        LOG_D("DoGetClustersList");
+        YDB_LOG_DEBUG("DoGetClustersList",
+            {"logPrefix", NPQ_LOG_PREFIX});
         Become(&TCreateTopicOperationActor::GetClustersListState);
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
     }
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
-        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse");
+        YDB_LOG_DEBUG("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse",
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         auto& response = *ev->Get();
         if (response.Success) {
@@ -67,11 +73,24 @@ private:
 
 private:
     void DoCreate() {
-        LOG_D("DoCreate IfNotExists: " << Settings.IfNotExists);
+        YDB_LOG_DEBUG("DoCreate",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"ifNotExists", Settings.IfNotExists});
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
-        auto topicName = CanonizePath(Settings.Strategy->GetTopicName());
+        // Federation create still expects the original legacy name so ForFederation can
+        // extract DC/producer metadata. ResolveName is only for FCC (modern + legacy → path).
+        TString path;
+        if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {
+            auto resolved = NNameResolver::ResolveName(database, Settings.Strategy->GetTopicName());
+            if (!resolved) {
+                return ReplyAndDie(Ydb::StatusIds::BAD_REQUEST, TString{resolved.error()});
+            }
+            path = std::move(resolved->Path);
+        } else {
+            path = NormalizePath(database, CanonizePath(Settings.Strategy->GetTopicName()));
+        }
 
         auto proposal = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
 
@@ -81,7 +100,6 @@ private:
             proposal->Record.SetUserToken(Settings.UserToken->GetSerializedToken());
         }
 
-        auto path = NormalizePath(database, topicName);
         auto [workingDir, name] = GetWorkingDirAndName(path);
         if (workingDir.empty()) {
             return ReplyAndDie(Ydb::StatusIds::SCHEME_ERROR, "Wrong topic name");
@@ -117,7 +135,8 @@ private:
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        LOG_D("Handle TEvSchemaOperationResponse");
+        YDB_LOG_DEBUG("Handle TEvSchemaOperationResponse",
+            {"logPrefix", NPQ_LOG_PREFIX});
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }
@@ -131,7 +150,10 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
+        YDB_LOG_DEBUG("ReplyAndDie",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"errorCode", errorCode},
+            {"errorMessage", errorMessage});
         if ((errorCode == Ydb::StatusIds::SUCCESS || errorCode == Ydb::StatusIds::ALREADY_EXISTS) && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }

@@ -21,7 +21,11 @@ You can use --help option on root or any subcommand for more info.
 
 ### Tests
 
-Run with `./ya make -tA <dir>` (Linux only):
+Run testsuit with `./ya make -tA <dir>` (Linux only):
 
 - Unit and binary tests (C++): `ut/` dirs next to the code, plus `ydb/apps/ydb/ut/` (drives the built `ydb` binary against a YDB recipe).
 - Functional tests (Python): `ydb/tests/functional/ydb_cli/` (start a real cluster and run the `ydb` binary against it).
+
+
+Run a specific test with `./ya make -tA <dir> -F <test_name>`
+- Use actual test name for <test_name> like YdbWorkloadTopic::ReadWrite_Statistics, or use * as a mask like YdbWorkloadTopic::*

@@ -6,6 +6,8 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_PROXY
+
 namespace NKikimr::NKqp {
 
 namespace {
@@ -30,11 +32,14 @@ public:
     {}
 
     void Bootstrap() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Bootstrap");
+        YDB_LOG_DEBUG("Script execution lease check actor bootstrapped",
+            {"logPrefix", LogPrefix()});
         Become(&TScriptExecutionLeaseCheckActor::MainState);
 
         const auto& creatorId = Register(CreateScriptExecutionsTablesCreator(AppData()->FeatureFlags.GetEnableSecureScriptExecutions()));
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Start script executions tables creator: " << creatorId);
+        YDB_LOG_DEBUG("Starting script execution tables creation",
+            {"logPrefix", LogPrefix()},
+            {"creator", creatorId});
     }
 
     STRICT_STFUNC(MainState,
@@ -54,12 +59,16 @@ public:
                 break;
             case EWakeup::RefreshScriptExecutions: {
                 const auto& checkerId = Register(CreateRefreshScriptExecutionLeasesActor(SelfId(), QueryServiceConfig, Counters));
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Start lease checker: " << checkerId);
+                YDB_LOG_DEBUG("Starting script execution lease refresh",
+                    {"logPrefix", LogPrefix()},
+                    {"checker", checkerId});
                 break;
             }
             case EWakeup::CreateTables: {
                 const auto& creatorId = Register(CreateScriptExecutionsTablesCreator(AppData()->FeatureFlags.GetEnableSecureScriptExecutions()));
-                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Start script executions tables creator: " << creatorId);
+                YDB_LOG_DEBUG("Starting script execution tables creation",
+                    {"logPrefix", LogPrefix()},
+                    {"creator", creatorId});
                 break;
             }
         }
@@ -69,7 +78,8 @@ public:
         WaitRefreshNodes = false;
 
         if (!ev->Get()->Success) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Failed to discover tenant nodes");
+            YDB_LOG_WARN("Failed to discover tenant nodes",
+                {"logPrefix", LogPrefix()});
             return;
         }
 
@@ -77,7 +87,10 @@ public:
         RefreshLeasePeriod = std::max(nodesCount, static_cast<size_t>(1)) * CHECK_PERIOD;
         HasNodesInfo = true;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Handle discover tenant nodes result, number of nodes #" << nodesCount << ", new RefreshLeasePeriod: " << RefreshLeasePeriod);
+        YDB_LOG_DEBUG("Handle discover tenant nodes result, number of nodes new",
+            {"logPrefix", LogPrefix()},
+            {"nodesCount", nodesCount},
+            {"refreshLeasePeriod", RefreshLeasePeriod});
     }
 
     void Handle(TEvRefreshScriptExecutionLeasesResponse::TPtr& ev) {
@@ -86,27 +99,40 @@ public:
         const auto expiredLeasesCount = ev->Get()->ExpiredLeasesCount;
 
         if (!ev->Get()->Success) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh " << ev->Sender << " failed, found expired leases: " << expiredLeasesCount << ", issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("Script execution lease refresh failed because expired leases were found",
+                {"logPrefix", LogPrefix()},
+                {"sender", ev->Sender},
+                {"leases", expiredLeasesCount},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Refresh " << ev->Sender << " successfully completed, found expired leases: " << expiredLeasesCount);
+            YDB_LOG_DEBUG("Refresh successfully completed, found expired",
+                {"logPrefix", LogPrefix()},
+                {"sender", ev->Sender},
+                {"leases", expiredLeasesCount});
         }
     }
 
     void Handle(TEvScriptExecutionsTablesCreationFinished::TPtr& ev) {
         if (!ev->Get()->Success) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Script executions tables creation failed with issues: " << ev->Get()->Issues.ToOneLineString());
+            YDB_LOG_ERROR("Script executions tables creation failed with",
+                {"logPrefix", LogPrefix()},
+                {"issues", ev->Get()->Issues.ToOneLineString()});
             Schedule(CREATE_TABLES_PERIOD, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CreateTables)));
             return;
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Script executions tables creation finished, start lease checks");
+        YDB_LOG_DEBUG("Script executions tables creation finished, start lease checks",
+            {"logPrefix", LogPrefix()});
         RefreshNodesInfo();
         Schedule(StartupTimeout, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
     }
 
 private:
     void RefreshNodesInfo() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Do RefreshNodesInfo (WaitRefreshNodes: " << WaitRefreshNodes << "), next refresh after " << REFRESH_NODES_PERIOD);
+        YDB_LOG_DEBUG("Scheduled next RefreshNodesInfo",
+            {"logPrefix", LogPrefix()},
+            {"waitRefreshNodes", WaitRefreshNodes},
+            {"refreshNodesPeriod", REFRESH_NODES_PERIOD});
         Schedule(REFRESH_NODES_PERIOD, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RefreshNodesInfo)));
 
         if (!WaitRefreshNodes) {
@@ -116,11 +142,15 @@ private:
     }
 
     void ScheduleRefreshScriptExecutions() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Do ScheduleRefreshScriptExecutions (WaitRefreshScriptExecutions: " << WaitRefreshScriptExecutions << "), next refresh after " << RefreshLeasePeriod);
+        YDB_LOG_DEBUG("Scheduled next script execution refresh",
+            {"logPrefix", LogPrefix()},
+            {"waitRefreshScriptExecutions", WaitRefreshScriptExecutions},
+            {"refreshLeasePeriod", RefreshLeasePeriod});
         Schedule(RefreshLeasePeriod, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::ScheduleRefreshScriptExecutions)));
 
         if (!HasNodesInfo) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Skip ScheduleRefreshScriptExecutions, node info is not arrived");
+            YDB_LOG_DEBUG("Skip ScheduleRefreshScriptExecutions, node info is not arrived",
+                {"logPrefix", LogPrefix()});
             return;
         }
 
@@ -131,7 +161,9 @@ private:
             // to reduce the number of tli
             const auto leaseCheckTime = RefreshLeasePeriod * RandomNumber<double>();
             Schedule(leaseCheckTime, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::RefreshScriptExecutions)));
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_PROXY, LogPrefix() << "Schedule lease check after " << leaseCheckTime);
+            YDB_LOG_DEBUG("Scheduled script execution lease check",
+                {"logPrefix", LogPrefix()},
+                {"leaseCheckTime", leaseCheckTime});
         }
     }
 

@@ -514,6 +514,47 @@ CreateAsyncDoubleMetricSystemFilesystemLimit(metrics::Meter *meter)
 }
 
 /**
+  Filesystem lock counts.
+  <p>
+  updowncounter
+ */
+static constexpr const char *kMetricSystemFilesystemLockCount     = "system.filesystem.lock.count";
+static constexpr const char *descrMetricSystemFilesystemLockCount = "Filesystem lock counts.";
+static constexpr const char *unitMetricSystemFilesystemLockCount  = "{lock}";
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
+CreateSyncInt64MetricSystemFilesystemLockCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64UpDownCounter(kMetricSystemFilesystemLockCount,
+                                         descrMetricSystemFilesystemLockCount,
+                                         unitMetricSystemFilesystemLockCount);
+}
+
+static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
+CreateSyncDoubleMetricSystemFilesystemLockCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleUpDownCounter(kMetricSystemFilesystemLockCount,
+                                          descrMetricSystemFilesystemLockCount,
+                                          unitMetricSystemFilesystemLockCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncInt64MetricSystemFilesystemLockCount(metrics::Meter *meter)
+{
+  return meter->CreateInt64ObservableUpDownCounter(kMetricSystemFilesystemLockCount,
+                                                   descrMetricSystemFilesystemLockCount,
+                                                   unitMetricSystemFilesystemLockCount);
+}
+
+static inline nostd::shared_ptr<metrics::ObservableInstrument>
+CreateAsyncDoubleMetricSystemFilesystemLockCount(metrics::Meter *meter)
+{
+  return meter->CreateDoubleObservableUpDownCounter(kMetricSystemFilesystemLockCount,
+                                                    descrMetricSystemFilesystemLockCount,
+                                                    unitMetricSystemFilesystemLockCount);
+}
+
+/**
   Reports a filesystem's space usage across different states.
   <p>
   The sum of all @code system.filesystem.usage @endcode values over the different @code
@@ -619,33 +660,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemLinuxMemor
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricSystemLinuxMemoryAvailable(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricSystemLinuxMemoryAvailable,
                                     descrMetricSystemLinuxMemoryAvailable,
                                     unitMetricSystemLinuxMemoryAvailable);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricSystemLinuxMemoryAvailable(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricSystemLinuxMemoryAvailable,
                                     descrMetricSystemLinuxMemoryAvailable,
                                     unitMetricSystemLinuxMemoryAvailable);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricSystemLinuxMemoryAvailable(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricSystemLinuxMemoryAvailable,
                                              descrMetricSystemLinuxMemoryAvailable,
                                              unitMetricSystemLinuxMemoryAvailable);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricSystemLinuxMemoryAvailable(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricSystemLinuxMemoryAvailable,
                                               descrMetricSystemLinuxMemoryAvailable,
                                               unitMetricSystemLinuxMemoryAvailable);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -665,33 +714,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemLinuxMemor
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricSystemLinuxMemorySlabUsage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricSystemLinuxMemorySlabUsage,
                                     descrMetricSystemLinuxMemorySlabUsage,
                                     unitMetricSystemLinuxMemorySlabUsage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricSystemLinuxMemorySlabUsage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricSystemLinuxMemorySlabUsage,
                                     descrMetricSystemLinuxMemorySlabUsage,
                                     unitMetricSystemLinuxMemorySlabUsage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricSystemLinuxMemorySlabUsage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(kMetricSystemLinuxMemorySlabUsage,
                                              descrMetricSystemLinuxMemorySlabUsage,
                                              unitMetricSystemLinuxMemorySlabUsage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricSystemLinuxMemorySlabUsage(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(kMetricSystemLinuxMemorySlabUsage,
                                               descrMetricSystemLinuxMemorySlabUsage,
                                               unitMetricSystemLinuxMemorySlabUsage);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1156,29 +1213,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemMemoryShar
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricSystemMemoryShared(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricSystemMemoryShared, descrMetricSystemMemoryShared,
                                          unitMetricSystemMemoryShared);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricSystemMemoryShared(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricSystemMemoryShared, descrMetricSystemMemoryShared,
                                           unitMetricSystemMemoryShared);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricSystemMemoryShared(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(
       kMetricSystemMemoryShared, descrMetricSystemMemoryShared, unitMetricSystemMemoryShared);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricSystemMemoryShared(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(
       kMetricSystemMemoryShared, descrMetricSystemMemoryShared, unitMetricSystemMemoryShared);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1321,33 +1386,41 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemNetworkCon
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<int64_t>>
 CreateSyncInt64MetricSystemNetworkConnections(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64UpDownCounter(kMetricSystemNetworkConnections,
                                          descrMetricSystemNetworkConnections,
                                          unitMetricSystemNetworkConnections);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::UpDownCounter<double>>
 CreateSyncDoubleMetricSystemNetworkConnections(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleUpDownCounter(kMetricSystemNetworkConnections,
                                           descrMetricSystemNetworkConnections,
                                           unitMetricSystemNetworkConnections);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricSystemNetworkConnections(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableUpDownCounter(kMetricSystemNetworkConnections,
                                                    descrMetricSystemNetworkConnections,
                                                    unitMetricSystemNetworkConnections);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricSystemNetworkConnections(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableUpDownCounter(kMetricSystemNetworkConnections,
                                                     descrMetricSystemNetworkConnections,
                                                     unitMetricSystemNetworkConnections);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1376,29 +1449,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemNetworkDro
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricSystemNetworkDropped(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricSystemNetworkDropped, descrMetricSystemNetworkDropped,
                                     unitMetricSystemNetworkDropped);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricSystemNetworkDropped(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricSystemNetworkDropped, descrMetricSystemNetworkDropped,
                                     unitMetricSystemNetworkDropped);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricSystemNetworkDropped(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(
       kMetricSystemNetworkDropped, descrMetricSystemNetworkDropped, unitMetricSystemNetworkDropped);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricSystemNetworkDropped(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(
       kMetricSystemNetworkDropped, descrMetricSystemNetworkDropped, unitMetricSystemNetworkDropped);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**
@@ -1598,29 +1679,37 @@ OPENTELEMETRY_DEPRECATED static constexpr const char *unitMetricSystemNetworkPac
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<uint64_t>>
 CreateSyncInt64MetricSystemNetworkPackets(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateUInt64Counter(kMetricSystemNetworkPackets, descrMetricSystemNetworkPackets,
                                     unitMetricSystemNetworkPackets);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::unique_ptr<metrics::Counter<double>>
 CreateSyncDoubleMetricSystemNetworkPackets(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleCounter(kMetricSystemNetworkPackets, descrMetricSystemNetworkPackets,
                                     unitMetricSystemNetworkPackets);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncInt64MetricSystemNetworkPackets(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateInt64ObservableCounter(
       kMetricSystemNetworkPackets, descrMetricSystemNetworkPackets, unitMetricSystemNetworkPackets);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 OPENTELEMETRY_DEPRECATED static inline nostd::shared_ptr<metrics::ObservableInstrument>
 CreateAsyncDoubleMetricSystemNetworkPackets(metrics::Meter *meter)
 {
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_BEGIN
   return meter->CreateDoubleObservableCounter(
       kMetricSystemNetworkPackets, descrMetricSystemNetworkPackets, unitMetricSystemNetworkPackets);
+  OPENTELEMETRY_SUPPRESS_DEPRECATED_END
 }
 
 /**

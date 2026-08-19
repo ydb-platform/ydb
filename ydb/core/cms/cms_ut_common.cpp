@@ -682,10 +682,25 @@ TCmsTestEnv::TCmsTestEnv(const TTestEnvOpts &options)
     }
 
     SetObserverFunc([](TAutoPtr<IEventHandle> &event) -> auto {
-        if ((event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
-            || event->Type == TEvBlobStorage::EvControllerConfigRequest
-            || event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest)
-            && event->Recipient.IsService()) {
+        bool forwardToFakeService = false;
+        if (event->GetTypeRewrite() == TEvBlobStorage::EvControllerConfigRequest
+                || event->Type == TEvBlobStorage::EvControllerConfigRequest) {
+            // DDisk pool configuration is handled by the real BSC in these tests.
+            // Keep the old fake-service routing for all other CMS/BSC requests.
+            forwardToFakeService = true;
+            if (const auto* request = event->Get<TEvBlobStorage::TEvControllerConfigRequest>()) {
+                for (const auto& command : request->Record.GetRequest().GetCommand()) {
+                    if (command.HasDefineDDiskPool()) {
+                        forwardToFakeService = false;
+                        break;
+                    }
+                }
+            }
+        } else if (event->GetTypeRewrite() == TEvConfigsDispatcher::EvGetConfigRequest) {
+            forwardToFakeService = true;
+        }
+
+        if (forwardToFakeService) {
             auto fakeId = NNodeWhiteboard::MakeNodeWhiteboardServiceId(event->Recipient.NodeId());
             if (event->Recipient != fakeId)
                 event = IEventHandle::Forward(std::move(event), fakeId);

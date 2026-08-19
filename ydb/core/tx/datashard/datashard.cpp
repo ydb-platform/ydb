@@ -4196,10 +4196,6 @@ TString EncodeHnswCounterPath(TStringBuf path) {
     return result;
 }
 
-TString FormatHnswCounterPathId(const TPathId& pathId) {
-    return TStringBuilder() << pathId.OwnerId << ':' << pathId.LocalPathId;
-}
-
 } // anonymous namespace
 
 void TDataShard::SendHnswCountersToAggregator(const TActorContext& ctx) {
@@ -4218,15 +4214,12 @@ void TDataShard::SendHnswCountersToAggregator(const TActorContext& ctx) {
                 break;
             }
         }
-        if (!table || !table->VectorIndexTablePathId || !table->VectorIndexPathId
-                || table->VectorIndexTablePath.empty() || table->VectorIndexPath.empty()) {
+        if (!table || table->VectorIndexTablePath.empty() || table->VectorIndexPath.empty()) {
             continue;
         }
 
         const TString group = TStringBuilder()
-            << FormatHnswCounterPathId(table->VectorIndexTablePathId) << '/'
             << EncodeHnswCounterPath(table->VectorIndexTablePath) << '/'
-            << FormatHnswCounterPathId(table->VectorIndexPathId) << '/'
             << EncodeHnswCounterPath(table->VectorIndexPath);
         TAutoPtr<TTabletLabeledCountersBase> counters(new TTabletLabeledCountersBase(
             CreateProtobufTabletLabeledCounters<EHnswLabeledCounters_descriptor>(group, localTid)));

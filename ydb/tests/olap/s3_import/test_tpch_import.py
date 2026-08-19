@@ -10,41 +10,39 @@ class TestS3TpchImport(S3ImportTestBase):
         logger.info(f"Validation of {table_name}...")
 
         result_sets = self.ydb_client.query(f"""
-            SELECT
-                String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS check_hash,
-                COUNT(*) AS check_size
+            $check_table = SELECT
+                l_linenumber, l_orderkey,
+                l_comment, l_commitdate, l_discount, l_extendedprice,
+                l_linestatus, l_partkey, l_quantity, l_receiptdate,
+                l_returnflag, l_shipdate, l_shipinstruct, l_shipmode,
+                l_suppkey, l_tax
             FROM {table_name};
+            SELECT
+                String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS hash,
+                COUNT(*) AS size
+            FROM $check_table;
 
-            $initial_table = SELECT
-                l_linenumber,
-                l_orderkey,
-                JUST(l_comment) AS l_comment,
-                JUST(l_commitdate) AS l_commitdate,
-                JUST(l_discount) AS l_discount,
-                JUST(l_extendedprice) AS l_extendedprice,
-                JUST(l_linestatus) AS l_linestatus,
-                JUST(l_partkey) AS l_partkey,
-                JUST(l_quantity) AS l_quantity,
-                JUST(l_receiptdate) AS l_receiptdate,
-                JUST(l_returnflag) AS l_returnflag,
-                JUST(l_shipdate) AS l_shipdate,
-                JUST(l_shipinstruct) AS l_shipinstruct,
-                JUST(l_shipmode) AS l_shipmode,
-                JUST(l_suppkey) AS l_suppkey,
-                JUST(l_tax) AS l_tax
+            $lineitem_table = SELECT
+                l_linenumber, l_orderkey,
+                l_comment, l_commitdate, l_discount, l_extendedprice,
+                l_linestatus, l_partkey, l_quantity, l_receiptdate,
+                l_returnflag, l_shipdate, l_shipinstruct, l_shipmode,
+                l_suppkey, l_tax
             FROM lineitem;
             SELECT
-                String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS lineitem_hash,
-                COUNT(*) AS lineitem_size
-            FROM $initial_table;
+                String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS hash,
+                COUNT(*) AS size
+            FROM $lineitem_table;
         """)
 
         check_result = result_sets[0].rows[0]
-        assert check_result.check_size > 0
+        assert check_result.size > 0
 
         lineitem_result = result_sets[1].rows[0]
-        assert check_result.check_size == lineitem_result.lineitem_size
-        assert check_result.check_hash == lineitem_result.lineitem_hash
+        assert check_result.size == lineitem_result.size, \
+            f"Row count mismatch: {table_name} has {check_result.size}, lineitem has {lineitem_result.size}"
+        assert check_result.hash == lineitem_result.hash, \
+            f"Hash mismatch: {table_name} hash={check_result.hash}, lineitem hash={lineitem_result.hash}"
 
     def test_import_and_export(self):
         test_bucket = "test_import_and_export_bucket"
@@ -68,20 +66,20 @@ class TestS3TpchImport(S3ImportTestBase):
             CREATE EXTERNAL TABLE s3_table (
                 l_linenumber Int32 NOT NULL,
                 l_orderkey Int64 NOT NULL,
-                l_comment Utf8,
-                l_commitdate Date,
-                l_discount Double,
-                l_extendedprice Double,
-                l_linestatus Utf8,
-                l_partkey Int64,
-                l_quantity Double,
-                l_receiptdate Date,
-                l_returnflag Utf8,
-                l_shipdate Date,
-                l_shipinstruct Utf8,
-                l_shipmode Utf8,
-                l_suppkey Int64,
-                l_tax Double
+                l_comment Utf8 NOT NULL,
+                l_commitdate Date NOT NULL,
+                l_discount Double NOT NULL,
+                l_extendedprice Double NOT NULL,
+                l_linestatus Utf8 NOT NULL,
+                l_partkey Int64 NOT NULL,
+                l_quantity Double NOT NULL,
+                l_receiptdate Date NOT NULL,
+                l_returnflag Utf8 NOT NULL,
+                l_shipdate Date NOT NULL,
+                l_shipinstruct Utf8 NOT NULL,
+                l_shipmode Utf8 NOT NULL,
+                l_suppkey Int64 NOT NULL,
+                l_tax Double NOT NULL
             ) WITH (
                 DATA_SOURCE="s3_source",
                 LOCATION="/test_folder/",

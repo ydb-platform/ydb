@@ -2,14 +2,19 @@ name: Preview documentation
 
 on:
   workflow_run:
+    # Preview consumes build artifacts from `docs_build.yaml` only.
+    # `Rebuild documentation` dispatches that workflow and must not trigger
+    # preview itself (it produces no artifacts).
     workflows:
       - Build documentation
-      - Rebuild documentation
     types:
       - completed
 
 jobs:
   post-build:
+    if: |
+      github.event.workflow_run.conclusion == 'success' ||
+      github.event.workflow_run.conclusion == 'failure'
     permissions: write-all
     concurrency:
       group: preview-documentation-${{ github.event.workflow_run.id }}
@@ -29,6 +34,7 @@ jobs:
           cli-version: stable
 
       - name: Comment message
+        if: github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure'
         uses: diplodoc-platform/docs-message-action@v1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

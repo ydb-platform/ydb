@@ -1389,10 +1389,7 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             auto& command = *request->Record.MutableRequest()->AddCommand()->MutableUpdateDriveStatus();
             command.MutableHostKey()->SetNodeId(id.NodeId);
             command.SetPDiskId(id.DiskId);
-            // Leave Status as UNKNOWN when only maintenance changed — BSC ignores UNKNOWN.
-            if (info->GetStatus() != info->ActualStatus) {
-                command.SetStatus(info->GetStatus());
-            }
+            command.SetStatus(info->GetStatus());
             if (info->GetMaintenanceStatus() != info->ActualMaintenanceStatus) {
                 command.SetMaintenanceStatus(info->GetMaintenanceStatus());
             }

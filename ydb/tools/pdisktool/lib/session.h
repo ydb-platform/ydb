@@ -28,7 +28,7 @@ public:
     TLogScanResult Log;
     bool Loaded = false;
 
-    bool OpenFile(const TString& path, const TSessionOptions& opts);
+    bool OpenFile(const TString& path, const TSessionOptions& opts, bool requireFormat = true);
     bool OpenSectorMap(TIntrusivePtr<NPDisk::TSectorMap> map, const TSessionOptions& opts);
 
     TOwner ResolveOwner(const TString& vdisk, TMaybe<ui32> ownerId, TIssueLog& issues) const;

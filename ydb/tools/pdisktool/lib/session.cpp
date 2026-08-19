@@ -26,14 +26,17 @@ bool TPDiskSession::Load(const TSessionOptions& opts) {
     return true;
 }
 
-bool TPDiskSession::OpenFile(const TString& path, const TSessionOptions& opts) {
+bool TPDiskSession::OpenFile(const TString& path, const TSessionOptions& opts, bool requireFormat) {
     try {
         Device = OpenFileDevice(path, opts.TryLock, Issues);
     } catch (const yexception& e) {
         Issues.Error(path, TStringBuilder() << "Cannot open device: " << e.what());
         return false;
     }
-    return Load(opts);
+    if (!Load(opts) && requireFormat) {
+        return false;
+    }
+    return true;
 }
 
 bool TPDiskSession::OpenSectorMap(TIntrusivePtr<NPDisk::TSectorMap> map, const TSessionOptions& opts) {

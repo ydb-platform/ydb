@@ -2,6 +2,7 @@
 
 #include "blobs.h"
 #include "chunk.h"
+#include "keys.h"
 #include "output.h"
 #include "sector.h"
 #include "session.h"
@@ -39,9 +40,9 @@ void PrintUsage(const TString& argv0) {
         << "  metadata          Dump the metadata vault blob if present\n\n"
         << "Global options:\n"
         << "  --device PATH     File or block device (required for most commands)\n"
-        << "  --main-key NUM    Encryption main key (repeatable)\n"
-        << "  --key-file PATH   Node Warden key container\n"
-        << "  --pin STR         Pin for --key-file (default EmptyPin)\n"
+        << "  --main-key NUM    Encryption main key (repeatable; decimal, 0x-hex, or YdbDefaultPDiskSequence)\n"
+        << "  --key-file PATH   ydbd TKeyConfig proto (--pdisk-key-file) or a raw key container\n"
+        << "  --pin STR         Pin for a raw --key-file container (default EmptyPin)\n"
         << "  --format text|json  Output format (default text)\n"
         << "  --show-keys       Include encryption keys in format output\n"
         << "  --strict          Fail on the first inconsistency\n"
@@ -75,9 +76,11 @@ struct TGlobals {
 static void AddGlobals(TOpts& opts, TGlobals& g) {
     opts.AddLongOption("device", "path to PDisk file or block device")
         .RequiredArgument("PATH").StoreResult(&g.Device);
-    opts.AddLongOption("main-key", "encryption main key (repeatable)")
-        .RequiredArgument("NUM").AppendTo(&g.MainKeys);
-    opts.AddLongOption("key-file", "Node Warden key container")
+    opts.AddLongOption("main-key", "encryption main key: decimal, 0x-hex, or YdbDefaultPDiskSequence (repeatable)")
+        .RequiredArgument("NUM").Handler1T<TString>([&g](const TString& value) {
+            g.MainKeys.push_back(ParseMainKeyArg(value));
+        });
+    opts.AddLongOption("key-file", "ydbd TKeyConfig proto or raw key container")
         .RequiredArgument("PATH").StoreResult(&g.KeyFile);
     opts.AddLongOption("pin", "pin for --key-file").RequiredArgument("STR").StoreResult(&g.Pin);
     opts.AddLongOption("format", "text or json").RequiredArgument("FMT").StoreResult(&g.Format);
@@ -107,13 +110,13 @@ static int FinishText(TProto& proto, const TIssueLog& issues, bool json, TText&&
     return Finish(proto, issues, json, fatal);
 }
 
-static bool OpenSession(const TGlobals& g, TPDiskSession& session) {
+static bool OpenSession(const TGlobals& g, TPDiskSession& session, bool requireFormat = true) {
     if (!g.Device) {
         Cerr << "--device is required" << Endl;
         return false;
     }
     TSessionOptions opts = g.SessionOpts(session.Issues);
-    if (!session.OpenFile(g.Device, opts)) {
+    if (!session.OpenFile(g.Device, opts, requireFormat)) {
         PrintIssues(session.Issues, Cerr);
         return false;
     }
@@ -148,7 +151,7 @@ static TMaybe<TLogoBlobID> ParseBlobId(const TString& s, TIssueLog& issues, cons
 
 int CmdFormat(const TGlobals& g) {
     TPDiskSession session;
-    if (!OpenSession(g, session)) {
+    if (!OpenSession(g, session, /*requireFormat=*/ false)) {
         return 1;
     }
     NKikimr::NPdiskTool::TFormatResult proto;

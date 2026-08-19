@@ -16,7 +16,9 @@
 
 #include <cstring>
 #include <util/folder/tempdir.h>
+#include <util/stream/file.h>
 #include <util/system/fs.h>
+#include <ydb/tools/pdisktool/lib/keys.h>
 
 using namespace NKikimr;
 using namespace NKikimr::NPDisk;
@@ -372,5 +374,68 @@ Y_UNIT_TEST_SUITE(TPDiskToolOracle) {
         UNIT_ASSERT(fileSession.OpenFile(path, DefaultOpts()));
         UNIT_ASSERT_VALUES_EQUAL(fileSession.Format.Guid, 88u);
         UNIT_ASSERT(fileSession.SysLogRaw.Ok);
+    }
+
+    Y_UNIT_TEST(MainKeyArgAndKeyConfigProto) {
+        UNIT_ASSERT_VALUES_EQUAL(ParseMainKeyArg("YdbDefaultPDiskSequence"), NPDisk::YdbDefaultPDiskSequence);
+        UNIT_ASSERT_VALUES_EQUAL(ParseMainKeyArg("default"), NPDisk::YdbDefaultPDiskSequence);
+        UNIT_ASSERT_VALUES_EQUAL(ParseMainKeyArg("0x7e5700007e570000"), NPDisk::YdbDefaultPDiskSequence);
+        UNIT_ASSERT_VALUES_EQUAL(ParseMainKeyArg("0X7E5700007E570000"), NPDisk::YdbDefaultPDiskSequence);
+        UNIT_ASSERT_VALUES_EQUAL(ParseMainKeyArg("1"), 1u);
+
+        TTempDir tmp;
+        const TString container = TString(tmp()) + "/pdisk.key";
+        {
+            TFileOutput out(container);
+            out << "pdisktool-container-bytes";
+        }
+        const TString protoPath = TString(tmp()) + "/pdisk_key.txt";
+        {
+            TFileOutput out(protoPath);
+            out << "Keys {\n"
+                << "  ContainerPath: \"" << container << "\"\n"
+                << "  Id: \"pdisk\"\n"
+                << "  Version: 1\n"
+                << "}\n";
+        }
+
+        TIssueLog protoIssues;
+        const auto fromProto = MakeMainKey({}, protoPath, "", true, protoIssues);
+        UNIT_ASSERT_C(!protoIssues.HasErrors(), protoIssues.Items.empty() ? "" : protoIssues.Items.back().Message);
+        UNIT_ASSERT_VALUES_EQUAL(fromProto.Keys.size(), 1u);
+
+        TIssueLog rawIssues;
+        const auto fromRaw = MakeMainKey({}, container, "", true, rawIssues);
+        UNIT_ASSERT_C(!rawIssues.HasErrors(), rawIssues.Items.empty() ? "" : rawIssues.Items.back().Message);
+        UNIT_ASSERT_VALUES_EQUAL(fromRaw.Keys.size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(fromProto.Keys[0], fromRaw.Keys[0]);
+
+        auto map = MakeIntrusive<NPDisk::TSectorMap>(DiskSize);
+        TFormatOptions options;
+        options.SectorMap = map;
+        options.EnableSmallDiskOptimization = true;
+        FormatPDisk("", DiskSize, 4096, ChunkSize, 0x42,
+            NPDisk::TKey(1), NPDisk::TKey(2), NPDisk::TKey(3), fromProto.Keys[0], "key-config", options);
+
+        TPDiskSession ok;
+        TSessionOptions opts;
+        opts.MainKey = fromProto;
+        opts.TryLock = false;
+        UNIT_ASSERT(ok.OpenSectorMap(map, opts));
+        UNIT_ASSERT(ok.FormatResult.Ok);
+        UNIT_ASSERT_VALUES_EQUAL(ok.Format.Guid, 0x42u);
+
+        TPDiskSession badDefault;
+        UNIT_ASSERT(!badDefault.OpenSectorMap(map, DefaultOpts()));
+        UNIT_ASSERT(!badDefault.FormatResult.Ok);
+
+        const TString brokenProto = TString(tmp()) + "/broken.txt";
+        {
+            TFileOutput out(brokenProto);
+            out << "Keys {\n  ContainerPath: \n";
+        }
+        TIssueLog brokenIssues;
+        MakeMainKey({}, brokenProto, "", true, brokenIssues);
+        UNIT_ASSERT(brokenIssues.HasErrors());
     }
 }

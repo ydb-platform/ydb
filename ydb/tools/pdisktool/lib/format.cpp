@@ -2,8 +2,34 @@
 
 #include <cstring>
 #include <util/datetime/base.h>
+#include <util/string/hex.h>
 
 namespace NKikimr::NPDiskTool {
+
+namespace {
+
+bool IsAllZero(const ui8* data, ui32 size) {
+    for (ui32 i = 0; i < size; ++i) {
+        if (data[i] != 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TString DescribeRawPrefix(const ui8* raw, ui32 total) {
+    TStringStream s;
+    s << "deviceSizePrefixHex# " << HexEncode(raw, Min<ui32>(16, total));
+    if (total >= NPDisk::FormatSectorSize * NPDisk::ReplicationFactor && IsAllZero(raw, total)) {
+        s << " (format area is all zeros; unformatted device or the read returned no data)";
+    }
+    if (total > 512 + 8 && memcmp(raw + 512, "EFI PART", 8) == 0) {
+        s << " (looks like a GPT header at offset 512; this is probably the whole disk, not the PDisk partition)";
+    }
+    return s.Str();
+}
+
+} // namespace
 
 TFormatReadResult ReadDiskFormat(
     IDeviceReader& device,
@@ -13,8 +39,11 @@ TFormatReadResult ReadDiskFormat(
 {
     TFormatReadResult result;
     const ui32 total = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
-    TVector<ui8> raw(total);
-    device.Pread(raw.data(), total, 0, issues);
+    TVector<ui8> rawHolder(total + 4096);
+    ui8* raw = reinterpret_cast<ui8*>(
+        (reinterpret_cast<uintptr_t>(rawHolder.data()) + 4095) / 4096 * 4096);
+    memset(raw, 0, total);
+    device.Pread(raw, total, 0, issues);
 
     auto tryKey = [&](TKey key, bool encrypt) -> bool {
         TVector<TFormatReplicaInfo> replicas(NPDisk::ReplicationFactor);
@@ -26,25 +55,28 @@ TFormatReadResult ReadDiskFormat(
         cypher.SetKey(key);
 
         for (ui32 i = 0; i < NPDisk::ReplicationFactor; ++i) {
-            ui8* sector = raw.data() + i * NPDisk::FormatSectorSize;
+            ui8* sector = raw + i * NPDisk::FormatSectorSize;
             auto* footer = reinterpret_cast<TDataSectorFooter*>(
                 sector + NPDisk::FormatSectorSize - sizeof(TDataSectorFooter));
             replicas[i].Index = i;
             replicas[i].Nonce = footer->Nonce;
 
-            alignas(16) TDiskFormat candidate = {};
+            alignas(16) NPDisk::TDiskFormatSector formatCandidate;
             cypher.StartMessage(footer->Nonce);
-            cypher.Encrypt(&candidate, sector, sizeof(TDiskFormat));
+            cypher.Encrypt(formatCandidate.Raw, sector, NPDisk::FormatSectorSize);
 
             replicas[i].Decrypted = true;
-            if (candidate.IsHashOk(NPDisk::FormatSectorSize)) {
+            if (formatCandidate.Format.IsHashOk(NPDisk::FormatSectorSize)) {
                 replicas[i].HashOk = true;
-                replicas[i].Format = candidate;
-                winner = candidate;
+                replicas[i].Format = formatCandidate.Format;
+                winner = formatCandidate.Format;
                 haveWinner = true;
                 lastGood = i;
             } else {
-                replicas[i].Error = "hash mismatch";
+                replicas[i].Error = TStringBuilder() << "hash mismatch nonce# " << footer->Nonce
+                    << " version# " << formatCandidate.Format.Version
+                    << " diskFormatSize# " << formatCandidate.Format.DiskFormatSize
+                    << " headHex# " << HexEncode(sector, 16);
             }
         }
 
@@ -75,7 +107,6 @@ TFormatReadResult ReadDiskFormat(
                 }
             }
             if (okCount > 1) {
-                // Check disagreement among valid replicas
                 for (const auto& r : result.Replicas) {
                     if (r.HashOk && r.Format.Guid != result.Format.Guid) {
                         issues.Warning("format", TStringBuilder() << "Format replica " << r.Index
@@ -92,7 +123,11 @@ TFormatReadResult ReadDiskFormat(
         }
     }
 
-    issues.Error("format", "Could not decrypt/validate any format replica; check --main-key / --key-file");
+    issues.Error("format", TStringBuilder()
+        << "Could not decrypt/validate any format replica with " << mainKey.Keys.size()
+        << " main key(s). " << DescribeRawPrefix(raw, total)
+        << ". --key-file must be ydbd's TKeyConfig proto (--pdisk-key-file), or the binary container "
+        << "named in ContainerPath. --main-key accepts decimal, 0x-hex, or YdbDefaultPDiskSequence.");
     result.Ok = false;
     return result;
 }

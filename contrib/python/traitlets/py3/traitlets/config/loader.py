@@ -245,6 +245,18 @@ class Config(dict):  # type:ignore[type-arg]
             if _is_section_key(key) and isinstance(obj, dict) and not isinstance(obj, Config):
                 setattr(self, key, Config(obj))
 
+    def _merge(self, other: t.Any) -> None:
+        """deprecated alias, since traitlets 4.0 - 2015 use Config.merge()"""
+        # re-added in August 2026 because of Spyder
+        import warnings
+
+        warnings.warn(
+            "_merge has been deprecated since traitlets 4.0 - 2015, please use `merge()`",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        self.merge(other)
+
     def merge(self, other: t.Any) -> None:
         """merge another config object into this one"""
         to_update = {}

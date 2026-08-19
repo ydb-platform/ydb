@@ -145,7 +145,12 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexes) {
 
     Y_UNIT_TEST(NoMultipleColumnsWithoutFeatureFlag) {
         // With the prefix feature flag off, multi-column JSON indexes are rejected.
-        auto kikimr = Kikimr();
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableFulltextIndexPrefix(false);
+        featureFlags.SetEnableJsonIndexAutoSelect(false);
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
 
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);

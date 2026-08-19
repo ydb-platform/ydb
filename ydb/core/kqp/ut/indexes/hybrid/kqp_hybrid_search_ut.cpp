@@ -28,6 +28,17 @@ TKikimrRunner MakeRunner(bool enableHybridSearch = true) {
     return TKikimrRunner(settings);
 }
 
+TKikimrRunner MakeRunnerWithCompact(bool compact) {
+    NSchemeShard::gVectorIndexSeed = 1337;
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(compact);
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableHybridSearch(true);
+    return TKikimrRunner(settings);
+}
+
 void ExecOk(TQueryClient& db, const TString& sql) {
     auto result = db.ExecuteQuery(sql, TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -178,8 +189,8 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
     //   doc2:             + vec 1/(60+1) = 0.0164
     //   doc4:             + vec 1/(60+3) = 0.0159
     // i.e. exactly [1, 3, 2, 4].
-    Y_UNIT_TEST(FusesBothBranches) {
-        auto kikimr = MakeRunner();
+    Y_UNIT_TEST_TWIN(FusesBothBranches, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
         auto db = kikimr.GetQueryClient();
         SetupDocs(db);
 
@@ -504,8 +515,8 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_C(keys[0] == 1u || keys[0] == 3u, "a text-relevant doc must rank first");
     }
 
-    Y_UNIT_TEST(NamedIndexesDisambiguate) {
-        auto kikimr = MakeRunner();
+    Y_UNIT_TEST_TWIN(NamedIndexesDisambiguate, Compact) {
+        auto kikimr = MakeRunnerWithCompact(Compact);
         auto db = kikimr.GetQueryClient();
         CreateDocs(db);
         UpsertDocs(db);

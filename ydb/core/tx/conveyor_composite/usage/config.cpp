@@ -18,7 +18,8 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
         Categories.emplace_back(TCategory(i));
     }
     WorkerPools.reserve(1 + config.GetWorkerPools().size());
-    TWorkersPool defWorkersPool{TString(DefaultPoolId)};
+    WorkerPools.emplace_back(WorkerPools.size());
+    TWorkersPool* defWorkersPool = &WorkerPools.front();
     std::set<ESpecialTaskCategory> usedCategories;
     for (auto&& i : config.GetCategories()) {
         TCategory cat(ESpecialTaskCategory::Insert);
@@ -31,33 +32,31 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
         }
         Categories[(ui64)cat.GetCategory()] = std::move(cat);
     }
+    THashSet<TString> poolNames;
     for (auto&& i : config.GetWorkerPools()) {
-        TWorkersPool wp;
+        TWorkersPool wp(WorkerPools.size());
         auto conclusion = wp.DeserializeFromProto(i);
         if (conclusion.IsFail()) {
             return conclusion;
         }
         const TString poolName = wp.GetName();
-        auto [poolIt, inserted] = WorkerPools.emplace(std::move(wp));
-        if (!inserted) {
+        if (!poolNames.emplace(poolName).second) {
             return TConclusionStatus::Fail("pool name duplication: '" + poolName + "'");
         }
-        for (auto&& link : poolIt->GetLinks()) {
+        WorkerPools.emplace_back(std::move(wp));
+        for (auto&& link : WorkerPools.back().GetLinks()) {
             AFL_VERIFY((ui64)link.GetCategory() < Categories.size());
             auto& cat = Categories[(ui64)link.GetCategory()];
-            if (!cat.AddWorkerPool(poolName)) {
+            if (!cat.AddWorkerPool(WorkerPools.back().GetWorkersPoolId())) {
                 return TConclusionStatus::Fail("double link for category: " + ::ToString(link.GetCategory()));
             }
         }
     }
     for (auto&& i : Categories) {
         if (i.GetWorkerPools().empty()) {
-            AFL_VERIFY(defWorkersPool.AddLink(i.GetCategory()));
-            AFL_VERIFY(i.AddWorkerPool(TString(DefaultPoolId)));
+            AFL_VERIFY(defWorkersPool->AddLink(i.GetCategory()));
+            AFL_VERIFY(i.AddWorkerPool(defWorkersPool->GetWorkersPoolId()));
         }
-    }
-    if (!WorkerPools.emplace(std::move(defWorkersPool)).second) {
-        return TConclusionStatus::Fail("pool name duplication: '" + TString(DefaultPoolId) + "'");
     }
     return TConclusionStatus::Success();
 }
@@ -113,6 +112,12 @@ TConfig TConfig::BuildDefault() {
     return BuildFromProto(BuildDefaultProto()).DetachResult();
 }
 
+TWorkersPool::TWorkersPool(const ui32 wpId, const std::optional<double> workersCountDouble, const std::optional<double> workersFraction)
+    : WorkersPoolId(wpId)
+    , WorkersCountInfo(workersCountDouble, workersFraction) {
+    PoolName = "WP::UNDEFINED:" + ::ToString(wpId);
+}
+
 TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& proto) {
     if (!proto.GetLinks().size()) {
         return TConclusionStatus::Fail("no categories for workers pool");
@@ -152,7 +157,7 @@ TConclusionStatus TWorkersPool::DeserializeFromProto(const NKikimrConfig::TCompo
 TString TWorkersPool::DebugString() const {
     TStringBuilder sb;
     sb << "{";
-    sb << "id=" << PoolName << ";";
+    sb << "id=" << WorkersPoolId << ";";
     sb << "threads=" << WorkersCountInfo.DebugString() << ";";
     TStringBuilder sbLinks;
     sbLinks << "[";
@@ -178,7 +183,6 @@ TString TCategory::DebugString() const {
     TStringBuilder sb;
     sb << "{";
     sb << "category=" << Category << ";";
-    sb << "queue_limit=" << QueueSizeLimit << ";";
     sb << "pools=" << JoinSeq(",", WorkerPools) << ";";
     sb << "}";
     return sb;

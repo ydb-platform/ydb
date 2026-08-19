@@ -8,9 +8,7 @@
 namespace NKikimr::NConveyorComposite {
 class TTasksManager {
 private:
-    using TWorkersPools = THashMap<TString, std::shared_ptr<TWorkersPool>>;
-
-    TWorkersPools WorkerPools;
+    std::vector<std::shared_ptr<TWorkersPool>> WorkerPools;
     std::vector<std::shared_ptr<TProcessCategory>> Categories;
     NConfig::TConfig Config;
 
@@ -18,8 +16,7 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "{";
-        for (auto&& [id, wp] : WorkerPools) {
-            Y_UNUSED(id);
+        for (auto&& wp : WorkerPools) {
             sb << wp->GetMaxWorkerThreads() << ",";
         }
         sb << ";";
@@ -34,22 +31,19 @@ public:
             Categories.emplace_back(std::make_shared<TProcessCategory>(Config.GetCategoryConfig(i), counters));
         }
         for (const auto& poolConfig : Config.GetWorkerPools()) {
-            const auto& poolId = poolConfig.GetName();
-            AFL_VERIFY(WorkerPools.emplace(poolId, std::make_shared<TWorkersPool>(
-                poolId, distributorActorId, poolConfig, counters.GetWorkersPoolSignals(poolId), Categories)).second);
+            WorkerPools.emplace_back(std::make_shared<TWorkersPool>(poolConfig.GetName(), distributorActorId, poolConfig,
+                counters.GetWorkersPoolSignals(poolConfig.GetName()), Categories));
         }
     }
 
-    TWorkersPool& MutableWorkersPool(const TString& workersPoolId) {
-        auto it = WorkerPools.find(workersPoolId);
-        AFL_VERIFY(it != WorkerPools.end())("workers_pool_id", workersPoolId);
-        return *it->second;
+    TWorkersPool& MutableWorkersPool(const ui32 workersPoolId) {
+        AFL_VERIFY(workersPoolId < WorkerPools.size());
+        return *WorkerPools[workersPoolId];
     }
 
     [[nodiscard]] bool DrainTasks() {
         bool result = false;
-        for (auto&& [id, pool] : WorkerPools) {
-            Y_UNUSED(id);
+        for (auto&& pool : WorkerPools) {
             if (pool->DrainTasks()) {
                 result = true;
             }
@@ -63,16 +57,6 @@ public:
         return *Categories[(ui64)category];
     }
 
-    bool HasFreeWorkerForCategory(const ESpecialTaskCategory category) const {
-        for (const auto& [id, pool] : WorkerPools) {
-            Y_UNUSED(id);
-            if (pool->CanExecuteCategory(category)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     TConclusionStatus ValidateConfigUpdate(const NConfig::TConfig& config) const {
         if (config.IsEnabled() != Config.IsEnabled()) {
             return TConclusionStatus::Fail("runtime Enabled update is not supported yet");
@@ -80,10 +64,9 @@ public:
         if (config.GetWorkerPools().size() != WorkerPools.size()) {
             return TConclusionStatus::Fail("runtime worker pool add/remove is not supported yet");
         }
-        for (const auto& desiredPool : config.GetWorkerPools()) {
-            const auto& poolId = desiredPool.GetName();
-            if (!WorkerPools.contains(poolId)) {
-                return TConclusionStatus::Fail("runtime worker pool add/remove/rename is not supported yet: '" + poolId + "'");
+        for (ui32 poolIdx = 0; poolIdx < WorkerPools.size(); ++poolIdx) {
+            if (WorkerPools[poolIdx]->GetPoolName() != config.GetWorkerPools()[poolIdx].GetName()) {
+                return TConclusionStatus::Fail("runtime worker pool reorder/rename is not supported yet");
             }
         }
         return TConclusionStatus::Success();
@@ -93,28 +76,23 @@ public:
         AFL_VERIFY(!ValidateConfigUpdate(config).IsFail());
 
         // topology updates
-        for (const auto category : GetEnumAllValues<ESpecialTaskCategory>()) {
-            Categories[(ui64)category]->UpdateConfig(config.GetCategoryConfig(category));
-        }
-        for (const auto& poolConfig : config.GetWorkerPools()) {
-            const auto& poolId = poolConfig.GetName();
-            auto& pool = MutableWorkersPool(poolId);
-            pool.UpdateMaxBatchSize(poolConfig.GetMaxBatchSize());
-            pool.ApplyTopologyUpdate(poolConfig, Categories);
+        for (ui32 poolIdx = 0; poolIdx < WorkerPools.size(); ++poolIdx) {
+            WorkerPools[poolIdx]->UpdateMaxBatchSize(config.GetWorkerPools()[poolIdx].GetMaxBatchSize());
+            WorkerPools[poolIdx]->ApplyTopologyUpdate(config.GetWorkerPools()[poolIdx], Categories);
         }
         Config = config;
 
         // CPU usage updates
         const ui64 totalThreadsCount = NKqp::TStagePredictor::GetPossibleMaxLimitThreads();
-        for (const auto& poolConfig : config.GetWorkerPools()) {
-            const auto& poolId = poolConfig.GetName();
+        for (ui32 poolIdx = 0; poolIdx < WorkerPools.size(); ++poolIdx) {
+            const auto& poolConfig = config.GetWorkerPools()[poolIdx];
             const ui64 workersCount = poolConfig.GetWorkersCount(totalThreadsCount);
             std::vector<double> desiredCPULimits;
             desiredCPULimits.reserve(workersCount);
             for (ui64 workerIdx = 0; workerIdx < workersCount; ++workerIdx) {
                 desiredCPULimits.emplace_back(poolConfig.GetWorkerCPUUsage(workerIdx, totalThreadsCount));
             }
-            MutableWorkersPool(poolId).StartWorkersUpdate(desiredCPULimits);
+            WorkerPools[poolIdx]->StartWorkersUpdate(desiredCPULimits);
         }
         return !HasWorkersUpdateInProgress();
     }
@@ -130,8 +108,7 @@ public:
     }
 
     bool HasWorkersUpdateInProgress() const {
-        for (const auto& [id, pool] : WorkerPools) {
-            Y_UNUSED(id);
+        for (const auto& pool : WorkerPools) {
             if (pool->HasWorkersUpdateInProgress()) {
                 return true;
             }

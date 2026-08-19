@@ -153,9 +153,6 @@ public:
         const std::string textProto = GetConveyorConfig();
         NKikimrConfig::TCompositeConveyorConfig protoConfig;
         AFL_VERIFY(google::protobuf::TextFormat::ParseFromString(textProto, &protoConfig));
-        for (auto& category : *protoConfig.MutableCategories()) {
-            category.SetQueueSizeLimit(ui64(GetTasksCount()) * 100);
-        }
 
         NConfig::TConfig config = NConfig::TConfig::BuildFromProto(protoConfig).DetachResult();
         const auto actorId = actorSystem.Register(CreateService(config, counters));

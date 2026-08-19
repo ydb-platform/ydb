@@ -5,7 +5,7 @@
 namespace NKikimr::NConveyorComposite {
 
 TEvInternal::TEvTaskProcessedResult::TEvTaskProcessedResult(
-    std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const TString& workersPoolId)
+    std::vector<TWorkerTaskResult>&& results, const TDuration forwardSendDuration, const ui64 workerIdx, const ui64 workersPoolId)
     : ForwardSendDuration(forwardSendDuration)
     , Results(std::move(results))
     , WorkerIdx(workerIdx)

@@ -245,9 +245,11 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         ui64 bytesInSources = 0;
         i64 sourcesFreeSpace = 0;
         for (const auto& [_, sourceInfo] : this->SourcesMap) {
-            emptySources += sourceInfo.Buffer->Empty();
-            bytesInSources += sourceInfo.Buffer->GetStoredBytes();
-            sourcesFreeSpace += sourceInfo.Buffer->GetFreeSpace();
+            if (sourceInfo.Buffer) {
+                emptySources += sourceInfo.Buffer->Empty();
+                bytesInSources += sourceInfo.Buffer->GetStoredBytes();
+                sourcesFreeSpace += sourceInfo.Buffer->GetFreeSpace();
+            }
         }
 
         ui64 checkpointedInputChannels = 0;
@@ -258,10 +260,13 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         for (const auto& [_, channelInfo] : this->InputChannelsMap) {
             if (channelInfo.CheckpointingMode != NDqProto::CHECKPOINTING_MODE_DISABLED) {
                 checkpointedInputChannels++;
-                emptyInputChannels += channelInfo.Channel->Empty();
-                finishedOrPausedInputChannels += channelInfo.IsPaused() || channelInfo.Channel->IsFinished();
-                bytesInInputChannels += channelInfo.Channel->GetStoredBytes();
-                inputChannelsFreeSpace += channelInfo.Channel->GetFreeSpace();
+
+                if (channelInfo.Channel) {
+                    emptyInputChannels += channelInfo.Channel->Empty();
+                    finishedOrPausedInputChannels += channelInfo.IsPaused() || channelInfo.Channel->IsFinished();
+                    bytesInInputChannels += channelInfo.Channel->GetStoredBytes();
+                    inputChannelsFreeSpace += channelInfo.Channel->GetFreeSpace();
+                }
             }
         }
 
@@ -270,11 +275,12 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         ui64 bytesInInputTransforms = 0;
         i64 inputTransformsFreeSpace = 0;
         for (const auto& [_, transformInfo] : this->InputTransformsMap) {
-            const auto buffer = transformInfo.Buffer;
-            emptyInputTransforms += buffer->Empty();
-            pendingInputTransforms += buffer->IsPending();
-            bytesInInputTransforms += buffer->GetStoredBytes();
-            inputTransformsFreeSpace += buffer->GetFreeSpace();
+            if (const auto buffer = transformInfo.Buffer) {
+                emptyInputTransforms += buffer->Empty();
+                pendingInputTransforms += buffer->IsPending();
+                bytesInInputTransforms += buffer->GetStoredBytes();
+                inputTransformsFreeSpace += buffer->GetFreeSpace();
+            }
         }
 
         diagnostics << "Inputs state. ["

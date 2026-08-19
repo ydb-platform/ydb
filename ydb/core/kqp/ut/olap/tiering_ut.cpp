@@ -4,6 +4,7 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <util/generic/size_literals.h>
 #include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
@@ -659,35 +660,39 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         ExecuteScanQuery(tableClient, "SELECT * FROM `/Root/olapStore/olapTable`");
     }
 
-    // Several inplace (__LOCAL_METADATA) indexes on one table: each is size-guarded individually, so the one
-    // outgrowing the blob limit is dropped while the small ones stay in the portion metadata.
+    // Many inplace (__LOCAL_METADATA) indexes summing above 100 MiB per portion.
     Y_UNIT_TEST(ManyLocalIndexesOnTiering) {
+        constexpr ui32 IndexesCount = 104;
+        constexpr ui32 FilterSize = 1_MB;
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+        // 100 MiB metadata commits per portion push the executor reject probability to 1, writes would get
+        // OVERLOADED regardless of the load.
+        testHelper.GetRuntime().GetAppData().FeatureFlags.SetEnableOlapRejectProbability(false);
         olapHelper.CreateTestOlapTable();
         testHelper.CreateTier(DEFAULT_TIER_NAME);
 
         NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
 
-        const std::vector<std::pair<TString, TString>> indexes = {
-            { "index_local_uid", "uid\", \"records_count\" : 65536" },
-            { "index_local_resource_id", "resource_id\", \"records_count\" : 65536" },
-            { "index_local_oversized", "message\", \"records_count\" : 1024" },
-        };
         auto session = tableClient.CreateSession().GetValueSync().GetSession();
-        for (const auto& [name, features] : indexes) {
+        for (ui32 i = 0; i < IndexesCount; ++i) {
             auto alterQuery = TStringBuilder()
-                << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=" << name
-                << ", TYPE=BLOOM_NGRAMM_FILTER, FEATURES=`{\"column_name\" : \"" << features
-                << ", \"ngramm_size\" : 3, \"hashes_count\" : 2, \"filter_size_bytes\" : 512, "
+                << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_local_" << i
+                << ", TYPE=BLOOM_NGRAMM_FILTER, FEATURES=`{\"column_name\" : \"uid\", \"ngramm_size\" : 3, \"hashes_count\" : 2, "
+                << "\"filter_size_bytes\" : " << FilterSize << ", \"records_count\" : 1000000, "
                 << "\"storage_id\" : \"__LOCAL_METADATA\", \"inherit_portion_storage\" : false}`);";
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
         }
 
-        tieringHelper.WriteSampleData();
+        // Filters are constant-size, a few writes already give >100 MiB of inplace indexes per portion;
+        // the full WriteSampleData volume overloads the shard with 104 x 1 MiB index builds per portion.
+        for (ui64 i = 0; i < 10; ++i) {
+            WriteTestData(testHelper.GetKikimr(), DEFAULT_TABLE_PATH, 0, 3600000000 + i * 10000, 1000);
+        }
         csController->WaitCompactions(TDuration::Seconds(5));
         csController->WaitActualization(TDuration::Seconds(5));
         testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
@@ -697,7 +702,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
         {
             auto selectQuery = TStringBuilder() << R"(
-                SELECT EntityName, COUNT(*) AS Chunks
+                SELECT EntityName, SUM(BlobRangeSize) AS Bytes
                 FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
                 WHERE Activity == 1
                 GROUP BY EntityName
@@ -707,9 +712,9 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             for (auto& row : rows) {
                 storedEntities.emplace(*NYdb::TValueParser(row.at("EntityName")).GetOptionalUtf8());
             }
-            UNIT_ASSERT(storedEntities.contains("index_local_uid"));
-            UNIT_ASSERT(storedEntities.contains("index_local_resource_id"));
-            UNIT_ASSERT(!storedEntities.contains("index_local_oversized"));
+            for (ui32 i = 0; i < IndexesCount; ++i) {
+                UNIT_ASSERT_C(storedEntities.contains("index_local_" + ::ToString(i)), "index_local_" + ::ToString(i));
+            }
         }
 
         ExecuteScanQuery(tableClient, "SELECT * FROM `/Root/olapStore/olapTable`");

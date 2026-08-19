@@ -16,6 +16,7 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/size_literals.h>
 
 namespace NKikimr::NOlap::NTest {
 
@@ -192,23 +193,27 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
     // Inplace indexes are size-guarded individually: all are stored even when their sum exceeds the limit,
     // the aggregate goes to the portion metadata row, not to a blob.
     Y_UNIT_TEST(MultipleLocalIndexesAggregateAboveLimitIsStored) {
-        constexpr i64 blobLimit = 10 * 1024;
+        constexpr i64 BlobLimit = 2_MB;
+        constexpr ui32 FilterSize = 1_MB;
+        constexpr ui32 RecordsCount = 128;
+        constexpr ui32 IndexesCount = 128;
+        constexpr ui64 AggregateLimit = 100_MB;
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(blobLimit).SetMinBlobSize(blobLimit / 4));
+        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(BlobLimit).SetMinBlobSize(BlobLimit / 4));
 
-        const auto schema = MakeSchemaWithNGrammIndex(1, 8 * 1024, 128, IStoragesManager::LocalMetadataStorageId, 3);
-        const auto chunks = BuildColumnChunks(schema, MakeTestBatch(128));
+        const auto schema = MakeSchemaWithNGrammIndex(1, FilterSize, RecordsCount, IStoragesManager::LocalMetadataStorageId, IndexesCount);
+        const auto chunks = BuildColumnChunks(schema, MakeTestBatch(RecordsCount));
 
         auto secondaryData = schema->GetIndexInfo()
-                                 .AppendIndexes(chunks, TTestStoragesManager::GetInstance(), 128, IStoragesManager::DefaultStorageId)
+                                 .AppendIndexes(chunks, TTestStoragesManager::GetInstance(), RecordsCount, IStoragesManager::DefaultStorageId)
                                  .DetachResult();
-        UNIT_ASSERT_VALUES_EQUAL(secondaryData.GetSecondaryInplaceData().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(secondaryData.GetSecondaryInplaceData().size(), IndexesCount);
         ui64 sumSize = 0;
         for (const auto& [indexId, chunk] : secondaryData.GetSecondaryInplaceData()) {
-            UNIT_ASSERT_LE(chunk->GetPackedSize(), blobLimit);
+            UNIT_ASSERT_LE(chunk->GetPackedSize(), BlobLimit);
             sumSize += chunk->GetPackedSize();
         }
-        UNIT_ASSERT_GT(sumSize, blobLimit);
+        UNIT_ASSERT_GT(sumSize, AggregateLimit);
     }
 }
 

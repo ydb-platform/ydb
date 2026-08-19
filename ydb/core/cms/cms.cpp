@@ -2082,10 +2082,10 @@ void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr&
 }
 
 void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult::TPtr& ev, const TActorContext& ctx) {
-    if (ev->Sender != State->BSControllerPipe) {
-        return;
-    }
-
+    // NOTE: The response arrives with ev->Sender set to the remote BS Controller
+    // tablet actor id (as delivered through the tablet pipe), not to the local
+    // pipe client actor id (State->BSControllerPipe). Do not compare against
+    // State->BSControllerPipe here, otherwise every response would be dropped.
     if (DDiskInfoRequestsInFlight > 0) {
         --DDiskInfoRequestsInFlight;
     }

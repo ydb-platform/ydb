@@ -2,6 +2,8 @@
 
 #include "yql_http_header.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+
 #include <util/generic/hash.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
@@ -22,18 +24,18 @@ struct IHttpRequestContext : public TThrRefBase {
     using TPtr = TIntrusivePtr<IHttpRequestContext>;
 
     virtual ~IHttpRequestContext() = default;
-    virtual TString GetPoolId() const = 0;
+    virtual NDq::TPoolKey GetPoolKey() const = 0;
 };
 
 class TDefaultHttpRequestContext final : public IHttpRequestContext {
 public:
-    explicit TDefaultHttpRequestContext(TString poolId)
-        : PoolId(std::move(poolId)) {}
+    explicit TDefaultHttpRequestContext(NDq::TPoolKey key)
+        : Key(std::move(key)) {}
 
-    TString GetPoolId() const override { return PoolId; }
+    NDq::TPoolKey GetPoolKey() const override { return Key; }
 
 private:
-    const TString PoolId;
+    const NDq::TPoolKey Key;
 };
 
 class IHTTPGateway {
@@ -157,7 +159,7 @@ public:
         
     virtual ui64 GetBuffersSizePerStream() = 0;
 
-    virtual void UpdatePoolCaps(THashMap<TString, size_t> caps) = 0;
+    virtual void UpdatePoolCaps(THashMap<NDq::TPoolKey, size_t> caps) = 0;
 
     static constexpr const char* DefaultPoolId = "default";
 

@@ -4,14 +4,27 @@
 #include <library/cpp/time_provider/monotonic.h>
 
 #include <util/datetime/base.h>
+#include <util/generic/hash.h>
 #include <util/generic/string.h>
 
 #include <memory>
 
 namespace NYql::NDq {
 
+using TPoolId = TString;
+using TDatabaseId = TString;
+
+// Fully-qualified resource pool identifier. Pool names are not unique across
+// databases on a shared node — the (database, pool) pair disambiguates.
+struct TPoolKey {
+    TDatabaseId DatabaseId;
+    TPoolId PoolId;
+
+    bool operator==(const TPoolKey&) const = default;
+};
+
 ///
-/// Per work-unit gate + attribution. 
+/// Per work-unit gate + attribution.
 ///
 struct IDqSchedulableWork {
     virtual ~IDqSchedulableWork() = default;
@@ -32,7 +45,7 @@ struct IDqSchedulableWork {
     // TEvWakeup from the scheduler.
     virtual void RegisterForResume(const NActors::TActorId& actorId) = 0;
 
-    virtual TString GetPoolId() const = 0;
+    virtual TPoolKey GetPoolKey() const = 0;
 };
 
 ///
@@ -51,3 +64,10 @@ struct IDqSchedulerContext {
 using IDqSchedulerContextPtr = std::shared_ptr<IDqSchedulerContext>;
 
 } // namespace NYql::NDq
+
+template <>
+struct THash<NYql::NDq::TPoolKey> {
+    size_t operator()(const NYql::NDq::TPoolKey& k) const {
+        return CombineHashes(THash<TString>{}(k.DatabaseId), THash<TString>{}(k.PoolId));
+    }
+};

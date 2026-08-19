@@ -428,9 +428,9 @@ public:
         // lz4 decompressor reads signature in ctor, w/o actual data it will be deadlocked
         IHttpRequestContext::TPtr context;
         if (Work) {
-            const auto poolId = Work->GetPoolId();
-            LOG_CORO_D("S3 Download: poolId=" << poolId);
-            context = MakeIntrusive<TDefaultHttpRequestContext>(poolId);
+            const auto poolKey = Work->GetPoolKey();
+            LOG_CORO_D("S3 Download: db=" << poolKey.DatabaseId << " pool=" << poolKey.PoolId);
+            context = MakeIntrusive<TDefaultHttpRequestContext>(poolKey);
         }
         DownloadStart(RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(context));
 
@@ -564,8 +564,9 @@ public:
         }
         IHttpRequestContext::TPtr context;
         if (Work) {
-            LOG_CORO_D("S3 GetOrCreate: poolId=" << Work->GetPoolId());
-            context = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetPoolId());
+            const auto poolKey = Work->GetPoolKey();
+            LOG_CORO_D("S3 GetOrCreate: db=" << poolKey.DatabaseId << " pool=" << poolKey.PoolId);
+            context = MakeIntrusive<TDefaultHttpRequestContext>(poolKey);
         }
         RetryStuff->Gateway->Download(RetryStuff->Url, RetryStuff->Headers,
                             range.Offset,
@@ -1059,7 +1060,7 @@ public:
         if (!RetryStuff->IsCancelled() && RetryStuff->NextRetryDelay && RetryStuff->SizeLimit > 0ULL) {
             IHttpRequestContext::TPtr retryContext;
             if (Work) {
-                retryContext = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetPoolId());
+                retryContext = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetPoolKey());
             }
             GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
             InputBuffer.clear();

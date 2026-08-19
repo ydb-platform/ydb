@@ -9,14 +9,14 @@
 namespace NKikimr::NKqp::NScheduler {
 
     template <class TDerived>
-    class TSchedulableComputeActorBase : public NYql::NDq::TDqSyncComputeActorBase<TDerived>, TSchedulableActorBase {
+    class TSchedulableComputeActorBase : public NYql::NDq::TDqSyncComputeActorBase<TDerived>, TSchedulableBase {
         using TBase = NYql::NDq::TDqSyncComputeActorBase<TDerived>;
 
     public:
         template<typename ... TArgs>
-        TSchedulableComputeActorBase(const TSchedulableActorOptions& options, TArgs&& ... args)
+        TSchedulableComputeActorBase(const TSchedulableOptions& options, TArgs&& ... args)
             : TBase(std::forward<TArgs>(args) ...)
-            , TSchedulableActorBase(options)
+            , TSchedulableBase(options)
             , SchedulerContext(std::make_shared<TDqSchedulerContext>(options.Query, options.IsSchedulable))
         {
         }

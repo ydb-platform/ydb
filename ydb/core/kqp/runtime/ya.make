@@ -69,7 +69,6 @@ PEERDIR(
     ydb/library/yql/dq/actors/spilling
     ydb/library/yql/dq/common
     ydb/library/yql/dq/runtime
-    ydb/library/yql/providers/common/http_gateway
     yql/essentials/minikql/computation/llvm16
     yql/essentials/minikql/comp_nodes
     yql/essentials/utils

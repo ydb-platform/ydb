@@ -41,21 +41,21 @@ private:
 
     void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
         if (auto gw = Gateway.lock()) {
-            THashMap<TString, size_t> caps;
-            for (const auto& [poolId, share] : Provider()) {
+            THashMap<NDq::TPoolKey, size_t> caps;
+            for (const auto& [poolKey, share] : Provider()) {
                 const size_t raw = static_cast<size_t>(MaxHandlers * share);
-                caps[poolId] = share > 0.0 ? std::max<size_t>(raw, 1) : 0;
+                caps[poolKey] = share > 0.0 ? std::max<size_t>(raw, 1) : 0;
             }
             const size_t scheduledCapsSum = std::accumulate(caps.begin(), caps.end(), size_t{0},
                 [](size_t acc, const auto& kv) { return acc + kv.second; });
             const size_t defaultFloor = static_cast<size_t>(MaxHandlers * MinDefaultFraction);
             const size_t defaultCap = std::max(defaultFloor, MaxHandlers > scheduledCapsSum ? MaxHandlers - scheduledCapsSum : 0);
-            caps[IHTTPGateway::DefaultPoolId] = defaultCap;
+            caps[NDq::TPoolKey{{}, TString{IHTTPGateway::DefaultPoolId}}] = defaultCap;
 
             TStringBuilder log;
             log << "HttpPoolCapPusher tick: maxHandlers=" << MaxHandlers << " caps:";
-            for (const auto& [poolId, cap] : caps) {
-                log << " [" << poolId << "]=" << cap;
+            for (const auto& [poolKey, cap] : caps) {
+                log << " [" << poolKey.DatabaseId << "/" << poolKey.PoolId << "]=" << cap;
             }
             YQL_LOG(DEBUG) << log;
 

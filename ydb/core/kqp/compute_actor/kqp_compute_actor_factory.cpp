@@ -90,7 +90,7 @@ public:
 
         auto estimation = ResourceManager_->EstimateTaskResources(*args.Task, args.NumberOfTasks);
 
-        NScheduler::TSchedulableActorOptions schedulableOptions {
+        NScheduler::TSchedulableOptions schedulableOptions {
             .Query = args.Query,
             .IsSchedulable = args.Query && !args.TxInfo->PoolId.empty() && args.TxInfo->PoolId != NResourcePool::DEFAULT_POOL_ID,
         };

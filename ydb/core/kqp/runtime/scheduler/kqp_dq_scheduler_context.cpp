@@ -1,78 +1,23 @@
 #include "kqp_dq_scheduler_context.h"
 
+#include "kqp_schedulable_actor.h"
 #include "tree/dynamic.h"
 
 namespace NKikimr::NKqp::NScheduler {
 
-namespace {
-
-class TDqSchedulableWork final
-    : public NYql::NDq::IDqSchedulableWork
-    , private TSchedulableActorBase {
-public:
-    TDqSchedulableWork(const TSchedulableActorOptions& options, TString poolId)
-        : TSchedulableActorBase(options)
-        , PoolId(std::move(poolId))
-    {}
-
-    ~TDqSchedulableWork() override {
-        // Safety net: release scheduler state if owner died between StartExecution
-        // and StopExecution. Idempotent — no-op if Executed=false.
-        bool forced = false;
-        TSchedulableActorBase::StopExecution(forced);
-    }
-
-    bool StartExecution(TMonotonic now) override {
-        return TSchedulableActorBase::StartExecution(now);
-    }
-
-    void StopExecution(bool& forcedResume) override {
-        TSchedulableActorBase::StopExecution(forcedResume);
-    }
-
-    TDuration CalculateDelay(TMonotonic now) const override {
-        return TSchedulableActorBase::CalculateDelay(now);
-    }
-
-    void RegisterForResume(const NActors::TActorId& actorId) override {
-        TSchedulableActorBase::RegisterForResume(actorId);
-    }
-
-    TString GetPoolId() const override {
-        return PoolId;
-    }
-
-private:
-    const TString PoolId;
-};
-
-} // namespace
-
-namespace {
-    TString ExtractPoolId(const NHdrf::NDynamic::TQueryPtr& query) {
-        if (query && query->GetParent()) {
-            return std::get<NHdrf::TPoolId>(query->GetParent()->GetId());
-        }
-        return {};
-    }
-}
-
 TDqSchedulerContext::TDqSchedulerContext(NHdrf::NDynamic::TQueryPtr query, bool isSchedulable)
     : Query(std::move(query))
     , IsSchedulable(isSchedulable)
-    , PoolId(ExtractPoolId(Query))
 {}
 
 std::unique_ptr<NYql::NDq::IDqSchedulableWork> TDqSchedulerContext::CreateSchedulableWork() {
     if (!Query) {
         return nullptr;
     }
-    return std::make_unique<TDqSchedulableWork>(
-        TSchedulableActorOptions{
-            .Query = Query,
-            .IsSchedulable = IsSchedulable,
-        },
-        PoolId);
+    return std::make_unique<TSchedulableBase>(TSchedulableOptions{
+        .Query = Query,
+        .IsSchedulable = IsSchedulable,
+    });
 }
 
 } // namespace NKikimr::NKqp::NScheduler

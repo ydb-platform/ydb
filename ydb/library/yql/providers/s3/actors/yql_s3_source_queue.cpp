@@ -199,7 +199,7 @@ public:
         , AllowLocalFiles(allowLocalFiles) {
         if (schedulerContext) {
             if (auto work = schedulerContext->CreateSchedulableWork()) {
-                HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(work->GetPoolId());
+                HttpRequestContext = MakeIntrusive<TDefaultHttpRequestContext>(work->GetPoolKey());
             }
         }
         for (size_t i = 0; i < paths.size(); ++i) {

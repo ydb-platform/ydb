@@ -29,6 +29,7 @@ ydb/core/transfer/ut/functional Transfer.CheckCommittedOffset_Remote
 ydb/core/transfer/ut/functional Transfer.CreateAndDropConsumer
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.BaseCase
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.IndexPartitioning
+ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.IndexPartitioningUniq
 ydb/core/tx/schemeshard/ut_index_build_reboots IndexBuildTestReboots.UniqueIndexValidationFailsBetweenShards
 ydb/core/tx/schemeshard/ut_index_build_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_vector_index_build_reboots VectorIndexBuildTestReboots.BaseCase[TabletReboots]

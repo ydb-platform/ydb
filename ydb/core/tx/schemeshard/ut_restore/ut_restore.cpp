@@ -4447,6 +4447,68 @@ CREATE TABLE `/OldRoot/Original` (
             NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
     }
 
+    Y_UNIT_TEST(GeneratedCreateTableQueryWithCreateViewTextIsHandledAsTable) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        TTestDataWithScheme data;
+        data.Metadata = R"({"version": 1})";
+        data.CreationQuery = R"(
+            CREATE TABLE `/OldRoot/Original` (
+                key Uint32 NOT NULL,
+                a Int32,
+                `CREATE VIEW marker` Int32
+                    GENERATED ALWAYS AS (a + 1) STORED,
+                PRIMARY KEY (key)
+            );
+        )";
+        data.Data.emplace_back("1,41,42\n", EmptyYsonStr);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Restored");
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+
+        const auto& columns = describe.GetPathDescription().GetTable().GetColumns();
+        const NKikimrSchemeOp::TColumnDescription* generated = nullptr;
+        for (const auto& column : columns) {
+            if (column.GetName() == "CREATE VIEW marker") {
+                generated = &column;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(generated && generated->HasDefaultFromExpression(),
+            describe.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            generated->GetDefaultFromExpression().GetExprText(),
+            "a + 1");
+    }
+
     enum class ECreateTableQueryCompileResult {
         Empty,
         Multiple,

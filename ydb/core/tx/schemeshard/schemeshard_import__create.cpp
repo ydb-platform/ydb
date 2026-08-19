@@ -129,56 +129,36 @@ bool IsTableCreatedByQuery(const TItem& item) {
     }, item.PreparedCreationQuery->GetOperationType());
 }
 
-bool IsCreateViewQuery(const TString& query) {
-    return query.Contains("CREATE VIEW");
-}
-
-bool IsCreateReplicationQuery(const TString& query) {
-    return query.Contains("CREATE ASYNC REPLICATION");
-}
-
-bool IsCreateTransferQuery(const TString& query) {
-    return query.Contains("CREATE TRANSFER");
-}
-
-bool IsCreateExternalDataSourceQuery(const TString& query) {
-    return query.Contains("CREATE EXTERNAL DATA SOURCE");
-}
-
-bool IsCreateExternalTableQuery(const TString& query) {
-    return query.Contains("CREATE EXTERNAL TABLE");
-}
-
-bool IsCreateTableQuery(const TString& query) {
-    return query.Contains("CREATE TABLE `");
-}
-
 bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
     const TString& dbPath,
+    NKikimrSchemeOp::EPathType creationQueryPathType,
     NYql::TIssues& issues)
 {
-    if (IsCreateViewQuery(query)) {
+    switch (creationQueryPathType) {
+    case NKikimrSchemeOp::EPathTypeView:
         return NYdb::NDump::RewriteCreateViewQuery(query, dbRestoreRoot, true, dbPath, issues);
-    } else if (IsCreateReplicationQuery(query)) {
+    case NKikimrSchemeOp::EPathTypeReplication:
         return NYdb::NDump::RewriteCreateAsyncReplicationQuery(query, dbRestoreRoot, dbPath, issues);
-    } else if (IsCreateTransferQuery(query)) {
+    case NKikimrSchemeOp::EPathTypeTransfer:
         return NYdb::NDump::RewriteCreateTransferQuery(query, dbRestoreRoot, dbPath, issues);
-    } else if (IsCreateExternalDataSourceQuery(query)) {
+    case NKikimrSchemeOp::EPathTypeExternalDataSource:
         return NYdb::NDump::RewriteCreateExternalDataSourceQuery(query, dbRestoreRoot, dbPath, issues);
-    } else if (IsCreateExternalTableQuery(query)) {
+    case NKikimrSchemeOp::EPathTypeExternalTable:
         return NYdb::NDump::RewriteCreateExternalTableQuery(query, dbRestoreRoot, dbPath, issues);
-    } else if (IsCreateTableQuery(query)) {
+    case NKikimrSchemeOp::EPathTypeTable:
         return NYdb::NDump::RewriteCreateQuery(
             query,
             "CREATE TABLE `{}`",
             dbPath,
             issues);
+    default:
+        issues.AddIssue(TStringBuilder()
+            << "unsupported create query schema type: "
+            << NKikimrSchemeOp::EPathType_Name(creationQueryPathType));
+        return false;
     }
-
-    issues.AddIssue(TStringBuilder() << "unsupported create query: " << query);
-    return false;
 }
 
 TString GetDatabase(TSchemeShard& ss) {
@@ -868,7 +848,8 @@ private:
                 AllocateTxId(importInfo, itemIdx);
             } else {
                 item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
-                    Self->SelfId(), importInfo.Id, itemIdx, item.CreationQuery, database
+                    Self->SelfId(), importInfo.Id, itemIdx, item.CreationQuery,
+                    item.CreationQueryPathType, database
                 ));
                 Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
             }
@@ -1302,7 +1283,8 @@ private:
                         } else {
                             const auto database = GetDatabase(*Self);
                             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
-                                Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
+                                Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery,
+                                item.CreationQueryPathType, database
                             ));
                             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
                         }
@@ -1402,13 +1384,20 @@ private:
             const TString source = TStringBuilder() << item.SrcPath;
 
             NYql::TIssues issues;
-            if (!RewriteCreateQuery(item.CreationQuery, database, item.DstPathName, issues)) {
+            if (!RewriteCreateQuery(
+                    item.CreationQuery,
+                    database,
+                    item.DstPathName,
+                    item.CreationQueryPathType,
+                    issues))
+            {
                 issues.AddIssue(TStringBuilder() << "path: " << source);
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid creation query");
             }
 
             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
-                Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery, database
+                Self->SelfId(), msg.ImportId, msg.ItemIdx, item.CreationQuery,
+                item.CreationQueryPathType, database
             ));
             Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
         } else if (item.Table) {

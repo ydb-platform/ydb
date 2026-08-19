@@ -1778,6 +1778,48 @@ partitioning_settings {
             NBackup::ComputeChecksum(createTableQuery) + " create_table.sql");
     }
 
+    Y_UNIT_TEST(ShouldRejectGeneratedTableExportToAmbiguousSchemaPrefix) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        S3Mock().GetData()["/generated/scheme.pb"] = "stale ordinary table scheme";
+        S3Mock().GetData()["/generated/scheme.pb.sha256"] = "stale ordinary table checksum";
+
+        Run(Runtime(), Env(), TVector<TString>{R"(
+            Name: "GeneratedTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a" Type: "Int32" }
+            Columns {
+              Name: "stored"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + 1"
+                Stored: true
+                DependencyColumnNames: ["a"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )"}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/GeneratedTable"
+                destination_prefix: "generated"
+              }
+            }
+        )", S3Port()), Ydb::StatusIds::CANCELLED);
+
+        UNIT_ASSERT(!HasS3File("/generated/create_table.sql"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetS3FileContent("/generated/scheme.pb"),
+            "stale ordinary table scheme");
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetS3FileContent("/generated/scheme.pb.sha256"),
+            "stale ordinary table checksum");
+    }
+
     Y_UNIT_TEST(ShouldPreserveOrdinaryTableSchemeNextToGeneratedTableContract) {
         Env();
 

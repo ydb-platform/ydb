@@ -185,6 +185,16 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         auto storageOperator = ExternalStorageConfig->ConstructStorageOperator();
         Client = this->RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
 
+        if (!SchemaDestinationChecked) {
+            AlternateSchemaKeyIdx = 0;
+            CheckSchemaDestination();
+            return;
+        }
+
+        ContinueUpload();
+    }
+
+    void ContinueUpload() {
         if (!MetadataUploaded) {
             UploadMetadata();
         } else if (EnablePermissions && !PermissionsUploaded) {
@@ -202,6 +212,46 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
                 this->Send(Scanner, new TEvExportScan::TEvFeed());
             }
         }
+    }
+
+    void CheckSchemaDestination() {
+        Y_ENSURE(AlternateSchemaKeyIdx < AlternateSchemaKeys.size());
+
+        auto request = Aws::S3::Model::HeadObjectRequest()
+            .WithKey(AlternateSchemaKeys[AlternateSchemaKeyIdx]);
+        this->Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
+        this->Become(&TThis::StateCheckSchemaDestination);
+    }
+
+    static bool NoObjectFound(Aws::S3::S3Errors errorType) {
+        return errorType == Aws::S3::S3Errors::RESOURCE_NOT_FOUND
+            || errorType == Aws::S3::S3Errors::NO_SUCH_KEY;
+    }
+
+    void HandleSchemaDestination(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        const auto& key = AlternateSchemaKeys[AlternateSchemaKeyIdx];
+
+        YDB_LOG_DEBUG("[Export] checked alternate schema object",
+            {"key", key},
+            {"result", result});
+
+        if (result.IsSuccess()) {
+            return Finish(false, TStringBuilder()
+                << "Export destination contains alternate schema object '" << key << "'");
+        }
+
+        if (!NoObjectFound(result.GetError().GetErrorType())) {
+            return RetryOrFinish(result.GetError());
+        }
+
+        if (++AlternateSchemaKeyIdx < AlternateSchemaKeys.size()) {
+            CheckSchemaDestination();
+            return;
+        }
+
+        SchemaDestinationChecked = true;
+        ContinueUpload();
     }
 
     template <typename T>
@@ -861,6 +911,7 @@ public:
         , Retries(task.GetNumberOfRetries())
         , Attempt(0)
         , Delay(TDuration::Minutes(1))
+        , SchemaDestinationChecked(ShardNum != 0)
         , SchemeUploaded(ShardNum == 0 ? false : true)
         , ChangefeedsUploaded(ShardNum == 0 ? false : true)
         , MetadataUploaded(ShardNum == 0 ? false : true)
@@ -868,6 +919,15 @@ public:
         , EnableChecksums(task.GetEnableChecksums())
         , EnablePermissions(task.GetEnablePermissions())
     {
+        if (!SchemaDestinationChecked) {
+            const TString alternateSchemaKey = CreateTableQuery
+                ? Settings.GetSchemeKey()
+                : Settings.GetCreateTableQueryKey();
+            AlternateSchemaKeys = {
+                alternateSchemaKey,
+                ChecksumKey(alternateSchemaKey),
+            };
+        }
     }
 
     void Bootstrap() {
@@ -914,6 +974,16 @@ public:
             {"actorState", "StateUploadScheme"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleScheme);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateCheckSchemaDestination) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateCheckSchemaDestination"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleSchemaDestination);
         default:
             return StateBase(ev);
         }
@@ -1023,6 +1093,9 @@ private:
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 
     TActorId Client;
+    TVector<TString> AlternateSchemaKeys;
+    size_t AlternateSchemaKeyIdx = 0;
+    bool SchemaDestinationChecked;
     bool SchemeUploaded;
     bool ChangefeedsUploaded;
     bool MetadataUploaded;

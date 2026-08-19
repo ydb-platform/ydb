@@ -32,8 +32,8 @@ class TestMoveData(RollingUpgradeAndDowngradeFixture):
 
         yield from self.setup_cluster(
             tenant_db="move_data",
+            extra_feature_flags=["enable_columnshard_move_data"],
             column_shard_config={
-                "move_data_enabled": True,
                 "alter_object_enabled": True,
             },
         )

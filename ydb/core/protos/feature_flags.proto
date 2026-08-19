@@ -384,4 +384,5 @@ message TFeatureFlags {
     optional bool EnableCheckpointsCompression = 325 [default = false];
     optional bool EnableDataShardLocksTransferOnSplit = 326 [default = false];
     optional bool EnableDqSourceStreamLookupJoinLocalLookups = 327 [default = false];
+    optional bool EnableColumnshardMoveData = 328 [default = false];
 }

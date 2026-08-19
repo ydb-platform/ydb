@@ -90,13 +90,13 @@ public:
         Config = config;
 
         // CPU usage updates
-        const ui32 totalThreadsCount = NKqp::TStagePredictor::GetPossibleMaxLimitThreads();
+        const ui64 totalThreadsCount = NKqp::TStagePredictor::GetPossibleMaxLimitThreads();
         for (ui32 poolIdx = 0; poolIdx < WorkerPools.size(); ++poolIdx) {
             const auto& poolConfig = config.GetWorkerPools()[poolIdx];
-            const ui32 workersCount = poolConfig.GetWorkersCount(totalThreadsCount);
+            const ui64 workersCount = poolConfig.GetWorkersCount(totalThreadsCount);
             std::vector<double> desiredCPULimits;
             desiredCPULimits.reserve(workersCount);
-            for (ui32 workerIdx = 0; workerIdx < workersCount; ++workerIdx) {
+            for (ui64 workerIdx = 0; workerIdx < workersCount; ++workerIdx) {
                 desiredCPULimits.emplace_back(poolConfig.GetWorkerCPUUsage(workerIdx, totalThreadsCount));
             }
             WorkerPools[poolIdx]->StartWorkersUpdate(desiredCPULimits);

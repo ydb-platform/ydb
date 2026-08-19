@@ -104,7 +104,7 @@ void TPersQueueReadBalancer::Die(const TActorContext& ctx) {
     PipesRequested.clear();
     ReadyPartitionTablets = 0;
     while (!PartitionsLocationQueue.empty()) {
-        SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx);
+        SendPartitionsLocationError(PartitionsLocationQueue.front().Sender, ctx, PartitionsLocationQueue.front().Cookie);
         PartitionsLocationQueue.pop_front();
     }
     if (PartitionsScaleManager) {

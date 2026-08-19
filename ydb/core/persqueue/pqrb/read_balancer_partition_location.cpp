@@ -14,11 +14,12 @@ void TPersQueueReadBalancer::HandleOnInit(
 
 void TPersQueueReadBalancer::SendPartitionsLocationError(
     const TActorId& sender,
-    const TActorContext& ctx)
+    const TActorContext& ctx,
+    ui64 cookie)
 {
     auto response = std::make_unique<TEvPersQueue::TEvGetPartitionsLocationResponse>();
     response->Record.SetStatus(false);
-    ctx.Send(sender, response.release());
+    ctx.Send(sender, response.release(), 0, cookie);
 }
 
 bool TPersQueueReadBalancer::AllPartitionPipesReady() const
@@ -46,6 +47,7 @@ void TPersQueueReadBalancer::EnqueuePartitionsLocationRequest(
         .Sender = ev->Sender,
         .Record = std::move(ev->Get()->Record),
         .Deadline = TAppData::TimeProvider->Now() + timeout,
+        .Cookie = ev->Cookie,
     });
 
     YDB_LOG_DEBUG("Enqueue GetPartitionsLocation request",
@@ -65,7 +67,7 @@ void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext&
         auto& request = PartitionsLocationQueue[read];
 
         // Prefer a successful answer whenever possible, even past the deadline.
-        if (TryRespondPartitionsLocation(request.Sender, request.Record, ctx)) {
+        if (TryRespondPartitionsLocation(request.Sender, request.Record, ctx, request.Cookie)) {
             continue;
         }
 
@@ -73,7 +75,7 @@ void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext&
             YDB_LOG_DEBUG("GetPartitionsLocation request expired",
                 {"logPrefix", LogPrefix()},
                 {"sender", request.Sender});
-            SendPartitionsLocationError(request.Sender, ctx);
+            SendPartitionsLocationError(request.Sender, ctx, request.Cookie);
             continue;
         }
 
@@ -89,7 +91,8 @@ void TPersQueueReadBalancer::ProcessPartitionsLocationQueue(const TActorContext&
 bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
     const TActorId& sender,
     const NKikimrPQ::TGetPartitionsLocation& request,
-    const TActorContext& ctx)
+    const TActorContext& ctx,
+    ui64 cookie)
 {
     auto pipeIsReady = [&](ui64 tabletId) {
         if (PipesRequested.contains(tabletId)) {
@@ -121,7 +124,7 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
         for (const auto& partitionInRequest : request.GetPartitions()) {
             auto partitionInfoIter = PartitionsInfo.find(partitionInRequest);
             if (partitionInfoIter == PartitionsInfo.end()) {
-                SendPartitionsLocationError(sender, ctx);
+                SendPartitionsLocationError(sender, ctx, cookie);
                 return true; // answered with error, drop from queue
             }
 
@@ -173,12 +176,14 @@ bool TPersQueueReadBalancer::TryRespondPartitionsLocation(
     }
 
     if (!filled) {
-        SendPartitionsLocationError(sender, ctx);
+        SendPartitionsLocationError(sender, ctx, cookie);
         return true;
     }
 
     evResponse->Record.SetStatus(true);
-    ctx.Send(sender, evResponse.release());
+    // Echo the request cookie so clients can drop stale replies after retry.
+    // Old clients ignore it; cookie 0 remains valid for mixed-version rollouts.
+    ctx.Send(sender, evResponse.release(), 0, cookie);
     return true;
 }
 
@@ -186,7 +191,7 @@ void TPersQueueReadBalancer::Handle(
     TEvPersQueue::TEvGetPartitionsLocation::TPtr& ev,
     const TActorContext& ctx)
 {
-    if (TryRespondPartitionsLocation(ev->Sender, ev->Get()->Record, ctx)) {
+    if (TryRespondPartitionsLocation(ev->Sender, ev->Get()->Record, ctx, ev->Cookie)) {
         return;
     }
 

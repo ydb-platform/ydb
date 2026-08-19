@@ -118,6 +118,40 @@ Y_UNIT_TEST(HappyPathAfterPipesReady) {
     UNIT_ASSERT(!response->Record.GetStatus());
 }
 
+Y_UNIT_TEST(EchoesRequestCookie) {
+    TTestContext tc;
+    tc.Prepare();
+    tc.Runtime->SetScheduledLimit(10000);
+
+    PQTabletPrepare({}, {}, tc);
+    PQBalancerPrepare("topic", {{0, {tc.TabletId, 1}}}, /*ssId=*/1, tc);
+    WaitBalancerReady(tc);
+
+    ui64 responseCookie = Max<ui64>();
+    auto response = SendLocationRequest(
+        tc,
+        new TEvPersQueue::TEvGetPartitionsLocation(),
+        TDuration::Seconds(10),
+        /*cookie=*/42,
+        &responseCookie);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.GetStatus());
+    UNIT_ASSERT_VALUES_EQUAL(responseCookie, 42u);
+
+    responseCookie = Max<ui64>();
+    auto* unknown = new TEvPersQueue::TEvGetPartitionsLocation();
+    unknown->Record.AddPartitions(50);
+    response = SendLocationRequest(
+        tc,
+        unknown,
+        TDuration::Seconds(10),
+        /*cookie=*/43,
+        &responseCookie);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(!response->Record.GetStatus());
+    UNIT_ASSERT_VALUES_EQUAL(responseCookie, 43u);
+}
+
 Y_UNIT_TEST(SinglePartitionNotBlockedByAllPartitions) {
     TTestContext tc;
     tc.Prepare();

@@ -659,6 +659,62 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         ExecuteScanQuery(tableClient, "SELECT * FROM `/Root/olapStore/olapTable`");
     }
 
+    // Several inplace (__LOCAL_METADATA) indexes on one table: each is size-guarded individually, so the one
+    // outgrowing the blob limit is dropped while the small ones stay in the portion metadata.
+    Y_UNIT_TEST(ManyLocalIndexesOnTiering) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        const std::vector<std::pair<TString, TString>> indexes = {
+            { "index_local_uid", "uid\", \"records_count\" : 65536" },
+            { "index_local_resource_id", "resource_id\", \"records_count\" : 65536" },
+            { "index_local_oversized", "message\", \"records_count\" : 1024" },
+        };
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        for (const auto& [name, features] : indexes) {
+            auto alterQuery = TStringBuilder()
+                << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=" << name
+                << ", TYPE=BLOOM_NGRAMM_FILTER, FEATURES=`{\"column_name\" : \"" << features
+                << ", \"ngramm_size\" : 3, \"hashes_count\" : 2, \"filter_size_bytes\" : 512, "
+                << "\"storage_id\" : \"__LOCAL_METADATA\", \"inherit_portion_storage\" : false}`);";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        tieringHelper.WriteSampleData();
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        {
+            auto selectQuery = TStringBuilder() << R"(
+                SELECT EntityName, COUNT(*) AS Chunks
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+                WHERE Activity == 1
+                GROUP BY EntityName
+            )";
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            THashSet<TString> storedEntities;
+            for (auto& row : rows) {
+                storedEntities.emplace(*NYdb::TValueParser(row.at("EntityName")).GetOptionalUtf8());
+            }
+            UNIT_ASSERT(storedEntities.contains("index_local_uid"));
+            UNIT_ASSERT(storedEntities.contains("index_local_resource_id"));
+            UNIT_ASSERT(!storedEntities.contains("index_local_oversized"));
+        }
+
+        ExecuteScanQuery(tableClient, "SELECT * FROM `/Root/olapStore/olapTable`");
+    }
+
     Y_UNIT_TEST_DUO(MinMaxIndexInheritsTiering, InheritPortionStorage) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();

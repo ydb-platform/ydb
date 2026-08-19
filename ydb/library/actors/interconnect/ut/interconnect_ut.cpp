@@ -1156,15 +1156,15 @@ Y_UNIT_TEST_SUITE(Interconnect) {
         const TActorId recipient = cluster.RegisterActor(new TOversizedTcpEventReceiverActor(context), 1);
 
         auto event = std::make_unique<TEvOversizedTcpEvent>();
-        // TEvTestSerialization.Buffer is encoded as a one-byte field tag, a four-byte varint length at
+        // TEvTestSerialization.Buffer is encoded as a one-byte field tag, a five-byte varint length at
         // this payload size, and the payload itself. Therefore its serialized size is:
         //
-        //   1 + 4 + (EventMaxByteSize - 4) = EventMaxByteSize + 1.
+        //   1 + 5 + (EventMaxByteSize - 5) = EventMaxByteSize + 1.
         //
         // Exceeding the limit by exactly one byte makes the coroutine request more output after consuming
         // the complete serialization budget. The size check must terminate the session while the coroutine
         // is suspended and ProcessUndelivered must abort the pending serialization.
-        event->Record.SetBuffer(TString(EventMaxByteSize - 4, 'x'));
+        event->Record.SetBuffer(TString(EventMaxByteSize - 5, 'x'));
         UNIT_ASSERT_VALUES_EQUAL(event->CalculateSerializedSize(), EventMaxByteSize + 1);
 
         cluster.RegisterActor(new TOversizedTcpEventSenderActor(recipient, std::move(event), context), 2);

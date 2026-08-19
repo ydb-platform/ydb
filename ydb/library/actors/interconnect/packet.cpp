@@ -8,11 +8,12 @@
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
 TTcpPacketOutTask::TTcpPacketOutTask(const TSessionParams& params, NInterconnect::TOutgoingStream& outgoingStream,
-    NInterconnect::TOutgoingStream& xdcStream)
+    NInterconnect::TOutgoingStream& xdcStream, bool usePreallocatedInternalStream)
     : Params(params)
     , OutgoingStream(outgoingStream)
     , XdcStream(xdcStream)
-    , HeaderBookmark(OutgoingStream.Bookmark(sizeof(TTcpPacketHeader_v2)))
+    , UsePreallocatedInternalStream(usePreallocatedInternalStream)
+    , HeaderBookmark(BookmarkStream(OutgoingStream, sizeof(TTcpPacketHeader_v2), UsePreallocatedInternalStream))
 {}
 
 ui32 TEventHolder::Fill(IEventHandle& ev) {

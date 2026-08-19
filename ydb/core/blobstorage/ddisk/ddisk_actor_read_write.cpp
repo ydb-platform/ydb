@@ -62,6 +62,15 @@ namespace NKikimr::NDDisk {
         const TBlockSelector selector(record.GetSelector());
         const TWriteInstruction instr(record.GetInstruction());
 
+        if (TabletChunkDeletionsInFlight.contains(creds.TabletId)) {
+            Counters.Interface.Write.Request(0);
+            Counters.Interface.Write.Reply(false);
+            SendReply(*ev, std::make_unique<TEvWriteResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
+                "tablet chunk deletion is in flight"));
+            return;
+        }
+
         if (instr.PayloadId) {
             const TRope& data = ev->Get()->GetPayload(*instr.PayloadId);
             auto dataIter = data.Begin();
@@ -124,10 +133,13 @@ namespace NKikimr::NDDisk {
 
         TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
         if (!chunkRef.PendingEventsForChunk.empty() || !chunkRef.ChunkIdx) {
-            if (chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx) {
+            // Park first: IssueChunkAllocation may place the extent synchronously from the
+            // reserve and OpenDataChunkWritePath only drains already-queued events.
+            const bool startAllocation = chunkRef.PendingEventsForChunk.empty() && !chunkRef.ChunkIdx;
+            chunkRef.PendingEventsForChunk.emplace(ev, "WaitChunkAllocation");
+            if (startAllocation) {
                 IssueChunkAllocation(creds.TabletId, selector.VChunkIndex);
             }
-            chunkRef.PendingEventsForChunk.emplace(ev, "WaitChunkAllocation");
             return;
         }
 
@@ -149,12 +161,26 @@ namespace NKikimr::NDDisk {
 
         Y_ABORT_UNLESS(data.size() == selector.Size);
 
+        // Track the written blocks (and their checksums, when supplied and block-aligned) at
+        // submission time: the protocol guarantees no reads of ranges with writes in flight.
+        {
+            std::vector<ui64> checksums;
+            if (record.ChecksumsSize() > 0 &&
+                    selector.OffsetInBytes % IntegrityUnitSize == 0 && selector.Size % IntegrityUnitSize == 0) {
+                checksums.assign(record.GetChecksums().begin(), record.GetChecksums().end());
+            }
+            IntegrityManager->OnBlocksWritten({creds.TabletId, selector.VChunkIndex},
+                selector.OffsetInBytes, selector.Size, checksums);
+        }
+
         auto offset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
         std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TDDiskIoOp>(ev.Get());
+        static_cast<TDDiskIoOp*>(op.get())->SetChunkKey(creds.TabletId, selector.VChunkIndex);
         op->SetSpan(std::move(span));
         op->PrepareWrite(std::move(data), offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
 
+        ++chunkRef.InFlightDataIo;
         DirectUringOp(op);
     }
 
@@ -165,12 +191,35 @@ namespace NKikimr::NDDisk {
             {"DDiskId", DDiskId},
             {"msg", msg});
 
-        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkWriteRawResult)")) {
+        auto it = WriteCallbacks.find(ev->Cookie);
+        if (it == WriteCallbacks.end()) {
+            Y_ABORT_UNLESS(IsBroken());
             return;
         }
 
-        auto it = WriteCallbacks.find(ev->Cookie);
-        Y_ABORT_UNLESS(it != WriteCallbacks.end());
+        if (Y_UNLIKELY(IsBroken())) {
+            std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
+            WriteCallbacks.erase(it);
+            op->SetResult(-EIO);
+            op.release()->OnComplete(TActorContext::ActorSystem());
+            return;
+        }
+
+        if (msg.Status != NKikimrProto::OK) {
+            if (it->second.Op->IsIntegrityIo()) {
+                // A fallback integrity write is a DDisk integrity failure, not a reason to enter
+                // the passive PDisk-session termination state. Finish it through the same op path
+                // as an io_uring EIO so the health latch is published before any success reply.
+                std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
+                WriteCallbacks.erase(it);
+                op->SetResult(-EIO);
+                op.release()->OnComplete(TActorContext::ActorSystem());
+                return;
+            }
+            if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkWriteRawResult)")) {
+                return;
+            }
+        }
 
         std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
         WriteCallbacks.erase(it);
@@ -196,6 +245,15 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const TBlockSelector selector(record.GetSelector());
 
+        if (TabletChunkDeletionsInFlight.contains(creds.TabletId)) {
+            Counters.Interface.Read.Request(0);
+            Counters.Interface.Read.Reply(false);
+            SendReply(*ev, std::make_unique<TEvReadResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
+                "tablet chunk deletion is in flight"));
+            return;
+        }
+
         TRope result;
 
         TChunkRef& chunkRef = ChunkRefs[creds.TabletId][selector.VChunkIndex];
@@ -215,7 +273,7 @@ namespace NKikimr::NDDisk {
             .Attribute("offset_in_bytes", selector.OffsetInBytes)
             .Attribute("size", selector.Size);
 
-        if (!chunkRef.ChunkIdx) {
+        auto replyZeros = [&] {
             auto zero = TRcBuf::Uninitialized(selector.Size);
             memset(zero.GetDataMut(), 0, zero.size());
             result.Insert(result.End(), std::move(zero));
@@ -223,16 +281,100 @@ namespace NKikimr::NDDisk {
             span.End();
             SendReply(*ev, std::make_unique<TEvReadResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK, std::nullopt,
                 std::move(result)));
+        };
+
+        // No chunk allocated: the whole range was never written.
+        if (!chunkRef.ChunkIdx) {
+            replyZeros();
+            return;
+        }
+
+        // A chunk exists, but some (or all) of its blocks may never have been written: consult the
+        // integrity manager so that such blocks read as zeros rather than as whatever the reused
+        // physical chunk contains. Untracked (boot-restored) chunks yield Passthrough.
+        auto plan = IntegrityManager->MakeReadPlan({creds.TabletId, selector.VChunkIndex},
+            selector.OffsetInBytes, selector.Size);
+        if (plan.Kind == TIntegrityManager::TReadPlan::AllZero) {
+            replyZeros();
             return;
         }
 
         auto offset = DiskFormat->Offset(chunkRef.ChunkIdx, 0, selector.OffsetInBytes);
 
         std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TDDiskIoOp>(ev.Get());
+        static_cast<TDDiskIoOp*>(op.get())->SetChunkKey(creds.TabletId, selector.VChunkIndex);
         op->SetSpan(std::move(span));
         op->PrepareRead(selector.Size, offset, chunkRef.ChunkIdx, selector.OffsetInBytes);
+        if (plan.Kind == TIntegrityManager::TReadPlan::Mixed) {
+            // The unused blocks are zero-filled right before the reply, on the uring completion
+            // thread, so the mask travels inside the op.
+            op->SetReadUsedBlocksMask(std::move(plan.UsedBlocks));
+        }
 
+        ++chunkRef.InFlightDataIo;
         DirectUringOp(op);
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvDDiskIoResult::TPtr ev) {
+        auto& msg = *ev->Get();
+        Y_ABORT_UNLESS(msg.HasChunkKey);
+        const auto tabletIt = ChunkRefs.find(msg.TabletId);
+        Y_ABORT_UNLESS(tabletIt != ChunkRefs.end());
+        const auto chunkIt = tabletIt->second.find(msg.VChunkIndex);
+        Y_ABORT_UNLESS(chunkIt != tabletIt->second.end());
+        Y_ABORT_UNLESS(chunkIt->second.InFlightDataIo > 0);
+        --chunkIt->second.InFlightDataIo;
+
+        auto status = msg.Status;
+        TString errorMessage = std::move(msg.ErrorMessage);
+        if (Y_UNLIKELY(IsBroken())) {
+            status = NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR;
+            errorMessage = GetBrokenReason();
+        } else if (msg.OperationType == NPDisk::TUringOperationBase::EWRITE && msg.HasChunkKey) {
+            const auto it = DataChunkAllocationsInFlight.find({msg.TabletId, msg.VChunkIndex});
+            if (it != DataChunkAllocationsInFlight.end()) {
+                it->second.ParkedWriteResults.push_back(TParkedWriteReply{
+                    .Status = status,
+                    .ErrorMessage = std::move(errorMessage),
+                    .OriginalRequester = msg.OriginalRequester,
+                    .InterconnectSession = msg.InterconnectSession,
+                    .Cookie = msg.Cookie,
+                    .Span = std::move(msg.Span),
+                    .TotalSize = msg.TotalSize,
+                    .RequestTimeMs = msg.RequestTimeMs,
+                });
+                return;
+            }
+        }
+
+        const bool isOk = status == NKikimrBlobStorage::NDDisk::TReplyStatus::OK;
+        std::optional<TString> errorReason;
+        if (errorMessage) {
+            errorReason.emplace(std::move(errorMessage));
+        }
+
+        std::unique_ptr<IEventBase> reply;
+        switch (msg.OperationType) {
+            case NPDisk::TUringOperationBase::EREAD:
+                reply = std::make_unique<TEvReadResult>(
+                    status, errorReason, isOk ? std::move(msg.Data) : TRope{});
+                Counters.Interface.Read.Reply(isOk, msg.TotalSize, msg.RequestTimeMs);
+                break;
+            case NPDisk::TUringOperationBase::EWRITE:
+                reply = std::make_unique<TEvWriteResult>(status, errorReason);
+                Counters.Interface.Write.Reply(isOk, msg.TotalSize, msg.RequestTimeMs);
+                break;
+            default:
+                Y_ABORT("Unknown OperationType");
+        }
+
+        auto h = std::make_unique<IEventHandle>(msg.OriginalRequester, SelfId(), reply.release(),
+            0, msg.Cookie, nullptr, msg.Span.GetTraceId());
+        if (msg.InterconnectSession) {
+            h->Rewrite(TEvInterconnect::EvForward, msg.InterconnectSession);
+        }
+        msg.Span.End();
+        TActivationContext::Send(h.release());
     }
 
 	void TDDiskActor::Handle(NPDisk::TEvChunkReadRawResult::TPtr ev) {
@@ -242,12 +384,23 @@ namespace NKikimr::NDDisk {
             {"DDiskId", DDiskId},
             {"msg", msg});
 
-        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
+        auto it = ReadCallbacks.find(ev->Cookie);
+        if (it == ReadCallbacks.end()) {
+            Y_ABORT_UNLESS(IsBroken());
             return;
         }
 
-        auto it = ReadCallbacks.find(ev->Cookie);
-        Y_ABORT_UNLESS(it != ReadCallbacks.end());
+        if (Y_UNLIKELY(IsBroken())) {
+            std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
+            ReadCallbacks.erase(it);
+            op->SetResult(-EIO);
+            op.release()->OnComplete(TActorContext::ActorSystem());
+            return;
+        }
+
+        if (!CheckPDiskReply(msg.Status, msg.ErrorReason, "Handle(TEvChunkReadRawResult)")) {
+            return;
+        }
 
         std::unique_ptr<TDirectIoOpBase> op = std::move(it->second.Op);
         ReadCallbacks.erase(it);
@@ -295,6 +448,25 @@ namespace NKikimr::NDDisk {
     }
 
     void TDDiskActor::DirectUringOp(std::unique_ptr<TDirectIoOpBase>& op, bool flush, bool isShort) {
+        if (Y_UNLIKELY(IsBroken())) {
+            if (isShort) {
+                switch (op->GetOperationType()) {
+                    case NPDisk::TUringOperationBase::EREAD:
+                        Counters.DirectIO.Read.Done(op->GetTotalSize());
+                        break;
+                    case NPDisk::TUringOperationBase::EWRITE:
+                        Counters.DirectIO.Write.Done(op->GetTotalSize());
+                        break;
+                    default:
+                        Y_ABORT("Unknown OperationType");
+                }
+            }
+            op->Reply(TActivationContext::ActorSystem(),
+                NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR, GetBrokenReason());
+            op.reset();
+            return;
+        }
+
         if (Y_LIKELY(!isShort)) {
             switch (op->GetOperationType()) {
             case NPDisk::TUringOperationBase::EREAD:
@@ -383,6 +555,15 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::ProcessIoSubmitQueue() {
 #if defined(__linux__)
         Y_ABORT_UNLESS(UringRouter);
+
+        if (Y_UNLIKELY(IsBroken())) {
+            while (!DirectIoQueue.empty()) {
+                auto op = std::move(DirectIoQueue.front());
+                DirectIoQueue.pop();
+                FailDirectIoOp(std::move(op), false);
+            }
+            return;
+        }
 
         while (!DirectIoQueue.empty()) {
             auto& op = DirectIoQueue.front();

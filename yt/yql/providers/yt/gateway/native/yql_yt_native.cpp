@@ -2893,6 +2893,12 @@ private:
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
         }
+        auto hasRowLevelSecurity = [](const TVector<NYT::TNode>& attributes, size_t idx) {
+            const NYT::TNode& attrs = attributes[idx];
+            return attrs.AsMap().contains("has_row_level_ace") && NYT::GetBool(attrs["has_row_level_ace"]);
+        };
+
+        TVector<ui8> fullReadPermissionFlags(tables.size(), 0);
         {
             auto batchGet = tx->CreateBatchRequest();
             TVector<TFuture<void>> batchRes;
@@ -2903,6 +2909,13 @@ private:
                     .AddAttribute(TString{YqlRowSpecAttribute})
                 );
             for (auto& idx: idxs) {
+                if (!omitInaccessibleRows && hasRowLevelSecurity(attributes, idx.first)) {
+                    batchRes.push_back(batchGet->CheckPermission(entry->EffectiveUser, NYT::EPermission::FullRead, idx.second)
+                        .Apply([idx, &fullReadPermissionFlags](const TFuture<NYT::TCheckPermissionResponse>& f) {
+                            fullReadPermissionFlags[idx.first] = f.GetValue().Action == NYT::ESecurityAction::Allow ? 1 : 0;
+                        }));
+                }
+
                 auto tablePath = tables[idx.first].Table();
                 batchRes.push_back(batchGet->Get(tablePath + "&/@", getOpts).Apply(
                     [idx, tablePath, &attributes] (const TFuture<NYT::TNode>& f) {
@@ -2979,7 +2992,7 @@ private:
                 }
 
                 bool isDynamic = attrs.AsMap().contains("dynamic") && NYT::GetBool(attrs["dynamic"]);
-                bool hasRLS = attrs.AsMap().contains("has_row_level_ace") && NYT::GetBool(attrs["has_row_level_ace"]);
+                bool hasRLS = hasRowLevelSecurity(attributes, idx.first);
                 auto rowCount = attrs[isDynamic || hasRLS ? "chunk_row_count" : "row_count"].AsInt64();
                 statInfo->RecordsCount = rowCount;
                 statInfo->DataSize = GetDataWeight(attrs).GetOrElse(0);
@@ -2991,7 +3004,7 @@ private:
                 if (statInfo->IsEmpty()) {
                     YQL_CLOG(INFO, ProviderYt) << "Empty table : " << tables[idx.first].Table() << ", modify time: " << strModifyTime << ", revision: " << statInfo->Revision;
                 }
-                if (metaInfo->HasRLS && !omitInaccessibleRows) {
+                if (metaInfo->HasRLS && !fullReadPermissionFlags[idx.first] && !omitInaccessibleRows) {
                     YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR)
                         << "Table " << tables[idx.first].Table() << " on cluster " << tables[idx.first].Cluster()
                         << " has row level security. Please enable pragma yt.OmitInaccessibleRows.";

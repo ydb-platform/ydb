@@ -325,7 +325,6 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
     }
 
     if (ev->Get()->States.size() != taskIdsSize) {
-
         auto message = TStringBuilder() << "TEvGetTaskStateResult unexpected states count: " << ev->Get()->States.size() << ", expected: " << taskIdsSize;
         LOG_CP_E(checkpoint, message);
         NYql::TIssues issues;

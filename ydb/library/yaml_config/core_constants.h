@@ -22,17 +22,25 @@ constexpr inline TStringBuf EPHEMERAL_POOL_CONFIG_PATH = "/storage_pool_types/*"
 
 constexpr inline TStringBuf ERASURE_SPECIES_FIELD = "erasure_species";
 
-const inline std::array<std::pair<TString, ui32>, 10> DEFAULT_TABLETS{
-    std::pair{TString{"FlatHive"}, 1},
-    std::pair{TString{"FlatBsController"}, 1},
-    std::pair{TString{"FlatSchemeshard"}, 1},
-    std::pair{TString{"FlatTxCoordinator"}, 3},
-    std::pair{TString{"TxMediator"}, 3},
-    std::pair{TString{"TxAllocator"}, 3},
-    std::pair{TString{"Cms"}, 1},
-    std::pair{TString{"NodeBroker"}, 1},
-    std::pair{TString{"TenantSlotBroker"}, 1},
-    std::pair{TString{"Console"}, 1},
+struct TDefaultTabletConfig
+{
+    TString Type;
+    ui32 Count;
+    bool IsOptional = false;
+};
+
+const inline std::array DEFAULT_TABLETS{
+    TDefaultTabletConfig{.Type = TString{"FlatHive"}, .Count = 1},
+    TDefaultTabletConfig{.Type = TString{"FlatBsController"}, .Count = 1},
+    TDefaultTabletConfig{.Type = TString{"FlatSchemeshard"}, .Count = 1},
+    TDefaultTabletConfig{.Type = TString{"FlatTxCoordinator"}, .Count = 3},
+    TDefaultTabletConfig{.Type = TString{"TxMediator"}, .Count = 3},
+    TDefaultTabletConfig{.Type = TString{"TxAllocator"}, .Count = 3},
+    TDefaultTabletConfig{.Type = TString{"Cms"}, .Count = 1},
+    TDefaultTabletConfig{.Type = TString{"NodeBroker"}, .Count = 1},
+    TDefaultTabletConfig{.Type = TString{"TenantSlotBroker"}, .Count = 1},
+    TDefaultTabletConfig{.Type = TString{"Console"}, .Count = 1},
+    TDefaultTabletConfig{.Type = TString{"DbsController"}, .Count = 1, .IsOptional = true},
 };
 
 const inline std::map<TString, ui64> GetTablets(ui64 idx) {
@@ -44,6 +52,7 @@ const inline std::map<TString, ui64> GetTablets(ui64 idx) {
         {TString{"NodeBroker"}, 72057594037936129},
         {TString{"TenantSlotBroker"}, 72057594037936130},
         {TString{"Console"}, 72057594037936131},
+        {TString{"DbsController"}, 72057594037936132},
         {TString{"TxAllocator"}, TDomainsInfo::MakeTxAllocatorIDFixed(idx)},
         {TString{"FlatTxCoordinator"}, TDomainsInfo::MakeTxCoordinatorIDFixed(idx)},
         {TString{"TxMediator"}, TDomainsInfo::MakeTxMediatorIDFixed(idx)},

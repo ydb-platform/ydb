@@ -99,6 +99,7 @@ public:
         authConfig.SetUseBuiltinDomain(true);
         ServerSettings = MakeHolder<Tests::TServerSettings>(MsgBusPort, authConfig);
         ServerSettings->AppConfig->MutableFeatureFlags()->SetEnableStreamingQueries(true);
+        ServerSettings->AppConfig->MutableTableServiceConfig()->MutableQueryLimits()->SetResultRowsLimit(5);
 
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableStreamingQueries(true);
@@ -559,12 +560,28 @@ public:
         NKikimr::NMiniKQL::TScopedAlloc Alloc(__LOCATION__);
 
         RegisterDefaultCoordinator();
-        CreateCheckpoint(GraphId, Generation, CheckpointId1, false);
-        auto state = MakeState("some random state");
-        SaveState(1317, CheckpointId1, state);
+        size_t count = 20;
+        ui64 taskId1 = 1316;
+        ui64 taskId2 = 1317;
 
-        auto actual = GetState(1317, GraphId, CheckpointId1);
-        UNIT_ASSERT_VALUES_EQUAL(state, actual);
+        for (size_t seqNo = 0; seqNo < count; ++seqNo) {
+            auto checkpointId = TCheckpointId(Generation, seqNo);
+            CreateCheckpoint(GraphId, Generation, checkpointId, false);
+            auto state1 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId1);
+            SaveState(taskId1, checkpointId, state1);
+            auto state2 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId2);
+            SaveState(taskId2, checkpointId, state2);
+        }
+
+        ui64 seqNo = 10;
+        auto checkpointId = TCheckpointId(Generation, seqNo);
+        auto actual1 = GetState(taskId1, GraphId, checkpointId);
+        auto expected1 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId1);
+        UNIT_ASSERT_VALUES_EQUAL(expected1, actual1);
+
+        auto actual2 = GetState(taskId2, GraphId, checkpointId);
+        auto expected2 = MakeState(TStringBuilder() << "some random state " << seqNo << " " << taskId2);
+        UNIT_ASSERT_VALUES_EQUAL(expected2, actual2);
     }
 
     void ShouldUseGc() {

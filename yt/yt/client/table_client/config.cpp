@@ -399,6 +399,15 @@ void TInsertRowsFormatConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TPushQueueProducerFormatConfig::Register(TRegistrar registrar)
+{
+    registrar.Preprocessor([] (TThis* config) {
+        config->EnableNullToYsonEntityConversion = false;
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 TChunkReaderOptionsPtr TChunkReaderOptions::GetDefault()
 {
     return LeakyRefCountedSingleton<TChunkReaderOptions>();

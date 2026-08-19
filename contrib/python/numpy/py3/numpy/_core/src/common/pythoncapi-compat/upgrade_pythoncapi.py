@@ -10,7 +10,7 @@ MIN_PYTHON = (2, 7)
 
 
 PYTHONCAPI_COMPAT_URL = ('https://raw.githubusercontent.com/python/'
-                         'pythoncapi_compat/master/pythoncapi_compat.h')
+                         'pythoncapi-compat/main/pythoncapi_compat.h')
 PYTHONCAPI_COMPAT_H = 'pythoncapi_compat.h'
 INCLUDE_PYTHONCAPI_COMPAT = f'#include "{PYTHONCAPI_COMPAT_H}"'
 INCLUDE_PYTHONCAPI_COMPAT2 = f'#include <{PYTHONCAPI_COMPAT_H}>'

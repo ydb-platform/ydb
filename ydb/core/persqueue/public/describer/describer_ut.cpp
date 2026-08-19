@@ -479,6 +479,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
             Ydb::StatusIds::UNAUTHORIZED
         );
         UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::UNKNOWN_ERROR), Ydb::StatusIds::INTERNAL_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(NDescriber::Convert(NDescriber::EStatus::BAD_REQUEST), Ydb::StatusIds::BAD_REQUEST);
     }
 
     Y_UNIT_TEST(DescriptionMessages) {
@@ -492,6 +493,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT(!NDescriber::Description(path, NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS)
             .Contains("does not exist"));
         UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::NOT_TOPIC).Contains("is not a topic"));
+        UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::BAD_REQUEST).Contains("Invalid topic name"));
         UNIT_ASSERT(NDescriber::Description(path, NDescriber::EStatus::UNKNOWN_ERROR).Contains("Error describing"));
     }
 
@@ -813,8 +815,7 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
 
         runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
 
-        // Primary resolve under /Root misses into account tenants; Federation retries
-        // with DatabaseName=/Root/account1 and /Root/account2.
+        // account1/topic → Path=/Root/account1/topic, NavigateDatabase=/Root/account1.
         StartDescribe(runtime, {"account1/topic", "account2/topic"}, {}, "/Root");
         auto topics = WaitResult(runtime);
 
@@ -946,6 +947,159 @@ Y_UNIT_TEST_SUITE(TDescriberTests) {
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].Status, NDescriber::EStatus::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].CdcStream, true);
         UNIT_ASSERT_VALUES_EQUAL(topics["/Root/table1/feed2"].RealPath, "/Root/table1/feed2/streamImpl");
+    }
+
+    // -------------------------------------------------------------------------
+    // Legacy rt3 / short names via nameresolver
+    // -------------------------------------------------------------------------
+
+    Y_UNIT_TEST(LegacyRt3TopicWithFederationRoot) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        const TString federationRoot = "/Root/Federation";
+        ExecuteDDL(*setup, "CREATE TOPIC `Federation/account/topic1`");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(federationRoot);
+
+        StartDescribe(runtime, {"rt3.dc1--account--topic1"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("rt3.dc1--account--topic1"));
+        auto& topicInfo = topics["rt3.dc1--account--topic1"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, federationRoot + "/account/topic1");
+    }
+
+    Y_UNIT_TEST(LegacyShortTopicWithFederationRoot) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        const TString federationRoot = "/Root/Federation";
+        ExecuteDDL(*setup, "CREATE TOPIC `Federation/account/topic1`");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot(federationRoot);
+
+        StartDescribe(runtime, {"account--topic1"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("account--topic1"));
+        auto& topicInfo = topics["account--topic1"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, federationRoot + "/account/topic1");
+    }
+
+    Y_UNIT_TEST(LegacyRt3CdcWithFederationRoot) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        ExecuteDDL(*setup, "CREATE TABLE `Federation/account/table1` (id Uint64, PRIMARY KEY (id))");
+        ExecuteDDL(*setup, "ALTER TABLE `Federation/account/table1` ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/Federation");
+
+        // Nested path in legacy form: @ → /
+        StartDescribe(runtime, {"rt3.dc1--account@table1--feed"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("rt3.dc1--account@table1--feed"));
+        auto& topicInfo = topics["rt3.dc1--account@table1--feed"];
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.Status, NDescriber::EStatus::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStream, true);
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.CdcStreamName, "feed");
+        UNIT_ASSERT_VALUES_EQUAL(topicInfo.RealPath, "/Root/Federation/account/table1/feed/streamImpl");
+    }
+
+    Y_UNIT_TEST(LegacyNameBadRequest) {
+        auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
+        EnableDescriberLogs(*setup);
+
+        auto& runtime = setup->GetRuntime();
+        runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
+        runtime.GetAppData().PQConfig.MutablePQDiscoveryConfig()->SetLbUserDatabaseRoot("/Root/Federation");
+
+        StartDescribe(runtime, {"rt3.bad"});
+        auto topics = WaitResult(runtime);
+
+        UNIT_ASSERT(topics.contains("rt3.bad"));
+        UNIT_ASSERT_VALUES_EQUAL(topics["rt3.bad"].Status, NDescriber::EStatus::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(TopicInDatabaseWithSlashInName) {
+        // Database path has an extra path component ("my/db"), so topic paths look like
+        // /Root/my/db/... while the tenant boundary is /Root/my/db.
+        const TString dbPath = "/Root/my/db";
+
+        auto settings = NKikimr::NPersQueueTests::PQSettings(0, 1);
+        settings.SetNodeCount(1);
+        settings.SetDynamicNodeCount(1);
+        settings.AddStoragePoolType(dbPath);
+        settings.PQConfig.SetTopicsAreFirstClassCitizen(true);
+        settings.PQConfig.SetRoot("/Root");
+        settings.PQConfig.SetDatabase("/Root");
+
+        ::NPersQueue::TTestServer server(settings, false);
+        server.StartServer(false);
+        server.AnnoyingClient->GrantConnect("root@builtin");
+        server.EnableLogs(
+            {NKikimrServices::TX_PROXY_SCHEME_CACHE, NKikimrServices::PQ_DESCRIBER},
+            NActors::NLog::PRI_DEBUG
+        );
+
+        const ui32 firstDynamicNode = server.CleverServer->StaticNodes();
+        CreateDedicatedDatabase(server, dbPath, firstDynamicNode);
+
+        auto& runtime = *server.GetRuntime();
+        SetPqChannelPoolKind(runtime, dbPath);
+        ExecuteDDLInDatabase(server.Endpoint, dbPath, "CREATE TOPIC `my-topic`");
+        ExecuteDDLInDatabase(server.Endpoint, dbPath, "CREATE TOPIC `my-dir/my-topic`");
+
+        // Relative topic name + matching tenant database.
+        {
+            StartDescribe(runtime, {"my-topic"}, {}, dbPath);
+            auto topics = WaitResult(runtime);
+            UNIT_ASSERT(topics.contains("my-topic"));
+            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].Status, NDescriber::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].RealPath, "/Root/my/db/my-topic");
+        }
+
+        // Absolute topic path + matching tenant database.
+        {
+            const TString topic = "/Root/my/db/my-topic";
+            StartDescribe(runtime, {topic}, {}, dbPath);
+            auto topics = WaitResult(runtime);
+            UNIT_ASSERT(topics.contains(topic));
+            UNIT_ASSERT_VALUES_EQUAL(topics[topic].Status, NDescriber::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(topics[topic].RealPath, "/Root/my/db/my-topic");
+        }
+
+        // Absolute topic path under /Root database (navigate from domain root).
+        // SchemeCache with DatabaseName=/Root does not resolve into the dedicated
+        // tenant schemeshard → NOT_FOUND (path exists only under /Root/my/db).
+        {
+            const TString topic = "/Root/my/db/my-topic";
+            StartDescribe(runtime, {topic}, {}, "/Root");
+            auto topics = WaitResult(runtime);
+            UNIT_ASSERT(topics.contains(topic));
+            UNIT_ASSERT_VALUES_EQUAL(topics[topic].Status, NDescriber::EStatus::NOT_FOUND);
+        }
+
+        // Topic in a subdirectory; DatabaseName points at that subdirectory
+        // (not the tenant root /Root/my/db). SchemeCache still resolves the path
+        // under the owning schemeshard → SUCCESS.
+        {
+            StartDescribe(runtime, {"my-topic"}, {}, "/Root/my/db/my-dir");
+            auto topics = WaitResult(runtime);
+            UNIT_ASSERT(topics.contains("my-topic"));
+            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].Status, NDescriber::EStatus::SUCCESS);
+            UNIT_ASSERT_VALUES_EQUAL(topics["my-topic"].RealPath, "/Root/my/db/my-dir/my-topic");
+        }
     }
 
 }

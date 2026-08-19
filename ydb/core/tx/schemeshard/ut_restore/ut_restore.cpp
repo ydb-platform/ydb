@@ -3956,6 +3956,181 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         assertBloomIndexes("/MyRoot/OlapBloomImported");
     }
 
+    // Runs an import that names one item present in the backup and one that is not, so that
+    // FillItemsFromSchemaMapping fails. It swaps the shortened list into Items regardless of the
+    // error and the cancellation persists that shorter count, while every ImportItems row written
+    // by PersistCreateImport is still there. Rebooting SchemeShard afterwards makes TTxInit read
+    // those rows back.
+    void ImportWithMissingItemImpl(bool forgetBeforeReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        // Needed to reach EState::DownloadExportMetadata, which is what fetches the schema
+        // mapping and thus runs FillItemsFromSchemaMapping.
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot"
+              destination_prefix: "BackupPrefix"
+              items {
+                source_path: "/MyRoot/Table"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_prefix: "BackupPrefix"
+              items {
+                source_path: "Table"
+                destination_path: "/MyRoot/Restored"
+              }
+              items {
+                source_path: "NoSuchTable"
+                destination_path: "/MyRoot/Restored2"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+
+        if (forgetBeforeReboot) {
+            // Without the fix, PersistRemoveImport deleted ImportItems for [0, Items.size()) but
+            // dropped the Imports row unconditionally, so rows past the shrunk count outlived
+            // their parent.
+            TestForgetImport(runtime, ++txId, "/MyRoot", importId);
+        }
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // Getting here at all means SchemeShard came back up.
+        TestLs(runtime, "/MyRoot/Table", false, NLs::PathExist);
+    }
+
+    // Boots into "Invalid item's index": the recorded count no longer covers the persisted rows.
+    Y_UNIT_TEST(ShouldNotCorruptItemsWhenSchemaMappingFails) {
+        ImportWithMissingItemImpl(false);
+    }
+
+    // Boots into "Import not found": forgetting the import leaves the surplus rows orphaned.
+    Y_UNIT_TEST(ShouldNotOrphanItemsWhenForgettingFailedImport) {
+        ImportWithMissingItemImpl(true);
+    }
+
+    // Same corruption, reached without any error at all. exclude_regexps is matched against the
+    // destination path when the items are created and against the source object path when the
+    // schema mapping is applied, so an item can be persisted and then contribute nothing. Its
+    // prefix is still found, so no error is recorded and FillItemsFromSchemaMapping succeeds with
+    // a shorter list; the ImportItems row written for it by PersistCreateImport survives.
+    void ImportWithExcludedItemImpl(bool forgetBeforeReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table2"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "String" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_path: "/MyRoot"
+              destination_prefix: "BackupPrefix"
+              items {
+                source_path: "/MyRoot/Table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, txId);
+        TestGetExport(runtime, txId, "/MyRoot");
+
+        // "Table2" does not match the destination "/MyRoot/Restored2", so the second item is
+        // created and persisted, but it does match the source object path in the backup listing,
+        // so the schema mapping drops it.
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              source_prefix: "BackupPrefix"
+              exclude_regexps: "Table2"
+              items {
+                source_path: "Table1"
+                destination_path: "/MyRoot/Restored1"
+              }
+              items {
+                source_path: "Table2"
+                destination_path: "/MyRoot/Restored2"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, importId);
+
+        if (forgetBeforeReboot) {
+            TestForgetImport(runtime, ++txId, "/MyRoot", importId);
+        }
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        // Getting here at all means SchemeShard came back up.
+        TestLs(runtime, "/MyRoot/Table1", false, NLs::PathExist);
+    }
+
+    // Boots into "Invalid item's index" even though the import itself reported no error.
+    Y_UNIT_TEST(ShouldNotCorruptItemsWhenSchemaMappingExcludesItem) {
+        ImportWithExcludedItemImpl(false);
+    }
+
+    // Boots into "Import not found": the surplus row outlives the parent it was never counted in.
+    Y_UNIT_TEST(ShouldNotOrphanItemsWhenForgettingExcludedItemImport) {
+        ImportWithExcludedItemImpl(true);
+    }
+
     Y_UNIT_TEST_FLAG(ImportStandaloneColumnTableWithLocalMinMaxIndexes, EnableDataShardDirectPartImport) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();

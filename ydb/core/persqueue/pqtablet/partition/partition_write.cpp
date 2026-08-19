@@ -337,12 +337,17 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
         ui64 maxOffset = sit != SourceIdStorage.GetInMemorySourceIds().end() ? sit->second.Offset : 0;
 
         if (sit != SourceIdStorage.GetInMemorySourceIds().end() && partNo + 1 == totalParts) {
-            // Change-sender stalls until ReplyWrite, so SeqNo should not advance while deferred.
-            // Still take Max to avoid regressing SeqNo if that invariant ever breaks.
+            // Change-sender stalls until ReplyWrite, so SeqNo/version should not advance while deferred.
+            // Still take Max / keep newer LastSchemaChange if that invariant ever breaks.
             const ui64 registerSeqNo = Max(seqNo, sit->second.SeqNo);
+            TSchemaChangeInfo scInfo{*scVersion, writeResponse.Msg.Data};
+            if (sit->second.LastSchemaChange && sit->second.LastSchemaChange->Version > scInfo.Version) {
+                scInfo = *sit->second.LastSchemaChange;
+            }
+            // Keep the source's last data offset: schema changes do not advance the log.
             SourceIdStorage.RegisterSourceId(s, sit->second.Updated(
                 registerSeqNo, maxOffset, CurrentTimestamp,
-                TSchemaChangeInfo{*scVersion, writeResponse.Msg.Data}, producerEpoch));
+                std::move(scInfo), producerEpoch));
         }
 
         ui64 replyOffset = CalculateReplyOffset(false, writeResponse.Msg.EnableKafkaDeduplication, maxOffset, maxOffset, maxSeqNo, seqNo);

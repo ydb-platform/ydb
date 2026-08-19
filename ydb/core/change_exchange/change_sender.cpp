@@ -290,16 +290,19 @@ void TChangeSender::SendPreparedRecords(ui64 partitionId) {
     sender.Ready = false;
     ReadySenders--;
 
+    // Hold back records after a schema-change broadcast so post-schema data cannot share
+    // a write batch with a delayed-ACK schema change. Heartbeats stay non-blocking:
+    // they ACK immediately and must not introduce an extra OnReady round-trip.
     TVector<IChangeRecord::TPtr> toSend;
     TVector<IChangeRecord::TPtr> rest;
-    bool seenBroadcast = false;
+    bool seenSchemaChangeBarrier = false;
     for (auto& record : sender.Prepared) {
-        if (seenBroadcast) {
+        if (seenSchemaChangeBarrier) {
             rest.push_back(std::move(record));
             continue;
         }
-        if (record->IsBroadcast()) {
-            seenBroadcast = true;
+        if (record->GetKind() == IChangeRecord::EKind::CdcSchemaChange) {
+            seenSchemaChangeBarrier = true;
         }
         toSend.push_back(std::move(record));
     }

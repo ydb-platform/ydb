@@ -2038,16 +2038,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         {
             NYdb::TValueBuilder rows;
             rows.BeginList();
-            rows.AddListItem()
-                .BeginStruct()
-                .AddMember("region_id").Int64(1)
-                .AddMember("amount").Int64(100)
-                .EndStruct();
-            rows.AddListItem()
-                .BeginStruct()
-                .AddMember("region_id").Int64(2)
-                .AddMember("amount").Int64(200)
-                .EndStruct();
+            for (const auto& [regionId, amount] :
+                 TVector<std::pair<i64, i64>>{{1, 100}, {2, 200}, {3, 300}, {4, 100}, {5, 500}}) {
+                rows.AddListItem()
+                    .BeginStruct()
+                    .AddMember("region_id").Int64(regionId)
+                    .AddMember("amount").Int64(amount)
+                    .EndStruct();
+            }
             rows.EndList();
             auto resultUpsert = db.BulkUpsert("/Root/sales", rows.Build()).GetValueSync();
             UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
@@ -2055,16 +2053,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         {
             NYdb::TValueBuilder rows;
             rows.BeginList();
-            rows.AddListItem()
-                .BeginStruct()
-                .AddMember("region_id").Int64(10)
-                .AddMember("threshold").Int64(50)
-                .EndStruct();
-            rows.AddListItem()
-                .BeginStruct()
-                .AddMember("region_id").Int64(11)
-                .AddMember("threshold").Int64(150)
-                .EndStruct();
+            for (const auto& [regionId, threshold] :
+                 TVector<std::pair<i64, i64>>{{3, 100}, {4, 500}, {10, 50}, {11, 150}}) {
+                rows.AddListItem()
+                    .BeginStruct()
+                    .AddMember("region_id").Int64(regionId)
+                    .AddMember("threshold").Int64(threshold)
+                    .EndStruct();
+            }
             rows.EndList();
             auto resultUpsert = db.BulkUpsert("/Root/quotas", rows.Build()).GetValueSync();
             UNIT_ASSERT_C(resultUpsert.IsSuccess(), resultUpsert.GetIssues().ToString());
@@ -2091,7 +2087,48 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         UNIT_ASSERT_VALUES_EQUAL(
             FormatResultSetYson(result.GetResultSet(0)),
-            R"([[1;100;#;#];[2;200;#;#]])");
+            R"([[1;100;#;#];[2;200;#;#];[3;300;[100];[3]];[4;100;#;#];[5;500;#;#]])");
+
+       std::vector<std::pair<TString, TString>> residualQueries = {
+            {R"(
+                SELECT s.region_id, s.amount
+                FROM `/Root/sales` AS s
+                WHERE EXISTS (
+                    SELECT 1 FROM `/Root/quotas` AS q
+                    WHERE s.region_id = q.region_id AND s.amount > q.threshold
+                )
+                ORDER BY s.region_id;
+             )",
+             R"([[3;300]])"},
+            {R"(
+                SELECT s.region_id, s.amount
+                FROM `/Root/sales` AS s
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM `/Root/quotas` AS q
+                    WHERE s.region_id = q.region_id AND s.amount > q.threshold
+                )
+                ORDER BY s.region_id;
+             )",
+             R"([[1;100];[2;200];[4;100];[5;500]])"},
+            {R"(
+                SELECT s.region_id, s.amount
+                FROM `/Root/sales` AS s
+                INNER JOIN `/Root/quotas` AS q
+                  ON s.region_id = q.region_id AND s.amount > q.threshold
+                ORDER BY s.region_id;
+             )",
+             R"([[3;300]])"},
+        };
+
+        for (const auto& [query, expected] : residualQueries) {
+            result = session.ExecuteQuery(
+                query,
+                NYdb::NQuery::TTxControl::NoTx(),
+                NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute)
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, query + ": " + result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(FormatResultSetYson(result.GetResultSet(0)), expected, query);
+        }
     }
 
     void TestRangePushdown(bool columnTables) {

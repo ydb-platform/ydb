@@ -21,7 +21,7 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
         AFL_VERIFY((ui64)i.GetCategory() < categories.size());
         Processes.emplace_back(i.GetWeight(), categories[(ui64)i.GetCategory()], Counters->GetCategorySignals(i.GetCategory()));
     }
-    for (ui32 i = 0; i < WorkersCount; ++i) {
+    for (ui64 i = 0; i < WorkersCount; ++i) {
         const double cpuLimit = config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetPossibleMaxLimitThreads());
         Workers.emplace_back(
             std::make_unique<TWorker>(poolName, cpuLimit, distributorId, i, config.GetWorkersPoolId()), cpuLimit);
@@ -34,12 +34,12 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
     Counters->WorkersCountLimit->Set(WorkersCount);
 }
 
-void TWorkersPool::RemoveFreeWorker(const ui32 workerIdx) {
+void TWorkersPool::RemoveFreeWorker(const ui64 workerIdx) {
     ActiveWorkersIdx.erase(std::find(ActiveWorkersIdx.begin(), ActiveWorkersIdx.end(), workerIdx));
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 }
 
-void TWorkersPool::UpdateWorkerCPULimit(const ui32 workerIdx, const double newLimit) {
+void TWorkersPool::UpdateWorkerCPULimit(const ui64 workerIdx, const double newLimit) {
     AFL_VERIFY(WorkersUpdate);
 
     auto& worker = Workers[workerIdx];
@@ -57,11 +57,11 @@ void TWorkersPool::UpdateWorkerCPULimit(const ui32 workerIdx, const double newLi
 void TWorkersPool::IncreaseWorkers(const std::vector<double>& desiredCPULimits) {
     AFL_VERIFY(WorkersUpdate);
 
-    const ui32 oldWorkersCount = Workers.size();
+    const ui64 oldWorkersCount = Workers.size();
     AFL_VERIFY(oldWorkersCount < desiredCPULimits.size());
 
     UpdateWorkerCPULimit(oldWorkersCount - 1, desiredCPULimits[oldWorkersCount - 1]);
-    for (ui32 workerIdx = oldWorkersCount; workerIdx < desiredCPULimits.size(); ++workerIdx) {
+    for (ui64 workerIdx = oldWorkersCount; workerIdx < desiredCPULimits.size(); ++workerIdx) {
         Workers.emplace_back(
             std::make_unique<TWorker>(PoolName, desiredCPULimits[workerIdx], DistributorId, workerIdx, WorkersPoolId), desiredCPULimits[workerIdx]);
         ActiveWorkersIdx.emplace_back(workerIdx);
@@ -73,11 +73,11 @@ void TWorkersPool::DecreaseWorkers(const std::vector<double>& desiredCPULimits) 
     // first decrease worker phase
     AFL_VERIFY(WorkersUpdate);
 
-    const ui32 oldWorkersCount = Workers.size();
+    const ui64 oldWorkersCount = Workers.size();
     AFL_VERIFY(desiredCPULimits.size() < oldWorkersCount);
 
     UpdateWorkerCPULimit(desiredCPULimits.size() - 1, desiredCPULimits[desiredCPULimits.size() - 1]);
-    for (ui32 workerIdx = desiredCPULimits.size(); workerIdx < oldWorkersCount; ++workerIdx) {
+    for (ui64 workerIdx = desiredCPULimits.size(); workerIdx < oldWorkersCount; ++workerIdx) {
         auto& worker = Workers[workerIdx];
         if (!worker.GetRunningTask()) {
             RemoveFreeWorker(workerIdx);
@@ -110,7 +110,7 @@ bool TWorkersPool::TryFinishWorkersUpdate() {
     }
 
     // second decrease worker phase
-    const ui32 desiredWorkersCount = WorkersUpdate->DesiredWorkersCount;
+    const ui64 desiredWorkersCount = WorkersUpdate->DesiredWorkersCount;
     if (desiredWorkersCount < Workers.size()) {
         while (Workers.size() > desiredWorkersCount) {
             Workers.pop_back();
@@ -161,7 +161,7 @@ void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletio
     TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch)));
 }
 
-void TWorkersPool::ReleaseWorker(const ui32 workerIdx) {
+void TWorkersPool::ReleaseWorker(const ui64 workerIdx) {
     AFL_VERIFY(workerIdx < Workers.size());
     auto& worker = Workers[workerIdx];
     worker.OnStopTask();

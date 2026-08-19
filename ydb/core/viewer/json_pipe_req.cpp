@@ -1050,26 +1050,36 @@ bool TViewerPipeClient::DenyRequestIfNodesAreOutOfDatabase(std::span<const TNode
     }
     // We can't validate the scope of the requested nodes without the database node list,
     // so an unresolved database denies the request.
-    const bool databaseNodesKnown = AreDatabaseNodesKnown();
-    std::unordered_set<TNodeId> databaseNodes;
-    if (databaseNodesKnown) {
-        const auto nodes = GetDatabaseNodes();
-        databaseNodes.insert(nodes.begin(), nodes.end());
+    if (!AreDatabaseNodesKnown()) {
+        YDB_LOG_NOTICE_COMP(
+            NKikimrServices::VIEWER,
+            "Access denied: database node list is unavailable, request cannot be validated",
+            {"logPrefix", GetLogPrefix()},
+            {"user", GetUserSID()},
+            {"database", Database});
+        ReplyAndPassAway(
+            GETHTTPACCESSDENIED(
+                "text/plain",
+                "Database node list is unavailable, request cannot be validated"),
+            "Access denied");
+        return true;
     }
+    std::unordered_set<TNodeId> databaseNodes;
+    const auto nodes = GetDatabaseNodes();
+    databaseNodes.insert(nodes.begin(), nodes.end());
     for (const auto& nodeId : nodeIds) {
         if (!databaseNodes.contains(nodeId)) {
             YDB_LOG_NOTICE_COMP(
                 NKikimrServices::VIEWER,
-                "Access denied: requested node is outside the specified database or cannot be validated",
+                "Access denied: requested node is outside the specified database",
                 {"logPrefix", GetLogPrefix()},
                 {"user", GetUserSID()},
                 {"database", Database},
-                {"outOfDatabaseNode", nodeId},
-                {"databaseNodesKnown", databaseNodesKnown});
+                {"outOfDatabaseNode", nodeId});
             ReplyAndPassAway(
                 GETHTTPACCESSDENIED(
                     "text/plain",
-                    "Some requested nodes are outside the specified database or cannot be validated"),
+                    "Some requested nodes are outside the specified database"),
                 "Access denied");
             return true;
         }

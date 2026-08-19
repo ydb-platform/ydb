@@ -458,7 +458,7 @@ void TColumnShard::RunTruncateTable(
     NIceDb::TNiceDb db(txc.DB);
 
     const auto& schemeShardLocalPathId = TSchemeShardLocalPathId::FromProto(truncateProto);
-    // Prefer the propose-time fence (TruncatingLocalToInternal): ResolveInternalPathId is empty
+    // Prefer the propose-time fence (Truncating): ResolveInternalPathId is empty
     // after TruncateTablePropose, by design. Fall back to Resolve for defensive coverage.
     std::optional<TInternalPathId> oldInternalPathId = TablesManager.GetTruncatingInternalPathId(schemeShardLocalPathId);
     if (!oldInternalPathId) {

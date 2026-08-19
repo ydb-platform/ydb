@@ -15,6 +15,7 @@
 #include <stack>
 #include <queue>
 #include <deque>
+#include <functional>
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <ydb/library/actors/prof/tag.h>
@@ -544,13 +545,12 @@ public:
     };
 
     EAction GetAction(size_t buffersSize) {
+        if (Cancelled) {
+            return EAction::Drop;
+        }
         if (!Started) {
             Started = true;
             return EAction::Init;
-        }
-
-        if (Cancelled) {
-            return EAction::Drop;
         }
         if (buffersSize && Paused != Counter->load() >= buffersSize) {
             Paused = !Paused;
@@ -728,7 +728,7 @@ private:
     TCurlInitConfig InitConfig;
 
     struct TPoolCounters {
-        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolCap;
+        ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolCapFloor;
         ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolAllocated;
         ::NMonitoring::TDynamicCounters::TCounterPtr PerPoolAwait;
     };
@@ -831,6 +831,19 @@ private:
             SyncPoolAwaitCounter(poolKey);
         }
 
+        DispatchAwaiting(true);
+        DispatchAwaiting(false);
+
+        size_t totalAwait = 0;
+        for (const auto& [_, q] : AwaitPerPool) {
+            totalAwait += q.size();
+        }
+        AwaitQueue->Set(totalAwait);
+        AllocatedMemory->Set(AllocatedSize);
+        return Allocated.size();
+    }
+
+    void DispatchAwaiting(bool respectCap) {
         for (bool progress = true; progress; ) {
             progress = false;
             for (auto& [poolKey, q] : AwaitPerPool) {
@@ -840,9 +853,11 @@ private:
                 if (Allocated.size() >= MaxHandlers) {
                     break;
                 }
-                const auto cap = GetPoolCap(poolKey);
-                if (AllocatedPerPool[poolKey] >= cap) {
-                    continue;
+                if (respectCap) {
+                    const auto cap = GetPoolCap(poolKey);
+                    if (AllocatedPerPool[poolKey] >= cap) {
+                        continue;
+                    }
                 }
                 auto it = q.begin();
                 for (; it != q.end(); ++it) {
@@ -870,14 +885,6 @@ private:
                 progress = true;
             }
         }
-
-        size_t totalAwait = 0;
-        for (const auto& [_, q] : AwaitPerPool) {
-            totalAwait += q.size();
-        }
-        AwaitQueue->Set(totalAwait);
-        AllocatedMemory->Set(AllocatedSize);
-        return Allocated.size();
     }
 
     void Done(CURL* handle, CURLcode result) {
@@ -1081,7 +1088,7 @@ private:
         PoolCaps.emplace(DefaultPoolKey(), MaxHandlers);
         for (const auto& [poolKey, cap] : PoolCaps) {
             if (!poolKey.PoolId.empty()) {
-                GetPoolCounters(poolKey).PerPoolCap->Set(cap);
+                GetPoolCounters(poolKey).PerPoolCapFloor->Set(cap);
             }
         }
     }
@@ -1116,7 +1123,7 @@ private:
             auto sub = Counters
                 ->GetSubgroup("db", poolKey.DatabaseId)
                 ->GetSubgroup("pool", poolKey.PoolId);
-            it->second.PerPoolCap = sub->GetCounter("PerPoolCap");
+            it->second.PerPoolCapFloor = sub->GetCounter("PerPoolCapFloor");
             it->second.PerPoolAllocated = sub->GetCounter("PerPoolAllocated");
             it->second.PerPoolAwait = sub->GetCounter("PerPoolAwait");
         }
@@ -1172,7 +1179,10 @@ private:
     THashMap<NDq::TPoolKey, TPoolCounters> PoolCounters;
 
     std::unordered_map<CURL*, TEasyCurl::TPtr> Allocated;
-    std::priority_queue<std::pair<TInstant, TEasyCurlBuffer::TPtr>> Delayed;
+    std::priority_queue<
+        std::pair<TInstant, TEasyCurlBuffer::TPtr>,
+        std::vector<std::pair<TInstant, TEasyCurlBuffer::TPtr>>,
+        std::greater<>> Delayed;
 
     std::shared_ptr<std::mutex> Sync = std::make_shared<std::mutex>();
     std::thread Thread;

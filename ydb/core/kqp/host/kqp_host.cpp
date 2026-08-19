@@ -2119,7 +2119,8 @@ private:
                     InitYtProvider(finalizers);
                 }
             }
-            if (FederatedQuerySetup->PqGatewayFactory) {
+            if (FederatedQuerySetup->PqGatewayFactory
+                && (AppData()->FeatureFlags.GetEnableExternalDataSources() || AppData()->FeatureFlags.GetEnableTopicsSqlIoOperations())) {
                 InitPqProvider(finalizers);
             }
 

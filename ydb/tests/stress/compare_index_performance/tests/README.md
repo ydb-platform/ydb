@@ -70,6 +70,8 @@ sanity check) or two different refs — **without a local build**.
 | `compare_current_feature_flags` | `` | comma-separated feature flags for the current cluster |
 | `compare_baseline_table_service_config` | `` | comma-separated `key=value` for the baseline `table_service_config` |
 | `compare_current_table_service_config` | `` | comma-separated `key=value` for the current `table_service_config` |
+| `compare_main_config` | `` | comma-separated top-level `key=value` config overrides for the baseline/main cluster |
+| `compare_current_config` | `` | comma-separated top-level `key=value` config overrides for the current cluster |
 | `compare_flamegraph` | `` | `1`/`true` → collect CPU flamegraphs (see below) |
 | `compare_perf_sudo` | `` | `1`/`true` → run `perf` under `sudo` |
 | `compare_perf_freq` | `50` | `perf record -F` sampling frequency |
@@ -90,6 +92,14 @@ recursively, so the untouched defaults of that submessage (such as
 same `key=value` convention: a bare `enable_foo` (or `enable_foo=true`) enables
 the flag, `enable_foo=false` disables it. The fulltext test additionally enables
 `enable_fulltext_index` on both sides automatically.
+
+`compare_main_config` and `compare_current_config` use the same value coercion
+and dotted-path syntax, but their paths start at the top-level YAML config. This
+allows any mapping section to be overridden, for example
+`data_shard_config.stats_report_interval_seconds=1` or
+`table_service_config.resource_manager.kqp_level_cache_max_size_bytes=314572800`.
+Generic config overrides are applied last if the same field is also set through
+the feature-flag or `table_service_config` compatibility options.
 
 > **A/B a flag that only exists on one side.** A feature flag or config field
 > that a binary doesn't know is rejected as an unknown YAML field, so pass a
@@ -153,6 +163,12 @@ the toolkit in `contrib/tools/flame-graph` (shipped to the sandbox via `DATA`):
   ydb/tests/stress/compare_index_performance/tests \
   --test-param compare_workload=vector \
   --test-param compare_current_table_service_config=resource_manager.kqp_level_cache_max_size_bytes=314572800
+
+# A/B an option in any other top-level config section.
+./ya make --build relwithdebinfo -tA \
+  ydb/tests/stress/compare_index_performance/tests \
+  --test-param compare_workload=vector \
+  --test-param compare_current_config=data_shard_config.stats_report_interval_seconds=1
 
 # Import data from S3 instead of auto-generating (uses a fixed dataset).
 ./ya make --build relwithdebinfo -tA \

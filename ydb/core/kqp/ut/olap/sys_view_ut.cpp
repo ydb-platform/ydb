@@ -419,8 +419,7 @@ Y_UNIT_TEST_SUITE(KqpOlapSysView) {
     Y_UNIT_TEST(StatsSysViewOrderByPKWithLimitPassthrough) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableFeatureFlags()->SetEnableSysViewOrderByLimitPushdown(true);
-        // Cap held portions at 1 so the limit sync point passes portions straight through to KQP as soon as it holds a
-        // second portion.
+        // Cap at 1 so the sync point switches to passthrough as soon as it holds a second portion.
         settings.AppConfig.MutableColumnShardConfig()->MutableLimitSyncPointConfig()->SetSysViewMaxHeldPortions(1);
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
         // Single shard + no compaction: every write stays a separate portion on one tablet, so the

@@ -89,6 +89,112 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         }
     }
 
+    void DoSplitReplicationSourceOffsets(bool rebootSrc) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        NKikimrConfig::TAppConfig app;
+        app.MutableFeatureFlags()->SetEnableTabletRestartOnUnhandledExceptions(true);
+        serverSettings.SetDomainName("Root")
+            .SetUseRealThreads(false)
+            .SetAppConfig(app);
+
+        Tests::TServer::TPtr server = new TServer(serverSettings);
+        auto &runtime = *server->GetRuntime();
+        auto sender = runtime.AllocateEdgeActor();
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+
+        InitRoot(server, sender);
+
+        CreateShardedTable(server, sender, "/Root", "table-1", TShardedTableOptions()
+            .Replicated(true)
+            .ReplicationConsistencyLevel(EConsistencyLevel::Row)
+        );
+
+        auto shards = GetTableShards(server, sender, "/Root/table-1");
+        auto tableId = ResolveTableId(server, sender, "/Root/table-1");
+        const ui64 srcShard = shards.at(0);
+
+        ApplyChanges(server, srcShard, tableId, "source-a", {
+            TChange{ .Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 11 },
+            TChange{ .Offset = 1, .WriteTxId = 0, .Key = 5, .Value = 55 },
+        });
+        ApplyChanges(server, srcShard, tableId, "source-b", {
+            TChange{ .Offset = 0, .WriteTxId = 0, .Key = 1, .Value = 11 },
+            TChange{ .Offset = 1, .WriteTxId = 0, .Key = 5, .Value = 55 },
+        });
+
+        SetSplitMergePartCountLimit(server->GetRuntime(), -1);
+
+        auto senderSplit = runtime.AllocateEdgeActor();
+        ui64 txId = AsyncSplitTable(server, senderSplit, "/Root/table-1", srcShard, 5);
+        WaitTxNotification(server, senderSplit, txId);
+
+        shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+        const ui64 leftShard = shards.at(0);
+        const ui64 rightShard = shards.at(1);
+
+        ApplyChanges(server, leftShard, tableId, "source-a", {
+            TChange{ .Offset = 10, .WriteTxId = 0, .Key = 1, .Value = 111 },
+        });
+        ApplyChanges(server, leftShard, tableId, "source-b", {
+            TChange{ .Offset = 10, .WriteTxId = 0, .Key = 1, .Value = 111 },
+        });
+        ApplyChanges(server, rightShard, tableId, "source-a", {
+            TChange{ .Offset = 20, .WriteTxId = 0, .Key = 5, .Value = 555 },
+        });
+        ApplyChanges(server, rightShard, tableId, "source-b", {
+            TChange{ .Offset = 20, .WriteTxId = 0, .Key = 5, .Value = 555 },
+        });
+
+        for (ui64 shardId : shards) {
+            CompactTable(runtime, shardId, tableId, true);
+        }
+
+        txId = AsyncMergeTable(server, senderSplit, "/Root/table-1", shards);
+        WaitTxNotification(server, senderSplit, txId);
+
+        shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 1u);
+        const ui64 mergedShard = shards.at(0);
+
+        // Force src to chunk after each split key.
+        auto forceSmallWindow = runtime.AddObserver<TEvDataShard::TEvGetReplicationSourceOffsets>(
+            [&](TEvDataShard::TEvGetReplicationSourceOffsets::TPtr& ev) {
+                ev->Get()->Record.SetWindowSize(1);
+            });
+
+        TTestActorRuntime::TEventObserverHolder rebootObserver;
+        if (rebootSrc) {
+            bool rebooted = false;
+            // Reboot src during offset fetch.
+            rebootObserver = runtime.AddObserver<TEvDataShard::TEvGetReplicationSourceOffsets>(
+                [&](TEvDataShard::TEvGetReplicationSourceOffsets::TPtr& /*ev*/) {
+                    if (!rebooted) {
+                        rebooted = true;
+                        RebootTablet(runtime, mergedShard, sender);
+                    }
+                });
+        }
+
+        AsyncSplitTable(server, senderSplit, "/Root/table-1", mergedShard, 5);
+
+        // Split stays on 1 shard if dst crashes in a restart loop.
+        for (int i = 0; i < 30 && GetTableShards(server, sender, "/Root/table-1").size() < 2; ++i) {
+            TDispatchOptions opts;
+            runtime.DispatchEvents(opts, TDuration::Seconds(1));
+        }
+
+        shards = GetTableShards(server, sender, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(shards.size(), 2u);
+
+        auto result = ReadShardedTable(server, "/Root/table-1");
+        UNIT_ASSERT_VALUES_EQUAL(result,
+            "key = 1, value = 111\n"
+            "key = 5, value = 555\n");
+    }
+
     void DoSplitMergeChanges(bool withReboots) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
@@ -226,6 +332,14 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
 
     Y_UNIT_TEST(SplitMergeChangesReboots) {
         DoSplitMergeChanges(true);
+    }
+
+    Y_UNIT_TEST(SplitReplicationSourceOffsetsOnSrcSplit) {
+        DoSplitReplicationSourceOffsets(false);
+    }
+
+    Y_UNIT_TEST(SplitReplicationSourceOffsetsOnSrcRestart) {
+        DoSplitReplicationSourceOffsets(true);
     }
 
     Y_UNIT_TEST(ReplicatedTable) {

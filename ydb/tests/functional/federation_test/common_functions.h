@@ -13,20 +13,20 @@ using AdminStub = NLogBroker::NAdmin::ConfigurationManagerAdminService::Stub;
 
 namespace NFederationTests {
 
-TDriver MakeDriver(const std::string& endpoint, const std::string& database);
+TDriver MakeDriver(const TString& endpoint, const TString& database);
 
-void WriteMessages(const std::string& endpoint, const std::string& database,
-                   const std::string& topicPath, const std::string& producerId,
-                   const std::vector<std::string>& messages);
+void WriteMessages(const TString& endpoint, const TString& database,
+                   const TString& topicPath, const TString& producerId,
+                   const std::vector<TString>& messages);
 
-std::vector<std::string> WriteLoadMessages(const std::string& endpoint, const std::string& database,
-                     const std::string& topicPath, const std::string& producerId,
+std::vector<TString> WriteLoadMessages(const TString& endpoint, const TString& database,
+                     const TString& topicPath, const TString& producerId,
                      size_t count = 10000, size_t smallMessageSize = 2_MB, size_t bigMessageSize = 12_MB);
 
-std::map<uint64_t, std::string> ReadMessages(std::shared_ptr<IReadSession> session, size_t wantCount,
+std::map<uint64_t, TString> ReadMessages(std::shared_ptr<IReadSession> session, size_t wantCount,
                                           TDuration timeout = TDuration::Seconds(30));
 
-std::map<std::pair<uint64_t, uint64_t>, std::string> ReadAutoscaledTopicMessages(std::shared_ptr<IReadSession> session, size_t wantCount, TDuration timeout = TDuration::Seconds(60));
+std::map<std::pair<uint64_t, uint64_t>, TString> ReadAutoscaledTopicMessages(std::shared_ptr<IReadSession> session, size_t wantCount, TDuration timeout = TDuration::Seconds(60));
 
 NLogBroker::Operations::Operation WaitOperation(AdminStub& stub,
                                                  const NLogBroker::Operations::Operation& initial,
@@ -35,11 +35,11 @@ NLogBroker::Operations::Operation WaitOperation(AdminStub& stub,
 void ExecCmRequest(AdminStub& stub, NLogBroker::NAdmin::ExecuteModifyCommandsRequest& req,
             const TString& comment);
 
-void CmCreateTopic(AdminStub& stub, const std::string& cmPath, const TString& comment, bool autoSplit = false);
+void CmCreateTopic(AdminStub& stub, const TString& cmPath, const TString& comment, bool autoSplit = false);
 
-void SetClusterWriteEnabled(AdminStub& stub, const std::string& clusterName, bool enabled);
+void SetClusterWriteEnabled(AdminStub& stub, const TString& clusterName, bool enabled);
 
 
-size_t GetActivePartitionCount(const std::string& endpoint, const std::string& database, const std::string& topicPath);
+size_t GetActivePartitionCount(const TString& endpoint, const TString& database, const TString& topicPath);
 
 } // namespace

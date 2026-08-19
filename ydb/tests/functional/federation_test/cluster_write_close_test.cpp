@@ -2,16 +2,14 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <contrib/libs/grpc/include/grpcpp/grpcpp.h>
 
-const std::string kDatabase = "/Root/logbroker-federation/prod";
-const std::string kTopicYdb = "write-disabled-topic";
-const std::string kTopicCM  = "prod/write-disabled-topic";
-const std::string kConsumer = "consumer";
+const TString kDatabase = "/Root/logbroker-federation/prod";
+const TString kTopicYdb = "write-disabled-topic";
+const TString kTopicCM  = "prod/write-disabled-topic";
+const TString kConsumer = "consumer";
 
 using namespace NYdb;
 using namespace NYdb::NTopic;
 using namespace NFederationTests;
-
-using AdminStub = NLogBroker::NAdmin::ConfigurationManagerAdminService::Stub;
 
 Y_UNIT_TEST_SUITE(TWriteDisabledTest) {
 
@@ -21,10 +19,10 @@ Y_UNIT_TEST_SUITE(TWriteDisabledTest) {
         UNIT_ASSERT_C(portA, "cluster_a_port is not set by federation_recipe");
         UNIT_ASSERT_C(cmPort, "CM_PORT is not set by federation_recipe");
 
-        const std::string endpointA = std::string("localhost:") + portA;
+        const TString endpointA = TString("localhost:") + portA;
 
         auto channel = grpc::CreateChannel(
-            std::string("localhost:") + cmPort,
+            TString("localhost:") + cmPort,
             grpc::InsecureChannelCredentials()
         );
         auto stub = NLogBroker::NAdmin::ConfigurationManagerAdminService::NewStub(channel);
@@ -39,7 +37,7 @@ Y_UNIT_TEST_SUITE(TWriteDisabledTest) {
             ExecCmRequest(*stub, req, "create topic");
         }
 
-        const std::vector<std::string> initialMsgs = {
+        const std::vector<TString> initialMsgs = {
             "msg-0", "msg-1", "msg-2", "msg-3", "msg-4",
             "msg-5", "msg-6", "msg-7", "msg-8", "msg-9",
         };
@@ -101,7 +99,7 @@ Y_UNIT_TEST_SUITE(TWriteDisabledTest) {
         SetClusterWriteEnabled(*stub, "cluster_a", true);
         Sleep(TDuration::Seconds(5));
 
-        const std::string msgAfterReEnable = "msg-after-reenable";
+        const TString msgAfterReEnable = "msg-after-reenable";
         WriteMessages(endpointA, kDatabase, kTopicYdb, "producer-reenable", {msgAfterReEnable});
 
         {

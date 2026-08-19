@@ -2,7 +2,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NFederationTests {
-    TDriver MakeDriver(const std::string& endpoint, const std::string& database) {
+    TDriver MakeDriver(const TString& endpoint, const TString& database) {
     return TDriver(
         TDriverConfig()
             .SetEndpoint(endpoint)
@@ -11,9 +11,9 @@ namespace NFederationTests {
     );
 }
 
-void WriteMessages(const std::string& endpoint, const std::string& database,
-                   const std::string& topicPath, const std::string& producerId,
-                   const std::vector<std::string>& messages)
+void WriteMessages(const TString& endpoint, const TString& database,
+                   const TString& topicPath, const TString& producerId,
+                   const std::vector<TString>& messages)
 {
     TDriver driver = MakeDriver(endpoint, database);
     TTopicClient client(driver);
@@ -29,8 +29,8 @@ void WriteMessages(const std::string& endpoint, const std::string& database,
     driver.Stop(true);
 }
 
-std::vector<std::string> WriteLoadMessages(const std::string& endpoint, const std::string& database,
-                     const std::string& topicPath, const std::string& producerId,
+std::vector<TString> WriteLoadMessages(const TString& endpoint, const TString& database,
+                     const TString& topicPath, const TString& producerId,
                      size_t count, size_t smallMessageSize, size_t bigMessageSize)
 {
     TDriver driver = MakeDriver(endpoint, database);
@@ -41,11 +41,11 @@ std::vector<std::string> WriteLoadMessages(const std::string& endpoint, const st
             .MessageGroupId(producerId)
             .Codec(ECodec::RAW)
     );
-    std::vector<std::string> payloads;
+    std::vector<TString> payloads;
     for (size_t i = 0; i < count; ++i) {
         size_t targetSize = (i % 5 == 0) ? bigMessageSize : smallMessageSize;
-        std::string prefix = "msg-" + std::to_string(i) + ":";
-        std::string payload = prefix;
+        TString prefix = "msg-" + std::to_string(i) + ":";
+        TString payload = prefix;
         if (payload.size() < targetSize) {
             payload.append(targetSize - payload.size(), '-');
         }
@@ -58,8 +58,8 @@ std::vector<std::string> WriteLoadMessages(const std::string& endpoint, const st
     return payloads;
 }
 
-std::map<uint64_t, std::string> ReadMessages(std::shared_ptr<IReadSession> session, size_t wantCount, TDuration timeout) {
-    std::map<uint64_t, std::string> result;
+std::map<uint64_t, TString> ReadMessages(std::shared_ptr<IReadSession> session, size_t wantCount, TDuration timeout) {
+    std::map<uint64_t, TString> result;
     bool commitAckPending = false;
     TInstant deadline = TInstant::Now() + timeout;
 
@@ -73,7 +73,7 @@ std::map<uint64_t, std::string> ReadMessages(std::shared_ptr<IReadSession> sessi
             e->Confirm();
         } else if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             for (const auto& msg : e->GetMessages()) {
-                result[msg.GetOffset()] = std::string(msg.GetData());
+                result[msg.GetOffset()] = TString(msg.GetData());
             }
             e->Commit();
             commitAckPending = true;
@@ -90,10 +90,10 @@ std::map<uint64_t, std::string> ReadMessages(std::shared_ptr<IReadSession> sessi
     return result;
 }
 
-std::map<std::pair<uint64_t, uint64_t>, std::string> ReadAutoscaledTopicMessages(
+std::map<std::pair<uint64_t, uint64_t>, TString> ReadAutoscaledTopicMessages(
                     std::shared_ptr<IReadSession> session, size_t wantCount,
                     TDuration timeout) {
-    std::map<std::pair<uint64_t, uint64_t>, std::string> result;
+    std::map<std::pair<uint64_t, uint64_t>, TString> result;
     TInstant deadline = TInstant::Now() + timeout;
 
     while (TInstant::Now() < deadline) {
@@ -107,7 +107,7 @@ std::map<std::pair<uint64_t, uint64_t>, std::string> ReadAutoscaledTopicMessages
         } else if (auto* e = std::get_if<TReadSessionEvent::TDataReceivedEvent>(&*event)) {
             uint64_t partitionId = e->GetPartitionSession()->GetPartitionId();
             for (const auto& msg : e->GetMessages()) {
-                result[{partitionId, msg.GetOffset()}] = std::string(msg.GetData());
+                result[{partitionId, msg.GetOffset()}] = TString(msg.GetData());
             }
             e->Commit();
         } else if (std::holds_alternative<TSessionClosedEvent>(*event)) {
@@ -156,7 +156,7 @@ void ExecCmRequest(AdminStub& stub, NLogBroker::NAdmin::ExecuteModifyCommandsReq
         comment + ": CM status " + std::to_string((int)op.status()));
 }
 
-void CmCreateTopic(AdminStub& stub, const std::string& cmPath, const TString& comment, bool autoSplit)
+void CmCreateTopic(AdminStub& stub, const TString& cmPath, const TString& comment, bool autoSplit)
 {
     NLogBroker::NAdmin::ExecuteModifyCommandsRequest req;
     req.set_comment(comment);
@@ -180,16 +180,16 @@ void CmCreateTopic(AdminStub& stub, const std::string& cmPath, const TString& co
     ExecCmRequest(stub, req, comment);
 }
 
-void SetClusterWriteEnabled(AdminStub& stub, const std::string& clusterName, bool enabled) {
+void SetClusterWriteEnabled(AdminStub& stub, const TString& clusterName, bool enabled) {
     NLogBroker::NAdmin::ExecuteModifyCommandsRequest req;
-    req.set_comment(std::string(enabled ? "enable" : "disable") + " writes on " + clusterName);
+    req.set_comment(TString(enabled ? "enable" : "disable") + " writes on " + clusterName);
     auto* action = req.add_actions();
     action->mutable_update_cluster()->set_name(clusterName);
     action->mutable_update_cluster()->mutable_properties()->mutable_write_enabled()->set_user_defined(enabled);
     ExecCmRequest(stub, req, "SetClusterWriteEnabled");
 }
 
-size_t GetActivePartitionCount(const std::string& endpoint, const std::string& database, const std::string& topicPath) {
+size_t GetActivePartitionCount(const TString& endpoint, const TString& database, const TString& topicPath) {
     TDriver driver = MakeDriver(endpoint, database);
     TTopicClient client(driver);
     auto result = client.DescribeTopic(topicPath).GetValueSync();

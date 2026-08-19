@@ -1654,6 +1654,8 @@ namespace NActors {
     }
 
     void TTestActorRuntimeBase::SendInternal(TAutoPtr<IEventHandle> ev, ui32 nodeIndex, bool viaActorSystem) {
+        static constexpr ui32 TestRuntimeEventsPerMailbox = 8;
+
         Y_ABORT_UNLESS(nodeIndex < NodeCount);
         ui32 nodeId = FirstNodeId + nodeIndex;
         TNodeDataBase* node = Nodes[nodeId].Get();
@@ -1683,6 +1685,13 @@ namespace NActors {
             mbox.PushFront(ev);
             return;
         }
+
+        const TEventMailboxId mailboxId(nodeId, mailboxHint);
+        auto [batchIt, ownsBatch] = MailboxProcessingBatches.try_emplace(mailboxId);
+        if (ownsBatch) {
+            batchIt->second.StartCycles = GetCycleCountFast();
+        }
+        ++batchIt->second.ExecutedEvents;
 
         ui64 recipientLocalId = ev->GetRecipientRewrite().LocalId();
         if ((BlockedOutput.find(ev->Sender) == BlockedOutput.end()) && VERBOSE) {
@@ -1720,23 +1729,17 @@ namespace NActors {
                 TCallstack::GetTlsCallstack() = ev->Callstack;
                 TCallstack::GetTlsCallstack().SetLinesToSkip();
 #endif
-                const ui64 activationStart = GetCycleCountFast();
                 recipientActor->Receive(ev);
-                node->ExecutorThread->DropUnregistered();
 
-                recipientActor = mailbox->FindActor(actorId.LocalId());
-                if (recipientActor && NDetail::TActorSystemFlagAccessor::HasSystemFlag(
+                if (NDetail::TActorSystemFlagAccessor::HasSystemFlag(
                         *recipientActor, IActor::ESystemFlag::MailboxProcessingFinished)) {
-                    TAutoPtr<IEventHandle> finishedEv = new IEventHandle(
-                        recipientActor->SelfId(),
-                        TActorId(),
-                        new TEvents::TEvMailboxProcessingFinished(
-                            TEvents::TEvMailboxProcessingFinished::EReason::QueueEmpty,
-                            1,
-                            GetCycleCountFast() - activationStart));
-                    recipientActor->Receive(finishedEv);
-                    node->ExecutorThread->DropUnregistered();
+                    auto& actors = MailboxProcessingBatches.at(TEventMailboxId(nodeId, mailboxHint)).Actors;
+                    if (std::find(actors.begin(), actors.end(), actorId) == actors.end()) {
+                        actors.push_back(actorId);
+                    }
                 }
+
+                node->ExecutorThread->DropUnregistered();
             }
         } else {
             if (VERBOSE) {
@@ -1745,6 +1748,79 @@ namespace NActors {
 
             auto fw = IEventHandle::ForwardOnNondelivery(ev, TEvents::TEvUndelivered::ReasonActorUnknown);
             node->ActorSystem->Send(fw);
+        }
+
+        if (!ownsBatch) {
+            return;
+        }
+
+        while (batchIt->second.ExecutedEvents < TestRuntimeEventsPerMailbox && !mbox.IsEmpty()) {
+            auto nextEv = mbox.Pop();
+            ++DispatchedEventsCount;
+            if (DispatchedEventsCount > DispatchedEventsLimit) {
+                ythrow TWithBackTrace<yexception>() << "Dispatched "
+                    << DispatchedEventsLimit << " events, limit reached.";
+            }
+
+            EEventAction action;
+            {
+                TInverseGuard<TMutex> inverseGuard(Mutex);
+                for (auto& observer : ObserverFuncs) {
+                    observer(nextEv);
+                    if (!nextEv) {
+                        break;
+                    }
+                }
+                action = nextEv ? ObserverFunc(nextEv) : EEventAction::DROP;
+            }
+
+            if (action == EEventAction::PROCESS) {
+                UpdateFinalEventsStatsForEachContext(*nextEv);
+                SendInternal(nextEv.Release(), nodeIndex, false);
+            } else if (action == EEventAction::RESCHEDULE) {
+                mbox.Freeze(TInstant::MicroSeconds(CurrentTimestamp) + ReschedulingDelay);
+                mbox.PushFront(nextEv);
+                break;
+            }
+
+            batchIt = MailboxProcessingBatches.find(mailboxId);
+            Y_ABORT_UNLESS(batchIt != MailboxProcessingBatches.end());
+        }
+
+        batchIt = MailboxProcessingBatches.find(mailboxId);
+        if (batchIt == MailboxProcessingBatches.end() ||
+                (batchIt->second.ExecutedEvents < TestRuntimeEventsPerMailbox && !mbox.IsEmpty())) {
+            return;
+        }
+
+        TMailboxProcessingBatch batch = std::move(batchIt->second);
+        MailboxProcessingBatches.erase(batchIt);
+        const auto reason = batch.ExecutedEvents == TestRuntimeEventsPerMailbox
+            ? TEvents::TEvMailboxProcessingFinished::EReason::EventCountLimitReached
+            : TEvents::TEvMailboxProcessingFinished::EReason::QueueEmpty;
+        for (const TActorId& finishedActorId : batch.Actors) {
+            if (IActor* actor = mailbox->FindActor(finishedActorId.LocalId()); actor &&
+                    NDetail::TActorSystemFlagAccessor::HasSystemFlag(
+                        *actor, IActor::ESystemFlag::MailboxProcessingFinished)) {
+                TActorContext ctx(*mailbox, *node->ExecutorThread, GetCycleCountFast(), finishedActorId);
+                TActivationContext* prevTlsActivationContext = TlsActivationContext;
+                TlsActivationContext = &ctx;
+                CurrentRecipient = finishedActorId;
+                Y_DEFER {
+                    CurrentRecipient = TActorId();
+                    TlsActivationContext = prevTlsActivationContext;
+                };
+                TInverseGuard<TMutex> inverseGuard(Mutex);
+                TAutoPtr<IEventHandle> finishedEv = new IEventHandle(
+                    actor->SelfId(),
+                    TActorId(),
+                    new TEvents::TEvMailboxProcessingFinished(
+                        reason,
+                        batch.ExecutedEvents,
+                        GetCycleCountFast() - batch.StartCycles));
+                actor->Receive(finishedEv);
+                node->ExecutorThread->DropUnregistered();
+            }
         }
     }
 

@@ -733,6 +733,12 @@ namespace NActors {
         }
 
    private:
+        struct TMailboxProcessingBatch {
+            ui32 ExecutedEvents = 0;
+            ui64 StartCycles = 0;
+            TVector<TActorId> Actors;
+        };
+
         IActor* FindActor(const TActorId& actorId, TNodeDataBase* node) const;
         void SendInternal(TAutoPtr<IEventHandle> ev, ui32 nodeIndex, bool viaActorSystem);
         TEventMailBox& GetMailbox(ui32 nodeId, ui32 hint);
@@ -744,6 +750,7 @@ namespace NActors {
     private:
         ui64 ScheduledCount;
         ui64 ScheduledLimit;
+        THashMap<TEventMailboxId, TMailboxProcessingBatch, TEventMailboxId::THash> MailboxProcessingBatches;
         THolder<TTempDir> TmpDir;
         const TThread::TId MainThreadId;
 

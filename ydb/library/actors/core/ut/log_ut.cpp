@@ -803,7 +803,7 @@ Y_UNIT_TEST_SUITE(TWriteJsonValuesInJsonLogTest) {
 
     Y_UNIT_TEST(WriteJson) {
         TFixture env{NoBufferSettings()};
-        env.Settings->JsonTextMessageWithValues = false;
+        env.Settings->JsonTextMessageWithoutValues = true;
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");
@@ -818,7 +818,7 @@ Y_UNIT_TEST_SUITE(TWriteJsonValuesInJsonLogTest) {
 
     Y_UNIT_TEST(WriteMeta) {
         TFixture env{NoBufferSettings()};
-        env.Settings->JsonTextMessageWithValues = false;
+        env.Settings->JsonTextMessageWithoutValues = true;
         env.StartAccumulateMessages(TSettings::ELogFormat::JSON_FORMAT);
 
         YDB_LOG_CTX_COMP(env, PRI_DEBUG, 1, "Test message");

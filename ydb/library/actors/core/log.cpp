@@ -654,16 +654,16 @@ namespace NActors {
                     }
                 } else {
                     if (structuredMessage.Defined()) {
-                        if (Settings->JsonTextMessageWithValues) {
+                        if (Settings->JsonTextMessageWithoutValues) {
+                            j.WriteKey("message").WriteString(formatted);
+                            StructuredJsonWriter.Write(j, structuredMessage.GetRef(), true);
+                        } else {
                             TStringBuilder messageText;
                             messageText << formatted;
                             messageText << " (";
                             StructuredTextWriter.Write(messageText, structuredMessage.GetRef());
                             messageText << ")";
                             j.WriteKey("message").WriteString(messageText);
-                        } else {
-                            j.WriteKey("message").WriteString(formatted);
-                            StructuredJsonWriter.Write(j, structuredMessage.GetRef(), true);
                         }
                     } else {
                         j.WriteKey("message").WriteString(formatted);
@@ -673,7 +673,7 @@ namespace NActors {
                 j.EndObject();
                 auto logRecord = j.Str();
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), Settings->JsonTextMessageWithValues ? TLogRecord::TMetaFlags{} : metaFlags));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), Settings->JsonTextMessageWithoutValues ? metaFlags : TLogRecord::TMetaFlags{}));
             } break;
         }
 

@@ -98,8 +98,8 @@ namespace NActors {
             // Add levelStr field in JSON for Y.Deploy log format
             bool AddLevelInJson = false;
 
-            // Json text message contains key-value pairs from structured message
-            bool JsonTextMessageWithValues = true;
+            // Json text message doesn't contain key-value pairs from structured message
+            bool JsonTextMessageWithoutValues = false;
 
             // The best way to provide minVal, maxVal and func is to have
             // protobuf enumeration of components. In this case protoc
@@ -171,7 +171,7 @@ namespace NActors {
             void SetAllowDrop(bool val);
             void SetThrottleDelay(TDuration value);
             void SetUseLocalTimestamps(bool value);
-            void SetJsonTextMessageWithValues(bool value);
+            void SetJsonTextMessageWithoutValues(bool value);
 
         private:
             int SetLevelImpl(

@@ -219,8 +219,8 @@ namespace NActors {
             UseLocalTimestamps = value;
         }
 
-        void TSettings::SetJsonTextMessageWithValues(bool value) {
-            JsonTextMessageWithValues = value;
+        void TSettings::SetJsonTextMessageWithoutValues(bool value) {
+            JsonTextMessageWithoutValues = value;
         }
 
         EComponent TSettings::FindComponent(const TStringBuf& componentName) const {

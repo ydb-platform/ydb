@@ -42,10 +42,10 @@
 | `backend_file_name` | string | — | Имя файла для вывода логов. Если указано, логи записываются в этот файл. |
 | `sys_log_service` | string | — | Имя сервиса для syslog. Соответствует полю tag в старом протоколе syslog [RFC 3164](https://datatracker.ietf.org/doc/html/rfc3164) или полю app-name в современном протоколе [RFC 5424](https://datatracker.ietf.org/doc/html/rfc5424). |
 | `time_threshold_ms` | uint64 | 1000 | Если `allow_drop_entries = true`, определяет как часто, в миллисекундах, {{ ydb-short-name }} пишет записи логов из буфера в вывод. |
-| `ignore_unknown_components` | bool | true | Игнорировать запросы логирования от неизвестных компонентов. |
+| `ignore_unknown_comsponents` | bool | true | Игнорировать запросы логирования от неизвестных компонентов. |
 | `entry` | array | [] | Конфигурация уровня логирования и/или семплирования для конкретных компонентов {{ ydb-short-name }}, cм. [{#T}](#entry-objects) ниже. |
 | `uaclient_config` | object | — | Конфигурация для клиента Unified Agent, см. [{#T}](#uaclient-config) ниже. |
-| `json_text_message_with_values` | bool | true | При выводе журнала в формате `json` текст сообщения (поле `message`) содержит поля структурированного журнала в формате `key=value`. |
+| `json_text_message_without_values` | bool | false | При выводе журнала в формате `json`: если `false`, текст сообщения (поле `message`) содержит структурированные значения в виде `key=value` (например, `Text (a=1 b=2)`); если `true`, поле `message` содержит только текст, а структурированные значения выводятся отдельными JSON-полями (зарезервированные имена получают префикс `_`). |
 
 ### Объекты Entry {#entry-objects}
 

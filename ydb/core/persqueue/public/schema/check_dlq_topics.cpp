@@ -10,9 +10,11 @@
 
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
+#include <util/generic/vector.h>
 #include <util/string/builder.h>
 #include <util/string/join.h>
 
+#include <algorithm>
 #include <optional>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_SCHEMA
@@ -104,7 +106,15 @@ public:
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-        for (const auto& [path, info] : ev->Get()->Topics) {
+        TVector<TString> paths;
+        paths.reserve(ev->Get()->Topics.size());
+        for (const auto& [path, _] : ev->Get()->Topics) {
+            paths.push_back(path);
+        }
+        std::sort(paths.begin(), paths.end());
+
+        for (const auto& path : paths) {
+            const auto& info = ev->Get()->Topics.at(path);
             if (auto error = MapStatus(path, info); error) {
                 YDB_LOG_DEBUG("DLQ check failed",
                     {"logPrefix", LOG_PREFIX},
@@ -164,7 +174,10 @@ private:
                     NDescriber::Description(path, info.Status)
                 };
         }
-        return std::nullopt;
+        return TStatusAndMessage{
+            Ydb::StatusIds::INTERNAL_ERROR,
+            TStringBuilder() << "Unexpected describer status for path " << path
+        };
     }
 
     void ReplyAndDie(Ydb::StatusIds::StatusCode status, TString&& errorMessage) {

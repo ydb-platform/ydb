@@ -577,6 +577,9 @@ Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStream) {
     auto& client = *setup->GetServer().AnnoyingClient;
 
     const TString userSid = CreateUser(client, USER_NAME);
+    // CDC streamImpl is a topic; describer checks AlterSchema|UpdateRow before
+    // exposing the type. Grant UpdateRow so the check can return BAD_REQUEST.
+    client.TestGrant("/", "Root", userSid, NACLib::EAccessRights::UpdateRow);
 
     NTests::ExecuteDDL(*setup, TStringBuilder()
         << "CREATE TABLE `" << TABLE_NAME << "` (key Uint64, value String, PRIMARY KEY (key));");
@@ -602,6 +605,7 @@ Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWhenDlqIsACdcStreamImpl) {
     auto& client = *setup->GetServer().AnnoyingClient;
 
     const TString userSid = CreateUser(client, USER_NAME);
+    client.TestGrant("/", "Root", userSid, NACLib::EAccessRights::UpdateRow);
 
     NTests::ExecuteDDL(*setup, TStringBuilder()
         << "CREATE TABLE `" << TABLE_NAME << "` (key Uint64, value String, PRIMARY KEY (key));");
@@ -647,6 +651,7 @@ Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqIsACdcStream) {
     auto& client = *setup->GetServer().AnnoyingClient;
 
     const TString userSid = CreateUser(client, USER_NAME);
+    client.TestGrant("/", "Root", userSid, NACLib::EAccessRights::UpdateRow);
 
     NTests::ExecuteDDL(*setup, TStringBuilder()
         << "CREATE TABLE `" << TABLE_NAME << "` (key Uint64, value String, PRIMARY KEY (key));");
@@ -672,6 +677,7 @@ Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqIsACdcStreamImpl) {
     auto& client = *setup->GetServer().AnnoyingClient;
 
     const TString userSid = CreateUser(client, USER_NAME);
+    client.TestGrant("/", "Root", userSid, NACLib::EAccessRights::UpdateRow);
 
     NTests::ExecuteDDL(*setup, TStringBuilder()
         << "CREATE TABLE `" << TABLE_NAME << "` (key Uint64, value String, PRIMARY KEY (key));");
@@ -688,7 +694,7 @@ Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqIsACdcStreamImpl) {
 }
 
 Y_UNIT_TEST(CreateTopicWithSqsStyleDlqSkipsSchemeCheck) {
-    constexpr const char* USER_NAME = "topicuser-sqs";
+    constexpr const char* USER_NAME = "topicuser15";
     constexpr const char* MAIN_TOPIC = "main-topic-sqs-dlq-test";
 
     auto setup = CreateSetup();

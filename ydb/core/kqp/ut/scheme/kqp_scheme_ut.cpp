@@ -12581,7 +12581,9 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 )
             )
         )");
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+        // Query service wraps scheme UNAUTHORIZED as GENERIC_ERROR (execution).
+        const auto expected = UseQueryService ? EStatus::GENERIC_ERROR : EStatus::UNAUTHORIZED;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expected, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
             "Access denied for user@builtin on path /Root/dlq",
             result.GetIssues().ToString());
@@ -12605,7 +12607,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 )
             )
         )");
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+        const auto expected = UseQueryService ? EStatus::GENERIC_ERROR : EStatus::SCHEME_ERROR;
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), expected, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(),
             "does not exist",
             result.GetIssues().ToString());

@@ -24,7 +24,7 @@ private:
     std::optional<TDuration> ForwardDuration;
     const NActors::TActorId DistributorId;
     const ui64 WorkerIdx;
-    const ui64 WorkersPoolId;
+    const TString WorkersPoolId;
     std::optional<TDuration> ExecutionDuration;
     std::vector<TWorkerTaskResult> Results;
     TDuration GetWakeupDuration() const;
@@ -55,7 +55,7 @@ public:
     }
 
     TWorker(const TString& poolName, const double cpuLimit, const NActors::TActorId& distributorId, const ui64 workerIdx,
-        const ui64 workersPoolId)
+        const TString& workersPoolId)
         : TBase("COMPOSITE_CONVEYOR::" + poolName + "::WORKER")
         , CPULimit(cpuLimit)
         , DistributorId(distributorId)

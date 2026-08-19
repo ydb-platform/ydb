@@ -100,11 +100,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
     REGISTER_SETTING(*this, OptValidateStreamingConstraints);
-<<<<<<< HEAD
-=======
     REGISTER_SETTING(*this, OptValidateStreamingCheckpoints);
-    REGISTER_SETTING(*this, OptFallbackToLegacyOptimizer);
->>>>>>> 26e74bceefd (YQ-5607 added checkpoints usage validation for streaming queries (#50184))
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);

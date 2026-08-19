@@ -8,8 +8,8 @@
 immediate_controls_config:
   ...
   scheme_shard_controls:
-   force_shard_split_data_size: 2147483648
-   ...
+    force_shard_split_data_size: 2147483648
+    ...
 ```
 
 ## Параметры

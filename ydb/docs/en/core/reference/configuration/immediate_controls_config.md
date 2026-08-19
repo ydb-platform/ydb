@@ -8,7 +8,7 @@ The `immediate_controls_config` section provides a set of dynamic parameters for
 immediate_controls_config:
   ...
   scheme_shard_controls:
-   force_shard_split_data_size: 2147483648
+    force_shard_split_data_size: 2147483648
     ...
 ```
 

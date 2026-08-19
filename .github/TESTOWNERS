@@ -9,6 +9,7 @@
 
 #Row Tables Development Team @azevaykin TEAM:@ydb-platform/datashard
 /ydb/core/scheme @ydb-platform/datashard
+/ydb/core/scheme2 @ydb-platform/datashard
 /ydb/core/tablet_flat @ydb-platform/datashard
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/mon_alloc @ydb-platform/datashard

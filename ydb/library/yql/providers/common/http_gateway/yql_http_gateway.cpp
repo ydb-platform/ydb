@@ -14,6 +14,7 @@
 #include <mutex>
 #include <stack>
 #include <queue>
+#include <deque>
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <ydb/library/actors/prof/tag.h>
@@ -272,6 +273,8 @@ public:
     virtual size_t Read(char *buffer, size_t size, size_t nmemb) = 0;
 
     size_t GetSizeLimit() const { return SizeLimit; }
+    virtual size_t GetReservedSize() const { return 0; }
+    virtual bool IsStream() const { return false; }
     TString GetDetailedErrorText() const { return ErrorBuffer.data(); }
 
     void SetContext(IHttpRequestContext::TPtr context) {
@@ -431,6 +434,8 @@ public:
         FreeHandles();
         InitHandles();
     }
+
+    size_t GetReservedSize() const override { return GetSizeLimit(); }
 private:
     void Fail(CURLcode result, const TIssue& error) final  {
         TIssues issues{error};
@@ -559,6 +564,8 @@ public:
         Cancelled = true;
         OnFinish(CURLE_OK, TIssues{issue});
     }
+
+    bool IsStream() const override { return true; }
 private:
     void Fail(CURLcode result, const TIssue& error) final  {
         if (!Cancelled)
@@ -650,7 +657,6 @@ public:
         , OutputMemory(Counters->GetCounter("OutputMemory"))
         , PerformCycles(Counters->GetCounter("PerformCycles", true))
         , AwaitQueue(Counters->GetCounter("AwaitQueue"))
-        , AwaitQueueTopSizeLimit(Counters->GetCounter("AwaitQueueTopSizeLimit"))
         , DownloadedBytes(Counters->GetCounter("DownloadedBytes", true))
         , UploadedBytes(Counters->GetCounter("UploadedBytes", true))
         , GroupForGET(Counters->GetSubgroup("method", "GET"))
@@ -820,12 +826,11 @@ private:
 
         while (!Delayed.empty() && Delayed.top().first <= TInstant::Now()) {
             const auto poolKey = Delayed.top().second->GetPoolKey();
-            AwaitPerPool[poolKey].emplace(std::move(Delayed.top().second));
+            AwaitPerPool[poolKey].emplace_back(std::move(Delayed.top().second));
             Delayed.pop();
             SyncPoolAwaitCounter(poolKey);
         }
 
-        // Round-robin across pools respecting per-pool cap.
         for (bool progress = true; progress; ) {
             progress = false;
             for (auto& [poolKey, q] : AwaitPerPool) {
@@ -839,16 +844,27 @@ private:
                 if (AllocatedPerPool[poolKey] >= cap) {
                     continue;
                 }
-                const auto sizeLimit = q.front()->GetSizeLimit();
-                if (AllocatedSize + sizeLimit > MaxSimulatenousDownloadsSize) {
+                auto it = q.begin();
+                for (; it != q.end(); ++it) {
+                    if (AllocatedSize + (*it)->GetReservedSize() <= MaxSimulatenousDownloadsSize) {
+                        break;
+                    }
+                }
+                if (it == q.end()) {
                     continue;
                 }
-                AllocatedSize += sizeLimit;
-                const auto handle = q.front()->GetHandle();
-                Allocated.emplace(handle, std::move(q.front()));
-                q.pop();
+                AllocatedSize += (*it)->GetReservedSize();
+                auto easy = std::move(*it);
+                q.erase(it);
+                const auto handle = easy->GetHandle();
                 ++AllocatedPerPool[poolKey];
-                curl_multi_add_handle(Handle.get(), handle);
+                if (easy->IsStream()) {
+                    Streams.emplace_back(TEasyCurlStream::TWeakPtr(std::static_pointer_cast<TEasyCurlStream>(easy)));
+                    Allocated.emplace(handle, std::move(easy));
+                } else {
+                    Allocated.emplace(handle, std::move(easy));
+                    curl_multi_add_handle(Handle.get(), handle);
+                }
                 SyncPoolAllocatedCounter(poolKey);
                 SyncPoolAwaitCounter(poolKey);
                 progress = true;
@@ -921,6 +937,7 @@ private:
 
     void Fail(CURLMcode result) {
         std::stack<TEasyCurl::TPtr> works;
+        std::stack<TEasyCurl::TPtr> queued;
         {
             const std::unique_lock lock(SyncRef());
 
@@ -928,12 +945,27 @@ private:
                 works.emplace(std::move(item.second));
             }
 
+            for (auto& [_, q] : AwaitPerPool) {
+                while (!q.empty()) {
+                    queued.emplace(std::move(q.front()));
+                    q.pop_front();
+                }
+            }
+            AwaitPerPool.clear();
+
+            while (!Delayed.empty()) {
+                queued.emplace(std::move(Delayed.top().second));
+                Delayed.pop();
+            }
+
             AllocatedSize = 0ULL;
             Allocated.clear();
             AllocatedPerPool.clear();
             for (auto& [_, counters] : PoolCounters) {
                 counters.PerPoolAllocated->Set(0);
+                counters.PerPoolAwait->Set(0);
             }
+            AwaitQueue->Set(0);
         }
 
         const TIssue error(curl_multi_strerror(result));
@@ -941,6 +973,10 @@ private:
             curl_multi_remove_handle(Handle.get(), works.top()->GetHandle());
             works.top()->Fail(CURLE_OK, error);
             works.pop();
+        }
+        while (!queued.empty()) {
+            queued.top()->Fail(CURLE_OK, error);
+            queued.pop();
         }
     }
 
@@ -951,7 +987,7 @@ private:
         easy->SetContext(std::move(context));
         const auto poolKey = easy->GetPoolKey();
         const std::unique_lock lock(SyncRef());
-        AwaitPerPool[poolKey].emplace(std::move(easy));
+        AwaitPerPool[poolKey].emplace_back(std::move(easy));
         SyncPoolAwaitCounter(poolKey);
         Wakeup(0U);
     }
@@ -963,7 +999,7 @@ private:
         easy->SetContext(std::move(context));
         const auto poolKey = easy->GetPoolKey();
         const std::unique_lock lock(SyncRef());
-        AwaitPerPool[poolKey].emplace(std::move(easy));
+        AwaitPerPool[poolKey].emplace_back(std::move(easy));
         SyncPoolAwaitCounter(poolKey);
         Wakeup(0U);
     }
@@ -988,7 +1024,7 @@ private:
         easy->SetContext(std::move(context));
         const auto poolKey = easy->GetPoolKey();
         const std::unique_lock lock(SyncRef());
-        AwaitPerPool[poolKey].emplace(std::move(easy));
+        AwaitPerPool[poolKey].emplace_back(std::move(easy));
         SyncPoolAwaitCounter(poolKey);
         Wakeup(sizeLimit);
     }
@@ -1017,7 +1053,7 @@ private:
                 Allocated.emplace(stream->GetHandle(), std::move(stream));
                 SyncPoolAllocatedCounter(poolKey);
             } else {
-                StreamAwaitPerPool[poolKey].emplace(std::move(stream));
+                AwaitPerPool[poolKey].emplace_back(std::move(stream));
                 SyncPoolAwaitCounter(poolKey);
             }
             Wakeup(0ULL);
@@ -1054,7 +1090,7 @@ private:
         const auto poolKey = easy->GetPoolKey();
         const size_t sizeLimit = easy->GetSizeLimit();
         const std::unique_lock lock(SyncRef());
-        AwaitPerPool[poolKey].emplace(std::move(easy));
+        AwaitPerPool[poolKey].emplace_back(std::move(easy));
         SyncPoolAwaitCounter(poolKey);
         Wakeup(sizeLimit);
     }
@@ -1100,10 +1136,7 @@ private:
         }
         size_t depth = 0;
         if (auto it = AwaitPerPool.find(poolKey); it != AwaitPerPool.end()) {
-            depth += it->second.size();
-        }
-        if (auto it = StreamAwaitPerPool.find(poolKey); it != StreamAwaitPerPool.end()) {
-            depth += it->second.size();
+            depth = it->second.size();
         }
         GetPoolCounters(poolKey).PerPoolAwait->Set(depth);
     }
@@ -1115,19 +1148,7 @@ private:
         if (auto& n = AllocatedPerPool[poolKey]; n > 0) {
             --n;
         }
-        if (auto sIt = StreamAwaitPerPool.find(poolKey); sIt != StreamAwaitPerPool.end()) {
-            const auto cap = GetPoolCap(poolKey);
-            while (!sIt->second.empty() && AllocatedPerPool[poolKey] < cap && Allocated.size() < MaxHandlers) {
-                auto pending = std::move(sIt->second.front());
-                sIt->second.pop();
-                ++AllocatedPerPool[poolKey];
-                const auto pendingHandle = pending->GetHandle();
-                Streams.emplace_back(TEasyCurlStream::TWeakPtr(pending));
-                Allocated.emplace(pendingHandle, std::move(pending));
-            }
-        }
         SyncPoolAllocatedCounter(poolKey);
-        SyncPoolAwaitCounter(poolKey);
         Wakeup(0ULL);
     }
 
@@ -1142,8 +1163,7 @@ private:
 
     std::shared_ptr<CURLM> Handle;
 
-    THashMap<NDq::TPoolKey, std::queue<TEasyCurlBuffer::TPtr>> AwaitPerPool;
-    THashMap<NDq::TPoolKey, std::queue<TEasyCurlStream::TPtr>> StreamAwaitPerPool;
+    THashMap<NDq::TPoolKey, std::deque<TEasyCurl::TPtr>> AwaitPerPool;
     std::vector<TEasyCurlStream::TWeakPtr> Streams;
 
     THashMap<NDq::TPoolKey, size_t> PoolCaps;
@@ -1176,7 +1196,6 @@ private:
     const ::NMonitoring::TDynamicCounters::TCounterPtr OutputMemory;
     const ::NMonitoring::TDynamicCounters::TCounterPtr PerformCycles;
     const ::NMonitoring::TDynamicCounters::TCounterPtr AwaitQueue;
-    const ::NMonitoring::TDynamicCounters::TCounterPtr AwaitQueueTopSizeLimit;
     const ::NMonitoring::TDynamicCounters::TCounterPtr DownloadedBytes;
     const ::NMonitoring::TDynamicCounters::TCounterPtr UploadedBytes;
     const TIntrusivePtr<::NMonitoring::TDynamicCounters> GroupForGET;

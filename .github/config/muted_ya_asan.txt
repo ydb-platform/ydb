@@ -156,6 +156,7 @@ ydb/core/persqueue/public/mlp/ut TMLPChangerTests.CommitMultiPartition
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartition
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.DeadlineChangerMultiPartitionDifferentDeadlines
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.MixedDeadlineResults
+ydb/core/persqueue/public/mlp/ut TMLPChangerTests.MixedUnlockResults
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.UnlockMultiPartition
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.ConsumerNotExists
 ydb/core/persqueue/public/mlp/ut TMLPDescriberTests.DescribeEmptyTopic
@@ -174,6 +175,7 @@ ydb/core/persqueue/public/schema/ut SchemaOps.AlterCdcAllowsRetentionAndWriteLim
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMessagesPerSecond
 ydb/core/persqueue/public/schema/ut SchemaOps.CannotChangeConsumerType
 ydb/core/persqueue/public/schema/ut SchemaOps.CreateAlterDropSmoke
+ydb/core/persqueue/public/schema/ut TCheckDlqTopicsActor.SucceedsWithOnlyUpdateRow
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/persqueue/writer/ut unittest.sole chunk
 ydb/core/quoter/ut QuoterWithKesusTest.AllocationStatistics

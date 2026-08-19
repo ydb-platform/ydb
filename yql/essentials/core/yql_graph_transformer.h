@@ -396,12 +396,14 @@ WrapFutureCallback(const TFuture& future, const TCallback& callback, const TStri
                                 : message);
                     });
 
-                    if constexpr (AlwaysRaiseIssues)
+                    if constexpr (AlwaysRaiseIssues) {
                         res.ReportIssues(ctx.IssueManager);
+                    }
 
                     if (!res.Success()) {
-                        if constexpr (!AlwaysRaiseIssues)
+                        if constexpr (!AlwaysRaiseIssues) {
                             res.ReportIssues(ctx.IssueManager);
+                        }
                         input->SetState(TExprNode::EState::Error);
                         return IGraphTransformer::TStatus(IGraphTransformer::TStatus::Error);
                     }

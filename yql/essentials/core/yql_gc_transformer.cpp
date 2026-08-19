@@ -13,8 +13,9 @@ public:
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) override {
         output = input;
 
-        if (!CurrentThreshold_)
+        if (!CurrentThreshold_) {
             CurrentThreshold_ = ctx.GcConfig.Settings.NodeCountThreshold;
+        }
 
         if (ctx.NodeAllocationCounter < LastGcCount_ + CurrentThreshold_) {
             return TStatus::Ok;

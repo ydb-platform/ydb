@@ -649,8 +649,8 @@ private:
     }
 
     void MakeEpsilonTransitions() {
-        while (MakeEpsilonTransitionsImpl())
-            ;
+        while (MakeEpsilonTransitionsImpl()) {
+        }
     }
 
     static void Add(THashMap<size_t, i64>& counters, size_t index, i64 value) {

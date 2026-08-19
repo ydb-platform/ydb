@@ -4279,10 +4279,11 @@ namespace NTypeAnnImpl {
             }
             hasOptionals = hasOptionals || isOptional;
         }
-        if (hasOptionals && !ignoreNulls)
+        if (hasOptionals && !ignoreNulls) {
             input->SetTypeAnn(ctx.Expr.MakeType<TOptionalExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool)));
-        else
+        } else {
             input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Bool));
+        }
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -7675,12 +7676,14 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         } else if (const auto commonType = CommonType<false>(input->Pos(), thenType, elseType, ctx.Expr, ctx.Types)) {
             if (const auto status = TryConvertTo(input->ChildRef(1), *commonType, ctx.Expr, ctx.Types)
                 .Combine(TryConvertTo(input->TailRef(), *commonType, ctx.Expr, ctx.Types));
-                status != IGraphTransformer::TStatus::Ok)
+                status != IGraphTransformer::TStatus::Ok) {
                 return status;
+                }
 
             input->SetTypeAnn(commonType);
-        } else
+        } else {
             return IGraphTransformer::TStatus::Error;
+        }
 
         return IGraphTransformer::TStatus::Ok;
     }

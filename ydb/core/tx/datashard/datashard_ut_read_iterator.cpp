@@ -6206,6 +6206,98 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorFastCancel) {
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorVectorTopK) {
 
+    Y_UNIT_TEST(WriteInvalidatesConcurrentLazyHnswBuild) {
+        TPortManager pm;
+        TServerSettings serverSettings(pm.GetPort(2134));
+        serverSettings.SetDomainName("Root").SetUseRealThreads(false);
+        serverSettings.AppConfig = std::make_shared<NKikimrConfig::TAppConfig>();
+        serverSettings.AppConfig->MutableDataShardConfig()->SetVectorIndexHnswCacheMaxSize(64_MB);
+        TTestHelper helper(serverSettings);
+
+        TVector<TShardedTableOptions::TColumn> columns = {
+            {"parent", "Uint32", true, false},
+            {"key", "Uint32", true, false},
+            {"emb", "String", false, false}};
+        helper.CreateCustomTable("table-vector-race", columns);
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-vector-race` (parent, key, emb) VALUES
+                (1, 1, "\x66\x66\x66\x3F\xCD\xCC\xCC\x3D\x01"),
+                (1, 2, "\x00\x00\x00\x00\x00\x00\x80\x3F\x01");
+        )");
+
+        auto makeRequest = [&](ui64 readId) {
+            auto request = helper.GetBaseReadRequest(
+                "table-vector-race", readId, NKikimrDataEvents::FORMAT_CELLVEC);
+            request->Record.ClearSnapshot();
+            AddRangeQuery<ui32>(*request, {1}, true, {1}, true);
+            auto* topK = request->Record.MutableVectorTopK();
+            topK->SetColumn(2);
+            topK->SetTargetVector(TString("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9));
+            topK->SetLimit(1);
+            topK->AddDistinctColumns(1);
+            auto* settings = topK->MutableSettings();
+            settings->set_metric(Ydb::Table::VectorIndexSettings::DISTANCE_COSINE);
+            settings->set_vector_type(Ydb::Table::VectorIndexSettings::VECTOR_TYPE_FLOAT);
+            settings->set_vector_dimension(2);
+            settings->set_hnsw_min_rows(1);
+            return request;
+        };
+
+        auto& runtime = *helper.Server->GetRuntime();
+        TVector<TAutoPtr<IEventHandle>> delayedBuildResults;
+        // Keep in sync with TDataShard::TEvPrivate::EvHnswIndexBuildResult.
+        constexpr ui32 hnswBuildResultEvent = EventSpaceBegin(TKikimrEvents::ES_PRIVATE) + 34;
+        auto previousObserver = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == hnswBuildResultEvent) {
+                delayedBuildResults.push_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+        Y_DEFER { runtime.SetObserverFunc(previousObserver); };
+
+        auto result = helper.SendRead("table-vector-race", makeRequest(1).release());
+        UNIT_ASSERT(result->Record.GetFinished());
+        runtime.WaitFor("lazy HNSW build result", [&] { return !delayedBuildResults.empty(); });
+
+        ExecSQL(helper.Server, helper.Sender, R"(
+            UPSERT INTO `/Root/table-vector-race` (parent, key, emb) VALUES
+                (1, 100, "\x00\x00\x80\x3F\x00\x00\x00\x00\x01");
+        )");
+        for (auto& event : delayedBuildResults) {
+            runtime.Send(event.Release());
+        }
+        delayedBuildResults.clear();
+
+        // The obsolete result is discarded. This read falls back to the table,
+        // observes the concurrent insert, and starts a replacement build.
+        result = helper.SendRead("table-vector-race", makeRequest(2).release());
+        CheckResult(helper.Tables.at("table-vector-race").UserTable, *result, {
+            {TCell::Make<ui32>(1), TCell::Make<ui32>(100),
+                TCell("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9)},
+        }, {
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+            NScheme::TTypeInfo(NScheme::NTypeIds::String),
+        });
+        runtime.WaitFor("replacement HNSW build result", [&] { return !delayedBuildResults.empty(); });
+        for (auto& event : delayedBuildResults) {
+            runtime.Send(event.Release());
+        }
+        delayedBuildResults.clear();
+
+        // The replacement build installs successfully and remains correct.
+        result = helper.SendRead("table-vector-race", makeRequest(3).release());
+        CheckResult(helper.Tables.at("table-vector-race").UserTable, *result, {
+            {TCell::Make<ui32>(1), TCell::Make<ui32>(100),
+                TCell("\x00\x00\x80\x3F\x00\x00\x00\x00\x01", 9)},
+        }, {
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+            NScheme::TTypeInfo(NScheme::NTypeIds::Uint32),
+            NScheme::TTypeInfo(NScheme::NTypeIds::String),
+        });
+    }
+
     Y_UNIT_TEST(BadRequest) {
         TTestHelper helper;
         TVector<TShardedTableOptions::TColumn> columns = {

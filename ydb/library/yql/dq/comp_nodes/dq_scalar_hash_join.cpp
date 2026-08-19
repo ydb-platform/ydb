@@ -123,7 +123,7 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Kind, IScalarLayoutConverte
     };
 
     TRenamesScalarOutput(const TDqScalarJoinMetadata* meta, TSides<IScalarLayoutConverter*> converters)
-        : TBase(&meta->Renames, converters, /* leftIsBuild */ false)
+        : TBase(&meta->Renames, converters, ESide::Probe)
         , BuildWidth_(std::ssize(meta->InputTypes.Build))
         , ProbeWidth_(std::ssize(meta->InputTypes.Probe))
     {

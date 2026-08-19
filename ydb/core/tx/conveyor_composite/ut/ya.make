@@ -33,7 +33,9 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 SRCS(
+    ut_config.cpp
     ut_config_subscription.cpp
+    ut_runtime_update.cpp
     ut_simple.cpp
 )
 

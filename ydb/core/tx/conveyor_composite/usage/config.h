@@ -9,6 +9,8 @@
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/conclusion/status.h>
 
+#include <cmath>
+
 namespace NKikimr::NConveyorComposite::NConfig {
 
 class TWorkerPoolCategoryUsage {
@@ -50,11 +52,11 @@ public:
 
     TString DebugString() const;
 
-    ui32 GetThreadsCount(const ui32 totalThreadsCount) const {
+    ui64 GetThreadsCount(const ui64 totalThreadsCount) const {
         return std::ceil(GetCPUUsageDouble(totalThreadsCount));
     }
 
-    double GetCPUUsageDouble(const ui32 totalThreadsCount) const;
+    double GetCPUUsageDouble(const ui64 totalThreadsCount) const;
 
     TConclusionStatus DeserializeFromProto(const NKikimrConfig::TCompositeConveyorConfig::TWorkersPool& poolInfo);
 };
@@ -70,8 +72,8 @@ private:
 public:
     const TString& GetName() const;
 
-    double GetWorkerCPUUsage(const ui32 workerIdx, const ui32 totalThreadsCount) const;
-    ui32 GetWorkersCount(const ui32 totalThreadsCount) const;
+    double GetWorkerCPUUsage(const ui64 workerIdx, const ui64 totalThreadsCount) const;
+    ui64 GetWorkersCount(const ui64 totalThreadsCount) const;
 
     bool AddLink(const ESpecialTaskCategory cat) {
         for (auto&& i : Links) {
@@ -98,7 +100,7 @@ public:
 class TCategory {
 private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
-    YDB_READONLY(ui32, QueueSizeLimit, 256 * 1024);
+    YDB_READONLY(ui64, QueueSizeLimit, 256 * 1024);
     YDB_READONLY_DEF(std::vector<ui32>, WorkerPools);
 
 public:

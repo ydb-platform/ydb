@@ -60,7 +60,7 @@ TConclusionStatus TConfig::DeserializeFromProto(const NKikimrConfig::TCompositeC
     return TConclusionStatus::Success();
 }
 
-double TWorkersPool::GetWorkerCPUUsage(const ui32 workerIdx, const ui32 totalThreadsCount) const {
+double TWorkersPool::GetWorkerCPUUsage(const ui64 workerIdx, const ui64 totalThreadsCount) const {
     const double workersCountDouble = WorkersCountInfo.GetCPUUsageDouble(totalThreadsCount);
     double wholePart;
     const double fractionalPart = std::modf(workersCountDouble, &wholePart);
@@ -169,7 +169,7 @@ TString TWorkersPool::DebugString() const {
     return sb;
 }
 
-ui32 TWorkersPool::GetWorkersCount(const ui32 totalThreadsCount) const {
+ui64 TWorkersPool::GetWorkersCount(const ui64 totalThreadsCount) const {
     return WorkersCountInfo.GetThreadsCount(totalThreadsCount);
 }
 
@@ -203,7 +203,7 @@ TThreadsCountInfo::TThreadsCountInfo(const std::optional<double> count, const st
     AFL_VERIFY(Count || Fraction);
 }
 
-double TThreadsCountInfo::GetCPUUsageDouble(const ui32 totalThreadsCount) const {
+double TThreadsCountInfo::GetCPUUsageDouble(const ui64 totalThreadsCount) const {
     if (Count) {
         return *Count;
     }

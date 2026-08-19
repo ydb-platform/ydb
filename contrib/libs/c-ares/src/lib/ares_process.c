@@ -566,7 +566,6 @@ static ares_status_t ares_append_requeue_int(ares_array_t     **requeue,
                                              ares_dns_record_t *dnsrec)
 {
   ares_requeue_t entry;
-  ares_status_t  insert_status;
 
   if (*requeue == NULL) {
     *requeue = ares_array_create(sizeof(ares_requeue_t), NULL);
@@ -575,22 +574,14 @@ static ares_status_t ares_append_requeue_int(ares_array_t     **requeue,
     }
   }
 
+  ares_query_remove_from_conn(query);
+
   entry.type   = type;
   entry.qid    = query->qid;
   entry.server = server;
   entry.status = status;
   entry.dnsrec = dnsrec;
-
-  /* Do not detach the query until the deferred operation is recorded.  If
-   * growing the array fails, the query must remain on its connection and
-   * timeout lists so that a later process call can make progress. */
-  insert_status = ares_array_insertdata_last(*requeue, &entry);
-  if (insert_status != ARES_SUCCESS) {
-    return insert_status;
-  }
-
-  ares_query_remove_from_conn(query);
-  return ARES_SUCCESS;
+  return ares_array_insertdata_last(*requeue, &entry);
 }
 
 static ares_status_t ares_append_requeue(ares_array_t **requeue,
@@ -1080,6 +1071,8 @@ ares_status_t ares_requeue_query(ares_query_t *query, const ares_timeval_t *now,
      server = query->conn->server;
   }
 
+  ares_query_remove_from_conn(query);
+
   if (status != ARES_SUCCESS) {
     query->error_status = status;
   }
@@ -1093,15 +1086,7 @@ ares_status_t ares_requeue_query(ares_query_t *query, const ares_timeval_t *now,
     if (requeue != NULL) {
       return ares_append_requeue(requeue, query, NULL);
     }
-
-    ares_query_remove_from_conn(query);
     return ares_send_query(NULL, query, now);
-  }
-
-  /* Deferred completion is detached transactionally by
-   * ares_append_requeue_int().  Keep the immediate path unchanged. */
-  if (requeue == NULL) {
-    ares_query_remove_from_conn(query);
   }
 
   /* If we are here, all attempts to perform query failed. */
@@ -1616,7 +1601,12 @@ static void ares_detach_query(ares_query_t *query)
 {
   /* Remove the query from all the lists in which it is linked */
   ares_query_remove_from_conn(query);
-  ares_htable_szvp_remove(query->channel->queries_by_qid, query->qid);
+  /* A callback may queue a new query that reuses this ID. Only remove the
+   * entry if it still points to this query. */
+  if (ares_htable_szvp_get_direct(query->channel->queries_by_qid, query->qid) ==
+      query) {
+    ares_htable_szvp_remove(query->channel->queries_by_qid, query->qid);
+  }
   ares_llist_node_destroy(query->node_all_queries);
   query->node_all_queries = NULL;
 }

@@ -3047,7 +3047,7 @@ ISchemalessFormatWriterPtr CreateWriterForArrow(
     try {
         arrowConfig = ConvertTo<TArrowFormatConfigPtr>(attributes);
     } catch (const std::exception& ex) {
-        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for arrow format") << ex;
+        THROW_ERROR_EXCEPTION(NFormats::EErrorCode::InvalidFormat, "Failed to parse config for arrow format").With(ex);
     }
     return CreateWriterForArrow(
         std::move(arrowConfig),

@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <util/generic/queue.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::INTERCONNECT_SPEED_TEST
+
 namespace NInterconnect {
     using namespace NActors;
 
@@ -406,7 +408,7 @@ namespace NInterconnect {
                 msg << " final";
             }
 
-            LOG_NOTICE(ctx, NActorsServices::INTERCONNECT_SPEED_TEST, "%s", msg.Str().data());
+            YDB_LOG_NOTICE_CTX(ctx, msg.Str());
 
             if (schedule) {
                 SchedulePublishResults(ctx);

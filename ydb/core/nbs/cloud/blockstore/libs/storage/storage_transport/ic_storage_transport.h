@@ -78,10 +78,15 @@ public:
     NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntries(
         const THostConnection& connection) override;
 
+    NThreading::TFuture<TEvDeleteTabletChunksResult> DeleteTabletChunks(
+        const THostConnection& connection) override;
+
+protected:
+    NActors::TActorSystem* const ActorSystem;
+
 private:
     using EConnectionType = THostConnection::EConnectionType;
 
-    NActors::TActorSystem* const ActorSystem;
     const NActors::TActorId ICStorageTransportActorId;
 };
 

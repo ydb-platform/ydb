@@ -75,10 +75,25 @@ struct TPackResult {
         MKQL_ENSURE(Empty(), "sanity check");
     }
 
+    void Reset() {
+        PackedTuples.clear();
+        Overflow.clear();
+        NTuples = 0;
+    }
+
     void AppendTuple(TSingleTuple tuple, const NPackedTuple::TTupleLayout* layout);
 };
 
 using TPackedTuple = std::vector<ui8, TMKQLAllocator<ui8>>;
 using TOverflow = std::vector<ui8, TMKQLAllocator<ui8>>;
+
+template <typename TKeyColumns>
+TVector<NPackedTuple::EColumnRole> MakeColumnRoles(size_t width, const TKeyColumns& keyColumns) {
+    TVector<NPackedTuple::EColumnRole> roles(width, NPackedTuple::EColumnRole::Payload);
+    for (auto column : keyColumns) {
+        roles[column] = NPackedTuple::EColumnRole::Key;
+    }
+    return roles;
+}
 
 }   // namespace NKikimr::NMiniKQL

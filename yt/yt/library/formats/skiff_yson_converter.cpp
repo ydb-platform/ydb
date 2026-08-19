@@ -133,8 +133,8 @@ struct TOptionalTypesMatch
 {
     THROW_ERROR_EXCEPTION("Cannot match field %Qv to Skiff schema",
         descriptor.GetDescription())
-        << SkiffYsonErrorAttributes(descriptor, skiffSchema)
-        << ex;
+        .With(SkiffYsonErrorAttributes(descriptor, skiffSchema))
+        .With(ex);
 }
 
 template <typename... TArgs>
@@ -145,7 +145,7 @@ template <typename... TArgs>
 {
     THROW_ERROR_EXCEPTION("Yson to Skiff conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(format, std::forward<TArgs>(args)...);
+        .With(TError(format, std::forward<TArgs>(args)...));
 }
 
 [[noreturn]] void ThrowBadYsonToken(
@@ -182,7 +182,7 @@ template <typename... TArgs>
 {
     THROW_ERROR_EXCEPTION("Skiff to Yson conversion error while converting %Qv field",
         descriptor.GetDescription())
-        << TError(format, std::forward<TArgs>(args)...);
+        .With(TError(format, std::forward<TArgs>(args)...));
 }
 
 TOptionalTypesMatch MatchOptionalTypes(

@@ -113,6 +113,8 @@ private:
     {
         YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock);
         TSummarySnapshot<T> Value;
+        // Lock-free fast path for the collect sweep: skip the lock for shards with no samples.
+        std::atomic<bool> Empty = true;
     };
 
     std::array<TShard, TTscp::MaxProcessorId> Shards_;

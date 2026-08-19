@@ -137,12 +137,17 @@ namespace NKikimr::NBlobDepot {
                 fFunc(TEvPrivate::EvDeliver, handleDelivery);
 
                 hFunc(TEvBlobDepot::TEvPushMetrics, Handle);
+                hFunc(TEvBlobDepot::TEvPushS3RouterMetrics, Handle);
 
                 hFunc(TEvBlobStorage::TEvCollectGarbageResult, Data->Handle);
                 hFunc(TEvBlobStorage::TEvGetResult, Data->UncertaintyResolver->Handle);
 
                 hFunc(TEvBlobStorage::TEvStatusResult, SpaceMonitor->Handle);
                 cFunc(TEvPrivate::EvKickSpaceMonitor, KickSpaceMonitor);
+
+                hFunc(TEvTablet::TEvMoveData, Handle);
+                cFunc(TEvPrivate::EvMoveDataContinue, ContinueMoveData);
+                hFunc(TEvMoveDataBlobCopied, Handle);
 
                 hFunc(TEvTabletPipe::TEvServerConnected, Handle);
                 hFunc(TEvTabletPipe::TEvServerDisconnected, Handle);

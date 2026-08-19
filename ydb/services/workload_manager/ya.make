@@ -22,6 +22,8 @@ PEERDIR(
 
     ydb/library/aclib
 
+    ydb/library/yql/providers/pq/common
+
 )
 
 YQL_LAST_ABI_VERSION()

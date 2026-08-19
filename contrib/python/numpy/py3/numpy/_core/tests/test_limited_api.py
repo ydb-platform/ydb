@@ -1,11 +1,10 @@
 import os
-import shutil
 import subprocess
 import sys
 import sysconfig
 import pytest
 
-from numpy.testing import IS_WASM, IS_PYPY
+from numpy.testing import IS_WASM, IS_PYPY, NOGIL_BUILD, IS_EDITABLE
 
 # This import is copied from random.tests.test_extending
 try:
@@ -25,6 +24,13 @@ else:
 pytestmark = pytest.mark.skipif(cython is None, reason="requires cython")
 
 
+if IS_EDITABLE:
+    pytest.skip(
+        "Editable install doesn't support tests with a compile step",
+        allow_module_level=True
+    )
+
+
 @pytest.fixture(scope='module')
 def install_temp(tmpdir_factory):
     # Based in part on test_cython from random.tests.test_extending
@@ -34,6 +40,14 @@ def install_temp(tmpdir_factory):
     srcdir = os.path.join(os.path.dirname(__file__), 'examples', 'limited_api')
     build_dir = tmpdir_factory.mktemp("limited_api") / "build"
     os.makedirs(build_dir, exist_ok=True)
+    # Ensure we use the correct Python interpreter even when `meson` is
+    # installed in a different Python environment (see gh-24956)
+    native_file = str(build_dir / 'interpreter-native-file.ini')
+    with open(native_file, 'w') as f:
+        f.write("[binaries]\n")
+        f.write(f"python = '{sys.executable}'\n")
+        f.write(f"python3 = '{sys.executable}'")
+
     try:
         subprocess.check_call(["meson", "--version"])
     except FileNotFoundError:
@@ -42,11 +56,13 @@ def install_temp(tmpdir_factory):
         subprocess.check_call(["meson", "setup",
                                "--werror",
                                "--buildtype=release",
-                               "--vsenv", str(srcdir)],
+                               "--vsenv", "--native-file", native_file,
+                               str(srcdir)],
                               cwd=build_dir,
                               )
     else:
-        subprocess.check_call(["meson", "setup", "--werror", str(srcdir)],
+        subprocess.check_call(["meson", "setup", "--werror",
+                               "--native-file", native_file, str(srcdir)],
                               cwd=build_dir
                               )
     try:
@@ -69,6 +85,10 @@ def install_temp(tmpdir_factory):
         "Py_LIMITED_API is incompatible with Py_DEBUG, Py_TRACE_REFS, "
         "and Py_REF_DEBUG"
     ),
+)
+@pytest.mark.xfail(
+    NOGIL_BUILD,
+    reason="Py_GIL_DISABLED builds do not currently support the limited API",
 )
 @pytest.mark.skipif(IS_PYPY, reason="no support for limited API in PyPy")
 def test_limited_api(install_temp):

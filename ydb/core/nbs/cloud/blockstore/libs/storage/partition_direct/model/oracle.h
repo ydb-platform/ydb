@@ -28,6 +28,9 @@ enum class EHostHealth
     Broken,   // changes strictly outside of Oracle
 };
 
+// Indexed by EOperation.
+using TLatencyByOperation = std::array<TLatencyStats, OperationCount>;
+
 struct TOracleHostStat
 {
     TOracleHostStat(
@@ -35,6 +38,7 @@ struct TOracleHostStat
         const THostState& state,
         EHostHealth health,
         const THostStat& hostStat,
+        TLatencyByOperation latencyByOperation,
         TInstant now);
 
     THostIndex Index;
@@ -43,6 +47,7 @@ struct TOracleHostStat
     TInflightByOperation InflightByOperation;
     THostStat::TErrorsInfo Errors;
     ui64 PBufferUsedSize;
+    TLatencyByOperation LatencyByOperation;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -176,6 +181,7 @@ public:
     void MaybeQueryAddHost();
 
     [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
+    [[nodiscard]] size_t GetLatencyHistoryCapacity() const;
 
 private:
     [[nodiscard]] TTimePredictor& AccessTimePredictor(EOperation operation);

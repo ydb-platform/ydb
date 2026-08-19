@@ -129,7 +129,6 @@ Checks: >
   -clang-analyzer-cplusplus.InnerPointer,
   -clang-analyzer-cplusplus.Move,
   -clang-analyzer-cplusplus.NewDelete,
-  -clang-analyzer-cplusplus.NewDeleteLeaks,
   -clang-analyzer-cplusplus.PlacementNew,
   -clang-analyzer-cplusplus.PureVirtualCall,
   -clang-analyzer-cplusplus.SelfAssignment,

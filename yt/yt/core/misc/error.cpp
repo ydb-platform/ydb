@@ -21,7 +21,7 @@
 
 #include <library/cpp/yt/global/variable.h>
 
-#include <library/cpp/yt/misc/global.h>
+#include <library/cpp/yt/misc/leaky_global.h>
 
 namespace NYT {
 
@@ -693,7 +693,7 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-static YT_DEFINE_GLOBAL(NConcurrency::TFlsSlot<TErrorCodicils>, ErrorCodicilsSlot);
+static YT_DEFINE_LEAKY_GLOBAL(NConcurrency::TFlsSlot<TErrorCodicils>, ErrorCodicilsSlot);
 
 TErrorCodicils::TGuard::~TGuard()
 {

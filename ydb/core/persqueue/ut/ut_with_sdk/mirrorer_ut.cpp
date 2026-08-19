@@ -48,7 +48,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         mirrorFrom.SetEndpointPort(server.GrpcPort);
         mirrorFrom.SetTopic(srcTopic);
         mirrorFrom.SetConsumer("some_user");
-        mirrorFrom.SetSyncWriteTime(true);
         //mirrorFrom.SetDatabase("/Root");
         //mirrorFrom.MutableCredentials()->SetOauthToken("test_user@" BUILTIN_ACL_DOMAIN);
 
@@ -290,7 +289,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
         const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
         const TString srcTopicSdkPath = "PQ/" + srcTopicFullName;
-        const TString dstTopicPath = "/Root/" + dstTopicFullName;
+        const TString dstTopicPath = "/Root/PQ/" + dstTopicFullName;
         const TString mirrorConsumer = "mirror_user";
         const TString readerConsumer = "reader";
 
@@ -582,7 +581,6 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         mirrorFrom.SetEndpointPort(server.GrpcPort);
         mirrorFrom.SetTopic(srcTopic);
         mirrorFrom.SetConsumer(mirrorConsumer);
-        mirrorFrom.SetSyncWriteTime(true);
         mirrorFrom.SetReadFromTimestampsMs(readFromTs.MilliSeconds());
 
         if (dstTopicPrefillSize) {

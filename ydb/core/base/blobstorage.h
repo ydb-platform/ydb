@@ -640,6 +640,9 @@ struct TEvBlobStorage {
         EvIncrHugeReadLogResult,
         EvIncrHugeScanResult,
 
+        // Device overestimation sample transport (DDisk/PersistentBuffer -> PDisk)
+        EvDeviceOverestimationSamples,
+
         EvEnd
     };
 
@@ -738,6 +741,7 @@ struct TEvBlobStorage {
         const NKikimrBlobStorage::EPutHandleClass HandleClass;
         const ETactic Tactic;
         const TWriteSource WriteSource;
+        const NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
         const bool IssueKeepFlag = false;
         const bool IgnoreBlock = false;
         const bool AlreadyEncrypted = false; // when set to true, no encryption is required
@@ -755,6 +759,7 @@ struct TEvBlobStorage {
             NKikimrBlobStorage::EPutHandleClass HandleClass = NKikimrBlobStorage::TabletLog;
             ETactic Tactic = TacticDefault;
             TWriteSource WriteSource = UnknownWriteSource();
+            NKikimrBlobStorage::TDataKind::E DataKind = NKikimrBlobStorage::TDataKind::USER;
             bool IssueKeepFlag = false;
             bool IgnoreBlock = false;
             bool AlreadyEncrypted = false;
@@ -764,17 +769,21 @@ struct TEvBlobStorage {
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
-        TEvPut(TCloneEventPolicy, const TEvPut& origin)
+        // reduceInterpileTraffic overrides the copied value; every other field is taken from origin,
+        // so a new field of TEvPut cannot be silently lost by a caller that only needs to flip this
+        // one flag.
+        TEvPut(TCloneEventPolicy, const TEvPut& origin, std::optional<bool> reduceInterpileTraffic = std::nullopt)
             : Id(origin.Id)
             , Buffer(origin.Buffer)
             , Deadline(origin.Deadline)
             , HandleClass(origin.HandleClass)
             , Tactic(origin.Tactic)
             , WriteSource(origin.WriteSource)
+            , DataKind(origin.DataKind)
             , IssueKeepFlag(origin.IssueKeepFlag)
             , IgnoreBlock(origin.IgnoreBlock)
             , AlreadyEncrypted(origin.AlreadyEncrypted)
-            , ReduceInterpileTraffic(origin.ReduceInterpileTraffic)
+            , ReduceInterpileTraffic(reduceInterpileTraffic.value_or(origin.ReduceInterpileTraffic))
             , IsZeroEntry(origin.IsZeroEntry)
             , FailOnSlowDown(origin.FailOnSlowDown)
             , ExtraBlockChecks(origin.ExtraBlockChecks)
@@ -788,6 +797,7 @@ struct TEvBlobStorage {
             , HandleClass(parameters.HandleClass)
             , Tactic(parameters.Tactic)
             , WriteSource(parameters.WriteSource)
+            , DataKind(parameters.DataKind)
             , IssueKeepFlag(parameters.IssueKeepFlag)
             , IgnoreBlock(parameters.IgnoreBlock)
             , AlreadyEncrypted(parameters.AlreadyEncrypted)
@@ -849,6 +859,9 @@ struct TEvBlobStorage {
             str << " Deadline# " << Deadline.MilliSeconds();
             str << " HandleClass# " << HandleClass;
             str << " Tactic# " << TacticName(Tactic);
+            if (DataKind != NKikimrBlobStorage::TDataKind::USER) {
+                str << " DataKind# " << NKikimrBlobStorage::TDataKind::E_Name(DataKind);
+            }
             if (IssueKeepFlag) {
                 str << " IssueKeepFlag# " << IssueKeepFlag;
             }

@@ -736,6 +736,26 @@ namespace NKikimr::NBlobDepot {
         void AddTrashOnLoad(TLogoBlobID id);
         void AddGenStepOnLoad(ui8 channel, ui32 groupId, TGenStep issuedGenStep, TGenStep confirmedGenStep);
 
+        enum class EMoveDataReplaceResult {
+            Replaced,
+            KeyChanged,
+            KeyMissing,
+        };
+
+        EMoveDataReplaceResult ReplaceLocatorForMoveData(const TKey& key, ui32 valueChainIndex,
+            ui32 expectedValueVersion, const NKikimrBlobDepot::TBlobLocator& oldLocator,
+            const NKikimrBlobDepot::TBlobLocator& newLocator,
+            NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
+
+        enum class EMoveDataTrashStatus {
+            Clear,
+            NeedsIndexRescan,
+            WaitingForGC,
+        };
+
+        EMoveDataTrashStatus CheckMoveDataTrash(const TSet<ui32>& groups);
+        bool IsBlobReferenced(TLogoBlobID id) const;
+
         bool UpdateKeepState(TKey key, EKeepState keepState, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void DeleteKey(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, void *cookie);
         void CommitTrash(void *cookie);

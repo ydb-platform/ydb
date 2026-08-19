@@ -12,30 +12,6 @@ namespace NYT::NLogging {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TLoggingTagSpec
-{
-public:
-    template <size_t N>
-    consteval TLoggingTagSpec(const char (&spec)[N])
-        : Spec_(spec + 1, N - 2)
-    {
-        static_assert(N >= 2, "Logging tag format spec must be a non-empty string literal");
-        if (spec[0] != '%') {
-            throw "Logging tag format spec must start with '%'";
-        }
-    }
-
-    TStringBuf Get() const
-    {
-        return Spec_;
-    }
-
-private:
-    const TStringBuf Spec_;
-};
-
-////////////////////////////////////////////////////////////////////////////////
-
 class TLoggingTagKey
 {
 public:
@@ -82,13 +58,6 @@ TLoggingTagList& TLoggingTagList::Add(TLoggingTagKey key, const TValue& value)
     return *this;
 }
 
-template <class TValue>
-TLoggingTagList& TLoggingTagList::Add(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec)
-{
-    DoAdd(key, value, spec.Get());
-    return *this;
-}
-
 template <class... TArgs>
 TLoggingTagList& TLoggingTagList::AddFormat(TLoggingTagKey key, TFormatString<TArgs...> format, TArgs&&... args)
 {
@@ -110,21 +79,6 @@ template <class TValue>
 TLoggingTagList TLoggingTagList::With(TLoggingTagKey key, const TValue& value) &&
 {
     Add(key, value);
-    return std::move(*this);
-}
-
-template <class TValue>
-TLoggingTagList TLoggingTagList::With(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) const &
-{
-    auto result = *this;
-    result.Add(key, value, spec);
-    return result;
-}
-
-template <class TValue>
-TLoggingTagList TLoggingTagList::With(TLoggingTagKey key, const TValue& value, TLoggingTagSpec spec) &&
-{
-    Add(key, value, spec);
     return std::move(*this);
 }
 

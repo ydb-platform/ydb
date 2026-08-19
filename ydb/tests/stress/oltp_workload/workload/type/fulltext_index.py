@@ -23,16 +23,26 @@ class WorkloadFulltextIndex(WorkloadBase):
         # random word queries return nothing too often.
         self.user_count = 2
 
-    def _create_table(self, table_path, utf8, with_prefix=False):
+    def _pk_type(self, string_pk):
+        return "String" if string_pk else "Uint64"
+
+    def _pk_literal(self, key, string_pk):
+        # Zero-padded strings keep lexical order equal to numeric order for range deletes.
+        if string_pk:
+            return f'"{key:010d}"'
+        return str(key)
+
+    def _create_table(self, table_path, utf8, with_prefix=False, string_pk=False):
         logger.info(f"Create table {table_path}")
         if utf8:
             texttype = "Utf8"
         else:
             texttype = "String"
+        pktype = self._pk_type(string_pk)
         if with_prefix:
             create_table_sql = f"""
                 CREATE TABLE `{table_path}` (
-                    pk Uint64,
+                    pk {pktype},
                     user_id Uint64,
                     text {texttype},
                     PRIMARY KEY (pk)
@@ -41,7 +51,7 @@ class WorkloadFulltextIndex(WorkloadBase):
         else:
             create_table_sql = f"""
                 CREATE TABLE `{table_path}` (
-                    pk Uint64,
+                    pk {pktype},
                     text {texttype},
                     PRIMARY KEY (pk)
                 );
@@ -94,17 +104,18 @@ class WorkloadFulltextIndex(WorkloadBase):
         logger.info(create_index_sql)
         self.client.query(create_index_sql, True)
 
-    def _upsert_values(self, table_path, use_upsert, min_key, max_key, with_prefix=False):
+    def _upsert_values(self, table_path, use_upsert, min_key, max_key, with_prefix=False, string_pk=False):
         logger.info("Upsert values")
         values = []
 
         for key in range(min_key, max_key):
             text = fulltext.get_random_text()
+            pk = self._pk_literal(key, string_pk)
             if with_prefix:
                 user_id = (key % self.user_count) + 1
-                values.append(f'({key}, {user_id}, "{text}")')
+                values.append(f'({pk}, {user_id}, "{text}")')
             else:
-                values.append(f'({key}, "{text}")')
+                values.append(f'({pk}, "{text}")')
 
         if use_upsert:
             insert = "UPSERT"
@@ -122,10 +133,12 @@ class WorkloadFulltextIndex(WorkloadBase):
             """
         self.client.query(upsert_sql, False)
 
-    def _delete_rows(self, table_path, min_key, max_key):
+    def _delete_rows(self, table_path, min_key, max_key, string_pk=False):
         logger.info("Delete rows")
+        min_pk = self._pk_literal(min_key, string_pk)
+        max_pk = self._pk_literal(max_key, string_pk)
         delete_sql = f"""
-            DELETE FROM `{table_path}` WHERE pk >= {min_key} AND pk < {max_key};
+            DELETE FROM `{table_path}` WHERE pk >= {min_pk} AND pk < {max_pk};
         """
         self.client.query(delete_sql, False)
 
@@ -209,13 +222,16 @@ class WorkloadFulltextIndex(WorkloadBase):
             return
         raise Exception("Error getting index status")
 
-    def _check_loop(self, table_path, index_type, tokenizer='standard', utf8=False, with_prefix=False):
+    def _check_loop(
+        self, table_path, index_type, tokenizer='standard', utf8=False, with_prefix=False, string_pk=False
+    ):
         if utf8:
             texttype = "Utf8"
         else:
             texttype = "String"
         prefix_suffix = "_prefixed" if with_prefix else ""
-        index_name = f"{self.index_name_prefix}_{texttype}_{index_type}_{tokenizer}{prefix_suffix}"
+        pk_suffix = "_string_pk" if string_pk else ""
+        index_name = f"{self.index_name_prefix}_{texttype}_{index_type}_{tokenizer}{prefix_suffix}{pk_suffix}"
         self._create_index(
             table_path=table_path,
             index_name=index_name,
@@ -256,6 +272,7 @@ class WorkloadFulltextIndex(WorkloadBase):
             min_key=self.row_count+1,
             max_key=self.row_count+3,
             with_prefix=with_prefix,
+            string_pk=string_pk,
         )
         # update the index using upsert
         self._upsert_values(
@@ -264,12 +281,14 @@ class WorkloadFulltextIndex(WorkloadBase):
             min_key=self.row_count-3,
             max_key=self.row_count+2,
             with_prefix=with_prefix,
+            string_pk=string_pk,
         )
         # delete from index
         self._delete_rows(
             table_path=table_path,
             min_key=self.row_count-3,
             max_key=self.row_count+3,
+            string_pk=string_pk,
         )
         # sometimes replace the index
         if random.randint(0, 1) == 0:
@@ -285,34 +304,51 @@ class WorkloadFulltextIndex(WorkloadBase):
         logger.info('check was completed successfully')
 
     def _loop(self):
-        text_table = self.get_table_path(f"{self.table_name_prefix}_text")
-        utf8_table = self.get_table_path(f"{self.table_name_prefix}_utf8")
-        text_table_prefixed = self.get_table_path(f"{self.table_name_prefix}_text_prefixed")
-        utf8_table_prefixed = self.get_table_path(f"{self.table_name_prefix}_utf8_prefixed")
-        tables = [text_table, utf8_table, text_table_prefixed, utf8_table_prefixed]
-        self._create_table(text_table, 0, with_prefix=False)
-        self._create_table(utf8_table, 1, with_prefix=False)
-        self._create_table(text_table_prefixed, 0, with_prefix=True)
-        self._create_table(utf8_table_prefixed, 1, with_prefix=True)
+        # Tables cover text type × prefix × PK type (Uint64 legacy doc_id vs String -> __ydb_row_id).
+        table_specs = [
+            (False, False, False),  # String text, no prefix, Uint64 PK
+            (True, False, False),   # Utf8 text, no prefix, Uint64 PK
+            (False, True, False),   # String text, prefixed, Uint64 PK
+            (True, True, False),    # Utf8 text, prefixed, Uint64 PK
+            (False, False, True),   # String text, no prefix, String PK
+            (True, False, True),    # Utf8 text, no prefix, String PK
+            (False, True, True),    # String text, prefixed, String PK
+            (True, True, True),     # Utf8 text, prefixed, String PK
+        ]
+        tables = []
+        for utf8, with_prefix, string_pk in table_specs:
+            text_suffix = "utf8" if utf8 else "text"
+            prefix_suffix = "_prefixed" if with_prefix else ""
+            pk_suffix = "_string_pk" if string_pk else ""
+            table_path = self.get_table_path(
+                f"{self.table_name_prefix}_{text_suffix}{prefix_suffix}{pk_suffix}"
+            )
+            self._create_table(
+                table_path, utf8, with_prefix=with_prefix, string_pk=string_pk
+            )
+            tables.append(table_path)
 
         utf8_opts = [0, 1]
         index_type_opts = ['fulltext_plain', 'fulltext_relevance']
         tokenizer_opts = ['standard', 'whitespace']
         prefix_opts = [False, True]
-        opts = list(product(utf8_opts, index_type_opts, tokenizer_opts, prefix_opts))
+        string_pk_opts = [False, True]
+        opts = list(product(utf8_opts, index_type_opts, tokenizer_opts, prefix_opts, string_pk_opts))
         random.shuffle(opts)
         opt_iter = cycle(opts)
 
         while not self.is_stop_requested():
-            [utf8, index_type, tokenizer, with_prefix] = next(opt_iter)
+            [utf8, index_type, tokenizer, with_prefix, string_pk] = next(opt_iter)
             try:
-                table_idx = utf8 + (2 if with_prefix else 0)
+                # Same layout as table_specs: utf8 + 2*prefix + 4*string_pk
+                table_idx = utf8 + (2 if with_prefix else 0) + (4 if string_pk else 0)
                 self._upsert_values(
                     table_path=tables[table_idx],
                     use_upsert=True,
                     min_key=0,
                     max_key=self.row_count,
                     with_prefix=with_prefix,
+                    string_pk=string_pk,
                 )
                 self._check_loop(
                     table_path=tables[table_idx],
@@ -320,6 +356,7 @@ class WorkloadFulltextIndex(WorkloadBase):
                     tokenizer=tokenizer,
                     utf8=utf8,
                     with_prefix=with_prefix,
+                    string_pk=string_pk,
                 )
             except Exception as ex:
                 logger.info(f"ERROR {ex}")

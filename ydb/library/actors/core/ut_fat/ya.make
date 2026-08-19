@@ -20,9 +20,8 @@ PEERDIR(
     ydb/library/actors/core
 )
 
-SRCS(
-    actor_benchmark.cpp
-    waiting_benchs.cpp
-)
+INCLUDE(sources.inc)
 
 END()
+
+RECURSE_FOR_TESTS(bundle)

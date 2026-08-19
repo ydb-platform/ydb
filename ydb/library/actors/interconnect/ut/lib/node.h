@@ -79,10 +79,10 @@ public:
             // proxy binds it to the actor system on start (SetActorSystem). Shard count is overridable via
             // YDB_IC_V2_SHARDS so tests can force many connections onto a single ring.
             if (const TString s = GetEnv("YDB_IC_V2_SHARDS"); !s.empty()) {
-                common->Settings.V2.UringEngineThreads = FromString<ui32>(s);
+                common->Settings.V2.Threads = FromString<ui32>(s);
             }
             if (const TString s = GetEnv("YDB_IC_V2_RINGS_PER_SHARD"); !s.empty()) {
-                common->Settings.V2.UringEngineRingsPerShard = FromString<ui32>(s);
+                common->Settings.V2.RingsPerShard = FromString<ui32>(s);
             }
             common->UringEngineV2 = CreateUringEngine(common);
             setup.OnActorSystemCreated.push_back([engine = common->UringEngineV2](TActorSystem *actorSystem) {
@@ -95,6 +95,7 @@ public:
         #if !defined(_msan_enabled_)
         if (withRdma) {
             common->RdmaMemPool = NInterconnect::NRdma::CreateSlotMemPool(nullptr, {});
+            setup.RcBufAllocator = std::make_shared<TRdmaAllocatorWithFallback>(common->RdmaMemPool);
         }
         #else
             Y_UNUSED(withRdma);
@@ -132,7 +133,8 @@ public:
         setup.LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(CreatePollerActor(counters),
             TMailboxType::ReadAsFilled, 0));
         setup.LocalServices.emplace_back(NInterconnect::NRdma::MakeCqActorId(),
-            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(NInterconnect::NRdma::TRdmaRuntimeParams{-1, 1024, 0, 0}, rdmaCqMode, nullptr),
+            TActorSetupCmd(NInterconnect::NRdma::CreateCqActor(
+                CreateRdmaRuntimeParams(1024, common->Settings.EnableRdmaSendReceive), rdmaCqMode, nullptr),
             TMailboxType::ReadAsFilled, 0));
 
         const TActorId loggerActorId = loggerSettings ? loggerSettings->LoggerActorId : TActorId(0, "logger");

@@ -107,6 +107,21 @@ class TestSetOps:
 
         assert_array_equal([], setxor1d([], []))
 
+    def test_setxor1d_unique(self):
+        a = np.array([1, 8, 2, 3])
+        b = np.array([6, 5, 4, 8])
+
+        ec = np.array([1, 2, 3, 4, 5, 6])
+        c = setxor1d(a, b, assume_unique=True)
+        assert_array_equal(c, ec)
+
+        a = np.array([[1], [8], [2], [3]])
+        b = np.array([[6, 5], [4, 8]])
+
+        ec = np.array([1, 2, 3, 4, 5, 6])
+        c = setxor1d(a, b, assume_unique=True)
+        assert_array_equal(c, ec)
+
     def test_ediff1d(self):
         zero_elem = np.array([])
         one_elem = np.array([1])
@@ -255,7 +270,7 @@ class TestSetOps:
             assert_isin_equal(empty_array, empty_array)
 
     @pytest.mark.parametrize("kind", [None, "sort", "table"])
-    def test_isin(self, kind):
+    def test_isin_additional(self, kind):
         # we use two different sizes for the b array here to test the
         # two different paths in isin().
         for mult in (1, 10):

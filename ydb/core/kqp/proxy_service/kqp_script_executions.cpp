@@ -110,7 +110,7 @@ public:
         , ExecutionId(std::move(settings.ExecutionId))
         , LeaseGeneration(settings.LeaseGeneration.value_or(0))
     {
-        SetOperationInfo(operationName, CreateTraceId(settings));
+        SetOperationInfo(operationName, CreateTraceId(settings.SessionId));
     }
 
 private:
@@ -144,23 +144,23 @@ private:
     }
 
 protected:
-    static TString CreateTraceId(const TSettings& settings) {
+    TString CreateTraceId(const TString& sessionId = "") const {
         TStringBuilder result;
 
-        if (settings.ExecutionId) {
-            result << "ExecutionId: " << settings.ExecutionId;
+        if (ExecutionId) {
+            result << "ExecutionId: " << ExecutionId;
         }
 
-        if (settings.Database) {
-            result << ", RequestDatabase: " << settings.Database;
+        if (Database) {
+            result << ", RequestDatabase: " << Database;
         }
 
-        if (settings.SessionId) {
-            result << ", RequestSessionId: " << settings.SessionId;
+        if (sessionId) {
+            result << ", RequestSessionId: " << sessionId;
         }
 
-        if (settings.LeaseGeneration) {
-            result << ", LeaseGeneration: " << *settings.LeaseGeneration;
+        if (LeaseGeneration) {
+            result << ", LeaseGeneration: " << LeaseGeneration;
         }
 
         return result;
@@ -484,7 +484,8 @@ public:
     TCreateScriptOperationQuery(TString executionId, const TActorId& runScriptActorId, NKikimrKqp::TEvQueryRequest req,
         NKikimrKqp::TScriptExecutionOperationMeta meta, const TDuration maxRunTime,
         NKikimrKqp::TScriptExecutionRetryState retryState, std::optional<NKikimrKqp::TQueryPhysicalGraph> physicalGraph,
-        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> streamingDisposition, const i64 generation)
+        const NKikimrConfig::TQueryServiceConfig& queryServiceConfig, std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> streamingDisposition,
+        const i64 generation, TString streamingQueryPath, TString streamingQueryOperationId)
         : TQueryBase(__func__, {.Database = req.GetRequest().GetDatabase(), .ExecutionId = std::move(executionId), .LeaseGeneration = generation})
         , RunScriptActorId(runScriptActorId)
         , Request(std::move(req))
@@ -493,18 +494,94 @@ public:
         , RetryState(std::move(retryState))
         , PhysicalGraph(std::move(physicalGraph))
         , StreamingDisposition(std::move(streamingDisposition))
+        , StreamingQueryPath(std::move(streamingQueryPath))
+        , StreamingQueryOperationId(std::move(streamingQueryOperationId))
         , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
     {}
 
 private:
     void OnRunQuery() override {
+        if (!StreamingQueryPath) {
+            CreateScriptExecution();
+            return;
+        }
+
+        // We should ensure that current operation on streaming query still exists
+        // and create script execution in the same transaction
+
+        constexpr char sql[] = R"(
+            -- TCreateScriptOperationQuery::OnRunQuery
+            DECLARE $database_id AS Text;
+            DECLARE $query_path AS Text;
+
+            SELECT
+                state
+            FROM `.metadata/streaming/queries`
+            WHERE database_id = $database_id
+              AND query_path = $query_path;
+        )";
+
+        NYdb::TParamsBuilder params;
+        params
+            .AddParam("$database_id")
+                .Utf8(Request.GetRequest().GetDatabaseId())
+                .Build()
+            .AddParam("$query_path")
+                .Utf8(StreamingQueryPath)
+                .Build();
+
+        SetQueryResultHandler(&TThis::OnStreamingOperationStateFetched, "Validate streaming operation state");
+        RunDataQuery(sql, &params, TTxControl::BeginTx());
+    }
+
+    void OnStreamingOperationStateFetched() {
+        if (ResultSets.size() != 1) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected database response");
+            return;
+        }
+
+        NYdb::TResultSetParser result(ResultSets[0]);
+        if (!result.TryNextRow()) {
+            Finish(Ydb::StatusIds::NOT_FOUND, TStringBuilder() << "Streaming operation for path '" << StreamingQueryPath << "' not found");
+            return;
+        }
+
+        const std::optional<TString>& stateJsonString = result.ColumnParser("state").GetOptionalJson();
+        if (!stateJsonString) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query state not found");
+            return;
+        }
+
+        NJson::TJsonValue stateJson;
+        if (!NJson::ReadJsonTree(*stateJsonString, &stateJson)) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query state is corrupted");
+            return;
+        }
+
+        NKikimrKqp::TStreamingQueryState state;
+        try {
+            NProtobufJson::Json2Proto(stateJson, state);
+        } catch (const std::exception& e) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Failed to parse streaming query state: " << e.what());
+            return;
+        }
+
+        if (const auto& currentOwner = state.GetOperationActorId(); currentOwner != StreamingQueryOperationId) {
+            Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Streaming operation '" << StreamingQueryOperationId << "' was lost, current operation id: '" << currentOwner << "'");
+            return;
+        }
+
+        CreateScriptExecution();
+    }
+
+    void CreateScriptExecution() {
         const auto metaTtl = std::min(MaxRunTime.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1);
         YDB_LOG_DEBUG("[ScriptExecutions] Creating script execution query in database",
             {"logPrefix", LogPrefix()},
             {"metaTtl", TDuration::MicroSeconds(metaTtl)});
 
         constexpr char sql[] = R"(
-            -- TCreateScriptOperationQuery::OnRunQuery
+            -- TCreateScriptOperationQuery::CreateScriptExecution
             DECLARE $database AS Text;
             DECLARE $execution_id AS Text;
             DECLARE $run_script_actor_id AS Text;
@@ -618,7 +695,8 @@ private:
                 .JsonDocument("[]")
                 .Build();
 
-        RunDataQuery(sql, &params);
+        SetQueryResultHandler(&TThis::OnQueryResult, "Create script execution operation");
+        RunDataQuery(sql, &params, StreamingQueryPath ? TTxControl::ContinueAndCommitTx() : TTxControl::BeginAndCommitTx());
     }
 
     void OnFinish(const Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) override {
@@ -663,6 +741,8 @@ private:
     const NKikimrKqp::TScriptExecutionRetryState RetryState;
     const std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     const std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
+    const TString StreamingQueryPath;
+    const TString StreamingQueryOperationId;
     const TCompressor Compressor;
 };
 
@@ -721,7 +801,11 @@ public:
             disposition = nullptr; // Do not save disposition if state already saved
         }
 
-        const auto& creatorId = Register(TCreateScriptOperationQuery::MakeRetry(SelfId(), ExecutionId, RunScriptActorId, ev.Record, std::move(meta), MaxRunTime, GetRetryState(), ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation));
+        const auto& creatorId = Register(TCreateScriptOperationQuery::MakeRetry(
+            SelfId(), ExecutionId, RunScriptActorId, ev.Record, std::move(meta), MaxRunTime, GetRetryState(),
+            ev.QueryPhysicalGraph, QueryServiceConfig, std::move(disposition), ev.Generation,
+            ev.StreamingQueryPath, ev.StreamingQueryOperationId
+        ));
         YDB_LOG_DEBUG("[ScriptExecutions] Bootstrap: starting TCreateScriptOperationQuery",
             {"logPrefix", LogPrefix()},
             {"creatorId", creatorId},
@@ -1357,7 +1441,9 @@ private:
             }
         }
 
-        Response->OperationIssues = ParseScriptExecutionIssues(executionsResult);
+        if (const auto& issuesSerialized = executionsResult.ColumnParser("issues").GetOptionalJsonDocument()) {
+            Response->OperationIssues = DeserializeIssues(*issuesSerialized);
+        }
 
         if (const auto& retryState = ParseRetryState(executionsResult)) {
             Response->HasRetryPolicy = retryState->RetryPolicyMappingSize() > 0;
@@ -1574,7 +1660,7 @@ private:
 
         auto issues = event.OperationIssues;
         if (!issues) {
-            issues.AddIssue(event.FinalizationStatus ? "Finalization is not complete" : "Lease expired");
+            issues.AddIssue(event.FinalizationStatus ? "Finalization is not complete" : "Lease expired for current query execution runner. Execution runner node was lost.");
         }
 
         // Script execution lease is expired but TRunScriptActor may be still running, so we should check it availability first
@@ -1806,10 +1892,17 @@ private:
     }
 
     void Reply(const Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
-        YDB_LOG_WARN("[ScriptExecutions] Reply failed",
-            {"logPrefix", LogPrefix()},
-            {"status", status},
-            {"issues", issues.ToOneLineString()});
+        if (status == Ydb::StatusIds::SUCCESS) {
+            YDB_LOG_DEBUG("[ScriptExecutions] Reply success",
+                {"logPrefix", LogPrefix()},
+                {"issues", issues.ToOneLineString()});
+        } else {
+            YDB_LOG_WARN("[ScriptExecutions] Reply failed",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"issues", issues.ToOneLineString()});
+        }
+
         Send(ReplyActorId, new TEvPrivate::TEvFinalizeScriptLeaseResult(status, {
             .LeaseVerified = LeaseVerified,
             .ExecutionEntryExists = EntryExists,
@@ -2211,7 +2304,7 @@ private:
 
         ExecutionId = std::move(*executionId);
         Metadata.set_execution_id(ExecutionId);
-        SetOperationInfo(OperationName, CreateTraceId({.Database = Database, .ExecutionId = ExecutionId}));
+        SetOperationInfo(OperationName, CreateTraceId());
 
         constexpr char sql[] = R"(
             -- TGetScriptExecutionOperationQueryActor::OnRunQuery
@@ -4987,7 +5080,7 @@ IActor* CreateGetScriptExecutionPhysicalGraphActor(const TActorId& replyActorId,
 namespace NPrivate {
 
 IActor* CreateCreateScriptOperationQueryActor(TString executionId, const TActorId& runScriptActorId, NKikimrKqp::TEvQueryRequest record, NKikimrKqp::TScriptExecutionOperationMeta meta) {
-    return new TCreateScriptOperationQuery(std::move(executionId), runScriptActorId, std::move(record), std::move(meta), TDuration::Max(), {}, std::nullopt, {}, nullptr, 1);
+    return new TCreateScriptOperationQuery(std::move(executionId), runScriptActorId, std::move(record), std::move(meta), TDuration::Max(), {}, std::nullopt, {}, nullptr, 1, "", "");
 }
 
 IActor* CreateCheckLeaseStatusActor(TString database, TString executionId) {

@@ -1,3 +1,11 @@
+* Added `IWriteSession::Flush` to asynchronously wait until all previously accepted topic writes are acknowledged.
+
+* Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.
+
+## v3.21.1
+
+* Fix read session close deadlock in topic sdk.
+
 ## v3.21.0
 
 * Fixed Query SDK `CreateSession` metrics being recorded when reusing a session from the pool.

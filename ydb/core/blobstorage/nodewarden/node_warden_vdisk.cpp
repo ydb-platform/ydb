@@ -326,6 +326,9 @@ namespace NKikimr::NStorage {
             vdiskConfig->HullCompThrottlerBytesRate = HullCompThrottlerBytesRate;
             vdiskConfig->GarbageThresholdToRunFullCompactionPerMille = GarbageThresholdToRunFullCompactionPerMille;
             vdiskConfig->HullCompFreeSpaceThresholdPerMille = HullCompFreeSpaceThresholdPerMille;
+            vdiskConfig->HullCompEmergencyMaxSsts = HullCompEmergencyMaxSsts;
+            vdiskConfig->HullCompEmergencyChunkReserve = HullCompEmergencyChunkReserve;
+            vdiskConfig->HullCompEmergencyEnableAtColor = HullCompEmergencyEnableAtColor;
             vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
             vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
             vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;

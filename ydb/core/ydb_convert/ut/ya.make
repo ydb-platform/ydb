@@ -13,6 +13,7 @@ SRCS(
     compression_ut.cpp
     dictionary_feature_flag_ut.cpp
     table_description_ut.cpp
+    topic_description_ut.cpp
     ydb_convert_ut.cpp
 )
 

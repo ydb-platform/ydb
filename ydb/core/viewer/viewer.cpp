@@ -1,5 +1,5 @@
 #include "viewer.h"
-#include "viewer_utils.h"
+#include <ydb/core/base/http_database_param.h>
 #include "counters_hosts.h"
 #include "viewer_healthcheck.h"
 #include "json_handlers.h"
@@ -303,6 +303,10 @@ public:
                     {"/viewer/metainfo", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/browse", {EViewerEndpointAccessType::Viewer}},
                     {"/viewer/content", {EViewerEndpointAccessType::Viewer}},
+                    // `/viewer/render` is used by GraphShard metrics rendering.
+                    // It may expose cluster-level metrics, so it's intentionally restricted to Viewer access.
+                    // Before changing it back to Database access, ensure that only database-scoped metrics are returned.
+                    {"/viewer/render", {EViewerEndpointAccessType::Viewer}},
 
                     // Database-level endpoints that require explicit database parameter for strict database tokens.
                     {"/storage/groups", {EViewerEndpointAccessType::Database, true}},
@@ -313,7 +317,6 @@ public:
                     {"/query/script/execute", {EViewerEndpointAccessType::Database, true}},
                     {"/query/script/fetch", {EViewerEndpointAccessType::Database, true}},
                     {"/scheme/directory", {EViewerEndpointAccessType::Database, true}},
-                    {"/viewer/render", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/topic_data", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/feature_flags", {EViewerEndpointAccessType::Database, true}},
                     {"/viewer/sysinfo", {EViewerEndpointAccessType::Database, true}},
@@ -701,6 +704,7 @@ private:
         const TCgiParameters& params,
         const TStringBuf& method,
         const TStringBuf& body,
+        const TStringBuf& contentType,
         const TString& serializedToken,
         TString& error) const
     {
@@ -715,7 +719,7 @@ private:
         }
         const auto itAccess = EndpointAccess.find(path);
         if (itAccess != EndpointAccess.end() && itAccess->second.RequireDatabaseParam) {
-            if (GetDatabaseParam(params, method, body).empty()) {
+            if (ExtractHttpDatabaseParam(params, method, body, contentType).empty()) {
                 error = TStringBuilder() << "`database` is required for " << path;
                 return EDatabaseScopedRequestValidationResult::DatabaseRequired;
             }
@@ -953,6 +957,7 @@ private:
                 msg->Request.GetParams(),
                 msg->Request.GetMethod() == HTTP_METHOD_POST ? TStringBuf("POST") : TStringBuf(),
                 msg->Request.GetPostContent(),
+                TrimHttpContentTypeHeader(msg->Request.GetHeader("Content-Type")),
                 msg->UserToken,
                 scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:
@@ -1055,6 +1060,7 @@ private:
                 proxyParams,
                 ev->Get()->Request->Method,
                 ev->Get()->Request->Body,
+                TrimHttpContentTypeHeader(NHttp::THeaders(ev->Get()->Request->Headers).Get("Content-Type")),
                 ev->Get()->UserToken,
                 scopeError)) {
                 case EDatabaseScopedRequestValidationResult::DatabaseRequired:

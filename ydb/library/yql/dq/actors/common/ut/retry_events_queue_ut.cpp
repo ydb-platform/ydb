@@ -1,15 +1,11 @@
-#include <library/cpp/testing/unittest/registar.h>
-#include <ydb/core/testlib/actors/test_runtime.h>
-#include <ydb/core/testlib/actor_helpers.h>
-#include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/library/yql/dq/actors/common/retry_queue.h>
-#include <ydb/core/testlib/basics/appdata.h>
-#include <ydb/library/actors/interconnect/interconnect_impl.h>
-#include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
-#include <ydb/core/testlib/tablet_helpers.h>
-#include <chrono>
-#include <thread>
+#include "retry_events_queue_ut_event.h"
 
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
+#include <ydb/library/yql/dq/actors/common/retry_queue.h>
 
 using namespace NActors;
 using namespace NYql::NDq;
@@ -19,7 +15,6 @@ namespace {
 const ui64 EventQueueId = 777;
 
 struct TEvPrivate {
-    // Event ids
     enum EEv : ui32 {
         EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
         EvSend = EvBegin + 10,
@@ -32,7 +27,6 @@ struct TEvPrivate {
     struct TEvData : public TEventLocal<TEvData, EvData> {};
     struct TEvDisconnect : public TEventLocal<TEvDisconnect, EvDisconnect> {};
 };
-
 
 class ClientActor : public TActorBootstrapped<ClientActor> {
 public:
@@ -86,7 +80,7 @@ public:
 
     void Init() {
         EventsQueue.Init("TxId", SelfId(), SelfId(), EventQueueId, true /*KeepAlive*/);
-        EventsQueue.OnNewRecipientId(ServerActorId);
+        EventsQueue.OnNewRecipientId(ServerActorId, false, true /*connected*/);
     }
 
     NYql::NDq::TRetryEventsQueue EventsQueue;
@@ -140,51 +134,50 @@ public:
     NActors::TActorId ServerEdgeActorId;
 };
 
-struct TRuntime: public NActors::TTestBasicRuntime
-{
-public:
-    TRuntime() 
-    : NActors::TTestBasicRuntime(2, true){
-        Initialize(NKikimr::TAppPrepare().Unwrap());
-        SetLogPriority(NKikimrServices::FQ_ROW_DISPATCHER, NLog::PRI_DEBUG);
-
-        ClientEdgeActorId = AllocateEdgeActor(0);
-        ServerEdgeActorId = AllocateEdgeActor(1);
-        
-        Server = new ServerActor(ServerEdgeActorId);
-        ServerActorId = Register(Server, 1);
-        EnableScheduleForActor(ServerActorId, true);
-
-        Client = new ClientActor(ClientEdgeActorId, ServerActorId);
-        ClientActorId = Register(Client, 0);
-        EnableScheduleForActor(ClientActorId, true);
-    }
-
+struct TRuntime {
+    TTestActorRuntimeBase Runtime;
     ClientActor* Client;
     ServerActor* Server;
     NActors::TActorId ClientActorId;
     NActors::TActorId ServerActorId;
     NActors::TActorId ClientEdgeActorId;
     NActors::TActorId ServerEdgeActorId;
+
+    TRuntime()
+        : Runtime(1, true)
+    {
+        Runtime.Initialize();
+
+        ClientEdgeActorId = Runtime.AllocateEdgeActor(0);
+        ServerEdgeActorId = Runtime.AllocateEdgeActor(0);
+
+        Server = new ServerActor(ServerEdgeActorId);
+        ServerActorId = Runtime.Register(Server, 0);
+        Runtime.EnableScheduleForActor(ServerActorId, true);
+
+        Client = new ClientActor(ClientEdgeActorId, ServerActorId);
+        ClientActorId = Runtime.Register(Client, 0);
+        Runtime.EnableScheduleForActor(ClientActorId, true);
+    }
 };
 
 Y_UNIT_TEST_SUITE(TRetryEventsQueueTest) {
-    Y_UNIT_TEST(SendDisconnectAfterPoisonPill) { 
+    Y_UNIT_TEST(SendDisconnectAfterPoisonPill) {
         TRuntime runtime;
 
-        runtime.Send(new IEventHandle(
+        runtime.Runtime.Send(new IEventHandle(
             runtime.ClientActorId,
             runtime.ClientEdgeActorId,
             new TEvPrivate::TEvSend()));
 
-        TEvDqCompute::TEvInjectCheckpoint::TPtr event = runtime.GrabEdgeEvent<TEvDqCompute::TEvInjectCheckpoint>(runtime.ServerEdgeActorId);
+        TEvDqCompute::TEvInjectCheckpoint::TPtr event = runtime.Runtime.GrabEdgeEvent<TEvDqCompute::TEvInjectCheckpoint>(runtime.ServerEdgeActorId);
         UNIT_ASSERT(event);
 
-        runtime.Send(runtime.ServerActorId, runtime.ServerEdgeActorId, new TEvents::TEvPoisonPill());
+        runtime.Runtime.Send(runtime.ServerActorId, runtime.ServerEdgeActorId, new TEvents::TEvPoisonPill());
 
-        TEvPrivate::TEvDisconnect::TPtr disconnectEvent = runtime.GrabEdgeEvent<TEvPrivate::TEvDisconnect>(runtime.ClientEdgeActorId);
+        TEvPrivate::TEvDisconnect::TPtr disconnectEvent = runtime.Runtime.GrabEdgeEvent<TEvPrivate::TEvDisconnect>(runtime.ClientEdgeActorId);
         UNIT_ASSERT(disconnectEvent);
     }
 }
 
-}
+} // namespace

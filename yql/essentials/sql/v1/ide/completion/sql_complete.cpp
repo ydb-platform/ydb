@@ -50,11 +50,11 @@ public:
     }
 
     NThreading::TFuture<TCompletion>
-    Complete(TCompletionInput input, TEnvironment env = {}) override {
+    Complete(TCompletionInput input, TEnvironment env = {}) const override {
         return CompleteAsync(input, env);
     }
 
-    NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input, TEnvironment env) override {
+    NThreading::TFuture<TCompletion> CompleteAsync(TCompletionInput input, TEnvironment env) const override {
         if ((input.CursorPosition < input.Text.length() &&
              IsUTF8ContinuationByte(input.Text.at(input.CursorPosition))) ||
             (input.Text.length() < input.CursorPosition)) {

@@ -111,6 +111,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.__role = role
         self.__node_broker_port = node_broker_port
         self.__seed_nodes_file = seed_nodes_file
+        self.__use_node_id_auto_detection = False
 
         self.__working_dir = ensure_path_exists(
             os.path.join(
@@ -232,7 +233,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 self.host,
                 self.__node_broker_port))
         else:
-            command.append("--node=%d" % self.node_id)
+            command.append("--node=%s" % ("static" if self.__use_node_id_auto_detection else self.node_id))
 
         if self.__configurator.grpc_ssl_enable:
             command.append(
@@ -422,6 +423,10 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
 
     def set_seed_nodes_file(self, seed_nodes_file):
         self.__seed_nodes_file = seed_nodes_file
+        self.update_command(self.__make_run_command())
+
+    def enable_node_id_auto_detection(self):
+        self.__use_node_id_auto_detection = True
         self.update_command(self.__make_run_command())
 
     def set_log_file_prefix(self, prefix):

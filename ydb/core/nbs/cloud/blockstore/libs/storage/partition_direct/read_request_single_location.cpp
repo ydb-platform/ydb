@@ -37,9 +37,9 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", "Read"},
-           {"lsn", ToString(readHint.Lsn)},
-           {"r", request->Headers.Range.Print()},
-           {"vr", readHint.VChunkRange.Print()}}))
+           {"lsn", readHint.Lsn},
+           {"r", request->Headers.Range},
+           {"vr", readHint.VChunkRange}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , CallContext(std::move(callContext))
@@ -99,7 +99,16 @@ void TReadSingleLocationRequestExecutor::StartReading()
     auto host = candidates.First();
     if (!host) {
         if (Requested == Failed) {
-            Reply(MakeError(E_REJECTED, ExtendedDebugState()));
+            TStringBuilder message;
+            message << "Read from all available hosts failed. "
+                    << ExtendedDebugState();
+            LOG_ERROR(
+                *ActorSystem,
+                NKikimrServices::NBS_PARTITION,
+                "%s %s",
+                LogTitle.GetWithTime().c_str(),
+                message.c_str());
+            Reply(MakeError(E_REJECTED, std::move(message)));
         } else {
             LOG_DEBUG(
                 *ActorSystem,

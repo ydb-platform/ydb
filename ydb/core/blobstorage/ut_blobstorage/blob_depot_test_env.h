@@ -183,6 +183,7 @@ struct TBlobDepotTestEnvironment {
             .NodeCount = nodeCount,
             .Erasure = erasure,
             .SetupHive = true,
+            .SetupResourceBroker = true,
         });
 
         envPtr->CreateBoxAndPool(1, numGroups);

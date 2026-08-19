@@ -2,6 +2,7 @@
 #include "dq_checkpoints.h"
 #include "dq_compute_actor_impl.h"
 #include <ydb/library/services/services.pb.h>
+#include <ydb/library/yql/dq/common/dq_common.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 
@@ -324,7 +325,6 @@ void TDqComputeActorCheckpoints::Handle(TEvDqCompute::TEvGetTaskStateResult::TPt
     }
 
     if (ev->Get()->States.size() != taskIdsSize) {
-
         auto message = TStringBuilder() << "TEvGetTaskStateResult unexpected states count: " << ev->Get()->States.size() << ", expected: " << taskIdsSize;
         LOG_CP_E(checkpoint, message);
         NYql::TIssues issues;
@@ -569,7 +569,7 @@ void TDqComputeActorCheckpoints::PassAway() {
 }
 
 static bool IsInfiniteSourceType(const TString& sourceType) {
-    return sourceType == "PqSource";
+    return sourceType == PqSource;
 }
 
 NDqProto::ECheckpointingMode GetTaskCheckpointingMode(const TDqTaskSettings& task) {

@@ -191,6 +191,7 @@ public:
     NCommon::TConfSetting<bool, Static> _ParseExpressionColumns;
     NCommon::TConfSetting<TDuration, Static> _SecureTmpTokenUsersAccessPeriod;
     NCommon::TConfSetting<bool, Static> _FixEndlessLoopInDropIfExists;
+    NCommon::TConfSetting<bool, Static> _ForbidReservedColumns;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

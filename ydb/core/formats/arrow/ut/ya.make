@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/formats/arrow/printer
     ydb/core/formats/arrow/program
     ydb/core/formats/arrow/reader
+    ydb/core/formats/arrow/serializer
     ydb/core/base
     ydb/library/formats/arrow
 
@@ -33,6 +34,7 @@ CFLAGS(
 
 SRCS(
     ut_arrow.cpp
+    ut_buffer_over_string.cpp
     ut_column_filter.cpp
     ut_dictionary.cpp
     ut_hash.cpp

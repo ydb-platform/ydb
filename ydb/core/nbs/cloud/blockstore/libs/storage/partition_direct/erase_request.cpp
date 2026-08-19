@@ -24,7 +24,10 @@ TEraseRequestExecutor::TEraseRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", "BatchErase"},
-           {"h", PrintHostAndNodeId(host, directBlockGroup->GetNodeId(host))}}))
+           {"h",
+            THostAndNodeId{
+                .HostIndex = host,
+                .NodeId = directBlockGroup->GetNodeId(host)}}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))

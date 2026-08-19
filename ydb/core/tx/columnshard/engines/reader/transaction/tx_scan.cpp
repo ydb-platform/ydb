@@ -50,7 +50,16 @@ void TTxScan::Complete(const TActorContext& ctx) {
     }
     const NColumnShard::TSchemeShardLocalPathId ssPathId = NColumnShard::TSchemeShardLocalPathId::FromProto(request);
     snapshot = Self->TablesManager.ResolveReadSnapshot(ssPathId, snapshot);
-    const bool deduplicationEnabled = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled();
+    const bool deduplicationEnabled = [&]() {
+        const bool defGlobal = AppDataVerified().ColumnShardConfig.GetDeduplicationEnabled();
+        if (Self->HasIndex()) {
+            const auto& vIndex = Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedIndex();
+            const auto schema = vIndex.GetSchemaVerified(snapshot);
+            return schema->GetIndexInfo().GetDeduplicationEnabled().value_or(defGlobal);
+        } else {
+            return defGlobal;
+        }
+    }();
     const TReadMetadataBase::ESorting sorting = [&]() {
         if (request.HasReverse()) {
             return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
@@ -101,8 +110,8 @@ void TTxScan::Complete(const TActorContext& ctx) {
             request.HasLockTxId() ? Self->GetOperationsManager().GetLockOptional(request.GetLockTxId()) : nullptr, false);
 
         {
-            auto accConclusion =
-                Self->TablesManager.BuildTableMetadataAccessor(request.GetTablePath() ? request.GetTablePath() : "undefined", ssPathId);
+            auto accConclusion = Self->TablesManager.BuildTableMetadataAccessor(
+                request.GetTablePath() ? request.GetTablePath() : "undefined", ssPathId, snapshot);
             if (accConclusion.IsFail()) {
                 return SendError("cannot build table metadata accessor for request: " + accConclusion.GetErrorMessage(),
                     AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
@@ -235,10 +244,12 @@ void TTxScan::Complete(const TActorContext& ctx) {
         scanDiagnosticsEvent->RequestId = requestCookie;
         ctx.Send(Self->ScanDiagnosticsActorId, std::move(scanDiagnosticsEvent));
     }
-    auto scanActorId = ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId,
-        Self->GetStoragesManager(), Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(),
-        shardingPolicy, scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat,
-        Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId));
+    const ui32 scanPoolId = request.GetUseBatchPool() ? AppDataVerified().BatchPoolId : Max<ui32>();
+    auto scanActorId =
+        ctx.Register(new TColumnShardScan(Self->SelfId(), scanComputeActor, Self->ScanDiagnosticsActorId, Self->GetStoragesManager(),
+                         Self->DataAccessorsManager.GetObjectPtrVerified(), Self->ColumnDataManager.GetObjectPtrVerified(), shardingPolicy,
+                         scanId, txId, scanGen, requestCookie, Self->TabletID(), timeout, readMetadataRange, dataFormat,
+                         Self->Counters.GetScanCounters(), cpuLimits, std::move(orbit), rawPathId), TMailboxType::HTSwap, scanPoolId);
     Self->InFlightReadsTracker.AddScanActorId(requestCookie, scanActorId);
 
     YDB_LOG_DEBUG("",

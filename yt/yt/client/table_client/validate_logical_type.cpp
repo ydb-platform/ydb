@@ -448,7 +448,7 @@ private:
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION(NTableClient::EErrorCode::SchemaViolation, "Error validating field %Qv",
                 GetDescription(fieldId))
-                << ex;
+                .With(ex);
         }
         Cursor_.Next();
     }

@@ -1100,6 +1100,7 @@ public:
     const std::string& GetOwner() const;
     const std::vector<NScheme::TPermissions>& GetPermissions() const;
     const std::vector<NScheme::TPermissions>& GetEffectivePermissions() const;
+    bool GetInterruptInheritance() const;
 
     const std::vector<TKeyRange>& GetKeyRanges() const;
 

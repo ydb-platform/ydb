@@ -20,6 +20,8 @@ REQUIREMENTS(ram:32)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/computation/header.ya.make.inc)
 INCLUDE(${ARCADIA_ROOT}/yql/essentials/minikql/invoke_builtins/header.ya.make.inc)
 
+ENABLE(TIDY_ALLOW_GENERATED)
+
 SET(ORIG_SRC_DIR yql/essentials/minikql/comp_nodes/ut)
 
 SET(ORIG_SOURCES
@@ -31,7 +33,6 @@ SET(ORIG_SOURCES
     mkql_block_exists_ut.cpp
     mkql_block_logical_ut.cpp
     mkql_block_skiptake_ut.cpp
-    mkql_block_map_join_ut_utils.cpp
     mkql_block_map_join_ut.cpp
     mkql_block_test_helper.cpp
     mkql_block_serializer_test_utils.cpp
@@ -46,6 +47,7 @@ SET(ORIG_SOURCES
     mkql_block_dynumber_ut.cpp
     mkql_block_variant_item_ut.cpp
     mkql_block_variant_node_ut.cpp
+    mkql_block_dynamic_variant_ut.cpp
     mkql_blocks_ut.cpp
     mkql_callable_ut.cpp
     mkql_combine_ut.cpp
@@ -143,4 +145,3 @@ COPY(
     OUTPUT_INCLUDES
         yql/essentials/minikql/computation/mkql_computation_node_codegen.h
 )
-

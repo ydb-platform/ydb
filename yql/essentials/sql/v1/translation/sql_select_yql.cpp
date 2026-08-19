@@ -1061,6 +1061,7 @@ private:
         const bool isAnonymous = rule.HasBlock2();
 
         return Build(
+            rule,
             rule.GetBlock3(),
             std::move(service),
             std::move(cluster),
@@ -1111,6 +1112,7 @@ private:
 
     TSQLResult<TYqlSource>
     Build(
+        const TRule_table_ref& rule,
         const TRule_table_ref::TBlock3& block,
         TString service,
         TDeferredAtom cluster,
@@ -1125,7 +1127,8 @@ private:
                     std::move(cluster),
                     isAnonymous);
             case TRule_table_ref_TBlock3::kAlt2:
-                return Unsupported("an_id_expr LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
+                return Build(rule, block.GetAlt2())
+                    .transform([](auto x) { return TYqlSource{.Node = std::move(x)}; });
             case TRule_table_ref_TBlock3::kAlt3:
                 return Build(
                            block.GetAlt3(),
@@ -1177,6 +1180,31 @@ private:
         };
 
         return std::move(source);
+    }
+
+    TNodeResult Build(
+        const TRule_table_ref& rule,
+        const TRule_table_ref::TBlock3::TAlt2& alt)
+    {
+        Y_UNUSED(alt);
+
+        if (auto maybe = AsTableImpl(rule)) {
+            return Wrap(static_cast<INode*>(maybe->Get()));
+        }
+
+        TTableRef result;
+        TTableHints tableHints;
+        TMaybe<TString> keyFunc;
+        if (!TableRefImpl(rule, result, /*unorderedSubquery=*/false, tableHints, keyFunc)) {
+            return std::unexpected(ESQLError::Basic);
+        }
+
+        YQL_ENSURE(keyFunc);
+
+        Token(alt.GetToken2());
+        return Unsupported(
+            TStringBuilder()
+            << keyFunc << " LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
     }
 
     TNodeResult Build(

@@ -279,7 +279,7 @@ public:
                     << Source->Sources.size() << " != " << Source->Constraints.size());
 
             TNodePtr from = Y();
-            for (const auto& source : Source->Sources) {
+            for (const TYqlSource& source : Source->Sources) {
                 if (auto element = BuildFromElement(ctx, source)) {
                     from->Add(std::move(*element));
                 } else {
@@ -551,7 +551,7 @@ private:
         return name;
     }
 
-    TMaybe<TNodePtr> BuildFromElement(TContext& ctx, const TYqlSource& source) const {
+    TMaybe<TNodePtr> BuildFromElement(TContext& ctx, TYqlSource source) const {
         const auto build = [this](TNodePtr node,
                                   TString name,
                                   const TVector<TYqlColumnRef>& columns,
@@ -575,6 +575,10 @@ private:
             }
             return Q(std::move(x));
         };
+
+        if (auto x = MoveOutIfSource(source.Node)) {
+            source.Node = x->Build(ctx);
+        }
 
         if (!source.Alias) {
             return build(source.Node, ctx.MakeName("_yql_source_"), /*columns=*/{});

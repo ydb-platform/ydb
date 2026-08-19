@@ -1169,8 +1169,12 @@ Y_UNIT_TEST(LegacySourceBindTriggersFallbackInAutoMode) {
 
     NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
         PRAGMA YqlSelect = 'auto';
-        $source = select * from as_table([<|key1:1, key2:2|>]);
-        SELECT * FROM $source;
+        $x = (
+            SELECT *
+            FROM AsTable([<|a: [1], b: 2|>])
+            FLATTEN BY a
+        );
+        SELECT * FROM $x;
     )sql", settings);
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 
@@ -1909,6 +1913,117 @@ Y_UNIT_TEST(PragmaUnsupportedAuto) {
 }
 
 } // Y_UNIT_TEST_SUITE(YqlSelect)
+
+Y_UNIT_TEST_SUITE(YqlSelectFromTableFunction) {
+
+Y_UNIT_TEST(FromAsTableImmediate) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT k, v FROM AsTable(AsList(
+            AsStruct(1u AS k, "v1" AS v),
+            AsStruct(2u AS k, "v2" AS v),
+            AsStruct(3u AS k, "v3" AS v)
+        ));
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "ToList", "AsList", "AsStruct"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["ToList"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["AsList"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["AsStruct"], 3);
+}
+
+Y_UNIT_TEST(FromAsTableNamedNode) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $x = AsList(
+            AsStruct(1u AS k, "v1" AS v),
+            AsStruct(2u AS k, "v2" AS v),
+            AsStruct(3u AS k, "v3" AS v)
+        );
+
+        SELECT k, v FROM AsTable($x);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+
+    TWordCountHive stat = {"YqlSelect", "ToList", "AsList", "AsStruct"};
+    VerifyProgram(res, stat);
+    UNIT_ASSERT_VALUES_EQUAL(stat["YqlSelect"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["ToList"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["AsList"], 1);
+    UNIT_ASSERT_VALUES_EQUAL(stat["AsStruct"], 3);
+}
+
+Y_UNIT_TEST(FromAsTableImmediateCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT k, v FROM plato.AsTable(AsList(
+            AsStruct(1u AS k, "v1" AS v),
+            AsStruct(2u AS k, "v2" AS v),
+            AsStruct(3u AS k, "v3" AS v)
+        ));
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        ":2:32: Error: Cluster shouldn't be specified for AS_TABLE source");
+}
+
+Y_UNIT_TEST(FromConcatUnknownCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT k, v FROM Concat(x, y, z);
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        ":2:26: Error: No cluster name given and no default cluster is selected");
+}
+
+Y_UNIT_TEST(FromConcatKnownImplicitCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        USE plato;
+        SELECT k, v FROM Concat(x, y, z);
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "YqlSelect unsupported: Concat LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
+}
+
+Y_UNIT_TEST(FromConcatKnownExplicitCluster) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
+    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT k, v FROM plato.Concat(x, y, z);
+    )sql", settings);
+    UNIT_ASSERT(!res.IsOk());
+    UNIT_ASSERT_STRING_CONTAINS(
+        Err2Str(res),
+        "YqlSelect unsupported: Concat LPAREN (table_arg (COMMA table_arg)* COMMA?)? RPAREN");
+}
+
+} // Y_UNIT_TEST_SUITE(YqlSelectFromTableFunction)
 
 Y_UNIT_TEST_SUITE(YqlSelectWithCTE) {
 

@@ -13,6 +13,61 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 logger = logging.getLogger(__name__)
 
 
+class TestMoveDataDormant(RollingUpgradeAndDowngradeFixture):
+    """NEW code rolled against OLD config. EnableColumnshardMoveData is deliberately
+    absent — naming it in static YAML would fail config parsing on every pre-26.4
+    binary (unknown proto field), so old-code+new-config is impossible by
+    construction for text config and the safe rollout is: roll the binary first,
+    then enable the flag through CMS. This test covers the first half: a
+    mixed-version cluster with the MoveData machinery compiled in but dormant.
+    Runs on any version matrix.
+    """
+
+    rows_count = 100
+
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
+            tenant_db="move_data_dormant",
+            column_shard_config={
+                "alter_object_enabled": True,
+            },
+        )
+
+    def test_dormant_roll(self):
+        table_name = "olap_move_data_dormant"
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(
+                f"""
+                CREATE TABLE `{table_name}` (
+                    ts Timestamp NOT NULL,
+                    id Uint64 NOT NULL,
+                    payload Utf8,
+                    PRIMARY KEY (ts, id)
+                )
+                PARTITION BY HASH(ts, id)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 4)
+                """
+            )
+            values = ",".join(
+                f'(Timestamp("2024-01-01T00:{i // 60 % 60:02d}:{i % 60:02d}.000000Z"), {i}, "p{i}")'
+                for i in range(self.rows_count)
+            )
+            session_pool.execute_with_retries(f"INSERT INTO `{table_name}` (ts, id, payload) VALUES {values};")
+
+        def assert_readable():
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                result = session_pool.execute_with_retries(
+                    f"SELECT COUNT(*) AS cnt FROM `{table_name}`;",
+                    retry_settings=ydb.RetrySettings(idempotent=True),
+                )
+                assert result[0].rows[0]["cnt"] == self.rows_count
+
+        for _ in self.roll():
+            assert_readable()
+        assert_readable()
+
+
 class TestMoveData(RollingUpgradeAndDowngradeFixture):
     """Roll the cluster while a group decommission (MoveData) is in flight.
 

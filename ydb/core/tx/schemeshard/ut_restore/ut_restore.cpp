@@ -7631,6 +7631,25 @@ CREATE TABLE `/OldRoot/Original` (
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
+        THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> restoreBlocker;
+        THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> changefeedBlocker;
+        if (generated) {
+            restoreBlocker = MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(
+                runtime,
+                [](auto& ev) {
+                    const auto& record = ev->Get()->Record;
+                    return record.TransactionSize() == 1
+                        && record.GetTransaction(0).GetOperationType() == ESchemeOpRestore;
+                });
+            changefeedBlocker = MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(
+                runtime,
+                [](auto& ev) {
+                    const auto& record = ev->Get()->Record;
+                    return record.TransactionSize() == 1
+                        && record.GetTransaction(0).GetOperationType() == ESchemeOpCreateCdcStream;
+                });
+        }
+
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
@@ -7641,6 +7660,29 @@ CREATE TABLE `/OldRoot/Original` (
               }
             }
         )", port));
+
+        if (generated) {
+            runtime.WaitFor("generated table restore proposal", [&] {
+                return !restoreBlocker->empty();
+            });
+            UNIT_ASSERT_C(changefeedBlocker->empty(),
+                "changefeed creation must not be proposed while table data restore is blocked");
+
+            restoreBlocker->Unblock().Stop();
+            runtime.WaitFor("changefeed proposal after generated table restore", [&] {
+                return !changefeedBlocker->empty();
+            });
+
+            const auto select = ExecuteKqpDataQuery(runtime,
+                "SELECT key, double_value, float_value, generated_value FROM `/MyRoot/Restored`;");
+            UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)),
+                sourceRows);
+
+            changefeedBlocker->Unblock().Stop();
+        }
+
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", isShouldSuccess ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
 
@@ -7648,12 +7690,6 @@ CREATE TABLE `/OldRoot/Original` (
             TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored/Stream_1", false, false, true), {
                 NLs::PathExist,
             });
-            const auto select = ExecuteKqpDataQuery(runtime,
-                "SELECT key, double_value, float_value, generated_value FROM `/MyRoot/Restored`;");
-            UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(
-                NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)),
-                sourceRows);
         }
     }
 
@@ -8370,7 +8406,9 @@ CREATE TABLE `/OldRoot/Original` (
 
     void GeneratedMaterializedIndex(
         Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
-        bool enableDataShardDirectPartImport)
+        bool enableDataShardDirectPartImport,
+        bool withMaterializedIndex = true,
+        bool shouldSucceed = true)
     {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()
@@ -8417,10 +8455,14 @@ CREATE TABLE `/OldRoot/Original` (
         )";
         index.Data.emplace_back("41,1\n", EmptyYsonStr);
 
-        Run(runtime, env, ConvertTestData({
-            {"/generated", table},
-            {"/generated/by_a/indexImplTable", index},
-        }), Sprintf(R"(
+        THashMap<TString, TTestDataWithScheme> bucketContent = {
+            {"/generated", std::move(table)},
+        };
+        if (withMaterializedIndex) {
+            bucketContent.emplace("/generated/by_a/indexImplTable", std::move(index));
+        }
+
+        Run(runtime, env, ConvertTestData(bucketContent), Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%%d"
               scheme: HTTP
@@ -8430,7 +8472,12 @@ CREATE TABLE `/OldRoot/Original` (
                 destination_path: "/MyRoot/RestoredGenerated"
               }
             }
-        )", Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(mode).c_str()));
+        )", Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(mode).c_str()),
+            shouldSucceed ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
+
+        if (!shouldSucceed) {
+            return;
+        }
 
         TestDescribeResult(DescribePath(runtime,
             "/MyRoot/RestoredGenerated/by_a", false, false, true), {
@@ -8463,6 +8510,28 @@ CREATE TABLE `/OldRoot/Original` (
         GeneratedMaterializedIndex(
             Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO,
             EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedMaterializedIndexAbsentBuild, EnableDataShardDirectPartImport) {
+        GeneratedMaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD,
+            EnableDataShardDirectPartImport,
+            false);
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedMaterializedIndexAbsentAuto, EnableDataShardDirectPartImport) {
+        GeneratedMaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO,
+            EnableDataShardDirectPartImport,
+            false);
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedMaterializedIndexAbsentImport, EnableDataShardDirectPartImport) {
+        GeneratedMaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+            EnableDataShardDirectPartImport,
+            false,
+            false);
     }
 
     void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail, bool enableDataShardDirectPartImport) {

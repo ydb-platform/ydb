@@ -1,5 +1,4 @@
 #pragma once
-
 #include "linter.h"
 
 namespace NYql::NFastCheck {
@@ -10,7 +9,7 @@ class ICheckRunner {
 public:
     virtual ~ICheckRunner() = default;
 
-    virtual ECheckName GetCheckName() const = 0;
+    virtual TString GetCheckName() const = 0;
     virtual TCheckResponse Run(const TChecksRequest& request, TCheckState& state) = 0;
 };
 
@@ -19,7 +18,6 @@ public:
     TCheckResponse Run(const TChecksRequest& request, TCheckState& state) final;
 
 protected:
-    virtual const THashSet<ECheckName>& Requirements() const;
     virtual TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) = 0;
 };
 

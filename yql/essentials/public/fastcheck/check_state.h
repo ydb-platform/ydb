@@ -54,8 +54,6 @@ public:
     const NYql::TPGParseResult* ParsePg(TIssues& issues);
     const TAstParseResult* ParseSExpr(TIssues& issues);
 
-    bool IsDefinitelyFailed(ECheckName checkName);
-
 private:
     const TChecksRequest& Request_;
     google::protobuf::Arena Arena_;

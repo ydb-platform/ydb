@@ -18,11 +18,11 @@ public:
     using TRunnerFactoryFunction = std::function<std::unique_ptr<ICheckRunner>()>;
 
     TCheckRunnerFactory() {
-        Registry_.emplace(ToString(ECheckName::Lexer), MakeLexerRunner);
-        Registry_.emplace(ToString(ECheckName::Parser), MakeParserRunner);
-        Registry_.emplace(ToString(ECheckName::Format), MakeFormatRunner);
-        Registry_.emplace(ToString(ECheckName::Translator), MakeTranslatorRunner);
-        Registry_.emplace(ToString(ECheckName::Typecheck), MakeTypecheckRunner);
+        Registry_.emplace("lexer", MakeLexerRunner);
+        Registry_.emplace("parser", MakeParserRunner);
+        Registry_.emplace("format", MakeFormatRunner);
+        Registry_.emplace("translator", MakeTranslatorRunner);
+        Registry_.emplace("typecheck", MakeTypecheckRunner);
         for (const auto& x : Registry_) {
             CheckNames_.emplace(x.first);
         }

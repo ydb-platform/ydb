@@ -10,14 +10,8 @@ namespace {
 
 class TParserRunner: public TCheckRunnerBase {
 public:
-    ECheckName GetCheckName() const final {
-        return ECheckName::Parser;
-    }
-
-protected:
-    const THashSet<ECheckName>& Requirements() const final {
-        static const THashSet<ECheckName> Requirements = {ECheckName::Lexer};
-        return Requirements;
+    TString GetCheckName() const final {
+        return "parser";
     }
 
     TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) final {
@@ -34,7 +28,7 @@ protected:
 private:
     TCheckResponse RunSExpr(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
-        TCheckResponse res{.CheckName = ToString(GetCheckName())};
+        TCheckResponse res{.CheckName = GetCheckName()};
 
         const auto* astResult = state.ParseSExpr(res.Issues);
         res.Success = astResult && astResult->IsOk();
@@ -64,7 +58,7 @@ private:
 
     TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
-        TCheckResponse res{.CheckName = ToString(GetCheckName())};
+        TCheckResponse res{.CheckName = GetCheckName()};
 
         const auto* pgResult = state.ParsePg(res.Issues);
         if (pgResult) {
@@ -77,7 +71,7 @@ private:
 
     TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
-        TCheckResponse res{.CheckName = ToString(GetCheckName())};
+        TCheckResponse res{.CheckName = GetCheckName()};
 
         auto* msg = state.ParseSql(res.Issues);
         if (msg) {

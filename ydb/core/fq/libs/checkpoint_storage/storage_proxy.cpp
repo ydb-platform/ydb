@@ -226,6 +226,7 @@ void TStorageProxy::Bootstrap() {
         ydbConnection = CreateLocalYdbConnection(NKikimr::AppData()->TenantName, CHECKPOINTS_TABLE_PREFIX, StorageConfig.GetMaxActiveQuerySessions());
     }
     CheckpointStorage = NewYdbCheckpointStorage(StorageConfig, CreateEntityIdGenerator(IdsPrefix), ydbConnection);
+    Config.SetEnableCompression(NKikimr::AppData()->FeatureFlags.GetEnableCheckpointsCompression());
     StateStorage = NewYdbStateStorage(Config, ydbConnection);
 
     if (Config.GetCheckpointGarbageConfig().GetEnabled()) {

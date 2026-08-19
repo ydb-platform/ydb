@@ -1,5 +1,7 @@
 #include <ydb/core/fq/libs/checkpoint_storage/ydb_state_storage.h>
+#include <ydb/core/fq/libs/checkpoint_storage/storage_settings.h>
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
+#include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/testlib/basics/runtime.h>
 
@@ -35,7 +37,7 @@ public:
         : Alloc(__LOCATION__)
     {}
 
-    TStateStoragePtr GetStateStorage(const char* tablePrefix) {
+    TStateStoragePtr GetStateStorage(const char* tablePrefix, bool enableCompression = false) {
         NConfig::TCheckpointCoordinatorConfig config;
         auto& stateStorageConfig = *config.MutableStorage();
         stateStorageConfig.SetEndpoint(GetEnv("YDB_ENDPOINT"));
@@ -46,10 +48,62 @@ public:
         stateStorageLimits.SetMaxRowSizeBytes(YdbRowSizeLimit);
 
         NYdb::TDriver driver(NYdb::TDriverConfig{});
-        auto ydbConnectionPtr = CreateSdkYdbConnection(config.GetStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
-        auto storage = NewYdbStateStorage(config, ydbConnectionPtr);
+        YdbConnection = CreateSdkYdbConnection(config.GetStorage(), NKikimr::CreateYdbCredentialsProviderFactory, driver);
+        TCheckpointStorageSettings settings(config);
+        settings.SetEnableCompression(enableCompression);
+        auto storage = NewYdbStateStorage(settings, YdbConnection);
         storage->Init({}).GetValueSync();
         return storage;
+    }
+
+    // Count the total number of rows in the `states` table for the given
+    // graph_id + checkpoint. Unlike CountStates (which groups by task_id),
+    // this returns the raw row count, confirming blob_seq_num partitioning.
+    ui64 CountStatesTableRows(
+        const TString& graphId,
+        const TCheckpointId& checkpointId)
+    {
+        Y_ENSURE(YdbConnection, "YdbConnection is not initialized");
+        auto tablePathPrefix = YdbConnection->GetTablePathPrefix();
+
+        auto paramsBuilder = std::make_shared<NYdb::TParamsBuilder>();
+        paramsBuilder->AddParam("$graph_id").String(graphId).Build();
+        paramsBuilder->AddParam("$coordinator_generation").Uint64(checkpointId.CoordinatorGeneration).Build();
+        paramsBuilder->AddParam("$seq_no").Uint64(checkpointId.SeqNo).Build();
+
+        auto query = Sprintf(R"(
+            --!syntax_v1
+            PRAGMA TablePathPrefix("%s");
+            DECLARE $graph_id AS String;
+            DECLARE $coordinator_generation AS Uint64;
+            DECLARE $seq_no AS Uint64;
+            SELECT COUNT(*) AS cnt
+            FROM states
+            WHERE graph_id = $graph_id
+              AND coordinator_generation = $coordinator_generation
+              AND seq_no = $seq_no;
+        )", tablePathPrefix.c_str());
+
+        ui64 result = 0;
+        auto future = YdbConnection->GetTableClient()->RetryOperation(
+            [query, paramsBuilder, &result](ISession::TPtr session) {
+                return session->ExecuteDataQuery(
+                    query,
+                    ISession::TTxControl::BeginAndCommitTx(),
+                    paramsBuilder
+                ).Apply([&result](const NThreading::TFuture<NYdb::NTable::TDataQueryResult>& f) {
+                    const auto& r = f.GetValue();
+                    if (r.IsSuccess()) {
+                        NYdb::TResultSetParser parser(r.GetResultSet(0));
+                        if (parser.TryNextRow()) {
+                            result = parser.ColumnParser("cnt").GetUint64();
+                        }
+                    }
+                    return NYdb::TStatus(r);
+                });
+            });
+        future.GetValueSync();
+        return result;
     }
 
     NYql::NDq::TComputeActorState MakeState(NYql::NUdf::TUnboxedValuePod&& value) {
@@ -154,6 +208,7 @@ private:
     NKikimr::NMiniKQL::TScopedAlloc Alloc;
     NKikimr::TActorSystemStub ActorSystemStub;
     TYqSharedResources::TPtr YqSharedResources;
+    IYdbConnection::TPtr YdbConnection;
 };
 
 
@@ -423,6 +478,26 @@ Y_UNIT_TEST_SUITE(TStateStorageTest) {
 
         auto actual = GetState(storage, 1, "graph1", CheckpointId3);
         CheckEquals(expected, actual);
+    }
+
+
+    Y_UNIT_TEST_F(ShouldSaveGetCompressedState, TFixture)
+    {
+        auto storage = GetStateStorage("ShouldSaveGetCompressedState", /* enableCompression */ true);
+        const size_t stateSize = YdbRowSizeLimit + 42;
+        TString blob(stateSize, 'a');
+        auto originalState = MakeState(NKikimr::NMiniKQL::TOutputSerializer::MakeSimpleBlobState(blob, 0));
+
+        auto [size, saveIssues] = storage->SaveState(1, "graph1", CheckpointId1, originalState).GetValueSync();
+        UNIT_ASSERT_C(saveIssues.Empty(), saveIssues.ToString());
+        UNIT_ASSERT_GT(size, 0u);
+
+        auto [states, getIssues] = storage->GetState({1}, "graph1", CheckpointId1).GetValueSync();
+        UNIT_ASSERT_C(getIssues.Empty(), getIssues.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(states.size(), 1u);
+        CheckEquals(originalState, states[0]);
+
+        UNIT_ASSERT_VALUES_EQUAL(CountStatesTableRows("graph1", CheckpointId1), 1);
     }
 
 };

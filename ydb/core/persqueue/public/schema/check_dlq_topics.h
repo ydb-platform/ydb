@@ -54,10 +54,13 @@ absl::flat_hash_set<TString> CollectNewDlqTopicPaths(
     const TString& database
 );
 
-NActors::IActor* CreateCheckDlqTopicsActor(
+// Builds the new-vs-old DLQ path diff. Returns nullptr when there is nothing to check
+// (create: pass empty oldConfig).
+NActors::IActor* CreateCheckDlqTopicsActorIfNeeded(
     const NActors::TActorId& parent,
     const TString& databasePath,
-    absl::flat_hash_set<TString>&& dlqPaths,
+    const NKikimrPQ::TPQTabletConfig& newConfig,
+    const NKikimrPQ::TPQTabletConfig& oldConfig,
     const TCheckDlqTopicsSettings& settings = {}
 );
 

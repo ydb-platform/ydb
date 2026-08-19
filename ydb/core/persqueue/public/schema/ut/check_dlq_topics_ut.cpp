@@ -3,6 +3,7 @@
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 
@@ -44,17 +45,23 @@ TIntrusiveConstPtr<NACLib::TUserToken> MakeUserToken(const TString& userSid) {
 
 THolder<TEvCheckDlqTopicsResponse> CheckDlq(
     NActors::TTestActorRuntime& runtime,
-    absl::flat_hash_set<TString> paths,
+    const NKikimrPQ::TPQTabletConfig& newConfig,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr,
-    const TString& databasePath = "/Root")
+    const TString& databasePath = "/Root",
+    const NKikimrPQ::TPQTabletConfig& oldConfig = {})
 {
     auto edge = runtime.AllocateEdgeActor();
-    auto actorId = runtime.Register(CreateCheckDlqTopicsActor(
+    auto* actor = CreateCheckDlqTopicsActorIfNeeded(
         edge,
         databasePath,
-        std::move(paths),
+        newConfig,
+        oldConfig,
         TCheckDlqTopicsSettings{.UserToken = std::move(userToken)}
-    ));
+    );
+    if (!actor) {
+        return MakeHolder<TEvCheckDlqTopicsResponse>(Ydb::StatusIds::SUCCESS);
+    }
+    auto actorId = runtime.Register(actor);
     runtime.EnableScheduleForActor(actorId);
     return runtime.GrabEdgeEvent<TEvCheckDlqTopicsResponse>(TDuration::Seconds(10));
 }
@@ -176,11 +183,24 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsHelpers) {
         UNIT_ASSERT(paths.contains("/Root/dlq"));
     }
 
+    Y_UNIT_TEST(FactoryReturnsNullWhenNoNewDlq) {
+        const NActors::TActorId parent;
+        const NKikimrPQ::TPQTabletConfig empty;
+        const auto config = MakeConfigWithDlq("c1", "dlq1");
+
+        UNIT_ASSERT(!CreateCheckDlqTopicsActorIfNeeded(parent, "/Root", empty, empty, {}));
+        UNIT_ASSERT(!CreateCheckDlqTopicsActorIfNeeded(parent, "/Root", config, config, {}));
+
+        NActors::IActor* actor = CreateCheckDlqTopicsActorIfNeeded(parent, "/Root", config, empty, {});
+        UNIT_ASSERT(actor);
+        delete actor;
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
 
-    Y_UNIT_TEST(EmptyPathSetSucceedsImmediately) {
+    Y_UNIT_TEST(EmptyConfigSucceedsWithoutActor) {
         auto setup = std::make_shared<TTopicSdkTestSetup>(TEST_CASE_NAME);
         EnableLogs(*setup);
 
@@ -192,7 +212,10 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
         EnableLogs(*setup);
         ExecuteDDL(*setup, "CREATE TOPIC topic1");
 
-        AssertStatus(CheckDlq(setup->GetRuntime(), {"/Root/topic1"}), Ydb::StatusIds::SUCCESS);
+        AssertStatus(
+            CheckDlq(setup->GetRuntime(), MakeConfigWithDlq("c1", "/Root/topic1")),
+            Ydb::StatusIds::SUCCESS
+        );
     }
 
     Y_UNIT_TEST(MissingTopicIsSchemeError) {
@@ -200,7 +223,7 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
         EnableLogs(*setup);
 
         AssertStatus(
-            CheckDlq(setup->GetRuntime(), {"/Root/missing"}),
+            CheckDlq(setup->GetRuntime(), MakeConfigWithDlq("c1", "/Root/missing")),
             Ydb::StatusIds::SCHEME_ERROR,
             "does not exist"
         );
@@ -212,7 +235,7 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
         ExecuteDDL(*setup, "CREATE TABLE table1 (id Uint64, PRIMARY KEY (id))");
 
         AssertStatus(
-            CheckDlq(setup->GetRuntime(), {"/Root/table1"}),
+            CheckDlq(setup->GetRuntime(), MakeConfigWithDlq("c1", "/Root/table1")),
             Ydb::StatusIds::BAD_REQUEST,
             "must be a topic"
         );
@@ -225,7 +248,7 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
         ExecuteDDL(*setup, "ALTER TABLE table1 ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
 
         AssertStatus(
-            CheckDlq(setup->GetRuntime(), {"/Root/table1/feed"}),
+            CheckDlq(setup->GetRuntime(), MakeConfigWithDlq("c1", "/Root/table1/feed")),
             Ydb::StatusIds::BAD_REQUEST,
             "CDC stream cannot be used as a dead letter queue"
         );
@@ -238,7 +261,7 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
         ExecuteDDL(*setup, "ALTER TABLE table1 ADD CHANGEFEED feed WITH (FORMAT = 'JSON', MODE = 'UPDATES')");
 
         AssertStatus(
-            CheckDlq(setup->GetRuntime(), {"/Root/table1/feed/streamImpl"}),
+            CheckDlq(setup->GetRuntime(), MakeConfigWithDlq("c1", "/Root/table1/feed/streamImpl")),
             Ydb::StatusIds::BAD_REQUEST,
             "CDC stream cannot be used as a dead letter queue"
         );
@@ -256,7 +279,7 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
         ModifyTopicAcl(*setup, "topic1", acl);
 
         AssertStatus(
-            CheckDlq(setup->GetRuntime(), {"/Root/topic1"}, MakeUserToken(userSid)),
+            CheckDlq(setup->GetRuntime(), MakeConfigWithDlq("c1", "/Root/topic1"), MakeUserToken(userSid)),
             Ydb::StatusIds::SUCCESS
         );
     }
@@ -273,7 +296,7 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
         ModifyTopicAcl(*setup, "topic1", acl);
 
         AssertStatus(
-            CheckDlq(setup->GetRuntime(), {"/Root/topic1"}, MakeUserToken(userSid)),
+            CheckDlq(setup->GetRuntime(), MakeConfigWithDlq("c1", "/Root/topic1"), MakeUserToken(userSid)),
             Ydb::StatusIds::SUCCESS
         );
     }
@@ -289,7 +312,7 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
         ModifyTopicAcl(*setup, "topic1", acl);
 
         AssertStatus(
-            CheckDlq(setup->GetRuntime(), {"/Root/topic1"}, MakeUserToken(userSid)),
+            CheckDlq(setup->GetRuntime(), MakeConfigWithDlq("c1", "/Root/topic1"), MakeUserToken(userSid)),
             Ydb::StatusIds::UNAUTHORIZED,
             "AlterSchema or UpdateRow"
         );
@@ -307,7 +330,7 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
         ModifyTopicAcl(*setup, "topic1", acl);
 
         AssertStatus(
-            CheckDlq(setup->GetRuntime(), {"/Root/topic1"}, MakeUserToken(userSid)),
+            CheckDlq(setup->GetRuntime(), MakeConfigWithDlq("c1", "/Root/topic1"), MakeUserToken(userSid)),
             Ydb::StatusIds::UNAUTHORIZED,
             "AlterSchema or UpdateRow"
         );
@@ -319,7 +342,15 @@ Y_UNIT_TEST_SUITE(TCheckDlqTopicsActor) {
         ExecuteDDL(*setup, "CREATE TOPIC topic1");
         ExecuteDDL(*setup, "CREATE TABLE table1 (id Uint64, PRIMARY KEY (id))");
 
-        auto result = CheckDlq(setup->GetRuntime(), {"/Root/topic1", "/Root/table1"});
+        auto config = MakeConfigWithDlq("c1", "/Root/topic1");
+        auto* c2 = config.AddConsumers();
+        c2->SetName("c2");
+        c2->SetType(NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP);
+        c2->SetDeadLetterPolicyEnabled(true);
+        c2->SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+        c2->SetDeadLetterQueue("/Root/table1");
+
+        auto result = CheckDlq(setup->GetRuntime(), config);
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::BAD_REQUEST, result->ErrorMessage);
         UNIT_ASSERT_STRING_CONTAINS(result->ErrorMessage, "must be a topic");

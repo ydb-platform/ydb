@@ -8,10 +8,9 @@
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/public/cluster_tracker/cluster_tracker.h>
 #include <ydb/core/persqueue/public/nameresolver/nameresolver.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
-
-#include <util/string/join.h>
 
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
@@ -145,26 +144,21 @@ private:
 
 private:
     void DoCheckDlqOrPropose() {
-        auto dlqPaths = CollectDlqTopicPaths(
-            ModifyScheme.GetCreatePersQueueGroup().GetPQTabletConfig(),
-            CanonizePath(Settings.Database)
-        );
-        if (dlqPaths.empty()) {
-            return DoProposeOrReply();
+        const NKikimrPQ::TPQTabletConfig emptyOldConfig;
+        if (auto* actor = CreateCheckDlqTopicsActorIfNeeded(
+                SelfId(),
+                CanonizePath(Settings.Database),
+                ModifyScheme.GetCreatePersQueueGroup().GetPQTabletConfig(),
+                emptyOldConfig,
+                TCheckDlqTopicsSettings{
+                    .UserToken = Settings.UserToken
+                }))
+        {
+            Become(&TCreateTopicOperationActor::CheckDlqState);
+            RegisterWithSameMailbox(actor);
+            return;
         }
-
-        YDB_LOG_DEBUG("DoCheckDlq",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"dlqPaths", JoinRange(", ", dlqPaths.begin(), dlqPaths.end())});
-        Become(&TCreateTopicOperationActor::CheckDlqState);
-        RegisterWithSameMailbox(CreateCheckDlqTopicsActor(
-            SelfId(),
-            CanonizePath(Settings.Database),
-            std::move(dlqPaths),
-            TCheckDlqTopicsSettings{
-                .UserToken = Settings.UserToken
-            }
-        ));
+        return DoProposeOrReply();
     }
 
     void Handle(TEvCheckDlqTopicsResponse::TPtr& ev) {

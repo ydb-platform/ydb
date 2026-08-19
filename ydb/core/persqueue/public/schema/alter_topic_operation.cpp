@@ -8,8 +8,6 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
-#include <util/string/join.h>
-
 #define YDB_LOG_THIS_FILE_COMPONENT Service
 
 namespace NKikimr::NPQ::NSchema {
@@ -202,27 +200,20 @@ private:
         const auto& oldConfig = TopicInfo.Info
             ? TopicInfo.Info->Description.GetPQTabletConfig()
             : emptyOldConfig;
-        auto dlqPaths = CollectNewDlqTopicPaths(
-            ModifyScheme.GetAlterPersQueueGroup().GetPQTabletConfig(),
-            oldConfig,
-            Database
-        );
-        if (dlqPaths.empty()) {
-            return DoProposeOrReply();
+        if (auto* actor = CreateCheckDlqTopicsActorIfNeeded(
+                SelfId(),
+                Database,
+                ModifyScheme.GetAlterPersQueueGroup().GetPQTabletConfig(),
+                oldConfig,
+                TCheckDlqTopicsSettings{
+                    .UserToken = Settings.UserToken
+                }))
+        {
+            Become(&TAlterTopicOperationActor::CheckDlqState);
+            RegisterWithSameMailbox(actor);
+            return;
         }
-
-        YDB_LOG_DEBUG("DoCheckDlq",
-            {"logPrefix", NPQ_LOG_PREFIX},
-            {"dlqPaths", JoinRange(", ", dlqPaths.begin(), dlqPaths.end())});
-        Become(&TAlterTopicOperationActor::CheckDlqState);
-        RegisterWithSameMailbox(CreateCheckDlqTopicsActor(
-            SelfId(),
-            Database,
-            std::move(dlqPaths),
-            TCheckDlqTopicsSettings{
-                .UserToken = Settings.UserToken
-            }
-        ));
+        return DoProposeOrReply();
     }
 
     void Handle(TEvCheckDlqTopicsResponse::TPtr& ev) {

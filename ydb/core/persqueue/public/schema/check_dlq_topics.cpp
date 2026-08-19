@@ -220,12 +220,17 @@ absl::flat_hash_set<TString> CollectNewDlqTopicPaths(
     return result;
 }
 
-IActor* CreateCheckDlqTopicsActor(
+IActor* CreateCheckDlqTopicsActorIfNeeded(
     const TActorId& parent,
     const TString& databasePath,
-    absl::flat_hash_set<TString>&& dlqPaths,
+    const NKikimrPQ::TPQTabletConfig& newConfig,
+    const NKikimrPQ::TPQTabletConfig& oldConfig,
     const TCheckDlqTopicsSettings& settings
 ) {
+    auto dlqPaths = CollectNewDlqTopicPaths(newConfig, oldConfig, databasePath);
+    if (dlqPaths.empty()) {
+        return nullptr;
+    }
     return new TCheckDlqTopicsActor(parent, databasePath, std::move(dlqPaths), settings);
 }
 

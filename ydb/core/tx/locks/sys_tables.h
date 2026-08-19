@@ -24,11 +24,32 @@ struct TSysTables {
             DEFAULT_EXPRESSION = 3
         };
 
+        enum class EColumnExpressionKind : ui8 {
+            GeneratedStored = 0,
+            GeneratedVirtual = 1,
+            Default = 2,
+        };
+
         struct TDefaultExpressionColumnInfo {
             TString ExprText;
             TString Context;
             TVector<TString> Dependencies;
-            bool Stored = false;
+            EColumnExpressionKind Kind = EColumnExpressionKind::GeneratedStored;
+
+            // GENERATED ALWAYS AS (<expr>), as opposed to a DEFAULT <expr>
+            bool IsGenerated() const {
+                return Kind != EColumnExpressionKind::Default;
+            }
+
+            // The value is materialized in storage
+            bool IsStored() const {
+                return Kind != EColumnExpressionKind::GeneratedVirtual;
+            }
+
+            // The user may supply a value for the column explicitly
+            bool IsWritable() const {
+                return Kind == EColumnExpressionKind::Default;
+            }
         };
 
         TString Name;

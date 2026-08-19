@@ -426,10 +426,14 @@ private:
                 defaultColumnsLeft.insert(name);
             }
 
-            if (colInfo.IsDefaultFromExpression() && colInfo.DefaultExpression->Stored && isPublicBulkUpsert) {
-                return TConclusionStatus::Fail(TStringBuilder()
-                    << "Bulk upsert is not supported for tables with STORED generated columns: column "
-                    << name);
+            if (colInfo.IsDefaultFromExpression()) {
+                if (isPublicBulkUpsert && colInfo.DefaultExpression->IsGenerated() && colInfo.DefaultExpression->IsStored()) {
+                    return TConclusionStatus::Fail(TStringBuilder()
+                        << "Bulk upsert is not supported for tables with STORED generated columns: column "
+                        << name);
+                } else {
+                    defaultColumnsLeft.insert(name);
+                }
             }
         }
 

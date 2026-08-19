@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <atomic>
+#include <span>
 #include <string.h>
 #include <vector>
 

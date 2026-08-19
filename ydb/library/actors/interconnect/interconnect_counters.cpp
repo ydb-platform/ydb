@@ -334,6 +334,10 @@ namespace {
             PingTimeHistogram->Collect(value);
         }
 
+        void UpdatePingTimeRdmaHistogram(ui64 value) override {
+            PingTimeRdmaHistogram->Collect(value);
+        }
+
         void UpdateIcQueueTimeHistogram(ui64 value) override {
             InterconnectQueueTimeHistogram->Collect(value);
         }
@@ -348,6 +352,10 @@ namespace {
 
         void IncRdmaMultipartEvents() override {
             ++*RdmaMultipartEvents;
+        }
+
+        void IncRdmaSendBufferAllocationFails() override {
+            ++*RdmaSendBufferAllocationFails;
         }
 
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
@@ -436,6 +444,8 @@ namespace {
 
                 PingTimeHistogram = AdaptiveCounters->GetHistogram(
                     "PingTimeUs", NMonitoring::ExponentialHistogram(18, 2, 125));
+                PingTimeRdmaHistogram = AdaptiveCounters->GetHistogram(
+                    "PingTimeRdmaUs", NMonitoring::ExponentialHistogram(18, 2, 1.25));
                 InterconnectQueueTimeHistogram = AdaptiveCounters->GetHistogram(
                     "InterconnectQueueTimeHistogramUs", NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
                 NumEventsInQueueHistogram = AdaptiveCounters->GetHistogram(
@@ -443,6 +453,7 @@ namespace {
                 RdmaReadTimeHistogram = AdaptiveCounters->GetHistogram(
                     "RdmaReadTimeUs", NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
                 RdmaMultipartEvents = AdaptiveCounters->GetCounter("RdmaMultipartEvents", true);
+                RdmaSendBufferAllocationFails = AdaptiveCounters->GetCounter("RdmaSendBufferAllocationFails", true);
             }
 
             if (updateGlobal) {
@@ -548,10 +559,12 @@ namespace {
         NMonitoring::TDynamicCounters::TCounterPtr UsefulWriteWakeups;
         NMonitoring::TDynamicCounters::TCounterPtr SpuriousWriteWakeups;
         NMonitoring::THistogramPtr PingTimeHistogram;
+        NMonitoring::THistogramPtr PingTimeRdmaHistogram;
         NMonitoring::THistogramPtr InterconnectQueueTimeHistogram;
         NMonitoring::THistogramPtr NumEventsInQueueHistogram;
         NMonitoring::THistogramPtr RdmaReadTimeHistogram;
         NMonitoring::TDynamicCounters::TCounterPtr RdmaMultipartEvents;
+        NMonitoring::TDynamicCounters::TCounterPtr RdmaSendBufferAllocationFails;
 
         std::unordered_map<ui16, TOutputChannel> OutputChannels;
         TOutputChannel OtherOutputChannel;
@@ -819,6 +832,10 @@ namespace {
             PingTimeHistogram_->Record(value);
         }
 
+        void UpdatePingTimeRdmaHistogram(ui64 value) override {
+            PingTimeRdmaHistogram_->Record(value);
+        }
+
         void UpdateIcQueueTimeHistogram(ui64 value) override {
             InterconnectQueueTimeHistogram_->Record(value);
         }
@@ -833,6 +850,10 @@ namespace {
 
         void IncRdmaMultipartEvents() override {
             RdmaMultipartEvents_->Inc();
+        }
+
+        void IncRdmaSendBufferAllocationFails() override {
+            RdmaSendBufferAllocationFails_->Inc();
         }
 
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {
@@ -931,7 +952,11 @@ namespace {
                 InflightRdmaDataAmount_ = createRate(AdaptiveMetrics_, "interconnect.inflight_rdma_data");
                 SubscribersCount_ = createIntGauge(AdaptiveMetrics_, "interconnect.subscribers_count");
                 PingTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
-                        NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}), NMonitoring::ExponentialHistogram(18, 2, 125));
+                        NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_us"}}),
+                        NMonitoring::ExponentialHistogram(18, 2, 125));
+                PingTimeRdmaHistogram_ = AdaptiveMetrics_->HistogramRate(
+                        NMonitoring::MakeLabels({{"sensor", "interconnect.ping_time_rdma_us"}}),
+                        NMonitoring::ExponentialHistogram(18, 2, 1.25));
                 InterconnectQueueTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.ic_queue_time_us"}}), NMonitoring::ExplicitHistogram({500, 1000, 5000, 10000, 50000, 100000}));
                 NumEventsInQueueHistogram_ = AdaptiveMetrics_->HistogramRate(
@@ -939,6 +964,7 @@ namespace {
                 RdmaReadTimeHistogram_ = AdaptiveMetrics_->HistogramRate(
                         NMonitoring::MakeLabels({{"sensor", "interconnect.rdma_read_time_us"}}), NMonitoring::ExplicitHistogram({0, 5, 10, 20, 50, 100, 200, 1000, 10000}));
                 RdmaMultipartEvents_ = createRate(AdaptiveMetrics_, "interconnect.rdma_multipart_events");
+                RdmaSendBufferAllocationFails_ = createRate(AdaptiveMetrics_, "interconnect.rdma_send_buffer_allocation_fails");
             }
 
             if (updateGlobal) {
@@ -1078,10 +1104,12 @@ namespace {
         NMonitoring::IIntGauge* ClockSkewMicrosec_;
 
         NMonitoring::IHistogram* PingTimeHistogram_;
+        NMonitoring::IHistogram* PingTimeRdmaHistogram_;
         NMonitoring::IHistogram* InterconnectQueueTimeHistogram_;
         NMonitoring::IHistogram* NumEventsInQueueHistogram_;
         NMonitoring::IHistogram* RdmaReadTimeHistogram_;
         NMonitoring::IRate* RdmaMultipartEvents_;
+        NMonitoring::IRate* RdmaSendBufferAllocationFails_;
 
         THashMap<ui16, TOutputChannel> OutputChannels_;
         TOutputChannel OtherOutputChannel_;

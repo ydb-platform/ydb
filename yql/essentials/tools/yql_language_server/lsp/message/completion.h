@@ -43,8 +43,8 @@ enum class ECompletionItemKind {
 };
 
 enum class EMarkupKind {
-    PlainText,
-    Markdown,
+    PlainText /* "plaintext" */,
+    Markdown /* "markdown" */,
 };
 
 struct TMarkupContent {

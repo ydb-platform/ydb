@@ -133,13 +133,12 @@ public:
         Index.reset();
     }
 
-    void AddVector(TString key, TString vector, const void* data) {
+    void AddVector(TString key, const void* data) {
         const auto id = static_cast<similarity::IdType>(Keys.size());
         auto obj = std::make_unique<similarity::Object>(
             id, /* label */ -1, Dimension * sizeof(float), data);
         KeyBytes += key.size();
         Keys.push_back(std::move(key));
-        Vectors.push_back(std::move(vector));
         KeyToIndex.emplace(Keys.back(), static_cast<size_t>(id));
         Objects.push_back(obj.get());
         OwnedObjects.push_back(std::move(obj));
@@ -265,7 +264,9 @@ public:
         if (it == KeyToIndex.end()) {
             return false;
         }
-        result = Vectors[it->second];
+        const auto* object = OwnedObjects[it->second].get();
+        result.assign(object->data(), object->datalength());
+        result.push_back(static_cast<char>(Format<float>));
         return true;
     }
 
@@ -304,7 +305,6 @@ private:
     std::vector<const similarity::Object*> Objects;
     std::vector<std::unique_ptr<similarity::Object>> OwnedObjects;
     std::vector<TString> Keys; // Object::id() -> serialized primary key
-    std::vector<TString> Vectors; // Object::id() -> wire-format vector
     THashMap<TString, size_t> KeyToIndex;
     THashMap<TString, TString> DeltaVectors;
     THashSet<TString> ErasedKeys;
@@ -324,7 +324,10 @@ size_t THnswIndex::EstimateMemoryBytes(size_t rowCount, size_t dimension, ui32 c
     // fixed overhead. Saturate on overflow so an attacker cannot wrap the
     // estimate and pass the cache budget check.
     const size_t friendBytes = static_cast<size_t>(connectivity) * 2 * sizeof(similarity::IdType);
-    const size_t bytesPerRow = 2 * dimension * sizeof(float) + HeaderLen
+    // NMSLIB retains the source Object and copies its raw vector into the
+    // contiguous optimized-search index. We no longer retain a third copy in
+    // YDB wire format; GetVector() reconstructs its trailing format byte.
+    const size_t bytesPerRow = 2 * dimension * sizeof(float)
         + EstimatedBytesPerNodeOverhead + friendBytes;
     if (rowCount != 0 && bytesPerRow > (Max<size_t>() - serializedKeyBytes) / rowCount) {
         return Max<size_t>();
@@ -402,7 +405,7 @@ std::unique_ptr<THnswIndex> THnswIndex::Build(
         if (!view.IsValid() || view.Dimension != dimension) {
             continue; // Skip malformed/mismatched rows; do not fail the whole build.
         }
-        impl->AddVector(key, vec, view.Data);
+        impl->AddVector(key, view.Data);
     }
 
     if (impl->Size() == 0) {

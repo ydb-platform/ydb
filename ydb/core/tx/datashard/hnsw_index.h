@@ -93,9 +93,8 @@ public:
     // build-time vectors), ordered from closest to farthest.
     THnswSearchResult Search(TStringBuf targetVector, size_t k) const;
 
-    // Copies the original wire-format vector for a key into `result`. This is
-    // used by covered posting-table reads to materialize HNSW results without
-    // going back to the flat table.
+    // Reconstructs the wire-format vector for a key from the raw float payload
+    // owned by NMSLIB. Delta vectors are already retained in wire format.
     bool GetVector(TStringBuf key, TString& result) const;
 
     // Applies a posting-table change on top of the immutable HNSW graph.

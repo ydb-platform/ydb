@@ -1213,6 +1213,23 @@ Y_UNIT_TEST_SUITE(TInflightInfoTests)
 
         EraseAll(inflightInfo);
     }
+
+    Y_UNIT_TEST(SetAndGetPersistGeneration)
+    {
+        TTestReadyQueue readyQueue;
+        TInflightInfo inflightInfo(
+            &readyQueue,
+            MakeDDisks(),
+            THostMask::MakeEmpty(),
+            123,
+            4096);
+
+        UNIT_ASSERT_VALUES_EQUAL(0u, inflightInfo.GetPersistGeneration());
+        inflightInfo.SetPersistGeneration(42);
+        UNIT_ASSERT_VALUES_EQUAL(42u, inflightInfo.GetPersistGeneration());
+        TInflightInfo moved(std::move(inflightInfo));
+        UNIT_ASSERT_VALUES_EQUAL(42u, moved.GetPersistGeneration());
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

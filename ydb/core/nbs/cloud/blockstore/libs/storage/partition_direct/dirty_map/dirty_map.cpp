@@ -15,369 +15,6 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-namespace {
-template <typename T>
-TVector<ui64> DoMakeLsnVector(std::span<const T> segments)
-{
-    TVector<ui64> result;
-    result.reserve(segments.size());
-    for (const auto& segment: segments) {
-        result.push_back(segment.Lsn);
-    }
-    return result;
-}
-
-}   // namespace
-
-////////////////////////////////////////////////////////////////////////////////
-
-TReadRangeHint::TReadRangeHint(
-    THostMask hostMask,
-    ui64 lsn,
-    TBlockRange64 requestRelativeRange,
-    TBlockRange64 vchunkRange,
-    TRangeLock&& lock)
-    : HostMask(hostMask)
-    , Lsn(lsn)
-    , RequestRelativeRange(requestRelativeRange)
-    , VChunkRange(vchunkRange)
-    , Lock(std::move(lock))
-{}
-
-TReadRangeHint::TReadRangeHint(TReadRangeHint&& other) noexcept = default;
-TReadRangeHint& TReadRangeHint::operator=(
-    TReadRangeHint&& other) noexcept = default;
-
-TString TReadRangeHint::DebugPrint() const
-{
-    return TStringBuilder()
-           << Lsn << "{" << HostMask.Print() << VChunkRange.Print()
-           << RequestRelativeRange.Print() << "};";
-}
-
-TString TReadHint::DebugPrint() const
-{
-    if (RangeHints.empty()) {
-        return (WaitReady.IsReady()) ? "WaitReady:Ready" : "WaitReady:NotReady";
-    }
-
-    TStringBuilder result;
-    for (const auto& hint: RangeHints) {
-        result << hint.DebugPrint();
-    }
-
-    return result;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-// static
-TVector<ui64> TPBufferSegment::MakeLsnVector(
-    std::span<const TPBufferSegment> segments)
-{
-    TVector<ui64> result;
-    result.reserve(segments.size());
-    for (const auto& segment: segments) {
-        result.push_back(segment.Lsn);
-    }
-    return result;
-}
-
-TString TPBufferSegment::DebugPrint(bool brief) const
-{
-    if (brief) {
-        return ToString(Lsn);
-    }
-    return TStringBuilder() << Lsn << Range.Print();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TString TFlushHint::DebugPrint(bool brief) const
-{
-    TStringBuilder builder;
-    bool first = true;
-    for (const auto& segment: Segments) {
-        if (!first) {
-            builder << ",";
-        }
-        builder << segment.DebugPrint(brief);
-        first = false;
-    }
-    return builder;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TFlushHints::AddHint(
-    THostIndex source,
-    THostIndex destination,
-    ui64 lsn,
-    TBlockRange64 range)
-{
-    Hints[THostRoute{
-              .SourceHostIndex = source,
-              .DestinationHostIndex = destination}]
-        .Segments.emplace_back(lsn, range);
-}
-
-bool TFlushHints::Empty() const
-{
-    return Hints.empty();
-}
-
-const TFlushHints::THints& TFlushHints::GetAllHints() const
-{
-    return Hints;
-}
-
-TFlushHints::THints TFlushHints::TakeAllHints()
-{
-    return std::move(Hints);
-}
-
-TString TFlushHints::DebugPrint() const
-{
-    TStringBuilder builder;
-    for (const auto& [route, hint]: Hints) {
-        builder << route.DebugPrint() << ":" << hint.DebugPrint(false) << ";";
-    }
-    return builder;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TString TEraseSegment::DebugPrint(bool brief) const
-{
-    if (brief) {
-        return ToString(Lsn);
-    }
-    return TStringBuilder() << Generation << ":" << Lsn;
-}
-
-TString TEraseHint::DebugPrint(bool brief) const
-{
-    TStringBuilder builder;
-    bool first = true;
-    for (const auto& segment: Segments) {
-        if (!first) {
-            builder << ",";
-        }
-        builder << segment.DebugPrint(brief);
-        first = false;
-    }
-    return builder;
-}
-
-void TEraseHints::AddHint(THostIndex host, ui64 lsn)
-{
-    Hints[host].Segments.emplace_back(
-        0,   // TODO(drbasic)
-        lsn);
-}
-
-bool TEraseHints::Empty() const
-{
-    return Hints.empty();
-}
-
-const TEraseHints::THints& TEraseHints::GetAllHints() const
-{
-    return Hints;
-}
-
-TEraseHints::THints TEraseHints::TakeAllHints()
-{
-    return std::move(Hints);
-}
-
-TString TEraseHints::DebugPrint() const
-{
-    TStringBuilder builder;
-    for (const auto& [host, hint]: Hints) {
-        builder << PrintHostIndex(host) << ":" << hint.DebugPrint(false) << ";";
-    }
-    return builder;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-void TDDiskState::Init(ui64 totalBlockCount, ui64 operationalBlockCount)
-{
-    TotalBlockCount = totalBlockCount;
-    OperationalBlockCount = operationalBlockCount;
-    UpdateState(true);
-}
-
-void TDDiskState::SwitchOffline()
-{
-    State = EState::Disabled;
-    OperationalBlockCount = 0;
-}
-
-bool TDDiskState::IsLagging() const
-{
-    return Lagging;
-}
-
-void TDDiskState::StartLagging()
-{
-    Lagging = true;
-}
-
-void TDDiskState::StopLagging()
-{
-    Lagging = false;
-}
-
-bool TDDiskState::IsTrackingEnabled() const
-{
-    return State != EState::Disabled && (Lagging || IsFresh());
-}
-
-void TDDiskState::OnRangeFlushed(TBlockRange64 range, EFlushCompletion flush)
-{
-    if (!IsTrackingEnabled()) {
-        return;
-    }
-
-    // The replica is lagging and data has not been written. Adding the range to
-    // the behind map. Due to lagging switching races with notifications, it is
-    // possible to receive successful flush confirmation on a lagging replica.
-    // We will ignore such ranges for safety.
-    if (Lagging && flush == EFlushCompletion::Missed) {
-        BehindField.Add(range);
-    }
-
-    // The replica is not lagging and data has been written. Adding the range to
-    // the ahead map.
-    if (!Lagging && flush == EFlushCompletion::Completed) {
-        AddAhead(range);
-    }
-
-    UpdateState(false);
-}
-
-TDDiskState::EState TDDiskState::GetState() const
-{
-    return State;
-}
-
-bool TDDiskState::CanReadFromDDisk(TBlockRange64 range) const
-{
-    if (State == EState::Disabled) {
-        return false;
-    }
-    if (State == EState::Operational) {
-        return true;
-    }
-
-    // if (AheadField.Contains(range))
-    //    return true;
-    if (BehindField.Overlaps(range)) {
-        return false;
-    }
-
-    return range.End < OperationalBlockCount;
-}
-
-std::optional<TBlockRange64> TDDiskState::GetFreshRange() const
-{
-    std::optional<TBlockRange64> result;
-
-    if (GetState() == TDDiskState::EState::Operational ||
-        GetState() == TDDiskState::EState::Disabled)
-    {
-        return result;
-    }
-
-    if (!BehindField.Empty()) {
-        BehindField.Enumerate(
-            [&](TBlockRange64 range)
-            {
-                result = range;
-                return TBlockRangeField::EEnumerateContinuation::Stop;
-            });
-        return result;
-    }
-
-    result = TBlockRange64::WithLength(
-        OperationalBlockCount,
-        TotalBlockCount - OperationalBlockCount);
-
-    return result;
-}
-
-void TDDiskState::RangeSynced(TBlockRange64 range)
-{
-    BehindField.Remove(range);
-    AheadField.Remove(range);
-
-    const ui64 newWatermark = range.End + 1;
-    if (OperationalBlockCount < newWatermark &&
-        !BehindField.Overlaps(TBlockRange64::WithLength(0, newWatermark)))
-    {
-        OperationalBlockCount = newWatermark;
-    }
-    UpdateState(false);
-}
-
-void TDDiskState::UpdateWatermarkDebugOnly(ui64 blockCount)
-{
-    Y_ABORT_UNLESS(blockCount <= TotalBlockCount);
-
-    OperationalBlockCount = blockCount;
-    UpdateState(false);
-}
-
-TString TDDiskState::DebugPrint() const
-{
-    TStringBuilder result;
-    result << "{" << ToString(State);
-    if (State == EState::Fresh) {
-        result << (Lagging ? "-" : "+");
-    }
-    result << "," << OperationalBlockCount << "}";
-    return result;
-}
-
-TString TDDiskState::DebugPrintAhead() const
-{
-    return AheadField.Print();
-}
-
-TString TDDiskState::DebugPrintBehind() const
-{
-    return BehindField.Print();
-}
-
-bool TDDiskState::IsFresh() const
-{
-    return OperationalBlockCount != TotalBlockCount || !BehindField.Empty();
-}
-
-void TDDiskState::UpdateState(bool force)
-{
-    if (!force && State == EState::Disabled) {
-        return;
-    }
-
-    State = IsFresh() ? EState::Fresh : EState::Operational;
-}
-
-void TDDiskState::AddAhead(TBlockRange64 range)
-{
-    Y_ABORT_UNLESS(!Lagging);
-
-    BehindField.Remove(range);
-    AheadField.Add(range);
-    if (OperationalBlockCount) {
-        AheadField.Remove(TBlockRange64::WithLength(0, OperationalBlockCount));
-    }
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 TString TPBufferCounters::DebugPrint() const
 {
     TStringBuilder result;
@@ -434,6 +71,7 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
     for (auto indx: added) {
         const auto watermark = vChunkConfig.GetWatermark(indx);
         DDiskStates[indx].Init(
+            this,
             BlockCount,
             watermark ? *watermark / BlockSize : BlockCount);
     }
@@ -628,6 +266,11 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
 
         auto& val = item->Value;
 
+        if (!CheckEraseAbility(item->Range, val)) {
+            ReadyToErase.insert(lsn);
+            continue;
+        }
+
         for (THostIndex host: val.GetEraseNeeded()) {
             val.RequestErase(host);
 
@@ -815,45 +458,39 @@ std::optional<TBlockRange64> TBlocksDirtyMap::GetFreshRange(
     return DDiskStates[host].GetFreshRange();
 }
 
-NThreading::TFuture<void> TBlocksDirtyMap::GetRangeSyncStartTrigger(
-    THostIndex host,
-    TBlockRange64 range)
+TSyncHint TBlocksDirtyMap::BeginRangeSync(THostIndex host, TBlockRange64 range)
 {
-    TInflightDDiskSync sync{
-        .DestinationHost = host,
-        .SyncStartTrigger = NThreading::NewPromise<void>()};
+    TInflightDDiskSync inflightSync{.DestinationHost = host};
+
+    TSyncHint result{
+        .SyncId = ++InflightDDiskSyncIdGenerator,
+        .Host = host,
+        .Range = range,
+        .ReadyToStart = inflightSync.SyncStartTrigger.GetFuture()};
 
     if (!HasInflightFlush(host, range)) {
-        sync.SyncStartTrigger.SetValue();
+        inflightSync.SyncStartTrigger.SetValue();
     }
 
-    auto result = sync.SyncStartTrigger.GetFuture();
     InflightDDiskSyncMap.AddRange(
-        ++InflightDDiskSyncIdGenerator,
+        result.SyncId,
         range,
-        std::move(sync));
+        std::move(inflightSync));
 
     return result;
 }
 
-void TBlocksDirtyMap::RangeSynced(THostIndex host, TBlockRange64 range)
+void TBlocksDirtyMap::EndRangeSync(ui64 syncId, bool success)
 {
-    DDiskStates[host].RangeSynced(range);
+    auto inflightSync = InflightDDiskSyncMap.ExtractRange(syncId);
+    if (!inflightSync) {
+        return;
+    }
 
-    ui64 syncId = 0;
-    InflightDDiskSyncMap.EnumerateOverlapping(
-        range,
-        [&](TInflightDDiskSyncMap::TFindItem& item)
-        {
-            if (item.Value.DestinationHost == host && item.Range == range) {
-                syncId = item.Key;
-                return TInflightDDiskSyncMap::EEnumerateContinuation::Stop;
-            }
-
-            return TInflightDDiskSyncMap::EEnumerateContinuation::Continue;
-        });
-    Y_ABORT_UNLESS(syncId != 0);
-    InflightDDiskSyncMap.RemoveRange(syncId);
+    if (success) {
+        DDiskStates[inflightSync->Value.DestinationHost].RangeSynced(
+            inflightSync->Range);
+    }
 }
 
 void TBlocksDirtyMap::ClearRangeSyncs(THostIndex host)
@@ -1028,7 +665,7 @@ void TBlocksDirtyMap::UnRegister(ui64 lsn, EQueueType queueType)
 
 void TBlocksDirtyMap::FlushCompleted(ui64 lsn, THostMask ddisks)
 {
-    AddToAheadAndBehind(lsn, ddisks);
+    AddToAheadAndBehindOnFlushCompleted(lsn, ddisks);
 }
 
 void TBlocksDirtyMap::DataToPBufferAdded(
@@ -1083,6 +720,11 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
     }
 }
 
+void TBlocksDirtyMap::OnBehindAheadChanged()
+{
+    ++BehindAheadGeneration;
+}
+
 bool TBlocksDirtyMap::NeedFlush() const
 {
     return !ReadyToFlush.empty();
@@ -1091,6 +733,35 @@ bool TBlocksDirtyMap::NeedFlush() const
 bool TBlocksDirtyMap::NeedErase() const
 {
     return !ReadyToErase.empty() || !ReadyToEraseBelated.empty();
+}
+
+bool TBlocksDirtyMap::NeedPersist() const
+{
+    return BehindAheadGeneration > PersistedGeneration;
+}
+
+PartitionDirect::NProto::TDirtyMapState
+TBlocksDirtyMap::GetStateForPersist() const
+{
+    PartitionDirect::NProto::TDirtyMapState result;
+    result.SetStateGeneration(GetCurrentGeneration());
+    for (const auto& ddiskState: DDiskStates) {
+        ddiskState.Save(result.AddDDiskStates());
+    }
+    return result;
+}
+
+void TBlocksDirtyMap::StatePersisted(ui32 persistGeneration)
+{
+    Y_ABORT_UNLESS(persistGeneration > PersistedGeneration);
+    Y_ABORT_UNLESS(persistGeneration <= BehindAheadGeneration);
+
+    PersistedGeneration = persistGeneration;
+}
+
+ui64 TBlocksDirtyMap::GetCurrentGeneration() const
+{
+    return BehindAheadGeneration;
 }
 
 TString TBlocksDirtyMap::DebugPrintPBuffers()
@@ -1203,6 +874,20 @@ TString TBlocksDirtyMap::DebugPrintBehind() const
     return result;
 }
 
+TString TBlocksDirtyMap::DebugPrintAheadBehindBrief() const
+{
+    TStringBuilder result;
+    result << "gen:" << GetCurrentGeneration() << "/" << PersistedGeneration
+           << " ";
+    for (THostIndex h = 0; h < GetHostCount(); ++h) {
+        auto brief = DDiskStates[h].DebugPrintAheadBehindBrief();
+        if (brief) {
+            result << PrintHostIndex(h) << ":" << brief;
+        }
+    }
+    return result;
+}
+
 TString TBlocksDirtyMap::DebugPrintInflightSync()
 {
     TStringBuilder result;
@@ -1274,7 +959,9 @@ TReadRangeHint TBlocksDirtyMap::MakeReadRangeHint(
                  : TRangeLock(weak_from_this(), lsn));
 }
 
-void TBlocksDirtyMap::AddToAheadAndBehind(ui64 lsn, THostMask ddisks)
+void TBlocksDirtyMap::AddToAheadAndBehindOnFlushCompleted(
+    ui64 lsn,
+    THostMask ddisks)
 {
     // Check that one of the ddisks is lagging or aheading, in this case it
     // needs to be notified about the data flush to ddisk.
@@ -1336,6 +1023,36 @@ void TBlocksDirtyMap::InflightFlushFinished(TBlockRange64 range)
         });
 }
 
+bool TBlocksDirtyMap::CheckEraseAbility(
+    TBlockRange64 range,
+    TInflightInfo& inflightInfo)
+{
+    if (BehindAheadGeneration == 0) {
+        return true;
+    }
+
+    if (inflightInfo.GetPersistGeneration() < PersistedGeneration) {
+        return true;
+    }
+
+    bool eraseBlocked = AnyOf(
+        DDiskStates,
+        [&](const TDDiskState& ddiskState)
+        {
+            return ddiskState.IsTrackingEnabled() &&
+                   ddiskState.HasBehindOverlapping(range);
+        });
+
+    if (!eraseBlocked) {
+        return true;
+    }
+
+    if (!inflightInfo.GetPersistGeneration()) {
+        inflightInfo.SetPersistGeneration(BehindAheadGeneration);
+    }
+    return false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
@@ -1347,18 +1064,6 @@ bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
     };
 
     return makeTuple(*this) < makeTuple(other);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments)
-{
-    return DoMakeLsnVector<TPBufferSegment>(segments);
-}
-
-TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments)
-{
-    return DoMakeLsnVector<TEraseSegment>(segments);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

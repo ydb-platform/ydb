@@ -543,11 +543,18 @@ namespace NKikimr::NDDisk {
         }
 
         // Reject if any VChunk has a pending event queue (allocation queued but not yet in log)
+        // or client data I/O that still targets its physical chunk.
         for (const auto& [vChunkIndex, chunkRef] : tabletIt->second) {
             if (!chunkRef.PendingEventsForChunk.empty()) {
                 SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
                     "chunk allocation is queued for tablet"));
+                return;
+            }
+            if (chunkRef.InFlightDataIo) {
+                SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
+                    "data chunk I/O is in flight for tablet"));
                 return;
             }
         }

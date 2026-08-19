@@ -330,8 +330,10 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "CloneQueue: " << BlocksDirtyMap->DebugPrintReadyToClone() << "\n";
     sb << "FlushQueue: " << BlocksDirtyMap->DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap->DebugPrintReadyToErase() << "\n";
+    sb << "AheadBehind:" << BlocksDirtyMap->DebugPrintAheadBehindBrief()
+       << "\n";
     sb << "Ahead:\n" << BlocksDirtyMap->DebugPrintAhead();
-    sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
+    sb << "Behind\n" << BlocksDirtyMap->DebugPrintBehind();
     sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
     return sb;
 }
@@ -402,6 +404,7 @@ void TVChunk::OnBelatedWriteBlocksResponse(
     BlocksDirtyMap->UpdateBelatedEraseQueue(completedWrites, bundle->GetLsn());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
+    DoPersistDirtyMap();
     ScheduleCleaningUp();
 }
 
@@ -420,6 +423,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
+    DoPersistDirtyMap();
 }
 
 void TVChunk::DoStart()
@@ -709,6 +713,7 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
     UpdatePendingCounters();
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
+    DoPersistDirtyMap();
     ScheduleCleaningUp();
 }
 
@@ -814,6 +819,42 @@ void TVChunk::OnEraseBelatedResponse(
     ScheduleCleaningUp();
 }
 
+void TVChunk::DoPersistDirtyMap()
+{
+    if (DirtyMapStatePersisting) {
+        return;
+    }
+    if (!BlocksDirtyMap->NeedPersist()) {
+        return;
+    }
+    DirtyMapStatePersisting = true;
+
+    auto state = BlocksDirtyMap->GetStateForPersist();
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s DoPersistDirtyMap: %s",
+        LogTitle.GetWithTime().c_str(),
+        state.DebugString().c_str());
+
+    DirectBlockGroup->Schedule(
+        TDuration::Seconds(1),
+        [weakSelf = weak_from_this(),
+         stateGeneration = state.GetStateGeneration()]   //
+        ()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->OnDirtyMapPersisted(stateGeneration);
+            }
+        });
+}
+
+void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
+{
+    DirtyMapStatePersisting = false;
+    BlocksDirtyMap->StatePersisted(stateGeneration);
+}
+
 void TVChunk::ScheduleCleaningUp()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -868,6 +909,7 @@ void TVChunk::CleaningUp()
 
     DoFlush(true);
     DoErase(true, TBlocksDirtyMap::EEraseType::Standard);
+    DoPersistDirtyMap();
 }
 
 void TVChunk::UpdatePendingCounters()

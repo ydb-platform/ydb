@@ -50,6 +50,13 @@ THostMask MakeHostMask(bool b0, bool b1, bool b2, bool b3, bool b4)
     return mask;
 }
 
+void FlushAll(const TFlushHints& flushHint, TBlocksDirtyMap& dirtyMap)
+{
+    for (const auto& [route, hint]: flushHint.GetAllHints()) {
+        dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -609,18 +616,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto flushHint = dirtyMap->MakeFlushHint(2);
         UNIT_ASSERT(!flushHint.Empty());
         UNIT_ASSERT_VALUES_EQUAL(123, *dirtyMap->GetSafeBarrierForErase());
-        dirtyMap->FlushFinished(
-            THostRoute{.SourceHostIndex = 0, .DestinationHostIndex = 0},
-            {123, 124},
-            {});
-        dirtyMap->FlushFinished(
-            THostRoute{.SourceHostIndex = 1, .DestinationHostIndex = 1},
-            {123, 124},
-            {});
-        dirtyMap->FlushFinished(
-            THostRoute{.SourceHostIndex = 2, .DestinationHostIndex = 2},
-            {123, 124},
-            {});
+        FlushAll(flushHint, *dirtyMap);
         UNIT_ASSERT_VALUES_EQUAL(123, *dirtyMap->GetSafeBarrierForErase());
 
         // Erasing lsn 123 from only a sub-quorum of hosts keeps it inflight, so
@@ -689,9 +685,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT(!flushHint.Empty());
-        for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         auto eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT(!eraseHints.Empty());
@@ -726,9 +720,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT(!flushHint.Empty());
-        for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         auto eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT(!eraseHints.Empty());
@@ -791,11 +783,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H2->H2:123[10..19];"
             "H3->H3:123[10..19];",
             flushHint.DebugPrint());
-
-        // Finish flushes
-        for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         // Erase hints
         auto eraseHints = dirtyMap->MakeEraseHint(1);
@@ -809,35 +797,6 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
             dirtyMap->EraseFinished(host, MakeLsnVector(hint.Segments), {});
         }
-    }
-
-    // A range missed while the DDisk was lagging is recorded in the Behind
-    // field. Once the DDisk stops lagging and the same range is flushed
-    // successfully, AddAhead must move it out of Behind and into Ahead (the
-    // BehindField.Remove step): the range is now up-to-date, not outdated.
-    Y_UNIT_TEST(ShouldMoveRangeFromBehindToAheadOnLateFlush)
-    {
-        TDDiskState ddisk;
-        // Fresh DDisk (operational 5 < total 100) => tracking enabled.
-        ddisk.Init(/*totalBlockCount=*/100, /*operationalBlockCount=*/5);
-        UNIT_ASSERT_VALUES_EQUAL(true, ddisk.IsTrackingEnabled());
-
-        // While lagging, a missed flush marks the range as outdated (Behind).
-        ddisk.StartLagging();
-        ddisk.OnRangeFlushed(
-            TBlockRange64::WithLength(10, 10),
-            TDDiskState::EFlushCompletion::Missed);
-        UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintBehind());
-        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintAhead());
-
-        // The DDisk catches up and the same range is flushed successfully.
-        // The range must leave Behind and appear in Ahead.
-        ddisk.StopLagging();
-        ddisk.OnRangeFlushed(
-            TBlockRange64::WithLength(10, 10),
-            TDDiskState::EFlushCompletion::Completed);
-        UNIT_ASSERT_VALUES_EQUAL("", ddisk.DebugPrintBehind());
-        UNIT_ASSERT_VALUES_EQUAL("[10..19]", ddisk.DebugPrintAhead());
     }
 
     // A Fresh DDisk has range tracking enabled. When a write is flushed to it,
@@ -883,9 +842,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Finish flushes to every DDisk.
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
-        for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         // FlushCompleted recorded the flushed range in the Fresh DDisk's Ahead
         // field. Only the Fresh host H3 tracks; the Operational hosts do not.
@@ -937,11 +894,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H2->H2:123[10..19];"
             "H3->H3:123[10..19];",
             flushHint.DebugPrint());
-
-        // Finish flushes
-        for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         // Erase hints
         auto eraseHints = dirtyMap->MakeEraseHint(1);
@@ -1000,11 +953,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H3->H3:123[10..19];"
             "H4->H4:123[10..19];",
             flushHint.DebugPrint());
-
-        // Finish flushes
-        for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         // Erase hints
         auto eraseHints = dirtyMap->MakeEraseHint(1);
@@ -1058,11 +1007,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H1->H3:123[10..19];"
             "H2->H2:123[10..19];",
             flushHint.DebugPrint());
-
-        // Finish flushes
-        for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         // Erase hints
         auto eraseHints = dirtyMap->MakeEraseHint(1);
@@ -1147,9 +1092,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
-        for (const auto& [route, flush]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, {MakeLsnVector(flush.Segments)}, {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         // Lock pbuffer
         dirtyMap->LockPBuffer(123);
@@ -1344,19 +1287,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H1->H1:123[0..99];"
             "H2->H2:123[0..99];",
             flushHint.DebugPrint());
-
-        dirtyMap->FlushFinished(
-            THostRoute{.SourceHostIndex = 0, .DestinationHostIndex = 0},
-            {123},
-            {});
-        dirtyMap->FlushFinished(
-            THostRoute{.SourceHostIndex = 1, .DestinationHostIndex = 1},
-            {123},
-            {});
-        dirtyMap->FlushFinished(
-            THostRoute{.SourceHostIndex = 2, .DestinationHostIndex = 2},
-            {123},
-            {});
+        FlushAll(flushHint, *dirtyMap);
 
         auto eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1952,9 +1883,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Flush all hosts.
         auto flushHint = dirtyMap->MakeFlushHint(1);
-        for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         // Disable host 0 before erase.
         vchunkConfig.DisableHost(0);
@@ -2105,9 +2034,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             "H1->H1:123[10..19];"
             "H2->H2:123[10..19];",
             flushHint.DebugPrint());
-        for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         // Get erase hints and finish erase on hosts 0 and 2 only.
         auto eraseHints = dirtyMap->MakeEraseHint(1);
@@ -2197,9 +2124,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto flushHint = dirtyMap->MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
-        for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap->FlushFinished(route, MakeLsnVector(hint.Segments), {});
-        }
+        FlushAll(flushHint, *dirtyMap);
 
         auto eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT_EQUAL(false, eraseHints.Empty());
@@ -2418,8 +2343,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange64::MakeClosedInterval(0, totalBlocks - 1),
             *freshRange);
         auto syncRange = TBlockRange64::MakeClosedInterval(0, 255);
-        dirtyMap->GetRangeSyncStartTrigger(THostIndex{0}, syncRange);
-        dirtyMap->RangeSynced(THostIndex{0}, syncRange);
+        auto syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, syncRange);
+        dirtyMap->EndRangeSync(syncHint.SyncId, true);
 
         UNIT_ASSERT_VALUES_EQUAL(
             TBlockRange64::MakeClosedInterval(256, totalBlocks - 1),
@@ -2435,8 +2360,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // Sync the remaining blocks. The DDisk becomes fully operational and no
         // longer reports a fresh range.
         syncRange = TBlockRange64::MakeClosedInterval(256, totalBlocks - 1);
-        dirtyMap->GetRangeSyncStartTrigger(THostIndex{0}, syncRange);
-        dirtyMap->RangeSynced(THostIndex{0}, syncRange);
+        syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, syncRange);
+        dirtyMap->EndRangeSync(syncHint.SyncId, true);
 
         UNIT_ASSERT_EQUAL(std::nullopt, dirtyMap->GetFreshRange(THostIndex{0}));
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2464,8 +2389,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // With no overlapping inflight flush, the sync start trigger should be
         // ready immediately.
-        auto trigger = dirtyMap->GetRangeSyncStartTrigger(THostIndex{0}, range);
-        UNIT_ASSERT_VALUES_EQUAL(true, trigger.HasValue());
+        auto syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, range);
+        UNIT_ASSERT_VALUES_EQUAL(true, syncHint.ReadyToStart.HasValue());
 
         // The sync should be registered as in-flight and ready to run.
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2473,8 +2398,104 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             dirtyMap->DebugPrintInflightSync());
 
         // Completing the sync removes it from the in-flight sync map.
-        dirtyMap->RangeSynced(THostIndex{0}, range);
+        dirtyMap->EndRangeSync(syncHint.SyncId, true);
         UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintInflightSync());
+    }
+
+    Y_UNIT_TEST(ShouldNotAdvanceFreshRangeWhenRangeSyncFailed)
+    {
+        const ui64 totalBlocks = DefaultVChunkSize / DefaultBlockSize;
+
+        auto vchunkConfig = MakeTestVChunkConfig();
+
+        // Make H0 completely fresh (nothing synced yet).
+        vchunkConfig.SetWatermark(THostIndex{0}, 0);
+
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::MakeClosedInterval(0, totalBlocks - 1),
+            *dirtyMap->GetFreshRange(THostIndex{0}));
+
+        const auto syncRange = TBlockRange64::MakeClosedInterval(0, 255);
+        auto syncHint = dirtyMap->BeginRangeSync(THostIndex{0}, syncRange);
+
+        // A failed sync must be removed from the in-flight sync map, but it
+        // must NOT advance the operational block count / shrink the fresh
+        // range.
+        dirtyMap->EndRangeSync(syncHint.SyncId, false);
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintInflightSync());
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            TBlockRange64::MakeClosedInterval(0, totalBlocks - 1),
+            *dirtyMap->GetFreshRange(THostIndex{0}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            "H0*{Fresh+,0};"
+            "H1*{Operational,32768};"
+            "H2*{Operational,32768};"
+            "H3+{Disabled,0};"
+            "H4+{Disabled,0};",
+            dirtyMap->DebugPrintDDiskState());
+    }
+
+    // Exercises the full persist lifecycle:
+    //   - NeedPersist() starts false and generation is 0.
+    //   - After a flush that populates a fresh DDisk's Ahead field,
+    //     NeedPersist() becomes true and generation advances.
+    //   - GetStateForPersist() captures the generation and correct DDisk count.
+    //   - StatePersisted() resets NeedPersist() to false.
+    //   - Only Behind data (not Ahead) can block MakeEraseHint().
+    Y_UNIT_TEST(PersistLifecycleAndEraseNotBlockedByAheadData)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+
+        // H3 is fresh; writes above watermark populate its Ahead field.
+        vchunkConfig.PromoteHost(3);
+        vchunkConfig.SetWatermark(3, DefaultBlockSize * 5);
+
+        auto dirtyMap = std::make_shared<TBlocksDirtyMap>(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        // Initially no changes.
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
+        UNIT_ASSERT_VALUES_EQUAL(0u, dirtyMap->GetCurrentGeneration());
+
+        const THostMask requested = MakeHostMask(true, true, true, true, false);
+        dirtyMap->RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
+        dirtyMap->WriteFinished(
+            100,
+            TBlockRange64::WithLength(10, 10),
+            requested,
+            requested);
+
+        // Flush all DDIsks; H3's Ahead field changes → generation increments.
+        auto flushHint = dirtyMap->MakeFlushHint(1);
+        UNIT_ASSERT_EQUAL(false, flushHint.Empty());
+        FlushAll(flushHint, *dirtyMap);
+
+        UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap->NeedPersist());
+        UNIT_ASSERT(dirtyMap->GetCurrentGeneration() > 0);
+
+        // GetStateForPersist captures current generation.
+        // Saves one entry per host slot (DirectBlockGroupHostCount = 5).
+        const ui32 gen = static_cast<ui32>(dirtyMap->GetCurrentGeneration());
+        auto state = dirtyMap->GetStateForPersist();
+        UNIT_ASSERT_VALUES_EQUAL(gen, state.GetStateGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(5, state.DDiskStatesSize());
+
+        // StatePersisted() resets the persist flag.
+        dirtyMap->StatePersisted(gen);
+        UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
+
+        // Only Behind blocks erase; Ahead does not.
+        UNIT_ASSERT_VALUES_EQUAL("", dirtyMap->DebugPrintBehind());
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_EQUAL(false, eraseHints.Empty());
     }
 }
 

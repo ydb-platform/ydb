@@ -618,6 +618,8 @@ message TKqpPhyStage {
     double EstimatedRows = 19;
     repeated TKqpOutputTransform OutputTransforms = 17;
     map<string, TKqpControlPlaneSettings> StageControlPlaneActors = 18;
+    // Per-stage WASM UDF module names (from TCoUdf)
+    repeated string WasmUdfModules = 20;
 }
 
 message TKqpPhyResult {

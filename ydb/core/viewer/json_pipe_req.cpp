@@ -1,5 +1,6 @@
 #include "json_pipe_req.h"
 #include "log.h"
+#include <ydb/core/base/auth.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
 #include <util/generic/overloaded.h>
@@ -1021,6 +1022,21 @@ std::vector<TNodeId> TViewerPipeClient::GetDatabaseNodes() {
 
 bool TViewerPipeClient::IsDatabaseRequest() const {
     return DatabaseBoardInfoResponse || ResourceBoardInfoResponse;
+}
+
+bool TViewerPipeClient::IsStrictDatabaseOnlyRequest() {
+    if (!StrictDatabaseOnlyRequest.has_value()) {
+        StrictDatabaseOnlyRequest = IsStrictDatabaseOnlyToken(AppData(), GetRequest().GetUserTokenObject());
+    }
+    return *StrictDatabaseOnlyRequest;
+}
+
+TString TViewerPipeClient::GetUserSID() const {
+    NACLibProto::TUserToken userToken;
+    if (!userToken.ParseFromString(GetRequest().GetUserTokenObject())) {
+        return {};
+    }
+    return userToken.GetUserSID();
 }
 
 void TViewerPipeClient::InitConfig(const TCgiParameters& params) {

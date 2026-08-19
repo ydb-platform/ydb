@@ -856,6 +856,27 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
         ResumeExecution(EResumeSource::CAResumeByCheckpoint);
     }
 
+    TString GetTaskDebugState() const override {
+        auto diagnostics = TStringBuilder() << "Configuration. ["
+            << "Input channels #" << InputChannelsMap.size()
+            << ". Input transforms #" << InputTransformsMap.size()
+            << ". Sources #" << SourcesMap.size()
+            << ". Output channels #" << OutputChannelsMap.size()
+            << ". Output transforms #" << OutputTransformsMap.size()
+            << ". Sinks #" << SinksMap.size()
+            << "] ";
+
+        diagnostics << "Runtime state. ["
+            << "Compute state: " << NDqProto::EComputeState_Name(State)
+            << ". Last run time: " << ProcessOutputsState.LastRunTime
+            << ". Last run status: " << ProcessOutputsState.LastRunStatus
+            << ". Continue execution scheduled: " << ResumeEventScheduled
+            << ". Has pending watermark: " << WatermarksTracker.HasPendingWatermark()
+            << "] ";
+
+        return diagnostics;
+    }
+
 protected:
     virtual void DoLoadRunnerState(TString&& blob) = 0;
 

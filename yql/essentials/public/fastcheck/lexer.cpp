@@ -12,8 +12,8 @@ namespace {
 
 class TLexerRunner: public TCheckRunnerBase {
 public:
-    TString GetCheckName() const final {
-        return "lexer";
+    ECheckName GetCheckName() const final {
+        return ECheckName::Lexer;
     }
 
     TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) final {
@@ -32,19 +32,19 @@ private:
         Y_UNUSED(request);
         Y_UNUSED(state);
         // no separate check for lexer here
-        return TCheckResponse{.CheckName = GetCheckName(), .Success = true};
+        return TCheckResponse{.CheckName = ToString(GetCheckName()), .Success = true};
     }
 
     TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
         Y_UNUSED(state);
         // no separate check for lexer here
-        return TCheckResponse{.CheckName = GetCheckName(), .Success = true};
+        return TCheckResponse{.CheckName = ToString(GetCheckName()), .Success = true};
     }
 
     TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
-        TCheckResponse res{.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = ToString(GetCheckName())};
         res.Success = state.CheckLexer(res.Issues);
         return res;
     }

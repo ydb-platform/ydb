@@ -4,6 +4,7 @@
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/set.h>
+#include <util/string/cast.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/public/langver/yql_langver.h>
 #include <yql/essentials/public/udf_meta/udf_meta.h>
@@ -21,6 +22,14 @@ enum class EMode {
     Main,
     Library,
     View
+};
+
+enum class ECheckName {
+    Lexer /* "lexer" */,
+    Parser /* "parser" */,
+    Format /* "format" */,
+    Translator /* "translator" */,
+    Typecheck /* "typecheck" */,
 };
 
 enum EClusterMode {

@@ -19,8 +19,14 @@ namespace {
 
 class TTypecheckRunner: public TCheckRunnerBase {
 public:
-    TString GetCheckName() const final {
-        return "typecheck";
+    ECheckName GetCheckName() const final {
+        return ECheckName::Typecheck;
+    }
+
+protected:
+    const THashSet<ECheckName>& Requirements() const final {
+        static const THashSet<ECheckName> Requirements = {ECheckName::Lexer, ECheckName::Parser, ECheckName::Translator};
+        return Requirements;
     }
 
     TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) final {
@@ -36,7 +42,7 @@ public:
 
 private:
     TCheckResponse RunSExpr(const TChecksRequest& request, TCheckState& state) {
-        TCheckResponse res{.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = ToString(GetCheckName())};
 
         const auto* astResult = state.TranslateSExpr(res.Issues);
         if (!astResult || !astResult->IsOk()) {
@@ -50,7 +56,7 @@ private:
     }
 
     TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
-        TCheckResponse res{.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = ToString(GetCheckName())};
 
         const auto* astResult = state.TranslatePg(res.Issues);
         if (!astResult || !astResult->IsOk()) {
@@ -64,7 +70,7 @@ private:
     }
 
     TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
-        TCheckResponse res{.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = ToString(GetCheckName())};
 
         const auto* astResult = state.TranslateSql(res.Issues);
         if (!astResult || !astResult->IsOk()) {

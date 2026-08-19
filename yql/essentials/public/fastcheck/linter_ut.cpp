@@ -296,6 +296,84 @@ Y_UNIT_TEST(BadParserYql) {
     UNIT_ASSERT(res.Checks[0].Issues.Size() > 0);
 }
 
+Y_UNIT_TEST(HigherLevelChecksDoNotDuplicateParserErrors) {
+    TChecksRequest request = MakeCheckRequest();
+    request.Program = "1";
+    request.Syntax = ESyntax::YQL;
+    request.Filters.ConstructInPlace();
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "parser"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
+
+    auto res = RunChecks(request);
+
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "parser");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].CheckName, "translator");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[2].CheckName, "typecheck");
+
+    UNIT_ASSERT(!res.Checks[0].Success);
+    UNIT_ASSERT_C(res.Checks[0].Issues.Size() > 0, res.Checks[0].Issues.ToString());
+
+    UNIT_ASSERT(!res.Checks[1].Success);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].Issues.Size(), 0);
+
+    UNIT_ASSERT(!res.Checks[2].Success);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[2].Issues.Size(), 0);
+}
+
+Y_UNIT_TEST(HigherLevelChecksDoNotDuplicateSExprParserErrors) {
+    TChecksRequest request = MakeCheckRequest();
+    request.Program = ")";
+    request.Syntax = ESyntax::SExpr;
+    request.Filters.ConstructInPlace();
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "parser"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
+
+    auto res = RunChecks(request);
+
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "parser");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].CheckName, "translator");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[2].CheckName, "typecheck");
+
+    UNIT_ASSERT(!res.Checks[0].Success);
+    UNIT_ASSERT_C(res.Checks[0].Issues.Size() > 0, res.Checks[0].Issues.ToString());
+
+    UNIT_ASSERT(!res.Checks[1].Success);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].Issues.Size(), 0);
+
+    UNIT_ASSERT(!res.Checks[2].Success);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[2].Issues.Size(), 0);
+}
+
+Y_UNIT_TEST(HigherLevelChecksDoNotDuplicatePgParserErrors) {
+    TChecksRequest request = MakeCheckRequest();
+    request.Program = "sel";
+    request.Syntax = ESyntax::PG;
+    request.Filters.ConstructInPlace();
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "parser"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
+
+    auto res = RunChecks(request);
+
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "parser");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].CheckName, "translator");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[2].CheckName, "typecheck");
+
+    UNIT_ASSERT(!res.Checks[0].Success);
+    UNIT_ASSERT_C(res.Checks[0].Issues.Size() > 0, res.Checks[0].Issues.ToString());
+
+    UNIT_ASSERT(!res.Checks[1].Success);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].Issues.Size(), 0);
+
+    UNIT_ASSERT(!res.Checks[2].Success);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[2].Issues.Size(), 0);
+}
+
 Y_UNIT_TEST(DummyTranslatorSExpr) {
     TChecksRequest request = MakeCheckRequest();
     request.Program = "((return world))";
@@ -363,6 +441,27 @@ Y_UNIT_TEST(BadTranslatorYql) {
     UNIT_ASSERT(!res.Checks[0].Success);
     Cerr << res.Checks[0].Issues.ToString();
     UNIT_ASSERT(res.Checks[0].Issues.Size() > 0);
+}
+
+Y_UNIT_TEST(TypecheckDoesNotDuplicateTranslatorErrors) {
+    TChecksRequest request = MakeCheckRequest();
+    request.Program = "select ListLengggth([1,2,3])";
+    request.Syntax = ESyntax::YQL;
+    request.Filters.ConstructInPlace();
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "translator"});
+    request.Filters->push_back(TCheckFilter{.CheckNameGlob = "typecheck"});
+
+    auto res = RunChecks(request);
+
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks.size(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[0].CheckName, "translator");
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].CheckName, "typecheck");
+
+    UNIT_ASSERT(!res.Checks[0].Success);
+    UNIT_ASSERT_C(res.Checks[0].Issues.Size() > 0, res.Checks[0].Issues.ToString());
+
+    UNIT_ASSERT(!res.Checks[1].Success);
+    UNIT_ASSERT_VALUES_EQUAL(res.Checks[1].Issues.Size(), 0);
 }
 
 Y_UNIT_TEST(AllowYqlExportsForLibrary) {

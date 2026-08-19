@@ -44,8 +44,8 @@ TString ReplaceHidden(TStringBuf input) {
 
 class TFormatRunner: public TCheckRunnerBase {
 public:
-    TString GetCheckName() const final {
-        return "format";
+    ECheckName GetCheckName() const final {
+        return ECheckName::Format;
     }
 
     TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) final {
@@ -64,19 +64,19 @@ private:
         Y_UNUSED(request);
         Y_UNUSED(state);
         // no separate check for format here
-        return TCheckResponse{.CheckName = GetCheckName(), .Success = true};
+        return TCheckResponse{.CheckName = ToString(GetCheckName()), .Success = true};
     }
 
     TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
         Y_UNUSED(state);
         // no separate check for format here
-        return TCheckResponse{.CheckName = GetCheckName(), .Success = true};
+        return TCheckResponse{.CheckName = ToString(GetCheckName()), .Success = true};
     }
 
     TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(state);
-        TCheckResponse res{.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = ToString(GetCheckName())};
         if (request.SyntaxVersion != 1) {
             res.Issues.AddIssue(TIssue({}, "Only SyntaxVersion 1 is supported"));
             return res;

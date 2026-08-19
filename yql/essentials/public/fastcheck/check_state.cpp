@@ -15,6 +15,35 @@
 
 namespace NYql::NFastCheck {
 
+namespace {
+
+class TPgParseSuccess final: public IPGParseEvents {
+public:
+    void OnResult(const List* raw) override {
+        Y_UNUSED(raw);
+        Success_ = true;
+    }
+
+    void OnError(const TIssue& issue) override {
+        Y_UNUSED(issue);
+    }
+
+    bool Success() const {
+        return Success_;
+    }
+
+private:
+    bool Success_ = false;
+};
+
+bool IsPgParserSuccess(const TPGParseResult& result) {
+    TPgParseSuccess success;
+    result.Visit(success);
+    return success.Success();
+}
+
+} // namespace
+
 TCheckState::TCheckState(const TChecksRequest& request)
     : Request_(request)
 {
@@ -252,6 +281,28 @@ const TAstParseResult* TCheckState::ParseSExpr(TIssues& issues) {
 
 const TAstParseResult* TCheckState::TranslateSExpr(TIssues& issues) {
     return ParseSExpr(issues);
+}
+
+bool TCheckState::IsDefinitelyFailed(ECheckName checkName) {
+    switch (checkName) {
+        case ECheckName::Lexer:
+            return LexerCache_ && !LexerCache_->Success;
+        case ECheckName::Parser:
+            switch (GetEffectiveSyntax()) {
+                case ESyntax::SExpr:
+                    return TranslateCache_ && !TranslateCache_->Result.IsOk();
+                case ESyntax::PG:
+                    return PgParserCache_ && !IsPgParserSuccess(PgParserCache_->Result);
+                case ESyntax::YQL:
+                    return ParserCache_ && !ParserCache_->Msg;
+            }
+        case ECheckName::Translator:
+            return TranslateCache_ && !TranslateCache_->Result.IsOk();
+        case ECheckName::Format:
+            return false;
+        case ECheckName::Typecheck:
+            return false;
+    }
 }
 
 } // namespace NYql::NFastCheck

@@ -14,8 +14,14 @@ namespace {
 
 class TTranslatorRunner: public TCheckRunnerBase {
 public:
-    TString GetCheckName() const final {
-        return "translator";
+    ECheckName GetCheckName() const final {
+        return ECheckName::Translator;
+    }
+
+protected:
+    const THashSet<ECheckName>& Requirements() const final {
+        static const THashSet<ECheckName> Requirements = {ECheckName::Lexer, ECheckName::Parser};
+        return Requirements;
     }
 
     TCheckResponse DoRun(const TChecksRequest& request, TCheckState& state) final {
@@ -32,7 +38,7 @@ public:
 private:
     TCheckResponse RunSExpr(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
-        TCheckResponse res{.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = ToString(GetCheckName())};
 
         const auto* astResult = state.TranslateSExpr(res.Issues);
         res.Success = astResult && astResult->IsOk();
@@ -42,7 +48,7 @@ private:
 
     TCheckResponse RunPg(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
-        TCheckResponse res{.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = ToString(GetCheckName())};
 
         const auto* astResult = state.TranslatePg(res.Issues);
         res.Success = astResult && astResult->IsOk();
@@ -52,7 +58,7 @@ private:
 
     TCheckResponse RunYql(const TChecksRequest& request, TCheckState& state) {
         Y_UNUSED(request);
-        TCheckResponse res{.CheckName = GetCheckName()};
+        TCheckResponse res{.CheckName = ToString(GetCheckName())};
 
         const auto* astResult = state.TranslateSql(res.Issues);
         res.Success = astResult && astResult->IsOk();

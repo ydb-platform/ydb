@@ -3,6 +3,7 @@ import inspect
 import io
 import json
 import os
+import plistlib
 import shutil
 import signal
 import socket
@@ -44,6 +45,7 @@ from ydb.tools.ydb_bench.lib.results import ResultStore, SCHEMA_VERSION, load_ma
 from ydb.tools.ydb_bench.lib.runner import run_command
 from ydb.tools.ydb_bench.lib.topology import (
     CpuTopology,
+    _parse_darwin_topology,
     discover_topology,
     parse_cpu_list,
     plan_affinity,
@@ -1214,6 +1216,34 @@ class YdbBenchTest(unittest.TestCase):
     def test_cpu_list_parser(self):
         self.assertEqual(parse_cpu_list("0-3,8,10-11\n"), (0, 1, 2, 3, 8, 10, 11))
 
+    def test_darwin_topology_uses_device_tree_clusters(self):
+        entries = []
+        for cpu, cluster, kind in ((0, 0, "E"), (1, 0, "E"), (2, 1, "P"), (3, 1, "P"), (4, 2, "P")):
+            entries.append(
+                {
+                    "logical-cpu-id": cpu,
+                    "cluster-id": cluster.to_bytes(4, byteorder="little"),
+                    "cluster-type": kind.encode("ascii") + b"\0",
+                }
+            )
+        topology = _parse_darwin_topology(
+            plistlib.dumps([{"IORegistryEntryChildren": entries}]),
+            (0, 1, 2, 3, 4),
+        )
+
+        self.assertEqual(topology.chiplets, ((0, (0, 1)), (0, (2, 3)), (0, (4,))))
+        self.assertEqual(
+            topology.chiplet_labels,
+            (
+                ((0, 1), "Efficiency cluster"),
+                ((2, 3), "Performance cluster 1"),
+                ((4,), "Performance cluster 2"),
+            ),
+        )
+        self.assertEqual(topology.physical_cores, ((0,), (1,), (2,), (3,), (4,)))
+        self.assertEqual(topology.smt_siblings, topology.physical_cores)
+        self.assertEqual(topology_record(topology)["chiplets"][0]["label"], "Efficiency cluster")
+
     def test_topology_discovery_intersects_sysfs_with_allowed_cpus(self):
         sys_root = self.root / "sys" / "devices" / "system"
         for node_id, cpus in ((0, "0-3"), (1, "4-7")):
@@ -1934,6 +1964,18 @@ class WebTest(unittest.TestCase):
             with urllib.request.urlopen(base + "/app.js") as response:
                 script = response.read()
                 self.assertIn(b"System topology", script)
+                self.assertIn(b"NUMA, cache and cores", script)
+                self.assertIn(b"function affinityTree", script)
+                self.assertIn(b"class=affinity-tree", script)
+                self.assertIn(b"SMT threads", script)
+                self.assertIn(b"<span class=cpu-ranges>vCPU ", script)
+                self.assertNotIn(b"(core.index+1)", script)
+                self.assertIn(b"Unavailable", script)
+                self.assertNotIn(b"Use in new run", script)
+                self.assertNotIn(b"data-mode", script)
+                self.assertNotIn(b"<th>First mask</th>", script)
+                self.assertNotIn(b"Physical cores (", script)
+                self.assertNotIn(b"SMT sibling sets (", script)
                 self.assertIn(b"New run", script)
                 self.assertIn(b"<th>Duration</th>", script)
                 self.assertIn(b"<th>Runs</th>", script)

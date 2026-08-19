@@ -257,6 +257,7 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
         .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
         .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
+        .EnableDefaultFromExpression = AppData()->FeatureFlags.GetEnableDefaultFromExpression(),
     };
 
 

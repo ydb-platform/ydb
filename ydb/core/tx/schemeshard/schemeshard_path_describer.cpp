@@ -136,10 +136,13 @@ static void FillColumns(
                 Y_ABORT_UNLESS(colDescr->MutableDefaultFromLiteral()->ParseFromString(
                     cinfo.DefaultValue));
                 break;
-            case ETableColumnDefaultKind::FromExpression:
-                Y_ABORT_UNLESS(colDescr->MutableDefaultFromExpression()->ParseFromString(
-                    cinfo.DefaultValue));
+            case ETableColumnDefaultKind::FromExpression: {
+                auto* defaultExpression = colDescr->MutableDefaultFromExpression();
+                Y_ABORT_UNLESS(defaultExpression->ParseFromString(cinfo.DefaultValue));
+                Y_ABORT_UNLESS(defaultExpression->HasKind(),
+                    "Column '%s' has an expression default of unknown kind", cinfo.Name.c_str());
                 break;
+            }
         }
     }
 }

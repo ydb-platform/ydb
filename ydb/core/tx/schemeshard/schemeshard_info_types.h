@@ -751,6 +751,15 @@ struct TTableInfo : public TSimpleRefCount<TTableInfo> {
 
         bool IsKey() const { return KeyOrder != Max<ui32>(); }
         bool IsDropped() const { return DeleteVersion != Max<ui64>(); }
+
+        bool TryGetDefaultExpression(NKikimrSchemeOp::TDefaultExpressionColumnDescription& desc) const {
+            return DefaultKind == ETableColumnDefaultKind::FromExpression && desc.ParseFromString(DefaultValue);
+        }
+
+        bool IsGenerated() const {
+            NKikimrSchemeOp::TDefaultExpressionColumnDescription desc;
+            return TryGetDefaultExpression(desc) && desc.GetKind() != NKikimrSchemeOp::TDefaultExpressionColumnDescription::DEFAULT;
+        }
     };
 
     struct TBackupRestoreResult {
@@ -1020,6 +1029,7 @@ public:
         bool EnableColumnStatistics = false;
         bool EnableGeneratedStored = false;
         bool EnableGeneratedVirtual = false;
+        bool EnableDefaultFromExpression = false;
     };
 
     static TAlterDataPtr CreateAlterData(

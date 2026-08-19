@@ -10,7 +10,7 @@ namespace {
 
 constexpr TKafkaVersion ProtocolVersion = 3;
 
-TKafkaBytes BytesFromBuffer(TKafkaWriteBuffer& buf) {
+TKafkaBytes BytesFromBuffer(TWritableBuf& buf) {
     const auto& front = buf.GetFrontBuffer();
     return TKafkaRawBytes(front.data(), front.size());
 }
@@ -55,7 +55,7 @@ Y_UNIT_TEST(TryReadAssignmentParsesSyncGroupBlob) {
     topicPartition.Partitions = {0, 1};
     assignment.AssignedPartitions.push_back(topicPartition);
 
-    TKafkaWriteBuffer buf(assignment.Size(ProtocolVersion) + sizeof(ProtocolVersion));
+    TWritableBuf buf(nullptr, assignment.Size(ProtocolVersion) + sizeof(ProtocolVersion));
     TKafkaWritable writable(buf);
     writable << ProtocolVersion;
     assignment.Write(writable, ProtocolVersion);
@@ -87,7 +87,7 @@ Y_UNIT_TEST(GetSubscriptionsRejectsWrongProtocolType) {
     TConsumerProtocolSubscription subscription;
     subscription.Topics.push_back("topic");
 
-    TKafkaWriteBuffer buf(subscription.Size(ProtocolVersion) + sizeof(ProtocolVersion));
+    TWritableBuf buf(nullptr, subscription.Size(ProtocolVersion) + sizeof(ProtocolVersion));
     TKafkaWritable writable(buf);
     writable << ProtocolVersion;
     subscription.Write(writable, ProtocolVersion);
@@ -102,7 +102,7 @@ Y_UNIT_TEST(GetSubscriptionsParsesValidMetadata) {
     subscription.Topics.push_back("topic-a");
     subscription.Topics.push_back("topic-b");
 
-    TKafkaWriteBuffer buf(subscription.Size(ProtocolVersion) + sizeof(ProtocolVersion));
+    TWritableBuf buf(nullptr, subscription.Size(ProtocolVersion) + sizeof(ProtocolVersion));
     TKafkaWritable writable(buf);
     writable << ProtocolVersion;
     subscription.Write(writable, ProtocolVersion);

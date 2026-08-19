@@ -47,18 +47,20 @@ void AssertMessageMeta(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent
 }
 
 TString MakeKafkaRequestFrame(TRequestHeaderData& header, const TString& body) {
-    TKafkaWriteBuffer payload(256);
+    TWritableBuf payload(nullptr, 256);
     TKafkaWritable writable(payload);
     header.Write(writable, RequestHeaderVersion(header.RequestApiKey, header.RequestApiVersion));
     writable.write(body.data(), body.size());
 
-    const TString payloadBytes = payload.AsString();
-    TKafkaWriteBuffer frame(256);
+    const TBuffer& payloadBuf = payload.GetFrontBuffer();
+    const TString payloadBytes(payloadBuf.Data(), payloadBuf.Size());
+    TWritableBuf frame(nullptr, 256);
     TKafkaWritable frameWritable(frame);
     TKafkaInt32 size = payloadBytes.size();
     frameWritable << size;
     frameWritable.write(payloadBytes.data(), payloadBytes.size());
-    return frame.AsString();
+    const TBuffer& frameBuf = frame.GetFrontBuffer();
+    return TString(frameBuf.Data(), frameBuf.Size());
 }
 
 TString MakeMetadataRequestWithHugeTopicsArray(TKafkaVersion version) {
@@ -68,7 +70,7 @@ TString MakeMetadataRequestWithHugeTopicsArray(TKafkaVersion version) {
     header.CorrelationId = 9101;
     header.ClientId = "";
 
-    TKafkaWriteBuffer body(32);
+    TWritableBuf body(nullptr, 32);
     TKafkaWritable writable(body);
     constexpr TKafkaInt32 HugeLength = 2147483647;
     if (version >= 9) {
@@ -76,7 +78,8 @@ TString MakeMetadataRequestWithHugeTopicsArray(TKafkaVersion version) {
     } else {
         writable << HugeLength;
     }
-    return MakeKafkaRequestFrame(header, body.AsString());
+    const TBuffer& bodyBuf = body.GetFrontBuffer();
+    return MakeKafkaRequestFrame(header, TString(bodyBuf.Data(), bodyBuf.Size()));
 }
 
 void SendKafkaFrameAndExpectConnectionClose(ui16 port, const TString& frame) {

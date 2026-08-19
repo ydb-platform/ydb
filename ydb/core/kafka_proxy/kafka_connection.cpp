@@ -815,11 +815,6 @@ protected:
                         }
 
                         TKafkaReadable readable(*Request->Buffer);
-<<<<<<< HEAD
-=======
-                        readable.SetAllowCompressed(AppData()->FeatureFlags.GetEnableTopicMessagesBatching());
-                        readable.SetMaxArrayBytes(static_cast<size_t>(Context->Config.GetMaxMessageSize()));
->>>>>>> ead9eb11d4e (Harden Kafka parser against OOM and OOB on untrusted lengths (#50358))
 
                         try {
                             Request->Message = CreateRequest(Request->ApiKey);

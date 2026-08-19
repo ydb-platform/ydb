@@ -372,7 +372,6 @@ public:
     TKafkaReadable(const TBuffer& is, const TKafkaReadable& limitsFrom)
         : Is(is)
         , Position(0)
-        , AllowCompressed_(limitsFrom.AllowCompressed_)
         , MaxArrayBytes_(limitsFrom.MaxArrayBytes_) {
     }
 
@@ -425,16 +424,6 @@ public:
 
     size_t position() const;
 
-<<<<<<< HEAD:ydb/core/kafka_proxy/kafka.h
-=======
-    void SetAllowCompressed(bool allowCompressed) {
-        AllowCompressed_ = allowCompressed;
-    }
-
-    bool GetAllowCompressed() const {
-        return AllowCompressed_;
-    }
-
     void SetMaxArrayBytes(size_t maxArrayBytes) {
         MaxArrayBytes_ = maxArrayBytes == 0 ? DefaultMaxArrayBytes : maxArrayBytes;
     }
@@ -443,18 +432,12 @@ public:
         return MaxArrayBytes_;
     }
 
->>>>>>> ead9eb11d4e (Harden Kafka parser against OOM and OOB on untrusted lengths (#50358)):ydb/public/sdk/cpp/src/library/kafka/kafka.h
 private:
     void checkEof(size_t length);
 
     const TBuffer& Is;
     size_t Position;
-<<<<<<< HEAD:ydb/core/kafka_proxy/kafka.h
-=======
-    // Temporary switch until server-side Kafka record batch support is implemented.
-    bool AllowCompressed_ = false;
     size_t MaxArrayBytes_ = DefaultMaxArrayBytes;
->>>>>>> ead9eb11d4e (Harden Kafka parser against OOM and OOB on untrusted lengths (#50358)):ydb/public/sdk/cpp/src/library/kafka/kafka.h
 };
 
 struct TReadDemand {

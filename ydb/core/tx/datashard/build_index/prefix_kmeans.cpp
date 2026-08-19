@@ -160,7 +160,6 @@ public:
             {"debug", Debug()});
         NextCheckpointAtBytes = ScanSettings.GetMaxCheckpointBytes();
 
-        const bool toBuild = request.GetUpload() == NKikimrTxDataShard::UPLOAD_BUILD_TO_BUILD;
         OutForeign = OverlapClusters > 1 && request.GetOverlapOutForeign();
 
         const auto& embedding = request.GetEmbeddingColumn();
@@ -168,7 +167,7 @@ public:
         for (auto & col: request.GetSourcePrimaryKeyColumns()) {
             data.push_back(col);
         }
-        ScanTags = MakeScanTags(table, embedding, {data.begin(), data.end()}, toBuild, EmbeddingPos, DataPos);
+        ScanTags = MakeScanTags(table, embedding, {data.begin(), data.end()}, EmbeddingPos, DataPos);
         // tags: __ydb_foreign [embedding] data... sourcePK...
         // DataPos always includes the embedding column
         DataColumnCount = ScanTags.size() - request.GetSourcePrimaryKeyColumns().size() - DataPos;

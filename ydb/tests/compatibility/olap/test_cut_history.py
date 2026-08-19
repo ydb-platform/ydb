@@ -13,6 +13,70 @@ from ydb.tests.oss.ydb_sdk_import import ydb
 logger = logging.getLogger(__name__)
 
 
+class TestCutHistoryDormant(RollingUpgradeAndDowngradeFixture):
+    """The combination the guarded test cannot reach: NEW code rolled against OLD
+    config. No CutHistory flags are set, so on >= 26.4 nodes the cutter machinery is
+    present but dormant, and the roll proves a mixed-version cluster survives tablet
+    generation churn with the feature merely compiled in. Runs on any version matrix.
+    """
+
+    rows_count = 100
+    restart_rounds = 2
+
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        yield from self.setup_cluster(
+            column_shard_config={
+                "alter_object_enabled": True,
+            },
+        )
+
+    def test_dormant_roll(self):
+        table_name = "olap_cut_history_dormant"
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(
+                f"""
+                CREATE TABLE `{table_name}` (
+                    ts Timestamp NOT NULL,
+                    id Uint64 NOT NULL,
+                    payload Utf8,
+                    PRIMARY KEY (ts, id)
+                )
+                PARTITION BY HASH(ts, id)
+                WITH (STORE = COLUMN, PARTITION_COUNT = 4)
+                """
+            )
+            values = ",".join(
+                f'(Timestamp("2024-01-01T00:{i // 60 % 60:02d}:{i % 60:02d}.000000Z"), {i}, "p{i}")'
+                for i in range(self.rows_count)
+            )
+            session_pool.execute_with_retries(f"INSERT INTO `{table_name}` (ts, id, payload) VALUES {values};")
+
+        client = kikimr_client_factory("localhost", self.cluster.nodes[1].port)
+
+        def restart_column_shards():
+            response = client.tablet_state(tablet_type=TabletTypes.COLUMNSHARD)
+            for info in response.TabletStateInfo:
+                client.tablet_kill(info.TabletId)
+
+        def assert_readable():
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                result = session_pool.execute_with_retries(
+                    f"SELECT COUNT(*) AS cnt FROM `{table_name}`;",
+                    retry_settings=ydb.RetrySettings(idempotent=True),
+                )
+                assert result[0].rows[0]["cnt"] == self.rows_count
+
+        # Generation churn first, so channel history exists for the roll to stress.
+        for _ in range(self.restart_rounds):
+            restart_column_shards()
+            assert_readable()
+
+        for _ in self.roll():
+            assert_readable()
+        assert_readable()
+
+
 class TestCutHistory(RollingUpgradeAndDowngradeFixture):
     """Roll the cluster while CutHistory is trimming ColumnShard channel history.
 

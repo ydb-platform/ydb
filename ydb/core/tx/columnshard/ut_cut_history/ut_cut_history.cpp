@@ -1,13 +1,4 @@
-/*
- * Unit tests for the CutHistory (KIKIMR-26208) two-tier nomination engine.
- *
- * Coverage:
- *   1. Counter update correctness: OnPortionAdded / OnPortionRemoved / OnBootComplete.
- *   2. Nomination gating: entry with live portions never nominated; drained+zero-counter -> nominated;
- *      seenGroups blocks a candidate whose group was already seen by a later entry; active entry
- *      (last history slot) never nominated.
- *   3. Tier-2 sweep disproves a candidate that still has blobs on disk -> no barrier sent.
- */
+// Unit tests for the CutHistory (KIKIMR-26208) two-tier nomination engine.
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
@@ -48,12 +39,10 @@ TIntrusivePtr<TTabletStorageInfo> MakeTabletInfo(ui64 tabletId, ui32 nChannels, 
 
 static constexpr ui32 BlobSize = 1_KB;
 
-// Build a TLogoBlobID for a blob on a given tablet, channel, and generation.
 TLogoBlobID MakeBlob(ui64 tabletId, ui32 channel, ui32 gen, ui32 step = 1, ui32 cookie = 1) {
     return TLogoBlobID(tabletId, gen, step, channel, BlobSize, cookie);
 }
 
-// TUnifiedBlobId wrapper from a TLogoBlobID.
 NOlap::TUnifiedBlobId MakeUnifiedBlob(const TLogoBlobID& logo) {
     return NOlap::TUnifiedBlobId(logo.TabletID(), logo);
 }
@@ -141,7 +130,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         auto* cutter = bm->GetHistoryCutter();
         UNIT_ASSERT(cutter);
 
-        // Register the test controller so IsCSCutHistoryEnabled() returns true.
         NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
 
         // A blob on channel 2 at generation 3 falls in entry {ch=2, fromGen=0}.
@@ -177,7 +165,6 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         portionBlobs[42].push_back(ub);
         cutter->OnBootComplete(portionBlobs);
 
-        // Remove the portion — counter should decrement to 0.
         cutter->OnPortionRemoved(42);
 
         // Now counter=0 and BlobsToKeep/Delete empty → IsDrained true → entry is nominatable.

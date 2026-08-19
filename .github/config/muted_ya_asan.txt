@@ -83,7 +83,6 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestAuthMatrixForSendMessa
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_MixedTableAndTopicReceipts_TablesFormat0
-ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibility_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueue
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestCreateQueueWithAllAttributes
@@ -183,7 +182,6 @@ ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributes
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesNonExistentConsumerInFederation
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStd
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStd0Consumers
-ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStd3Consumers
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdDlq
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdDlq0Consumers
 ydb/core/http_proxy/ut/sqs_topic_ut TestSqsTopicHttpProxy.TestGetQueueAttributesStdDlq3Consumers
@@ -331,7 +329,6 @@ ydb/core/kqp/ut/join KqpJoinOrder.Chain65Nodes
 ydb/core/kqp/ut/olap KqpOlapOptimizer.SpecialSliceToOneLayer
 ydb/core/kqp/ut/olap KqpOlapOptimizer.TilingPlusPlusTtlDeletion
 ydb/core/kqp/ut/olap/types KqpOlapJson.BloomCategoryIndexesVariants[false,true,0,10,1000,0.5,CATEGORY_BLOOM_FILTER]
-ydb/core/kqp/ut/opt KqpConcurrentResults.ConcurrentStreamNamedExprRandomConsistency+EnableIndexStreamWrite
 ydb/core/kqp/ut/rbo KqpRboOlap.BlockChannelScalar
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
 ydb/core/kqp/ut/rbo KqpRboOlap.DoubleOutOfRangeInJson
@@ -367,7 +364,6 @@ ydb/core/kqp/ut/view TCreateAndDropViewTest.CreateViewOccupiedName
 ydb/core/kqp/ut/view TCreateAndDropViewTest.DropNonexistingView
 ydb/core/kqp/ut/view TCreateAndDropViewTest.DropViewIfExists
 ydb/core/kqp/ut/view TCreateAndDropViewTest.InvalidColumnRef
-ydb/core/kqp/ut/view TCreateAndDropViewTest.InvalidIndexRef
 ydb/core/kqp/ut/view TCreateAndDropViewTest.ParsingSecurityInvoker
 ydb/core/kqp/ut/view TSelectFromViewTest.LeftJoinViewsWithNoMatch
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
@@ -399,7 +395,6 @@ ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_P
 ydb/core/tx/columnshard/ut_rw TColumnShardTestReadWrite.CompactionSplitGranule_PKInt64
 ydb/core/tx/columnshard/ut_rw unittest.[*/*] chunk
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToBuild
-ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BuildToPostingWithOverlap
 ydb/core/tx/datashard/build_index/ut unittest.sole chunk
 ydb/core/tx/datashard/ut_export unittest.sole chunk
 ydb/core/tx/datashard/ut_lock_rows DataShardLockRows.RandomizedDeadlockDetection
@@ -422,7 +417,6 @@ ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/viewer/ut Viewer.PutRecordViewer
 ydb/core/viewer/ut Viewer.QueryExecuteScript
-ydb/core/ymq/actor/cloud_events/cloud_events_ut unittest.sole chunk
 ydb/library/actors/interconnect/ut_fat InterconnectZcLocalOp.ZcDisabledAfterHiddenCopy
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToAll
 ydb/library/actors/interconnect/ut_huge_cluster HugeCluster.AllToOne

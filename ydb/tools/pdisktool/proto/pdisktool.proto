@@ -146,6 +146,15 @@ message TExportResult {
     repeated TIssue Issues = 5;
 }
 
+message TExportBlobResult {
+    optional string Path = 1;
+    optional uint32 Blobs = 2;
+    optional uint32 Parts = 3;
+    optional uint32 PartsWithSeveralCopies = 4;
+    optional uint32 PartsWithDifferingCopies = 5;
+    repeated TIssue Issues = 6;
+}
+
 message TLogRecord {
     optional uint32 OwnerId = 1;
     optional uint32 Signature = 2;
@@ -173,18 +182,18 @@ message TBlobPart {
     optional uint32 ChunkIdx = 3;
     optional uint32 Offset = 4;
     optional string BlobType = 5;
+    // How many copies of this part the VDisk holds; one TBlobPart is emitted per copy.
+    optional uint32 Copies = 6;
+    // The range holds a multi-part DiskBlob that could not be split into individual parts.
+    optional bool Packed = 7;
 }
 
 message TBlobInfo {
     optional string LogoBlobId = 1;
-    optional uint64 TabletId = 2;
-    optional uint32 Channel = 3;
-    optional uint32 Generation = 4;
-    optional uint32 Step = 5;
-    optional uint32 Cookie = 6;
-    optional uint32 BlobSize = 7;
     optional uint64 Ingress = 8;
     repeated TBlobPart Parts = 9;
+
+    reserved 2, 3, 4, 5, 6, 7; // TabletId..BlobSize; all of it is already in LogoBlobId
 }
 
 message TBlobsResult {
@@ -192,6 +201,8 @@ message TBlobsResult {
     optional string ContinueToken = 2;
     optional uint64 TotalListed = 3;
     repeated TIssue Issues = 4;
+    // Index records without local data, skipped unless --all was given.
+    optional uint64 SkippedWithoutData = 5;
 }
 
 message TBarrierInfo {

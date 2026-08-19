@@ -15,10 +15,11 @@
 namespace NKikimr::NPDiskTool {
 
 struct TBlobIndexEntry {
-    TLogoBlobID Id;
+    TLogoBlobID Id; // part id stripped; the same blob may appear once per SST holding it
     TMemRecLogoBlob MemRec;
     TVector<TDiskPart> Outbound; // only used when ManyHugeBlobs; otherwise empty
     TString InlineData; // LogoBlobOpt payload kept from the log
+    ui32 InlinePartId = 0;
 };
 
 struct TBlockIndexEntry {

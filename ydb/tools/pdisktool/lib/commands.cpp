@@ -31,10 +31,11 @@ void PrintUsage(const TString& argv0) {
         << "  export-chunk      Decrypt a chunk to a file (--chunk N --output FILE)\n"
         << "  export-log        Decrypt the log chain to a binary container\n"
         << "  parse-log         Parse a log export or the live device\n"
-        << "  blobs             List logo blobs for a VDisk\n"
+        << "  blobs             List logo blobs this VDisk holds data for (--all for the rest;\n"
+        << "                    --tablet, --channel, --from, --to to narrow it down)\n"
         << "  barriers          List barriers for a VDisk\n"
         << "  blocks            List blocks for a VDisk\n"
-        << "  export-blob       Export this VDisk's blob parts to files\n"
+        << "  export-blob       Export this VDisk's blob parts to files, comparing duplicate copies\n"
         << "  verify            Scan format/syslog/log/data and list issues\n"
         << "  dump-sector       Hex-dump a physical sector\n"
         << "  metadata          Dump the metadata vault blob if present\n\n"
@@ -309,7 +310,7 @@ int CmdBlobs(const TGlobals& g, const TString& vdisk, TMaybe<ui32> owner, const 
         return 1;
     }
     NKikimr::NPdiskTool::TBlobsResult proto;
-    ListBlobs(snap, filter, proto);
+    ListBlobs(snap, filter, session.Issues, proto);
     return FinishText(proto, session.Issues, g.Json(), PrintBlobsText);
 }
 
@@ -351,6 +352,7 @@ int CmdExportBlob(
     const TString& id,
     const TString& from,
     const TString& to,
+    const TListFilter& filter,
     const TString& output)
 {
     TPDiskSession session;
@@ -364,21 +366,27 @@ int CmdExportBlob(
     }
     auto fromId = ParseBlobId(id ? id : from, session.Issues, "export-blob");
     auto toId = id ? fromId : ParseBlobId(to, session.Issues, "export-blob");
-    if (!fromId) {
-        session.Issues.Error("export-blob", "Specify --id or --from");
+    if (!fromId && !filter.TabletId && !filter.Channel) {
+        session.Issues.Error("export-blob", "Specify --id, --from, --tablet or --channel");
         PrintIssues(session.Issues, Cerr);
         return 1;
     }
-    ui32 exported = 0;
-    ExportBlobParts(*session.Device, session.Format, session.State, snap, *fromId, toId, output,
-        session.Issues, exported);
-    NKikimr::NPdiskTool::TExportResult proto;
+    TExportStats stats;
+    ExportBlobParts(*session.Device, session.Format, session.State, snap,
+        fromId.GetOrElse(TLogoBlobID()), toId, filter, output, session.Issues, stats);
+    NKikimr::NPdiskTool::TExportBlobResult proto;
     proto.SetPath(output);
-    proto.SetBytesWritten(exported);
-    auto print = [](const NKikimr::NPdiskTool::TExportResult& p, IOutputStream& out) {
-        out << "Exported " << p.GetBytesWritten() << " blob(s) to " << p.GetPath() << Endl;
+    proto.SetBlobs(stats.Blobs);
+    proto.SetParts(stats.Parts);
+    proto.SetPartsWithSeveralCopies(stats.PartsWithSeveralCopies);
+    proto.SetPartsWithDifferingCopies(stats.PartsWithDifferingCopies);
+    auto print = [](const NKikimr::NPdiskTool::TExportBlobResult& p, IOutputStream& out) {
+        out << "Exported " << p.GetParts() << " part(s) of " << p.GetBlobs()
+            << " blob(s) to " << p.GetPath() << Endl;
+        out << "parts with several copies: " << p.GetPartsWithSeveralCopies()
+            << ", of them differing: " << p.GetPartsWithDifferingCopies() << Endl;
     };
-    return FinishText(proto, session.Issues, g.Json(), print);
+    return FinishText(proto, session.Issues, g.Json(), print, stats.PartsWithDifferingCopies > 0);
 }
 
 int CmdVerify(const TGlobals& g) {
@@ -624,6 +632,7 @@ int RunCommand(const TString& command, int argc, char** argv) {
             opts.AddLongOption("channel", "filter channel").RequiredArgument("N").StoreResult(&channel);
             opts.AddLongOption("limit", "max rows").RequiredArgument("N").StoreResult(&limit);
             opts.AddLongOption("continue-token", "paging token").RequiredArgument("TOK").StoreResult(&token);
+            opts.AddLongOption("all", "also list blobs whose data this VDisk does not hold").NoArgument();
             TOptsParseResult res(&opts, argc, argv);
             if (res.Has("owner")) {
                 owner = ownerVal;
@@ -636,6 +645,7 @@ int RunCommand(const TString& command, int argc, char** argv) {
             }
             TIssueLog dummy;
             auto filter = MakeFilter(limit, from, to, tabletId, channelId, token, dummy);
+            filter.DataOnly = !res.Has("all");
             if (command == "blobs") {
                 return CmdBlobs(g, vdisk, owner, erasure, filter);
             } else if (command == "barriers") {
@@ -646,6 +656,10 @@ int RunCommand(const TString& command, int argc, char** argv) {
             TString vdisk, erasure, id, from, to, output;
             ui32 ownerVal = 0;
             TMaybe<ui32> owner;
+            ui64 tablet = 0;
+            ui32 channel = 0;
+            TMaybe<ui64> tabletId;
+            TMaybe<ui32> channelId;
             TOpts opts = TOpts::Default();
             AddGlobals(opts, g);
             opts.AddLongOption("vdisk", "VDisk id").RequiredArgument("ID").StoreResult(&vdisk);
@@ -654,12 +668,22 @@ int RunCommand(const TString& command, int argc, char** argv) {
             opts.AddLongOption("id", "single LogoBlobID").RequiredArgument("ID").StoreResult(&id);
             opts.AddLongOption("from", "from LogoBlobID").RequiredArgument("ID").StoreResult(&from);
             opts.AddLongOption("to", "to LogoBlobID").RequiredArgument("ID").StoreResult(&to);
+            opts.AddLongOption("tablet", "filter tablet id").RequiredArgument("ID").StoreResult(&tablet);
+            opts.AddLongOption("channel", "filter channel").RequiredArgument("N").StoreResult(&channel);
             opts.AddLongOption("output", "output directory").RequiredArgument("DIR").StoreResult(&output).Required();
             TOptsParseResult res(&opts, argc, argv);
             if (res.Has("owner")) {
                 owner = ownerVal;
             }
-            return CmdExportBlob(g, vdisk, owner, erasure, id, from, to, output);
+            if (res.Has("tablet")) {
+                tabletId = tablet;
+            }
+            if (res.Has("channel")) {
+                channelId = channel;
+            }
+            TIssueLog dummy;
+            auto filter = MakeFilter(Max<ui32>(), TString(), TString(), tabletId, channelId, TString(), dummy);
+            return CmdExportBlob(g, vdisk, owner, erasure, id, from, to, filter, output);
         } else if (command == "verify") {
             TOpts opts = TOpts::Default();
             AddGlobals(opts, g);

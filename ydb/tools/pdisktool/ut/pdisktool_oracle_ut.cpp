@@ -257,10 +257,15 @@ Y_UNIT_TEST_SUITE(TPDiskToolOracle) {
         auto snap = ReconstructHull(*session.Device, session.Format, session.State, session.Log, owner,
             TErasureType::ErasureNone, issues);
         NKikimr::NPdiskTool::TBlobsResult blobs;
-        ListBlobs(snap, TListFilter{}, blobs);
+        ListBlobs(snap, TListFilter{}, issues, blobs);
         UNIT_ASSERT_VALUES_EQUAL(blobs.BlobsSize(), 1u);
-        UNIT_ASSERT_VALUES_EQUAL(blobs.GetBlobs(0).GetTabletId(), 1001u);
-        UNIT_ASSERT_VALUES_EQUAL(blobs.GetBlobs(0).GetBlobSize(), 16u);
+        const auto& listed = blobs.GetBlobs(0);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetLogoBlobId(), TLogoBlobID(id, 0).ToString());
+        UNIT_ASSERT_VALUES_EQUAL(listed.PartsSize(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetParts(0).GetPartId(), id.PartId());
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetParts(0).GetSize(), data.size());
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetParts(0).GetBlobType(), TBlobType::TypeToStr(TBlobType::MemBlob));
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetParts(0).GetCopies(), 1u);
 
         NKikimr::NPdiskTool::TBlocksResult blocks;
         ListBlocks(snap, TListFilter{}, blocks);
@@ -269,10 +274,167 @@ Y_UNIT_TEST_SUITE(TPDiskToolOracle) {
         UNIT_ASSERT_VALUES_EQUAL(blocks.GetBlocks(0).GetBlockedGeneration(), 3u);
 
         TTempDir tmp;
-        ui32 exported = 0;
+        TExportStats stats;
         UNIT_ASSERT(ExportBlobParts(*session.Device, session.Format, session.State, snap,
-            TLogoBlobID(1001ull, 1, 1, 0, 16, 0), {}, TString(tmp()), issues, exported));
-        UNIT_ASSERT_VALUES_EQUAL(exported, 1u);
+            TLogoBlobID(1001ull, 1, 1, 0, 16, 0), {}, TListFilter{}, TString(tmp()), issues, stats));
+        UNIT_ASSERT_VALUES_EQUAL(stats.Blobs, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(stats.Parts, 1u);
+        UNIT_ASSERT_VALUES_EQUAL(stats.PartsWithDifferingCopies, 0u);
+        const TString exportedName = TStringBuilder() << TLogoBlobID(id, 0).ToString() << ".part" << id.PartId();
+        UNIT_ASSERT_VALUES_EQUAL(TFileInput(TFsPath(tmp()) / exportedName).ReadAll(), data);
+    }
+
+    Y_UNIT_TEST(RepeatedLogSignaturesReportedOnce) {
+        // Signatures this tool does not replay must not produce one line per record.
+        TYard yard;
+        const TVDiskID vdisk(11, 1, 0, 0, 0);
+        auto init = yard.Call<TEvYardInitResult>(new TEvYardInit(2, vdisk, yard.Guid));
+        const TOwner owner = init->PDiskParams->Owner;
+        const TOwnerRound round = init->PDiskParams->OwnerRound;
+        const ui32 count = 25;
+        for (ui32 i = 0; i < count; ++i) {
+            yard.Call<TEvLogResult>(new TEvLog(owner, round, TLogSignature::SignatureLocalSyncData,
+                TRcBuf(TString(32, 'S')), TLsnSeg(i + 1, i + 1), nullptr));
+        }
+        yard.Stop();
+
+        auto session = OpenTool(yard.Map);
+        TIssueLog issues;
+        ReconstructHull(*session.Device, session.Format, session.State, session.Log, owner,
+            TErasureType::ErasureNone, issues);
+        const TString name = SignatureName(TLogSignature::SignatureLocalSyncData);
+        ui32 mentions = 0;
+        for (const auto& i : issues.Items) {
+            if (i.Message.find(name) != TString::npos) {
+                ++mentions;
+                UNIT_ASSERT_C(i.Message.find(ToString(count)) != TString::npos, i.Message);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(mentions, 1u);
+    }
+
+    Y_UNIT_TEST(BlobsWithoutDataAreSkipped) {
+        // An index record that carries no local data is not what a recovery run is looking for.
+        THullSnapshot snap;
+        snap.Erasure = TErasureType::ErasureNone;
+        const TLogoBlobID withData(500ull, 1, 1, 0, 16, 0);
+        const TLogoBlobID withoutData(501ull, 1, 1, 0, 16, 0);
+
+        TBlobIndexEntry empty;
+        empty.Id = withoutData;
+        snap.Blobs.push_back(empty);
+
+        TBlobIndexEntry full;
+        full.Id = withData;
+        full.MemRec.SetHugeBlob(TDiskPart(7, 0, 16));
+        snap.Blobs.push_back(full);
+        std::sort(snap.Blobs.begin(), snap.Blobs.end(),
+            [](const TBlobIndexEntry& a, const TBlobIndexEntry& b) { return a.Id < b.Id; });
+
+        TIssueLog issues;
+        NKikimr::NPdiskTool::TBlobsResult listed;
+        ListBlobs(snap, TListFilter{}, issues, listed);
+        UNIT_ASSERT_VALUES_EQUAL(listed.BlobsSize(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetBlobs(0).GetLogoBlobId(), withData.ToString());
+        UNIT_ASSERT_VALUES_EQUAL(listed.GetSkippedWithoutData(), 1u);
+
+        TListFilter all;
+        all.DataOnly = false;
+        NKikimr::NPdiskTool::TBlobsResult everything;
+        ListBlobs(snap, all, issues, everything);
+        UNIT_ASSERT_VALUES_EQUAL(everything.BlobsSize(), 2u);
+
+        // Filters narrow the listing down to one tablet / channel.
+        TListFilter byTablet;
+        byTablet.TabletId = 500ull;
+        NKikimr::NPdiskTool::TBlobsResult filtered;
+        ListBlobs(snap, byTablet, issues, filtered);
+        UNIT_ASSERT_VALUES_EQUAL(filtered.BlobsSize(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(filtered.GetBlobs(0).GetLogoBlobId(), withData.ToString());
+
+        TListFilter byOtherChannel;
+        byOtherChannel.Channel = 5;
+        NKikimr::NPdiskTool::TBlobsResult none;
+        ListBlobs(snap, byOtherChannel, issues, none);
+        UNIT_ASSERT_VALUES_EQUAL(none.BlobsSize(), 0u);
+    }
+
+    Y_UNIT_TEST(SeveralCopiesOfPartAreComparedOnExport) {
+        TYard yard;
+        const TVDiskID vdisk(9, 1, 0, 0, 0);
+        auto init = yard.Call<TEvYardInitResult>(new TEvYardInit(2, vdisk, yard.Guid));
+        const TOwner owner = init->PDiskParams->Owner;
+        const TOwnerRound round = init->PDiskParams->OwnerRound;
+        auto reserved = yard.Call<TEvChunkReserveResult>(new TEvChunkReserve(owner, round, 1));
+        const TChunkIdx chunk = reserved->ChunkIds[0];
+        NPDisk::TCommitRecord commit;
+        commit.CommitChunks.push_back(chunk);
+        yard.Call<TEvLogResult>(new TEvLog(owner, round, TLogSignature::First, commit,
+            TRcBuf(TString()), TLsnSeg(1, 1), nullptr));
+
+        const ui32 blobSize = 16;
+        TString payload(24576, 'A');
+        // Second half differs, so two locations give two different copies of the same part.
+        memset(payload.Detach() + 8192, 'B', payload.size() - 8192);
+        yard.Call<TEvChunkWriteResult>(new TEvChunkWrite(owner, round, chunk, 0,
+            new TEvChunkWrite::TAlignedParts(TString(payload)), nullptr, true, 1));
+        yard.Stop();
+
+        auto session = OpenTool(yard.Map);
+        const ui32 payloadSize = session.Format.SectorPayloadSize();
+
+        const TLogoBlobID id(600ull, 1, 1, 0, blobSize, 0);
+        const TString partName = TStringBuilder() << id.ToString() << ".part1";
+        auto snapWith = [&](ui32 secondOffset) {
+            THullSnapshot snap;
+            snap.Erasure = TErasureType::ErasureNone;
+            for (ui32 offset : {0u, secondOffset}) {
+                TBlobIndexEntry e;
+                e.Id = id;
+                e.MemRec.SetHugeBlob(TDiskPart(chunk, offset, blobSize));
+                snap.Blobs.push_back(e);
+            }
+            return snap;
+        };
+
+        // Two records pointing at the very same bytes describe one copy, not two.
+        {
+            TIssueLog issues;
+            NKikimr::NPdiskTool::TBlobsResult listed;
+            ListBlobs(snapWith(0), TListFilter{}, issues, listed);
+            UNIT_ASSERT_VALUES_EQUAL(listed.BlobsSize(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(listed.GetBlobs(0).PartsSize(), 1u);
+            UNIT_ASSERT_VALUES_EQUAL(listed.GetBlobs(0).GetParts(0).GetCopies(), 1u);
+        }
+
+        // Two distinct locations holding equal bytes: one file, no complaint.
+        {
+            TIssueLog issues;
+            TTempDir tmp;
+            TExportStats stats;
+            UNIT_ASSERT(ExportBlobParts(*session.Device, session.Format, session.State,
+                snapWith(payloadSize), TLogoBlobID(), {}, TListFilter{}, TString(tmp()), issues, stats));
+            UNIT_ASSERT_VALUES_EQUAL(stats.Parts, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.PartsWithSeveralCopies, 1u);
+            UNIT_ASSERT_VALUES_EQUAL(stats.PartsWithDifferingCopies, 0u);
+            UNIT_ASSERT_VALUES_EQUAL(
+                TFileInput(TFsPath(tmp()) / partName).ReadAll(), TString(blobSize, 'A'));
+        }
+
+        // Copies that disagree are all kept and reported.
+        {
+            TIssueLog issues;
+            TTempDir tmp;
+            TExportStats stats;
+            UNIT_ASSERT(ExportBlobParts(*session.Device, session.Format, session.State,
+                snapWith(payloadSize * 3), TLogoBlobID(), {}, TListFilter{}, TString(tmp()), issues, stats));
+            UNIT_ASSERT_VALUES_EQUAL(stats.PartsWithDifferingCopies, 1u);
+            UNIT_ASSERT(issues.HasErrors());
+            UNIT_ASSERT_VALUES_EQUAL(
+                TFileInput(TFsPath(tmp()) / (partName + ".copy1")).ReadAll(), TString(blobSize, 'A'));
+            UNIT_ASSERT_VALUES_EQUAL(
+                TFileInput(TFsPath(tmp()) / (partName + ".copy2")).ReadAll(), TString(blobSize, 'B'));
+        }
     }
 
     Y_UNIT_TEST(DamagedFormatReplicaStillReadsDisk) {

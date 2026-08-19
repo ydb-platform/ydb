@@ -259,14 +259,28 @@ void PrintParseLogText(const NKikimr::NPdiskTool::TParseLogResult& proto, IOutpu
 }
 
 void PrintBlobsText(const NKikimr::NPdiskTool::TBlobsResult& proto, IOutputStream& out) {
-    out << "LogoBlobId\tTablet\tChannel\tGen\tStep\tSize\tParts" << Endl;
+    out << "LogoBlobId\tParts" << Endl;
     for (const auto& b : proto.GetBlobs()) {
-        out << b.GetLogoBlobId() << "\t" << b.GetTabletId() << "\t" << b.GetChannel()
-            << "\t" << b.GetGeneration() << "\t" << b.GetStep() << "\t" << b.GetBlobSize();
+        out << b.GetLogoBlobId();
         for (const auto& p : b.GetParts()) {
-            out << "\t" << p.GetBlobType() << ":" << p.GetChunkIdx() << "+" << p.GetOffset() << "/" << p.GetSize();
+            out << "\tpart" << p.GetPartId() << "=" << p.GetBlobType();
+            if (p.GetChunkIdx()) { // inline parts from the log have no on-disk location
+                out << ":" << p.GetChunkIdx() << "+" << p.GetOffset();
+            }
+            out << "/" << p.GetSize();
+            if (p.GetCopies() > 1) {
+                out << " (copy of " << p.GetCopies() << ")";
+            }
+            if (p.GetPacked()) {
+                out << " (packed)";
+            }
         }
         out << Endl;
+    }
+    out << "listed: " << proto.GetTotalListed() << Endl;
+    if (proto.GetSkippedWithoutData()) {
+        out << "skipped without data: " << proto.GetSkippedWithoutData()
+            << " (use --all to list them)" << Endl;
     }
     if (proto.HasContinueToken()) {
         out << "continue-token: " << proto.GetContinueToken() << Endl;

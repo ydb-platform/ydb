@@ -1,5 +1,8 @@
 #include "blobs.h"
 
+#include <ydb/core/blobstorage/vdisk/hulldb/base/blobstorage_blob.h>
+
+#include <algorithm>
 #include <util/folder/path.h>
 #include <util/stream/file.h>
 #include <util/string/cast.h>
@@ -36,35 +39,144 @@ TLogoBlobID ParseToken(const TString& token) {
     return id;
 }
 
-void FillParts(const TBlobIndexEntry& e, NKikimr::NPdiskTool::TBlobInfo& proto) {
-    proto.SetIngress(e.MemRec.GetIngress().Raw());
-    if (e.MemRec.GetType() != TBlobType::MemBlob) {
-        TDiskDataExtractor extr;
-        const TDiskPart* outbound = e.Outbound.empty() ? nullptr : e.Outbound.data();
-        e.MemRec.GetDiskData(&extr, outbound);
-        ui32 i = 0;
-        for (const TDiskPart* p = extr.Begin; p != extr.End; ++p, ++i) {
-            auto* part = proto.AddParts();
-            part->SetPartId(i + 1);
-            part->SetSize(p->Size);
-            part->SetChunkIdx(p->ChunkIdx);
-            part->SetOffset(p->Offset);
-            part->SetBlobType(TBlobType::TypeToStr(e.MemRec.GetType()));
+// Splits the range of an on-disk blob into its individual parts, mirroring TDiskBlob's layout.
+// TDiskBlob itself aborts on any inconsistency, which a recovery tool reading damaged data must not
+// do, so the layout is recomputed here and simply reported as unsplittable when it does not add up.
+bool LocateParts(
+    const TLogoBlobID& id,
+    TBlobStorageGroupType gtype,
+    NMatrix::TVectorType parts,
+    const TDiskPart& where,
+    TVector<std::pair<ui32, TDiskPart>>& out)
+{
+    if (parts.Empty()) {
+        return false;
+    }
+    ui64 blobSize = 0;
+    for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
+        blobSize += gtype.PartSize(TLogoBlobID(id, i + 1));
+    }
+    if (blobSize == 0 || blobSize > where.Size) {
+        return false;
+    }
+    const ui32 header = where.Size - blobSize;
+    if (header != TDiskBlob::GetBlobHeaderSize(EBlobHeaderMode::NO_HEADER)
+        && header != TDiskBlob::GetBlobHeaderSize(EBlobHeaderMode::OLD_HEADER)
+        && header != TDiskBlob::GetBlobHeaderSize(EBlobHeaderMode::XXH3_64BIT_HEADER))
+    {
+        return false;
+    }
+    ui32 offset = where.Offset + header;
+    for (ui8 i = parts.FirstPosition(); i != parts.GetSize(); i = parts.NextPosition(i)) {
+        const ui32 size = gtype.PartSize(TLogoBlobID(id, i + 1));
+        out.emplace_back(i + 1, TDiskPart(where.ChunkIdx, offset, size));
+        offset += size;
+    }
+    return true;
+}
+
+// Adds a copy, keeping the list free of exact duplicates: the same SST content reached through
+// several levels describes the same bytes and should not look like independent copies.
+void AddCopy(TVector<TBlobPartView>& parts, ui32 partId, TPartCopy copy) {
+    auto it = std::lower_bound(parts.begin(), parts.end(), partId,
+        [](const TBlobPartView& p, ui32 id) { return p.PartId < id; });
+    if (it == parts.end() || it->PartId != partId) {
+        it = parts.insert(it, TBlobPartView{partId, {}});
+    }
+    for (const auto& existing : it->Copies) {
+        if (existing.Where == copy.Where && existing.InlineData == copy.InlineData) {
+            return;
         }
     }
-    if (e.InlineData) {
-        auto* part = proto.AddParts();
-        part->SetPartId(e.Id.PartId() ? e.Id.PartId() : 1);
-        part->SetSize(e.InlineData.size());
-        part->SetBlobType("MemBlob");
-    }
+    it->Copies.push_back(std::move(copy));
 }
 
 } // namespace
 
+TVector<TBlobView> BuildBlobViews(const THullSnapshot& snap, TIssueLog& issues) {
+    const TBlobStorageGroupType gtype(snap.Erasure.GetOrElse(TErasureType::ErasureNone));
+    ui32 unsplittable = 0;
+
+    TVector<TBlobView> views;
+    for (const auto& e : snap.Blobs) {
+        if (views.empty() || !TKeyLogoBlob(views.back().Id).IsSameAs(TKeyLogoBlob(e.Id))) {
+            views.push_back(TBlobView{e.Id, 0, {}});
+        }
+        auto& view = views.back();
+        view.Ingress |= e.MemRec.GetIngress().Raw();
+
+        if (e.InlineData) {
+            TPartCopy copy;
+            copy.Type = TBlobType::MemBlob;
+            copy.InlineData = e.InlineData;
+            AddCopy(view.Parts, e.InlinePartId ? e.InlinePartId : 1, std::move(copy));
+        }
+        if (e.MemRec.GetType() == TBlobType::MemBlob || !e.MemRec.HasData()) {
+            continue;
+        }
+
+        TDiskDataExtractor extr;
+        const TDiskPart* outbound = e.Outbound.empty() ? nullptr : e.Outbound.data();
+        if (e.MemRec.GetType() == TBlobType::ManyHugeBlobs && e.Outbound.empty()) {
+            ++unsplittable;
+            continue; // GetDiskData would dereference a missing outbound array
+        }
+        e.MemRec.GetDiskData(&extr, outbound);
+        const NMatrix::TVectorType local = e.MemRec.GetLocalParts(gtype);
+
+        // A DiskBlob packs all local parts into one range; the huge flavours use one range per part.
+        if (e.MemRec.GetType() == TBlobType::DiskBlob) {
+            for (const TDiskPart* p = extr.Begin; p != extr.End; ++p) {
+                if (p->Empty()) {
+                    continue;
+                }
+                TVector<std::pair<ui32, TDiskPart>> located;
+                if (LocateParts(e.Id, gtype, local, *p, located)) {
+                    for (const auto& [partId, range] : located) {
+                        AddCopy(view.Parts, partId, TPartCopy{TBlobType::DiskBlob, range, {}, false});
+                    }
+                } else {
+                    ++unsplittable;
+                    const ui32 partId = local.Empty() ? 0 : ui32(local.FirstPosition()) + 1;
+                    AddCopy(view.Parts, partId, TPartCopy{TBlobType::DiskBlob, *p, {}, true});
+                }
+            }
+            continue;
+        }
+
+        ui8 bit = local.Empty() ? 0 : local.FirstPosition();
+        for (const TDiskPart* p = extr.Begin; p != extr.End; ++p) {
+            if (p->Empty()) {
+                continue;
+            }
+            const ui32 partId = local.Empty() ? 1 : ui32(bit) + 1;
+            NMatrix::TVectorType single(0, Max<ui8>(local.GetSize(), 1));
+            if (!local.Empty()) {
+                single.Set(bit);
+                bit = local.NextPosition(bit);
+            }
+            TVector<std::pair<ui32, TDiskPart>> located;
+            if (!local.Empty() && LocateParts(e.Id, gtype, single, *p, located)) {
+                AddCopy(view.Parts, partId, TPartCopy{e.MemRec.GetType(), located.front().second, {}, false});
+            } else {
+                // Without a known erasure the header size cannot be derived; keep the whole range.
+                AddCopy(view.Parts, partId, TPartCopy{e.MemRec.GetType(), *p, {}, true});
+            }
+        }
+    }
+
+    if (unsplittable) {
+        issues.Warning("hull", TStringBuilder() << unsplittable
+            << " blob record(s) could not be resolved to individual parts"
+            << (snap.Erasure ? "" : "; pass --erasure so part sizes can be derived"), true);
+    }
+    return views;
+}
+
 void ListBlobs(
     const THullSnapshot& snap,
     const TListFilter& filter,
+    TIssueLog& issues,
     NKikimr::NPdiskTool::TBlobsResult& out)
 {
     TLogoBlobID from = filter.From.GetOrElse(TLogoBlobID());
@@ -72,27 +184,40 @@ void ListBlobs(
         from = ParseToken(filter.ContinueToken);
     }
     ui32 n = 0;
+    ui32 skippedWithoutData = 0;
     TLogoBlobID last;
-    for (const auto& e : snap.Blobs) {
-        if (e.Id < from) {
+    for (const auto& view : BuildBlobViews(snap, issues)) {
+        if (view.Id < from) {
             continue;
         }
-        if (filter.ContinueToken && e.Id == from) {
+        if (filter.ContinueToken && view.Id == from) {
             continue;
         }
-        if (!PassRange(e.Id, filter)) {
+        if (!PassRange(view.Id, filter)) {
             continue;
+        }
+        if (!view.HasData()) {
+            ++skippedWithoutData;
+            if (filter.DataOnly) {
+                continue;
+            }
         }
         auto* b = out.AddBlobs();
-        b->SetLogoBlobId(e.Id.ToString());
-        b->SetTabletId(e.Id.TabletID());
-        b->SetChannel(e.Id.Channel());
-        b->SetGeneration(e.Id.Generation());
-        b->SetStep(e.Id.Step());
-        b->SetCookie(e.Id.Cookie());
-        b->SetBlobSize(e.Id.BlobSize());
-        FillParts(e, *b);
-        last = e.Id;
+        b->SetLogoBlobId(view.Id.ToString());
+        b->SetIngress(view.Ingress);
+        for (const auto& part : view.Parts) {
+            for (const auto& copy : part.Copies) {
+                auto* p = b->AddParts();
+                p->SetPartId(part.PartId);
+                p->SetSize(copy.Size());
+                p->SetChunkIdx(copy.Where.ChunkIdx);
+                p->SetOffset(copy.Where.Offset);
+                p->SetBlobType(TBlobType::TypeToStr(copy.Type));
+                p->SetCopies(part.Copies.size());
+                p->SetPacked(copy.Packed);
+            }
+        }
+        last = view.Id;
         ++n;
         if (n >= filter.Limit) {
             out.SetContinueToken(last.ToString());
@@ -100,6 +225,7 @@ void ListBlobs(
         }
     }
     out.SetTotalListed(n);
+    out.SetSkippedWithoutData(skippedWithoutData);
 }
 
 void ListBarriers(
@@ -169,44 +295,74 @@ bool ExportBlobParts(
     const THullSnapshot& snap,
     const TLogoBlobID& from,
     const TMaybe<TLogoBlobID>& to,
+    const TListFilter& filter,
     const TString& outputDir,
     TIssueLog& issues,
-    ui32& exported)
+    TExportStats& stats)
 {
-    exported = 0;
+    stats = {};
     TFsPath dir(outputDir);
     dir.MkDirs();
-    for (const auto& e : snap.Blobs) {
-        if (e.Id < from) {
+
+    auto write = [&](const TString& name, const TString& data) {
+        TFileOutput out(dir / name);
+        out.Write(data.data(), data.size());
+        out.Flush();
+    };
+
+    for (const auto& view : BuildBlobViews(snap, issues)) {
+        if (view.Id < from) {
             continue;
         }
-        if (to && *to < e.Id) {
+        if (to && *to < view.Id) {
             break;
         }
-        if (e.InlineData) {
-            TString name = TStringBuilder() << e.Id.ToString() << ".part";
-            TFileOutput out(dir / name);
-            out.Write(e.InlineData.data(), e.InlineData.size());
-            ++exported;
+        if (!PassRange(view.Id, filter)) {
             continue;
         }
-        if (e.MemRec.GetType() == TBlobType::MemBlob) {
+        if (!view.HasData()) {
             continue;
         }
-        TDiskDataExtractor extr;
-        const TDiskPart* outbound = e.Outbound.empty() ? nullptr : e.Outbound.data();
-        e.MemRec.GetDiskData(&extr, outbound);
-        ui32 partNo = 0;
-        for (const TDiskPart* p = extr.Begin; p != extr.End; ++p, ++partNo) {
-            if (p->Empty()) {
+        bool wroteAnything = false;
+        for (const auto& part : view.Parts) {
+            TVector<TString> copies;
+            for (const auto& copy : part.Copies) {
+                copies.push_back(copy.InlineData
+                    ? copy.InlineData
+                    : ReadLogicalRange(device, format, state, copy.Where.ChunkIdx, copy.Where.Offset,
+                        copy.Where.Size, issues, "blob"));
+            }
+            if (copies.empty()) {
                 continue;
             }
-            TString data = ReadLogicalRange(device, format, state, p->ChunkIdx, p->Offset, p->Size, issues, "blob");
-            TString name = TStringBuilder() << e.Id.ToString() << ".part" << (partNo + 1);
-            TFileOutput out(dir / name);
-            out.Write(data.data(), data.size());
+            const TString base = TStringBuilder() << view.Id.ToString() << ".part" << part.PartId;
+            const bool allEqual = std::equal(copies.begin() + 1, copies.end(), copies.begin());
+            if (copies.size() > 1) {
+                ++stats.PartsWithSeveralCopies;
+            }
+            if (allEqual) {
+                write(base, copies.front());
+            } else {
+                // Diverging copies are a real finding, so keep every one of them for inspection
+                // rather than silently picking a winner.
+                ++stats.PartsWithDifferingCopies;
+                TStringBuilder where;
+                for (size_t i = 0; i < part.Copies.size(); ++i) {
+                    write(TStringBuilder() << base << ".copy" << (i + 1), copies[i]);
+                    where << (i ? ", " : "") << part.Copies[i].Where.ToString()
+                        << " size# " << copies[i].size();
+                }
+                issues.Error("export-blob", TStringBuilder() << view.Id.ToString()
+                    << " part " << part.PartId << " has " << copies.size()
+                    << " copies that differ: " << where
+                    << "; written as " << base << ".copyN");
+            }
+            ++stats.Parts;
+            wroteAnything = true;
         }
-        ++exported;
+        if (wroteAnything) {
+            ++stats.Blobs;
+        }
     }
     return true;
 }

@@ -17,6 +17,31 @@ namespace {
 
 constexpr ui32 HullEntryMagic = 0x93F7ADD5;
 
+// The log holds millions of records, so anything reported once per record buries the real findings.
+// Repeated conditions are counted here and summarized once, keeping the last LSN as an entry point
+// for a manual look with parse-log.
+class TRepeatedIssues {
+    struct TEntry {
+        ui64 Count = 0;
+        ui64 LastLsn = 0;
+    };
+    TMap<TString, TEntry> Entries;
+
+public:
+    void Add(const TString& what, ui64 lsn) {
+        auto& e = Entries[what];
+        ++e.Count;
+        e.LastLsn = lsn;
+    }
+
+    void Flush(TIssueLog& issues, const TString& severity) const {
+        for (const auto& [what, e] : Entries) {
+            issues.Add(severity, "hull", TStringBuilder() << what << ": " << e.Count
+                << " record(s), last lsn# " << e.LastLsn);
+        }
+    }
+};
+
 bool ParseHullEntryPoint(const TString& data, NKikimrVDiskData::THullDbEntryPoint& pb, TIssueLog& issues) {
     if (data.size() < sizeof(ui32)) {
         issues.Warning("hull", "Hull entry point shorter than magic", true);
@@ -339,6 +364,8 @@ THullSnapshot ReconstructHull(
     std::sort(snap.Blobs.begin(), snap.Blobs.end(),
         [](const TBlobIndexEntry& a, const TBlobIndexEntry& b) { return a.Id < b.Id; });
 
+    TRepeatedIssues skipped;
+    TRepeatedIssues unparsed;
     for (const auto& rec : log.Records) {
         if (rec.OwnerId != owner) {
             continue;
@@ -354,7 +381,7 @@ THullSnapshot ReconstructHull(
                 bool keep = false;
                 TMaybe<TErasureType::EErasureSpecies> used;
                 if (!ParseLogoBlobOpt(rec.Payload, snap.Erasure, id, data, keep, used)) {
-                    issues.Warning("hull", TStringBuilder() << "Cannot parse LogoBlobOpt lsn# " << rec.Lsn, true);
+                    unparsed.Add("Cannot parse LogoBlobOpt", rec.Lsn);
                     break;
                 }
                 if (!snap.Erasure && used) {
@@ -367,6 +394,7 @@ THullSnapshot ReconstructHull(
                 e.Id = TLogoBlobID(id, 0);
                 e.MemRec = mem;
                 e.InlineData = data;
+                e.InlinePartId = id.PartId();
                 auto it = std::lower_bound(snap.Blobs.begin(), snap.Blobs.end(), e,
                     [](const TBlobIndexEntry& a, const TBlobIndexEntry& b) { return a.Id < b.Id; });
                 if (it != snap.Blobs.end() && TKeyLogoBlob(it->Id).IsSameAs(TKeyLogoBlob(e.Id))) {
@@ -383,18 +411,18 @@ THullSnapshot ReconstructHull(
                 const char* cur = rec.Payload.data();
                 const char* end = cur + rec.Payload.size();
                 if (size_t(end - cur) < sizeof(ui16)) {
-                    issues.Warning("hull", TStringBuilder() << "Cannot parse HugeLogoBlob lsn# " << rec.Lsn, true);
+                    unparsed.Add("Cannot parse HugeLogoBlob", rec.Lsn);
                     break;
                 }
                 const ui16 lbSize = ReadUnaligned<ui16>(cur);
                 cur += sizeof(ui16);
                 if (size_t(end - cur) < lbSize) {
-                    issues.Warning("hull", TStringBuilder() << "Cannot parse HugeLogoBlob lsn# " << rec.Lsn, true);
+                    unparsed.Add("Cannot parse HugeLogoBlob", rec.Lsn);
                     break;
                 }
                 NKikimrProto::TLogoBlobID protoId;
                 if (!protoId.ParseFromArray(cur, lbSize)) {
-                    issues.Warning("hull", TStringBuilder() << "Cannot parse HugeLogoBlob id lsn# " << rec.Lsn, true);
+                    unparsed.Add("Cannot parse HugeLogoBlob id", rec.Lsn);
                     break;
                 }
                 const TLogoBlobID hugeId = LogoBlobIDFromLogoBlobID(protoId);
@@ -402,13 +430,15 @@ THullSnapshot ReconstructHull(
                 if (size_t(end - cur) < sizeof(ui64)) {
                     break;
                 }
-                cur += sizeof(ui64); // ingress
+                // The ingress tells which parts are local, which is what maps a range to a part id.
+                const TIngress ingress(ReadUnaligned<ui64>(cur));
+                cur += sizeof(ui64);
                 TDiskPart addr;
                 if (!addr.Parse(cur, cur + TDiskPart::SerializedSize)) {
-                    issues.Warning("hull", TStringBuilder() << "Cannot parse HugeLogoBlob addr lsn# " << rec.Lsn, true);
+                    unparsed.Add("Cannot parse HugeLogoBlob addr", rec.Lsn);
                     break;
                 }
-                TMemRecLogoBlob mem;
+                TMemRecLogoBlob mem(ingress);
                 mem.SetHugeBlob(addr);
                 UpsertBlob(snap.Blobs, hugeId, mem);
                 break;
@@ -419,7 +449,7 @@ THullSnapshot ReconstructHull(
                 }
                 NKikimrBlobStorage::TEvVBlock pb;
                 if (!pb.ParseFromArray(rec.Payload.data(), rec.Payload.size())) {
-                    issues.Warning("hull", TStringBuilder() << "Cannot parse Block lsn# " << rec.Lsn, true);
+                    unparsed.Add("Cannot parse Block", rec.Lsn);
                     break;
                 }
                 TBlockIndexEntry e{TKeyBlock(pb.GetTabletId()), TMemRecBlock(pb.GetGeneration())};
@@ -438,7 +468,7 @@ THullSnapshot ReconstructHull(
                 }
                 NKikimrBlobStorage::TEvVCollectGarbage pb;
                 if (!pb.ParseFromArray(rec.Payload.data(), rec.Payload.size())) {
-                    issues.Warning("hull", TStringBuilder() << "Cannot parse GC lsn# " << rec.Lsn, true);
+                    unparsed.Add("Cannot parse GC", rec.Lsn);
                     break;
                 }
                 TBarrierIndexEntry e;
@@ -448,15 +478,10 @@ THullSnapshot ReconstructHull(
                 snap.Barriers.push_back(e);
                 break;
             }
-            case TLogSignature::SignatureAddBulkSst: {
-                issues.Info("hull", TStringBuilder() << "SignatureAddBulkSst lsn# " << rec.Lsn
-                    << " is not fully replayed in this tool");
-                break;
-            }
+            case TLogSignature::SignatureAddBulkSst:
             case TLogSignature::SignatureLocalSyncData:
             case TLogSignature::SignaturePhantomBlobs: {
-                issues.Info("hull", TStringBuilder() << SignatureName(sig) << " lsn# " << rec.Lsn
-                    << " kept as a raw payload");
+                skipped.Add(TStringBuilder() << SignatureName(sig) << " not replayed by this tool", rec.Lsn);
                 break;
             }
             default:
@@ -466,12 +491,13 @@ THullSnapshot ReconstructHull(
                     && sig != TLogSignature::SignatureHullCutLog
                     && sig != TLogSignature::First)
                 {
-                    issues.Info("hull", TStringBuilder() << "Unhandled log signature# " << SignatureName(sig)
-                        << " lsn# " << rec.Lsn);
+                    skipped.Add(TStringBuilder() << "Unhandled log signature " << SignatureName(sig), rec.Lsn);
                 }
                 break;
         }
     }
+    skipped.Flush(issues, "info");
+    unparsed.Flush(issues, "warning");
 
     std::sort(snap.Blobs.begin(), snap.Blobs.end(),
         [](const TBlobIndexEntry& a, const TBlobIndexEntry& b) { return a.Id < b.Id; });

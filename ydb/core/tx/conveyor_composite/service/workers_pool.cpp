@@ -3,11 +3,14 @@
 #include <ydb/core/kqp/query_data/kqp_predictor.h>
 
 #include <algorithm>
+#include <cmath>
+#include <numeric>
 
 namespace NKikimr::NConveyorComposite {
 TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
     : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
+    , MaxWorkerThreads(config.GetWorkersCountInfo().GetCPUUsageDouble(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
     , Counters(counters)
     , MaxBatchSize(config.GetMaxBatchSize())
     , PoolName(poolName)
@@ -16,12 +19,12 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
     Workers.reserve(WorkersCount);
     for (auto&& i : config.GetLinks()) {
         AFL_VERIFY((ui64)i.GetCategory() < categories.size());
-        Processes.emplace_back(TWeightedCategory(i.GetWeight(), categories[(ui64)i.GetCategory()], Counters->GetCategorySignals(i.GetCategory())));
+        Processes.emplace_back(i.GetWeight(), categories[(ui64)i.GetCategory()], Counters->GetCategorySignals(i.GetCategory()));
     }
-    AFL_VERIFY(Processes.size());
     for (ui32 i = 0; i < WorkersCount; ++i) {
-        Workers.emplace_back(std::make_unique<TWorker>(
-            poolName, config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetPossibleMaxLimitThreads()), distributorId, i, config.GetWorkersPoolId()));
+        const double cpuLimit = config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetPossibleMaxLimitThreads());
+        Workers.emplace_back(
+            std::make_unique<TWorker>(poolName, cpuLimit, distributorId, i, config.GetWorkersPoolId()), cpuLimit);
         ActiveWorkersIdx.emplace_back(i);
     }
     AFL_VERIFY(WorkersCount)("name", poolName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(
@@ -40,9 +43,13 @@ void TWorkersPool::UpdateWorkerCPULimit(const ui32 workerIdx, const double newLi
     AFL_VERIFY(WorkersUpdate);
 
     auto& worker = Workers[workerIdx];
+    if (std::abs(worker.GetCPULimit() - newLimit) < Eps) {
+        return;
+    }
     if (!worker.GetRunningTask()) {
         RemoveFreeWorker(workerIdx);
     }
+    worker.SetCPULimit(newLimit);
     WorkersUpdate->WorkersWaitingForLimitUpdate.emplace(workerIdx);
     TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvUpdateWorkerCPULimit>(newLimit));
 }
@@ -55,7 +62,8 @@ void TWorkersPool::IncreaseWorkers(const std::vector<double>& desiredCPULimits) 
 
     UpdateWorkerCPULimit(oldWorkersCount - 1, desiredCPULimits[oldWorkersCount - 1]);
     for (ui32 workerIdx = oldWorkersCount; workerIdx < desiredCPULimits.size(); ++workerIdx) {
-        Workers.emplace_back(std::make_unique<TWorker>(PoolName, desiredCPULimits[workerIdx], DistributorId, workerIdx, WorkersPoolId));
+        Workers.emplace_back(
+            std::make_unique<TWorker>(PoolName, desiredCPULimits[workerIdx], DistributorId, workerIdx, WorkersPoolId), desiredCPULimits[workerIdx]);
         ActiveWorkersIdx.emplace_back(workerIdx);
     }
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
@@ -82,7 +90,7 @@ void TWorkersPool::DecreaseWorkers(const std::vector<double>& desiredCPULimits) 
 bool TWorkersPool::StartWorkersUpdate(const std::vector<double>& desiredCPULimits) {
     AFL_VERIFY(desiredCPULimits.size());
 
-    AFL_VERIFY(!WorkersUpdate);  // Update entrypoint (another states continue)
+    AFL_VERIFY(!WorkersUpdate);  // Update entrypoint (another states is process continuation)
     WorkersUpdate.emplace();
     WorkersUpdate->DesiredWorkersCount = desiredCPULimits.size();
 
@@ -110,6 +118,10 @@ bool TWorkersPool::TryFinishWorkersUpdate() {
     }
 
     WorkersCount = desiredWorkersCount;
+    MaxWorkerThreads = std::accumulate(Workers.begin(), Workers.end(), 0.0,
+        [](const double sum, const TWorkerInfo& worker) {
+            return sum + worker.GetCPULimit();
+        });
     Counters->WorkersCountLimit->Set(WorkersCount);
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
     WorkersUpdate.reset();
@@ -137,14 +149,15 @@ bool TWorkersPool::HasFreeWorker() const {
     return !ActiveWorkersIdx.empty();
 }
 
-void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch) {
+void TWorkersPool::RunTask(std::vector<TWorkerTask>&& tasksBatch, TTaskCompletionContexts&& completionContexts) {
     AFL_VERIFY(HasFreeWorker());
+    AFL_VERIFY(tasksBatch.size());
     const auto workerIdx = ActiveWorkersIdx.back();
     ActiveWorkersIdx.pop_back();
     Counters->AvailableWorkersCount->Set(ActiveWorkersIdx.size());
 
     auto& worker = Workers[workerIdx];
-    worker.OnStartTask();
+    worker.OnStartTask(std::move(completionContexts));
     TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvNewTask>(std::move(tasksBatch)));
 }
 
@@ -161,7 +174,7 @@ void TWorkersPool::ReleaseWorker(const ui32 workerIdx) {
 }
 
 bool TWorkersPool::DrainTasks() {
-    if (ActiveWorkersIdx.empty()) {
+    if (ActiveWorkersIdx.empty() || Processes.empty()) {
         return false;
     }
     const auto predHeap = [](const TWeightedCategory& l, const TWeightedCategory& r) {
@@ -178,11 +191,11 @@ bool TWorkersPool::DrainTasks() {
     };
     std::make_heap(Processes.begin(), Processes.end(), predHeap);
     std::vector<TWeightedCategory> procLocal = Processes;
-    AFL_VERIFY(procLocal.size());
     bool newTask = false;
     while (ActiveWorkersIdx.size() && procLocal.size() && procLocal.front().GetCategory()->HasTasks()) {
         TDuration predicted = TDuration::Zero();
         std::vector<TWorkerTask> tasks;
+        TTaskCompletionContexts completionContexts;
         THashSet<TString> scopes;
         while (procLocal.size() && (tasks.empty() || (predicted < DeliveringDuration.GetValue() * 10 && tasks.size() < MaxBatchSize)) &&
                procLocal.front().GetCategory()->HasTasks()) {
@@ -192,6 +205,7 @@ bool TWorkersPool::DrainTasks() {
                 procLocal.pop_back();
                 continue;
             }
+            completionContexts.try_emplace(procLocal.back().GetCategory()->GetCategory(), procLocal.back());
             tasks.emplace_back(std::move(*task));
             procLocal.back().GetCPUUsage()->AddPredicted(tasks.back().GetPredictedDuration());
             predicted += tasks.back().GetPredictedDuration();
@@ -199,7 +213,7 @@ bool TWorkersPool::DrainTasks() {
         }
         newTask = true;
         if (tasks.size()) {
-            RunTask(std::move(tasks));
+            RunTask(std::move(tasks), std::move(completionContexts));
         }
     }
     for (auto&& i : Processes) {
@@ -211,31 +225,43 @@ bool TWorkersPool::DrainTasks() {
 }
 
 void TWorkersPool::PutTaskResults(std::vector<TWorkerTaskResult>&& result, const ui64 workersPoolId, const ui64 workerIdx) {
+    AFL_VERIFY(workerIdx < Workers.size())("workers_pool_id", workersPoolId)("worker_idx", workerIdx)("workers_count", Workers.size());
+    const auto& worker = Workers[workerIdx];
+    AFL_VERIFY(worker.GetRunningTask())("workers_pool_id", workersPoolId)("worker_idx", workerIdx);
+
     THashSet<TString> scopeIds;
     for (auto&& t : result) {
-        bool found = false;
-        for (auto&& i : Processes) {
-            if (i.GetCategory()->GetCategory() == t.GetCategory()) {
-                i.GetCounters()->WaitingHistogram->Collect((t.GetStart() - t.GetCreateInstant()).MicroSeconds());
-                i.GetCounters()->TaskExecuteHistogram->Collect((t.GetFinish() - t.GetStart()).MicroSeconds());
-                i.GetCounters()->ExecuteDuration->Add((t.GetFinish() - t.GetStart()).MicroSeconds());
-                found = true;
-                i.GetCPUUsage()->Exchange(t.GetPredictedDuration(), t.GetStart(), t.GetFinish());
-                i.GetCategory()->PutTaskResult(std::move(t), scopeIds);
-                break;
-            }
-        }
-        if (!found) {
-            TStringBuilder linkedCategories;
-            for (auto&& i : Processes) {
-                linkedCategories << (ui64)i.GetCategory()->GetCategory() << "(" << ::ToString(i.GetCategory()->GetCategory()) << "),";
-            }
-            AFL_VERIFY(false)("result_category", (ui64)t.GetCategory())("result_category_name", ::ToString(t.GetCategory()))(
-                "process_id", t.GetProcessId())("batch_size", result.size())("linked_categories", linkedCategories)(
-                "processes_count", Processes.size())("workers_pool_id", workersPoolId)("worker_idx", workerIdx)(
-                "workers_count", WorkersCount);
+        const auto& context = worker.GetCompletionContext(t.GetCategory());
+        context.GetCounters()->WaitingHistogram->Collect((t.GetStart() - t.GetCreateInstant()).MicroSeconds());
+        context.GetCounters()->TaskExecuteHistogram->Collect((t.GetFinish() - t.GetStart()).MicroSeconds());
+        context.GetCounters()->ExecuteDuration->Add((t.GetFinish() - t.GetStart()).MicroSeconds());
+        context.GetCPUUsage()->Exchange(t.GetPredictedDuration(), t.GetStart(), t.GetFinish());
+        context.GetCategory()->PutTaskResult(std::move(t), scopeIds);
+    }
+}
+
+void TWorkersPool::ApplyTopologyUpdate(
+    const NConfig::TWorkersPool& config, const std::vector<std::shared_ptr<TProcessCategory>>& categories) {
+    std::vector<TWeightedCategory> oldProcesses = std::move(Processes);
+    std::vector<TWeightedCategory> newProcesses;
+    newProcesses.reserve(config.GetLinks().size());
+
+    for (const auto& linkConfig : config.GetLinks()) {
+        const auto category = linkConfig.GetCategory();
+        auto oldIt = std::find_if(oldProcesses.begin(), oldProcesses.end(), [&](const TWeightedCategory& process) {
+            return process.GetCategory()->GetCategory() == category;
+        });
+        if (oldIt != oldProcesses.end()) {
+            oldIt->SetWeight(linkConfig.GetWeight());
+            newProcesses.emplace_back(std::move(*oldIt));
+            oldProcesses.erase(oldIt);
+        } else {
+            AFL_VERIFY((ui64)category < categories.size());
+            newProcesses.emplace_back(
+                linkConfig.GetWeight(), categories[(ui64)category], Counters->GetCategorySignals(category));
         }
     }
+    Processes = std::move(newProcesses);
 }
 
 }   // namespace NKikimr::NConveyorComposite

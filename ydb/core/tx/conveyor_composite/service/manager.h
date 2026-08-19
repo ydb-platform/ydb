@@ -10,9 +10,7 @@ class TTasksManager {
 private:
     std::vector<std::shared_ptr<TWorkersPool>> WorkerPools;
     std::vector<std::shared_ptr<TProcessCategory>> Categories;
-    const NActors::TActorId DistributorActorId;
-    const NConfig::TConfig Config;
-    TCounters& Counters;
+    NConfig::TConfig Config;
 
 public:
     TString DebugString() const {
@@ -27,16 +25,14 @@ public:
     }
 
     TTasksManager(const TString& /*convName*/, const NConfig::TConfig& config, const NActors::TActorId distributorActorId, TCounters& counters)
-        : DistributorActorId(distributorActorId)
-        , Config(config)
-        , Counters(counters)
+        : Config(config)
     {
         for (auto&& i : GetEnumAllValues<ESpecialTaskCategory>()) {
-            Categories.emplace_back(std::make_shared<TProcessCategory>(Config.GetCategoryConfig(i), Counters));
+            Categories.emplace_back(std::make_shared<TProcessCategory>(Config.GetCategoryConfig(i), counters));
         }
         for (auto&& i : Config.GetWorkerPools()) {
             WorkerPools.emplace_back(std::make_shared<TWorkersPool>(
-                i.GetName(), distributorActorId, i, Counters.GetWorkersPoolSignals(i.GetName()), Categories));
+                i.GetName(), distributorActorId, i, counters.GetWorkersPoolSignals(i.GetName()), Categories));
         }
     }
 
@@ -61,13 +57,39 @@ public:
         return *Categories[(ui64)category];
     }
 
-    const TProcessCategory& GetCategoryVerified(const ESpecialTaskCategory category) const {
-        AFL_VERIFY((ui64)category < Categories.size());
-        AFL_VERIFY(!!Categories[(ui64)category]);
-        return *Categories[(ui64)category];
+    TConclusionStatus ValidateConfigUpdate(const NConfig::TConfig& config) const {
+        if (config.IsEnabled() != Config.IsEnabled()) {
+            return TConclusionStatus::Fail("runtime Enabled update is not supported yet");
+        }
+        if (config.GetWorkerPools().size() != WorkerPools.size()) {
+            return TConclusionStatus::Fail("runtime worker pool add/remove is not supported yet");
+        }
+        for (ui32 poolIdx = 0; poolIdx < WorkerPools.size(); ++poolIdx) {
+            const auto& currentPool = *WorkerPools[poolIdx];
+            const auto& desiredPool = config.GetWorkerPools()[poolIdx];
+            if (currentPool.GetPoolName() != desiredPool.GetName()) {
+                return TConclusionStatus::Fail("runtime worker pool reorder/rename is not supported yet");
+            }
+            if (currentPool.GetMaxBatchSize() != desiredPool.GetMaxBatchSize()) {
+                return TConclusionStatus::Fail("runtime MaxBatchSize update is not supported yet");
+            }
+        }
+        return TConclusionStatus::Success();
     }
 
-    bool StartWorkersUpdate(const NConfig::TConfig& config) {
+    bool StartConfigUpdate(const NConfig::TConfig& config) {
+        AFL_VERIFY(!ValidateConfigUpdate(config).IsFail());
+
+        // topology updates
+        for (const auto category : GetEnumAllValues<ESpecialTaskCategory>()) {
+            Categories[(ui64)category]->UpdateConfig(config.GetCategoryConfig(category));
+        }
+        for (ui32 poolIdx = 0; poolIdx < WorkerPools.size(); ++poolIdx) {
+            WorkerPools[poolIdx]->ApplyTopologyUpdate(config.GetWorkerPools()[poolIdx], Categories);
+        }
+        Config = config;
+
+        // CPU usage updates
         const ui32 totalThreadsCount = NKqp::TStagePredictor::GetPossibleMaxLimitThreads();
         for (ui32 poolIdx = 0; poolIdx < WorkerPools.size(); ++poolIdx) {
             const auto& poolConfig = config.GetWorkerPools()[poolIdx];

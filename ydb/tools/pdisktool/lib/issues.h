@@ -96,6 +96,48 @@ public:
     }
 };
 
+// A damaged disk hits the same inconsistency in millions of records, and anything reported once per
+// record buries the real findings. Repeated conditions are counted here and summarized once, keeping
+// the last position as an entry point for a manual look.
+class TRepeatedIssues {
+    struct TEntry {
+        ui64 Count = 0;
+        ui64 Last = 0;
+    };
+    TMap<TString, TEntry> Entries;
+    TString Location;
+    TString PositionName;
+
+public:
+    TRepeatedIssues(TString location = "hull", TString positionName = "lsn")
+        : Location(std::move(location))
+        , PositionName(std::move(positionName))
+    {}
+
+    void Add(const TString& what, ui64 position) {
+        auto& e = Entries[what];
+        ++e.Count;
+        e.Last = position;
+    }
+
+    bool Empty() const {
+        return Entries.empty();
+    }
+
+    void Flush(TIssueLog& issues, const TString& severity) const {
+        for (const auto& [what, e] : Entries) {
+            issues.Add(severity, Location, TStringBuilder() << what << ": " << e.Count
+                << " record(s), last " << PositionName << "# " << e.Last);
+        }
+    }
+};
+
+// Bytes actually available for a claim of `want` starting at `pos` within `size`. Every size read off
+// the disk goes through here before it reaches an allocation or a memcpy.
+inline ui64 ClampSpan(ui64 pos, ui64 want, ui64 size) {
+    return pos >= size ? 0 : Min<ui64>(want, size - pos);
+}
+
 inline TString SignatureName(ui8 signature) {
     return TLogSignature(signature).ToString();
 }

@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <tuple>
+#include <util/generic/hash_set.h>
 #include <util/system/unaligned_mem.h>
 
 namespace NKikimr::NPDiskTool {
@@ -16,31 +17,6 @@ namespace NKikimr::NPDiskTool {
 namespace {
 
 constexpr ui32 HullEntryMagic = 0x93F7ADD5;
-
-// The log holds millions of records, so anything reported once per record buries the real findings.
-// Repeated conditions are counted here and summarized once, keeping the last LSN as an entry point
-// for a manual look with parse-log.
-class TRepeatedIssues {
-    struct TEntry {
-        ui64 Count = 0;
-        ui64 LastLsn = 0;
-    };
-    TMap<TString, TEntry> Entries;
-
-public:
-    void Add(const TString& what, ui64 lsn) {
-        auto& e = Entries[what];
-        ++e.Count;
-        e.LastLsn = lsn;
-    }
-
-    void Flush(TIssueLog& issues, const TString& severity) const {
-        for (const auto& [what, e] : Entries) {
-            issues.Add(severity, "hull", TStringBuilder() << what << ": " << e.Count
-                << " record(s), last lsn# " << e.LastLsn);
-        }
-    }
-};
 
 bool ParseHullEntryPoint(const TString& data, NKikimrVDiskData::THullDbEntryPoint& pb, TIssueLog& issues) {
     if (data.size() < sizeof(ui32)) {
@@ -82,14 +58,20 @@ bool LoadSstLinear(
 {
     TDiskPart cur = entry;
     bool first = true;
-    TString collected;
-    ui32 restIndex = 0;
-    ui32 restOutbound = 0;
-    ui32 items = 0;
-    ui32 outboundItems = 0;
+    ui64 restIndex = 0;
+    ui64 restOutbound = 0;
+    ui64 items = 0;
+    ui64 outboundItems = 0;
 
     TVector<TString> partsNewestFirst;
+    ui64 collected = 0;
+    THashSet<std::tuple<ui32, ui32, ui32>> visitedLinks;
     while (!cur.Empty()) {
+        // The PrevPart links come off the disk; a damaged one can point back into the chain.
+        if (!visitedLinks.insert(std::make_tuple(cur.ChunkIdx, cur.Offset, cur.Size)).second) {
+            issues.Warning("hull", TStringBuilder() << "SST fragment chain loops at " << cur.ToString(), true);
+            return false;
+        }
         visitedParts.push_back(cur);
         TString data = ReadDiskPart(device, format, state, cur, issues);
         if (data.size() < (first ? sizeof(TIdxDiskPlaceHolder) : sizeof(TIdxDiskLinker))) {
@@ -103,10 +85,12 @@ bool LoadSstLinear(
                 issues.Warning("hull", TStringBuilder() << "Bad SST placeholder magic at " << cur.ToString(), true);
                 return false;
             }
-            restIndex = ph.Info.IdxTotalSize;
-            restOutbound = ph.Info.OutboundItems * sizeof(TDiskPart);
+            // ui64 throughout: the products below overflow ui32 for the values a damaged
+            // placeholder can hold, which would leave the buffer smaller than the copies into it.
             items = ph.Info.Items;
             outboundItems = ph.Info.OutboundItems;
+            restIndex = ph.Info.IdxTotalSize;
+            restOutbound = outboundItems * sizeof(TDiskPart);
             partsNewestFirst.push_back(data.substr(0, data.size() - sizeof(TIdxDiskPlaceHolder)));
             cur = ph.PrevPart;
             first = false;
@@ -116,12 +100,23 @@ bool LoadSstLinear(
             partsNewestFirst.push_back(data.substr(0, data.size() - sizeof(TIdxDiskLinker)));
             cur = linker.PrevPart;
         }
+        collected += partsNewestFirst.back().size();
     }
 
-    const ui32 total = restIndex + restOutbound;
+    // The placeholder must agree with the bytes the fragments actually carry, otherwise the index
+    // and outbound tables would be read from beyond what was collected.
+    const ui64 total = restIndex + restOutbound;
+    const ui64 indexBytes = items * sizeof(TIndexRecord<TKey, TMemRec>);
+    if (total > collected || indexBytes > restIndex) {
+        issues.Warning("hull", TStringBuilder() << "SST placeholder disagrees with the fragments at "
+            << entry.ToString() << ": items# " << items << " idxTotalSize# " << restIndex
+            << " outboundItems# " << outboundItems << " collected# " << collected, true);
+        return false;
+    }
+
     TString buf = TString::Uninitialized(total);
     memset(buf.Detach(), 0, total);
-    ui32 write = total;
+    ui64 write = total;
     for (const auto& part : partsNewestFirst) {
         if (part.size() > write) {
             issues.Warning("hull", "SST index overflow while concatenating parts", true);
@@ -136,15 +131,9 @@ bool LoadSstLinear(
         memcpy(outbound.data(), buf.data() + restIndex, restOutbound);
     }
     index.resize(items);
-    if (items && restIndex >= items * sizeof(TIndexRecord<TKey, TMemRec>)) {
-        memcpy(index.data(), buf.data(), items * sizeof(TIndexRecord<TKey, TMemRec>));
-    } else if (items) {
-        // Best-effort: copy what we have.
-        const ui32 copy = Min<ui32>(restIndex, items * sizeof(TIndexRecord<TKey, TMemRec>));
-        memcpy(index.data(), buf.data(), copy);
-        issues.Warning("hull", "SST linear index size mismatch", true);
+    if (items) {
+        memcpy(index.data(), buf.data(), indexBytes);
     }
-    Y_UNUSED(total);
     return true;
 }
 
@@ -209,14 +198,19 @@ void UpsertBlob(TVector<TBlobIndexEntry>& blobs, const TLogoBlobID& id, const TM
     auto it = std::lower_bound(blobs.begin(), blobs.end(), e,
         [](const TBlobIndexEntry& a, const TBlobIndexEntry& b) { return a.Id < b.Id; });
     if (it != blobs.end() && TKeyLogoBlob(it->Id).IsSameAs(TKeyLogoBlob(e.Id))) {
-        TMemRecLogoBlob merged = it->MemRec;
-        merged.Merge(rec, TKeyLogoBlob(e.Id), false, TBlobStorageGroupType(TErasureType::ErasureNone));
-        if (rec.HasData()) {
-            it->MemRec = rec;
-        } else {
+        if (!rec.HasData()) {
+            // Metadata-only records can be folded into the entry that is already there.
+            TMemRecLogoBlob merged = it->MemRec;
+            merged.Merge(rec, TKeyLogoBlob(e.Id), false, TBlobStorageGroupType(TErasureType::ErasureNone));
             it->MemRec = merged;
+            return;
         }
-        return;
+        if (!it->MemRec.HasData()) {
+            it->MemRec = rec;
+            return;
+        }
+        // Both records point at data. Two huge parts of one blob are logged separately, so keeping
+        // only the newer one would drop a part; BuildBlobViews groups the entries back together.
     }
     blobs.insert(it, std::move(e));
 }
@@ -259,6 +253,12 @@ THullSnapshot ReconstructHull(
     THullSnapshot snap;
     snap.Erasure = erasure;
 
+    if (owner >= state.Owners.size()) {
+        // The owner table comes from the SysLog; without it there are no starting points to walk.
+        issues.Error("hull", TStringBuilder() << "No owner table available (SysLog was not parsed);"
+            " cannot reconstruct the Hull of owner# " << (ui32)owner);
+        return snap;
+    }
     const auto& ownerState = state.Owners[owner];
     auto loadFromEntry = [&](ui8 signature, auto loader) {
         auto it = ownerState.StartingPoints.find(signature);
@@ -428,12 +428,19 @@ THullSnapshot ReconstructHull(
                 const TLogoBlobID hugeId = LogoBlobIDFromLogoBlobID(protoId);
                 cur += lbSize;
                 if (size_t(end - cur) < sizeof(ui64)) {
+                    unparsed.Add("Truncated HugeLogoBlob ingress", rec.Lsn);
                     break;
                 }
                 // The ingress tells which parts are local, which is what maps a range to a part id.
                 const TIngress ingress(ReadUnaligned<ui64>(cur));
                 cur += sizeof(ui64);
                 TDiskPart addr;
+                // TDiskPart::Parse only checks the span it is handed, so the payload must be
+                // measured here before it is asked to read twelve bytes.
+                if (size_t(end - cur) < TDiskPart::SerializedSize) {
+                    unparsed.Add("Truncated HugeLogoBlob addr", rec.Lsn);
+                    break;
+                }
                 if (!addr.Parse(cur, cur + TDiskPart::SerializedSize)) {
                     unparsed.Add("Cannot parse HugeLogoBlob addr", rec.Lsn);
                     break;

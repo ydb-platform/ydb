@@ -100,7 +100,9 @@ TVector<TBlobView> BuildBlobViews(const THullSnapshot& snap, TIssueLog& issues) 
     TVector<TBlobView> views;
     for (const auto& e : snap.Blobs) {
         if (views.empty() || !TKeyLogoBlob(views.back().Id).IsSameAs(TKeyLogoBlob(e.Id))) {
-            views.push_back(TBlobView{e.Id, 0, {}});
+            // IsSameAs ignores the part id, so keep the full id out of the view: whichever record
+            // happened to group first must not lend its part id to the listing or a file name.
+            views.push_back(TBlobView{e.Id.FullID(), 0, {}});
         }
         auto& view = views.back();
         view.Ingress |= e.MemRec.GetIngress().Raw();
@@ -193,6 +195,9 @@ void ListBlobs(
         if (filter.ContinueToken && view.Id == from) {
             continue;
         }
+        if (filter.To && *filter.To < view.Id) {
+            break; // the views are sorted, so nothing past the upper bound can match
+        }
         if (!PassRange(view.Id, filter)) {
             continue;
         }
@@ -233,17 +238,23 @@ void ListBarriers(
     const TListFilter& filter,
     NKikimr::NPdiskTool::TBarriersResult& out)
 {
+    // The token counts matching rows, not raw index positions, so paging does not depend on the
+    // filter staying the same between calls.
     ui32 skip = 0;
     if (filter.ContinueToken) {
         skip = FromString<ui32>(filter.ContinueToken);
     }
+    ui32 matched = 0;
     ui32 n = 0;
-    for (ui32 i = skip; i < snap.Barriers.size(); ++i) {
+    for (ui32 i = 0; i < snap.Barriers.size(); ++i) {
         const auto& e = snap.Barriers[i];
         if (filter.TabletId && e.Key.TabletId != *filter.TabletId) {
             continue;
         }
         if (filter.Channel && e.Key.Channel != *filter.Channel) {
+            continue;
+        }
+        if (matched++ < skip) {
             continue;
         }
         auto* b = out.AddBarriers();
@@ -256,7 +267,7 @@ void ListBarriers(
         b->SetCollectStep(e.MemRec.CollectStep);
         ++n;
         if (n >= filter.Limit) {
-            out.SetContinueToken(ToString(i + 1));
+            out.SetContinueToken(ToString(matched));
             break;
         }
     }
@@ -271,10 +282,14 @@ void ListBlocks(
     if (filter.ContinueToken) {
         skip = FromString<ui32>(filter.ContinueToken);
     }
+    ui32 matched = 0;
     ui32 n = 0;
-    for (ui32 i = skip; i < snap.Blocks.size(); ++i) {
+    for (ui32 i = 0; i < snap.Blocks.size(); ++i) {
         const auto& e = snap.Blocks[i];
         if (filter.TabletId && e.Key.TabletId != *filter.TabletId) {
+            continue;
+        }
+        if (matched++ < skip) {
             continue;
         }
         auto* b = out.AddBlocks();
@@ -282,7 +297,7 @@ void ListBlocks(
         b->SetBlockedGeneration(e.MemRec.BlockedGeneration);
         ++n;
         if (n >= filter.Limit) {
-            out.SetContinueToken(ToString(i + 1));
+            out.SetContinueToken(ToString(matched));
             break;
         }
     }

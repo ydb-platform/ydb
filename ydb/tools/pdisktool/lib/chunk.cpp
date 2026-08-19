@@ -184,6 +184,7 @@ TString ReadLogicalRange(
 TRangeCheckResult CheckLogicalRange(
     IDeviceReader& device,
     const TDiskFormat& format,
+    const TParsedSysLog& state,
     TChunkIdx chunkIdx,
     ui32 offset,
     ui32 size,
@@ -194,15 +195,27 @@ TRangeCheckResult CheckLogicalRange(
     if (size == 0 || format.IsPlainDataChunks()) {
         return result; // plain chunks carry no per-sector hash
     }
+    ui64 baseNonce = 0;
+    if (chunkIdx < state.Chunks.size()) {
+        baseNonce = state.Chunks[chunkIdx].Nonce;
+    }
     const TSectorSpan span = LogicalSpanToSectors(format, offset, size);
     for (ui32 i = 0; i < span.Count; ++i) {
         const ui32 s = span.First + i;
         const ui64 sectorOffset = format.Offset(chunkIdx, s);
+        const TString where = TStringBuilder() << location << "[" << chunkIdx << ":" << s << "]";
         ++result.Checked;
         auto restored = RestoreOneSector(device, format, sectorOffset, format.MagicDataChunk,
-            format.ChunkKey, false, issues, TStringBuilder() << location << "[" << chunkIdx << ":" << s << "]",
-            {}, ESectorRef::Referenced);
+            format.ChunkKey, false, issues, where, {}, ESectorRef::Referenced);
         if (!restored.Ok) {
+            ++result.Bad;
+            continue;
+        }
+        if (baseNonce && restored.Nonce != baseNonce + s) {
+            // Same judgement as a read makes: a valid hash with the wrong nonce is data left over
+            // from a previous use of the chunk, not the referenced content.
+            issues.Warning(where, TStringBuilder() << "Nonce mismatch expected# " << (baseNonce + s)
+                << " got# " << restored.Nonce, true);
             ++result.Bad;
         }
     }

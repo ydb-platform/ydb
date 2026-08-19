@@ -110,6 +110,10 @@ static bool TryMetadataFormatSector(
     return found;
 }
 
+// A metadata record holds a node's config blob; anything larger than this is a damaged length field
+// rather than a record, and must not become an allocation or a read size.
+static constexpr ui64 MaxMetadataLength = 32ull << 20;
+
 static bool TryReadMetadataPayload(
     IDeviceReader& device,
     ui64 offset,
@@ -119,12 +123,12 @@ static bool TryReadMetadataPayload(
     TIssueLog& issues,
     NKikimr::NPdiskTool::TMetadataResult& proto)
 {
-    if (length < sizeof(NPDisk::TMetadataHeader) || length > (32ull << 20)) {
+    if (length < sizeof(NPDisk::TMetadataHeader) || length > MaxMetadataLength) {
         issues.Warning("metadata", TStringBuilder() << "Implausible metadata length# " << length, true);
         return false;
     }
     TVector<ui8> buf(length);
-    device.Pread(buf.data(), length, offset, issues);
+    device.Pread(buf.data(), static_cast<ui32>(length), offset, issues);
     auto* header = reinterpret_cast<NPDisk::TMetadataHeader*>(buf.data());
     TPDiskStreamCypher cypher(encryption);
     cypher.SetKey(dataKey);
@@ -163,7 +167,7 @@ static bool TryReadFormattedSlot(
 
     auto tryEnc = [&](bool encryption) -> bool {
         TVector<ui8> buf(headerBytes);
-        device.Pread(buf.data(), headerBytes, offset, issues);
+        device.Pread(buf.data(), static_cast<ui32>(headerBytes), offset, issues);
         auto* header = reinterpret_cast<NPDisk::TMetadataHeader*>(buf.data());
         TPDiskStreamCypher cypher(encryption);
         cypher.SetKey(format.ChunkKey);
@@ -171,11 +175,16 @@ static bool TryReadFormattedSlot(
         if (!header->CheckHash(&magic)) {
             return false;
         }
+        if (header->Length > MaxMetadataLength) {
+            issues.Warning("metadata", TStringBuilder() << "Implausible metadata slot length# "
+                << header->Length << " chunk# " << chunkIdx, true);
+            return false;
+        }
         const ui64 total = sizeof(NPDisk::TMetadataHeader) + header->Length;
         const ui64 need = format.RoundUpToSectorSize(total);
         if (need > headerBytes) {
             buf.resize(need);
-            device.Pread(buf.data(), need, offset, issues);
+            device.Pread(buf.data(), static_cast<ui32>(need), offset, issues);
             header = reinterpret_cast<NPDisk::TMetadataHeader*>(buf.data());
             header->Encrypt(cypher);
             header->EncryptData(cypher);

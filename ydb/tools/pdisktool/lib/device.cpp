@@ -37,9 +37,10 @@ class TAlignedBuf {
 
 public:
     void Ensure(ui32 size) {
-        if (size <= Cap) {
+        if (Ptr && size <= Cap) {
             return;
         }
+        size = Max<ui32>(size, IoAlign);
         Raw.Reset(new ui8[size + IoAlign - 1]);
         Ptr = reinterpret_cast<ui8*>(
             (reinterpret_cast<uintptr_t>(Raw.Get()) + IoAlign - 1) / IoAlign * IoAlign);

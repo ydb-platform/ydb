@@ -13,7 +13,11 @@ TSysLogReadResult ReadSysLog(
     TSysLogReadResult result;
     const ui32 setCount = format.SysLogSectorCount;
     const ui32 beginSectorIdx = format.FirstSysLogSectorIdx();
+    const ui64 payloadSize = format.SectorPayloadSize();
+    // A SysLog record is assembled from the ring, so it cannot exceed what the whole ring holds.
+    const ui64 maxRecordSize = ui64(setCount) * payloadSize;
     result.SectorSets.resize(setCount);
+    TRepeatedIssues damaged("syslog", "set");
 
     // The SysLog is a ring of sector sets that is swept in full. Sets the ring has not reached yet
     // hold no valid copy, which is normal, so the sweep stays quiet and the per-set state below
@@ -36,35 +40,49 @@ TSysLogReadResult ReadSysLog(
         }
         info.Nonce = restored.Nonce;
 
+        // Every size below comes off the disk and is clamped to the sector before it is used: the
+        // payload buffer is exactly one sector's worth of bytes.
         auto* pageHeader = reinterpret_cast<TLogPageHeader*>(restored.Payload.data());
         if (pageHeader->Flags & NPDisk::LogPageFirst) {
             info.HasStart = true;
             auto* first = reinterpret_cast<TFirstLogPageHeader*>(restored.Payload.data());
-            info.FullPayloadSize = first->DataSize;
-            info.PayloadPartSize = first->Size;
+            info.FullPayloadSize = Min<ui64>(first->DataSize, maxRecordSize);
+            if (info.FullPayloadSize != first->DataSize) {
+                damaged.Add("First page DataSize is implausible", setIdx);
+                info.IsConsistent = false;
+            }
+            const ui64 take = ClampSpan(sizeof(TFirstLogPageHeader), first->Size, payloadSize);
+            if (take != first->Size) {
+                damaged.Add("First page size exceeds the sector", setIdx);
+                info.IsConsistent = false;
+            }
+            info.PayloadPartSize = take;
             info.PayloadSignature = first->LogRecordHeader.Signature;
             info.PayloadLsn = first->LogRecordHeader.OwnerLsn;
             const ui8* src = restored.Payload.data() + sizeof(TFirstLogPageHeader);
-            info.Payload.assign(src, src + first->Size);
+            info.Payload.assign(src, src + take);
         } else {
             const ui8* src = restored.Payload.data() + sizeof(TLogPageHeader);
+            const ui64 take = ClampSpan(sizeof(TLogPageHeader), pageHeader->Size, payloadSize);
+            if (take != pageHeader->Size) {
+                damaged.Add("Continuation page size exceeds the sector", setIdx);
+                info.IsConsistent = false;
+            }
             if (pageHeader->Flags & NPDisk::LogPageLast) {
                 info.HasEnd = true;
-                info.PayloadPartSize = pageHeader->Size;
             } else {
                 info.HasMiddle = true;
-                info.PayloadPartSize = pageHeader->Size;
             }
-            info.Payload.assign(src, src + pageHeader->Size);
+            info.PayloadPartSize = take;
+            info.Payload.assign(src, src + take);
         }
+        // A record that fits one sector carries both flags on its first page.
         if (pageHeader->Flags & NPDisk::LogPageLast) {
             info.HasEnd = true;
-            if (!info.HasStart) {
-                info.PayloadPartSize = pageHeader->Size;
-            }
         }
     }
 
+    damaged.Flush(issues, "warning");
     if (emptySets) {
         issues.Info("syslog", TStringBuilder() << emptySets << " of " << setCount
             << " sector sets have no valid copy (not yet reached by the SysLog ring)");
@@ -182,6 +200,13 @@ TSysLogReadResult ReadSysLog(
         return result;
     }
 
+    if (bestLast < bestFirst) {
+        // The record's last page precedes its first one in ring order, so the ring is inconsistent;
+        // walking the span would wrap around ~2^32 times.
+        issues.Error("syslog", TStringBuilder() << "SysLog record ends before it starts: first set# "
+            << (bestFirst % setCount) << " last set# " << (bestLast % setCount));
+        return result;
+    }
     auto& first = result.SectorSets[bestFirst % setCount];
     TString payload = TString::Uninitialized(first.FullPayloadSize);
     if (first.Payload.size() > payload.size()) {

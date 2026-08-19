@@ -51,6 +51,7 @@ TString ReadLogicalRange(
 TRangeCheckResult CheckLogicalRange(
     IDeviceReader& device,
     const TDiskFormat& format,
+    const TParsedSysLog& state,
     TChunkIdx chunkIdx,
     ui32 offset,
     ui32 size,

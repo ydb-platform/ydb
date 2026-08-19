@@ -10,7 +10,10 @@
 #include <ydb/library/pdisk_io/aio.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/tools/pdisktool/lib/blobs.h>
+#include <ydb/tools/pdisktool/lib/commands.h>
 #include <ydb/tools/pdisktool/lib/format.h>
+#include <ydb/tools/pdisktool/lib/hull.h>
+#include <ydb/tools/pdisktool/lib/sector.h>
 #include <ydb/tools/pdisktool/lib/session.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -110,6 +113,57 @@ struct TYard {
         Runtime->Send(new IEventHandle(PDiskActor, Edge, new NActors::TEvents::TEvPoisonPill));
     }
 };
+
+bool HasMessage(const TIssueLog& issues, const TString& needle, const TString& location = TString()) {
+    for (const auto& i : issues.Items) {
+        if (i.Message.find(needle) != TString::npos && (!location || i.Location == location)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Rewrite one sector with a patched payload, restoring the encryption and the sector hash the tool
+// verifies. A plain byte flip is rejected before the parser under test ever sees the bytes.
+template <class TPatch>
+void RewriteSector(NPDisk::TSectorMap& map, const TDiskFormat& format, ui64 hashOffset, ui64 writeOffset,
+        ui64 magic, const TKey& key, TPatch patch)
+{
+    TVector<ui8> raw(format.SectorSize);
+    UNIT_ASSERT(map.Read(raw.data(), format.SectorSize, writeOffset));
+    auto* footer = reinterpret_cast<TDataSectorFooter*>(
+        raw.data() + format.SectorSize - sizeof(TDataSectorFooter));
+    const ui64 nonce = footer->Nonce;
+    const bool encrypted = footer->IsEncrypted();
+    const ui32 body = format.SectorSize - sizeof(TDataSectorFooter);
+    DecryptInPlace(raw.data(), body, key, nonce, encrypted);
+    patch(raw.data());
+    DecryptInPlace(raw.data(), body, key, nonce, encrypted);
+    TPDiskHashCalculator hasher;
+    footer->Hash = hasher.T1ha0HashSector<TT1ha0NoAvxHasher>(hashOffset, magic, raw.data(), format.SectorSize);
+    UNIT_ASSERT(map.Write(raw.data(), format.SectorSize, writeOffset));
+}
+
+// Offset of the first record page in a decrypted log sector, walking headers the way the scanner does.
+ui32 FindFirstLogPage(const ui8* payload, ui32 payloadSize) {
+    ui64 offset = 0;
+    while (offset + sizeof(TFirstLogPageHeader) <= payloadSize) {
+        const auto* h = reinterpret_cast<const TLogPageHeader*>(payload + offset);
+        if (h->Flags & NPDisk::LogPageTerminator) {
+            break;
+        }
+        if (h->Flags & NPDisk::LogPageNonceJump2) {
+            offset += sizeof(TNonceJumpLogPageHeader2);
+        } else if (h->Flags & NPDisk::LogPageNonceJump1) {
+            offset += sizeof(TNonceJumpLogPageHeader1);
+        } else if (h->Flags & NPDisk::LogPageFirst) {
+            return offset;
+        } else {
+            offset += sizeof(TLogPageHeader) + h->Size;
+        }
+    }
+    return Max<ui32>();
+}
 
 TString MakeLogoBlobOptPayload(const TLogoBlobID& id, const TString& data) {
     TString out = TString::Uninitialized(sizeof(TLogoBlobID) + data.size());
@@ -557,7 +611,7 @@ Y_UNIT_TEST_SUITE(TPDiskToolOracle) {
             // Checking a range that reaches into the unwritten tail does count bad sectors: something
             // points there, so the data is genuinely missing.
             TIssueLog tailIssues;
-            auto tail = CheckLogicalRange(*session.Device, session.Format, chunk,
+            auto tail = CheckLogicalRange(*session.Device, session.Format, session.State, chunk,
                 payloadSize * 4, payloadSize, tailIssues, "verify-ref");
             UNIT_ASSERT_VALUES_EQUAL(tail.Checked, 1u);
             UNIT_ASSERT_VALUES_EQUAL(tail.Bad, 1u);
@@ -681,6 +735,237 @@ Y_UNIT_TEST_SUITE(TPDiskToolOracle) {
         TIssueLog brokenIssues;
         MakeMainKey({}, brokenProto, "", true, brokenIssues);
         UNIT_ASSERT(brokenIssues.HasErrors());
+    }
+
+    Y_UNIT_TEST(ImplausibleLogPageSizesAreReportedAndScanTerminates) {
+        TYard yard;
+        const TVDiskID vdisk(31, 1, 0, 0, 0);
+        auto init = yard.Call<TEvYardInitResult>(new TEvYardInit(2, vdisk, yard.Guid));
+        const TOwner owner = init->PDiskParams->Owner;
+        const TOwnerRound round = init->PDiskParams->OwnerRound;
+        for (ui32 i = 0; i < 4; ++i) {
+            yard.Call<TEvLogResult>(new TEvLog(owner, round, TLogSignature::First,
+                TRcBuf(TString(64, 'L')), TLsnSeg(i + 1, i + 1), nullptr));
+        }
+        yard.Stop();
+
+        TDiskFormat format;
+        ui64 sectorOffset = 0;
+        ui32 pageOffset = 0;
+        TVector<ui8> pristine;
+        {
+            auto session = OpenTool(yard.Map);
+            format = session.Format;
+            const TChunkIdx logChunk = session.State.Record.LogHeadChunkIdx;
+            TIssueLog issues;
+            bool found = false;
+            for (ui32 s = 0; s < 8 && !found; ++s) {
+                const ui64 offset = format.Offset(logChunk, s);
+                auto restored = RestoreOneSector(*session.Device, format, offset, format.MagicLogChunk,
+                    format.LogKey, true, issues, "ut", {}, ESectorRef::Unreferenced);
+                if (!restored.Ok) {
+                    continue;
+                }
+                const ui32 page = FindFirstLogPage(restored.Payload.data(), restored.Payload.size());
+                if (page != Max<ui32>()) {
+                    sectorOffset = offset;
+                    pageOffset = page;
+                    found = true;
+                }
+            }
+            UNIT_ASSERT_C(found, "no first log page to corrupt");
+            pristine.resize(format.SectorSize);
+            UNIT_ASSERT(yard.Map->Read(pristine.data(), format.SectorSize, sectorOffset));
+        }
+
+        auto scanWithPatchedPage = [&](auto mutate) {
+            UNIT_ASSERT(yard.Map->Write(pristine.data(), format.SectorSize, sectorOffset));
+            RewriteSector(*yard.Map, format, sectorOffset, sectorOffset, format.MagicLogChunk, format.LogKey,
+                [&](ui8* payload) { mutate(reinterpret_cast<TFirstLogPageHeader*>(payload + pageOffset)); });
+            TPDiskSession session;
+            UNIT_ASSERT(session.OpenSectorMap(yard.Map, DefaultOpts()));
+            return session;
+        };
+
+        {
+            // A page claiming more bytes than the sector holds must not be copied out of the sector.
+            auto session = scanWithPatchedPage([](TFirstLogPageHeader* h) { h->Size = 0x7fff0000; });
+            UNIT_ASSERT_C(HasMessage(session.Issues, "exceeds the sector", "log"),
+                "oversized page size not reported");
+        }
+        {
+            // A record longer than the whole log chunk must not become an allocation.
+            auto session = scanWithPatchedPage([](TFirstLogPageHeader* h) { h->DataSize = Max<ui64>(); });
+            UNIT_ASSERT_C(HasMessage(session.Issues, "DataSize is implausible", "log"),
+                "implausible DataSize not reported");
+        }
+        {
+            // A zero-size page must not stall the walk over the sector; returning at all is the check.
+            auto session = scanWithPatchedPage([](TFirstLogPageHeader* h) {
+                h->Size = 0;
+                h->DataSize = 0;
+            });
+            UNIT_ASSERT(session.SysLogRaw.Ok);
+        }
+    }
+
+    Y_UNIT_TEST(ImplausibleSysLogPageSizeIsCapped) {
+        auto map = FormatMap(0x5150ull);
+        TDiskFormat format;
+        ui32 setIdx = 0;
+        {
+            auto session = OpenTool(map);
+            format = session.Format;
+            ui64 bestNonce = 0;
+            bool found = false;
+            for (const auto& info : session.SysLogRaw.SectorSets) {
+                if (info.HasStart && info.Nonce >= bestNonce) {
+                    bestNonce = info.Nonce;
+                    setIdx = info.SetIdx;
+                    found = true;
+                }
+            }
+            UNIT_ASSERT_C(found, "no SysLog sector set with a first page");
+        }
+
+        // All three replicas of a set are identical and hash against the set's own offset.
+        const ui64 base = ui64(format.FirstSysLogSectorIdx() + setIdx * NPDisk::ReplicationFactor)
+            * format.SectorSize;
+        for (ui32 replica = 0; replica < NPDisk::ReplicationFactor; ++replica) {
+            RewriteSector(*map, format, base, base + ui64(replica) * format.SectorSize,
+                format.MagicSysLogChunk, format.SysLogKey, [](ui8* payload) {
+                    reinterpret_cast<TFirstLogPageHeader*>(payload)->DataSize = Max<ui64>();
+                });
+        }
+
+        TPDiskSession session;
+        UNIT_ASSERT(session.OpenSectorMap(map, DefaultOpts()));
+        UNIT_ASSERT_C(HasMessage(session.Issues, "DataSize is implausible", "syslog"),
+            "implausible SysLog DataSize not reported");
+    }
+
+    Y_UNIT_TEST(HullWithoutOwnerTableIsRefused) {
+        // Every starting point comes from the SysLog, so with no owner table there is nothing to walk.
+        auto session = OpenTool(FormatMap(0x7717ull));
+        TParsedSysLog noState;
+        TIssueLog issues;
+        auto snap = ReconstructHull(*session.Device, session.Format, noState, TLogScanResult{}, 1,
+            TErasureType::ErasureNone, issues);
+        UNIT_ASSERT(snap.Blobs.empty());
+        UNIT_ASSERT(issues.HasErrors());
+        UNIT_ASSERT(HasMessage(issues, "No owner table"));
+    }
+
+    Y_UNIT_TEST(HostileSstPlaceholderIsAbandoned) {
+        TYard yard;
+        const TVDiskID vdisk(41, 1, 0, 0, 0);
+        auto init = yard.Call<TEvYardInitResult>(new TEvYardInit(2, vdisk, yard.Guid));
+        const TOwner owner = init->PDiskParams->Owner;
+        const TOwnerRound round = init->PDiskParams->OwnerRound;
+        auto reserved = yard.Call<TEvChunkReserveResult>(new TEvChunkReserve(owner, round, 1));
+        const TChunkIdx chunk = reserved->ChunkIds[0];
+        NPDisk::TCommitRecord commit;
+        commit.CommitChunks.push_back(chunk);
+        yard.Call<TEvLogResult>(new TEvLog(owner, round, TLogSignature::First, commit,
+            TRcBuf(TString()), TLsnSeg(1, 1), nullptr));
+
+        const ui32 fragmentSize = 8192;
+        TString image(2 * fragmentSize, 'q');
+        {
+            // Sizes far beyond what the fragment carries.
+            TIdxDiskPlaceHolder ph(1);
+            ph.Info.Items = Max<ui32>();
+            ph.Info.IdxTotalSize = Max<ui32>();
+            ph.Info.OutboundItems = Max<ui32>();
+            memcpy(image.Detach() + fragmentSize - sizeof(ph), &ph, sizeof(ph));
+        }
+        {
+            // A fragment chain that links back to itself.
+            TIdxDiskPlaceHolder ph(2);
+            ph.Info.Items = 1;
+            ph.Info.IdxTotalSize = sizeof(TIndexRecord<TKeyLogoBlob, TMemRecLogoBlob>);
+            ph.PrevPart = TDiskPart(chunk, fragmentSize, fragmentSize);
+            memcpy(image.Detach() + 2 * fragmentSize - sizeof(ph), &ph, sizeof(ph));
+        }
+        yard.Call<TEvChunkWriteResult>(new TEvChunkWrite(owner, round, chunk, 0,
+            new TEvChunkWrite::TAlignedParts(TString(image)), nullptr, true, 1));
+
+        NKikimrVDiskData::THullDbEntryPoint pb;
+        auto* level0 = pb.MutableLevelIndex()->MutableLevel0();
+        TDiskPart(chunk, 0, fragmentSize).SerializeToProto(*level0->AddSsts());
+        TDiskPart(chunk, fragmentSize, fragmentSize).SerializeToProto(*level0->AddSsts());
+        TString body;
+        UNIT_ASSERT(pb.SerializeToString(&body));
+        const ui32 hullEntryMagic = 0x93F7ADD5;
+        TString entry = TString::Uninitialized(sizeof(hullEntryMagic) + body.size());
+        memcpy(entry.Detach(), &hullEntryMagic, sizeof(hullEntryMagic));
+        memcpy(entry.Detach() + sizeof(hullEntryMagic), body.data(), body.size());
+        NPDisk::TCommitRecord startingPoint;
+        startingPoint.IsStartingPoint = true;
+        yard.Call<TEvLogResult>(new TEvLog(owner, round, TLogSignature::SignatureHullLogoBlobsDB,
+            startingPoint, TRcBuf(entry), TLsnSeg(2, 2), nullptr));
+        yard.Stop();
+
+        auto session = OpenTool(yard.Map);
+        TIssueLog issues;
+        auto snap = ReconstructHull(*session.Device, session.Format, session.State, session.Log, owner,
+            TErasureType::ErasureNone, issues);
+        UNIT_ASSERT(snap.Blobs.empty());
+        UNIT_ASSERT_C(HasMessage(issues, "disagrees with the fragments", "hull"),
+            "hostile placeholder not reported");
+        UNIT_ASSERT_C(HasMessage(issues, "loops at", "hull"),
+            "self-referencing fragment chain not reported");
+    }
+
+    Y_UNIT_TEST(NewerFormatVersionIsReportedNotAborted) {
+        auto map = FormatMap(0x1234ull);
+        const ui32 total = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
+        TVector<ui8> raw(total);
+        UNIT_ASSERT(map->Read(raw.data(), total, 0));
+        for (ui32 i = 0; i < NPDisk::ReplicationFactor; ++i) {
+            ui8* sector = raw.data() + i * NPDisk::FormatSectorSize;
+            const auto* footer = reinterpret_cast<const TDataSectorFooter*>(
+                sector + NPDisk::FormatSectorSize - sizeof(TDataSectorFooter));
+            const ui64 nonce = footer->Nonce;
+            TPDiskStreamCypher cypher(true);
+            cypher.SetKey(MainKeyValue);
+            alignas(16) NPDisk::TDiskFormatSector plain;
+            cypher.StartMessage(nonce);
+            cypher.Encrypt(plain.Raw, sector, NPDisk::FormatSectorSize);
+            UNIT_ASSERT(plain.Format.IsHashOk(NPDisk::FormatSectorSize));
+            plain.Format.Version = PDISK_FORMAT_VERSION + 1;
+            plain.Format.SetHash();
+            cypher.StartMessage(nonce);
+            cypher.Encrypt(sector, plain.Raw, NPDisk::FormatSectorSize);
+        }
+        UNIT_ASSERT(map->Write(raw.data(), total, 0));
+
+        TPDiskSession session;
+        UNIT_ASSERT(!session.OpenSectorMap(map, DefaultOpts()));
+        UNIT_ASSERT(!session.FormatResult.Ok);
+        UNIT_ASSERT_C(HasMessage(session.Issues, "newer than this build supports", "format"),
+            "a format from a newer build must be reported, not asserted on");
+    }
+
+    Y_UNIT_TEST(BadBlobIdFilterFailsTheCommand) {
+        TTempDir tmp;
+        const TString path = TString(tmp()) + "/pdisk.bin";
+        const ui32 chunkSize = 8 << 20;
+        TFormatOptions options;
+        options.EnableSmallDiskOptimization = true;
+        FormatPDisk(path, ui64(chunkSize) * 80, 4096, chunkSize, 99,
+            NPDisk::TKey(1), NPDisk::TKey(2), NPDisk::TKey(3), MainKeyValue, "filter", options);
+
+        auto run = [&](const TString& from) {
+            TVector<TString> args = {"blobs", "--device", path, "--main-key", "YdbDefaultPDiskSequence",
+                "--owner", "3", "--from", from};
+            TVector<char*> argv;
+            for (auto& a : args) {
+                argv.push_back(const_cast<char*>(a.c_str()));
+            }
+            return RunCommand(args[0], argv.size(), argv.data());
+        };
+        UNIT_ASSERT_VALUES_UNEQUAL(run("not-a-blob-id"), 0);
     }
 
     Y_UNIT_TEST(FillFormatProtoOnFailedReadDoesNotCrash) {

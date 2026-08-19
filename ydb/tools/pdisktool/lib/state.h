@@ -38,8 +38,10 @@ struct TLogChunkSnapshot {
 };
 
 struct TParsedSysLog {
-    TSysLogRecord Record;
-    TSysLogFirstNoncesToKeep FirstNoncesToKeep;
+    // Both are on-disk PODs without constructors, and commands still print them when the SysLog
+    // could not be read at all, so they must not start out as uninitialized memory.
+    TSysLogRecord Record = {};
+    TSysLogFirstNoncesToKeep FirstNoncesToKeep = {};
     ui32 FirstLogChunkToParseCommits = 0;
     TVector<TChunkSnapshot> Chunks;
     TVector<TOwnerState> Owners; // 256
@@ -50,7 +52,5 @@ TParsedSysLog ParseSysLogPayload(
     const TString& payload,
     const TDiskFormat& format,
     TIssueLog& issues);
-
-void ApplyTrimInfo(TParsedSysLog& parsed, const TChunkTrimInfo* trim, ui32 chunkCount);
 
 } // namespace NKikimr::NPDiskTool

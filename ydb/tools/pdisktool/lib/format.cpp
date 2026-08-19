@@ -39,17 +39,31 @@ TFormatReadResult ReadDiskFormat(
 {
     TFormatReadResult result;
     const ui32 total = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
-    TVector<ui8> rawHolder(total + 4096);
-    ui8* raw = reinterpret_cast<ui8*>(
-        (reinterpret_cast<uintptr_t>(rawHolder.data()) + 4095) / 4096 * 4096);
-    memset(raw, 0, total);
+    TVector<ui8> buffer(total);
+    ui8* raw = buffer.data();
     device.Pread(raw, total, 0, issues);
 
+    // A hash-valid record can still be one this build cannot represent; TDiskFormat::UpgradeFrom
+    // answers that with Y_VERIFY, which would abort the tool instead of reporting the version.
+    auto isRepresentable = [&](const TDiskFormat& candidate, TString& error) {
+        if (candidate.Version > PDISK_FORMAT_VERSION) {
+            error = TStringBuilder() << "format version# " << candidate.Version
+                << " is newer than this build supports (" << PDISK_FORMAT_VERSION << ")";
+            return false;
+        }
+        if (candidate.GetUsedSize() > sizeof(TDiskFormat)) {
+            error = TStringBuilder() << "diskFormatSize# " << candidate.DiskFormatSize
+                << " exceeds this build's TDiskFormat (" << sizeof(TDiskFormat) << ")";
+            return false;
+        }
+        return true;
+    };
+
+    TString unrepresentable;
     auto tryKey = [&](TKey key, bool encrypt) -> bool {
         TVector<TFormatReplicaInfo> replicas(NPDisk::ReplicationFactor);
         TDiskFormat winner;
         bool haveWinner = false;
-        ui32 lastGood = Max<ui32>();
 
         TPDiskStreamCypher cypher(encrypt);
         cypher.SetKey(key);
@@ -69,9 +83,14 @@ TFormatReadResult ReadDiskFormat(
             if (formatCandidate.Format.IsHashOk(NPDisk::FormatSectorSize)) {
                 replicas[i].HashOk = true;
                 replicas[i].Format = formatCandidate.Format;
+                TString error;
+                if (!isRepresentable(formatCandidate.Format, error)) {
+                    replicas[i].Error = error;
+                    unrepresentable = error;
+                    continue;
+                }
                 winner = formatCandidate.Format;
                 haveWinner = true;
-                lastGood = i;
             } else {
                 replicas[i].Error = TStringBuilder() << "hash mismatch nonce# " << footer->Nonce
                     << " version# " << formatCandidate.Format.Version
@@ -85,7 +104,6 @@ TFormatReadResult ReadDiskFormat(
             result.Format.UpgradeFrom(winner);
             result.Replicas = std::move(replicas);
             result.UsedEncryption = encrypt;
-            Y_UNUSED(lastGood);
             return true;
         }
         result.Replicas = std::move(replicas);
@@ -121,6 +139,14 @@ TFormatReadResult ReadDiskFormat(
             issues.Info("format", "Format record is stored unencrypted");
             return result;
         }
+    }
+
+    if (unrepresentable) {
+        issues.Error("format", TStringBuilder()
+            << "The format record decrypted and its hash is valid, but " << unrepresentable
+            << "; use a pdisktool built from the same revision as the ydbd that formatted this disk");
+        result.Ok = false;
+        return result;
     }
 
     issues.Error("format", TStringBuilder()
@@ -178,29 +204,35 @@ void FillFormatProto(const TFormatReadResult& result, NKikimr::NPdiskTool::TForm
 }
 
 void PrintFormatText(const NKikimr::NPdiskTool::TFormatResult& proto, IOutputStream& out) {
-    const auto& f = proto.GetFormat();
-    out << "PDisk format" << Endl;
-    out << "  Version: " << f.GetVersion() << Endl;
-    out << "  DiskSize: " << f.GetDiskSize() << " bytes" << Endl;
-    out << "  Guid: " << f.GetGuid() << Endl;
-    out << "  ChunkSize: " << f.GetChunkSize() << Endl;
-    out << "  SectorSize: " << f.GetSectorSize() << Endl;
-    out << "  SysLogSectorCount: " << f.GetSysLogSectorCount() << Endl;
-    out << "  SystemChunkCount: " << f.GetSystemChunkCount() << Endl;
-    out << "  UserAccessibleChunkSize: " << f.GetUserAccessibleChunkSize() << Endl;
-    out << "  FormatText: \"" << f.GetFormatText() << "\"" << Endl;
-    out << "  DiskFormatSize: " << f.GetDiskFormatSize() << Endl;
-    out << "  Timestamp: " << f.GetTimestamp() << Endl;
-    out << "  FormatFlags: " << f.GetFormatFlags() << Endl;
-    out << "  Magics: next=" << f.GetMagicNextLogChunkReference()
-        << " log=" << f.GetMagicLogChunk()
-        << " data=" << f.GetMagicDataChunk()
-        << " syslog=" << f.GetMagicSysLogChunk()
-        << " format=" << f.GetMagicFormatChunk() << Endl;
-    if (f.HasSysLogKey()) {
-        out << "  SysLogKey: " << f.GetSysLogKey() << Endl;
-        out << "  LogKey: " << f.GetLogKey() << Endl;
-        out << "  ChunkKey: " << f.GetChunkKey() << Endl;
+    if (!proto.HasFormat()) {
+        // Every field would read as zero, which looks like a format full of zeros rather than a
+        // record that never decrypted.
+        out << "PDisk format: not decrypted, see the replicas below" << Endl;
+    } else {
+        const auto& f = proto.GetFormat();
+        out << "PDisk format" << Endl;
+        out << "  Version: " << f.GetVersion() << Endl;
+        out << "  DiskSize: " << f.GetDiskSize() << " bytes" << Endl;
+        out << "  Guid: " << f.GetGuid() << Endl;
+        out << "  ChunkSize: " << f.GetChunkSize() << Endl;
+        out << "  SectorSize: " << f.GetSectorSize() << Endl;
+        out << "  SysLogSectorCount: " << f.GetSysLogSectorCount() << Endl;
+        out << "  SystemChunkCount: " << f.GetSystemChunkCount() << Endl;
+        out << "  UserAccessibleChunkSize: " << f.GetUserAccessibleChunkSize() << Endl;
+        out << "  FormatText: \"" << f.GetFormatText() << "\"" << Endl;
+        out << "  DiskFormatSize: " << f.GetDiskFormatSize() << Endl;
+        out << "  Timestamp: " << f.GetTimestamp() << Endl;
+        out << "  FormatFlags: " << f.GetFormatFlags() << Endl;
+        out << "  Magics: next=" << f.GetMagicNextLogChunkReference()
+            << " log=" << f.GetMagicLogChunk()
+            << " data=" << f.GetMagicDataChunk()
+            << " syslog=" << f.GetMagicSysLogChunk()
+            << " format=" << f.GetMagicFormatChunk() << Endl;
+        if (f.HasSysLogKey()) {
+            out << "  SysLogKey: " << f.GetSysLogKey() << Endl;
+            out << "  LogKey: " << f.GetLogKey() << Endl;
+            out << "  ChunkKey: " << f.GetChunkKey() << Endl;
+        }
     }
     out << "Replicas:" << Endl;
     for (const auto& r : proto.GetReplicas()) {

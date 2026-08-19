@@ -232,6 +232,13 @@ int CmdExportChunk(const TGlobals& g, ui32 chunk, const TString& output, bool ra
     if (!OpenSession(g, session)) {
         return 1;
     }
+    const ui32 chunkCount = session.Format.DiskSizeChunks();
+    if (chunkCount && chunk >= chunkCount) {
+        session.Issues.Error("export-chunk", TStringBuilder() << "Chunk " << chunk
+            << " is outside the disk, which holds " << chunkCount << " chunk(s)");
+        PrintIssues(session.Issues, Cerr);
+        return 1;
+    }
     NKikimr::NPdiskTool::TExportResult proto;
     proto.SetPath(output);
     proto.SetChunkIdx(chunk);
@@ -290,6 +297,11 @@ static bool LoadHull(
     const TString& erasure,
     THullSnapshot& snap)
 {
+    if (!session.SysLogRaw.Ok) {
+        session.Issues.Error("hull", "SysLog could not be reconstructed, so there is no owner table"
+            " and no log to replay; run the syslog command to see why");
+        return false;
+    }
     const TOwner owner = session.ResolveOwner(vdisk, ownerId, session.Issues);
     if (session.Issues.HasErrors() && owner == 0 && !ownerId) {
         return false;
@@ -452,7 +464,7 @@ int CmdVerify(const TGlobals& g) {
         auto snap = ReconstructHull(*session.Device, session.Format, session.State, session.Log,
             static_cast<TOwner>(owner), Nothing(), session.Issues);
         for (const auto& part : CollectReferencedParts(snap)) {
-            auto res = CheckLogicalRange(*session.Device, session.Format, part.ChunkIdx,
+            auto res = CheckLogicalRange(*session.Device, session.Format, session.State, part.ChunkIdx,
                 part.Offset, part.Size, session.Issues,
                 TStringBuilder() << "verify-ref[owner " << owner << "]");
             refChecked += res.Checked;
@@ -471,6 +483,13 @@ int CmdDumpSector(const TGlobals& g, ui64 offset, ui32 size, bool decrypt) {
     }
     if (size == 0) {
         size = session.Format.SectorSize ? session.Format.SectorSize : 4096;
+    }
+    // The dump is hex-encoded into a proto field, so a stray --size must not turn into a huge read.
+    const ui32 maxDump = 16u << 20;
+    if (size > maxDump) {
+        session.Issues.Warning("dump-sector", TStringBuilder() << "Size " << size
+            << " is too large; dumping " << maxDump << " bytes");
+        size = maxDump;
     }
     TVector<ui8> buf(size);
     session.Device->Pread(buf.data(), size, offset, session.Issues);
@@ -626,13 +645,19 @@ int RunCommand(const TString& command, int argc, char** argv) {
             opts.AddLongOption("vdisk", "VDisk id [group:gen:realm:domain:vdisk]").RequiredArgument("ID").StoreResult(&vdisk);
             opts.AddLongOption("owner", "PDisk owner id").RequiredArgument("ID").StoreResult(&ownerVal);
             opts.AddLongOption("erasure", "group erasure (none, block-4-2, ...)").RequiredArgument("NAME").StoreResult(&erasure);
-            opts.AddLongOption("from", "from LogoBlobID").RequiredArgument("ID").StoreResult(&from);
-            opts.AddLongOption("to", "to LogoBlobID").RequiredArgument("ID").StoreResult(&to);
             opts.AddLongOption("tablet", "filter tablet id").RequiredArgument("ID").StoreResult(&tablet);
-            opts.AddLongOption("channel", "filter channel").RequiredArgument("N").StoreResult(&channel);
             opts.AddLongOption("limit", "max rows").RequiredArgument("N").StoreResult(&limit);
             opts.AddLongOption("continue-token", "paging token").RequiredArgument("TOK").StoreResult(&token);
-            opts.AddLongOption("all", "also list blobs whose data this VDisk does not hold").NoArgument();
+            // Only offer the options the command actually honours: a block is keyed by tablet alone,
+            // and the blob-id range and the data-only default are specific to blobs.
+            if (command != "blocks") {
+                opts.AddLongOption("channel", "filter channel").RequiredArgument("N").StoreResult(&channel);
+            }
+            if (command == "blobs") {
+                opts.AddLongOption("from", "from LogoBlobID").RequiredArgument("ID").StoreResult(&from);
+                opts.AddLongOption("to", "to LogoBlobID").RequiredArgument("ID").StoreResult(&to);
+                opts.AddLongOption("all", "also list blobs whose data this VDisk does not hold").NoArgument();
+            }
             TOptsParseResult res(&opts, argc, argv);
             if (res.Has("owner")) {
                 owner = ownerVal;
@@ -640,12 +665,16 @@ int RunCommand(const TString& command, int argc, char** argv) {
             if (res.Has("tablet")) {
                 tabletId = tablet;
             }
-            if (res.Has("channel")) {
+            if (command != "blocks" && res.Has("channel")) {
                 channelId = channel;
             }
-            TIssueLog dummy;
-            auto filter = MakeFilter(limit, from, to, tabletId, channelId, token, dummy);
-            filter.DataOnly = !res.Has("all");
+            TIssueLog filterIssues;
+            auto filter = MakeFilter(limit, from, to, tabletId, channelId, token, filterIssues);
+            if (filterIssues.HasErrors()) {
+                PrintIssues(filterIssues, Cerr);
+                return 1;
+            }
+            filter.DataOnly = command == "blobs" && !res.Has("all");
             if (command == "blobs") {
                 return CmdBlobs(g, vdisk, owner, erasure, filter);
             } else if (command == "barriers") {
@@ -681,8 +710,12 @@ int RunCommand(const TString& command, int argc, char** argv) {
             if (res.Has("channel")) {
                 channelId = channel;
             }
-            TIssueLog dummy;
-            auto filter = MakeFilter(Max<ui32>(), TString(), TString(), tabletId, channelId, TString(), dummy);
+            TIssueLog filterIssues;
+            auto filter = MakeFilter(Max<ui32>(), TString(), TString(), tabletId, channelId, TString(), filterIssues);
+            if (filterIssues.HasErrors()) {
+                PrintIssues(filterIssues, Cerr);
+                return 1;
+            }
             return CmdExportBlob(g, vdisk, owner, erasure, id, from, to, filter, output);
         } else if (command == "verify") {
             TOpts opts = TOpts::Default();

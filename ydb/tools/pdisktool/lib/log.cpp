@@ -4,6 +4,7 @@
 #include <cstring>
 #include <util/generic/hash_set.h>
 #include <util/stream/file.h>
+#include <util/system/file.h>
 #include <util/system/unaligned_mem.h>
 
 namespace NKikimr::NPDiskTool {
@@ -75,7 +76,11 @@ TLogScanResult ScanMainLog(
     ui64 lastNonce = state.Record.LogHeadChunkPreviousNonce;
     bool parseCommits = state.FirstLogChunkToParseCommits == state.Record.LogHeadChunkIdx;
     const ui64 usable = UsableSectorsPerLogChunk(format);
+    const ui64 payloadSize = format.SectorPayloadSize();
+    const ui64 maxRecordSize = usable * payloadSize;
+    const ui32 chunkCount = format.DiskSizeChunks();
     THashSet<ui32> visited;
+    TRepeatedIssues damaged("log", "sector offset");
 
     TString lastData;
     ui32 lastWrite = 0;
@@ -154,6 +159,12 @@ TLogScanResult ScanMainLog(
     };
 
     while (chunkIdx != 0) {
+        if (chunkCount && chunkIdx >= chunkCount) {
+            // Either the SysLog head or a next-chunk reference points outside the disk.
+            issues.Error("log", TStringBuilder() << "Log chain leaves the disk at chunk# " << chunkIdx
+                << " of " << chunkCount);
+            break;
+        }
         if (!visited.insert(chunkIdx).second) {
             issues.Warning("log", TStringBuilder() << "Log chunk cycle at chunk# " << chunkIdx, true);
             break;
@@ -203,13 +214,16 @@ TLogScanResult ScanMainLog(
             }
             lcs.LastNonce = restored.Nonce;
 
-            ui32 offsetInSector = 0;
-            const ui32 maxOffset = format.SectorPayloadSize() - sizeof(TFirstLogPageHeader);
+            // Page sizes come off the disk, so the offset is tracked in ui64: a wrapped ui32 would
+            // land back inside the sector and spin here forever.
+            ui64 offsetInSector = 0;
+            const ui64 maxOffset = payloadSize - sizeof(TFirstLogPageHeader);
             ui8* data = restored.Payload.data();
             while (offsetInSector <= maxOffset) {
+                const ui64 pageOffset = offsetInSector;
                 auto* pageHeader = reinterpret_cast<TLogPageHeader*>(data + offsetInSector);
                 if (pageHeader->Flags & NPDisk::LogPageTerminator) {
-                    offsetInSector = format.SectorPayloadSize();
+                    offsetInSector = payloadSize;
                     break;
                 }
                 if (pageHeader->Flags & NPDisk::LogPageNonceJump2) {
@@ -237,19 +251,30 @@ TLogScanResult ScanMainLog(
                         continue;
                     }
                     skipped = false;
-                    lastHeader = first->LogRecordHeader;
-                    lastHeaderNonce = restored.Nonce;
-                    lastHeaderChunk = chunkIdx;
-                    haveHeader = true;
-                    lastData = TString::Uninitialized(first->DataSize);
-                    if (first->Size > lastData.size()) {
-                        issues.Warning("log", "First page size exceeds DataSize", true);
+                    const ui64 dataSize = first->DataSize;
+                    if (dataSize > maxRecordSize) {
+                        // Nothing legitimate declares a record longer than the whole log chunk.
+                        damaged.Add("First page DataSize is implausible", pageOffset);
                         haveHeader = false;
                         offsetInSector += first->Size;
                         continue;
                     }
-                    memcpy(lastData.Detach(), data + offsetInSector, first->Size);
-                    lastWrite = first->Size;
+                    lastHeader = first->LogRecordHeader;
+                    lastHeaderNonce = restored.Nonce;
+                    lastHeaderChunk = chunkIdx;
+                    haveHeader = true;
+                    lastData = TString::Uninitialized(dataSize);
+                    const ui64 take = ClampSpan(offsetInSector, first->Size, payloadSize);
+                    if (take != first->Size || first->Size > dataSize) {
+                        // The page claims more bytes than the sector or the record can hold; the
+                        // record would be truncated, so drop it rather than parse a partial payload.
+                        damaged.Add("First page size exceeds the sector or DataSize", pageOffset);
+                        haveHeader = false;
+                        offsetInSector += first->Size;
+                        continue;
+                    }
+                    memcpy(lastData.Detach(), data + offsetInSector, take);
+                    lastWrite = static_cast<ui32>(take);
                     offsetInSector += first->Size;
                 } else {
                     offsetInSector += sizeof(TLogPageHeader);
@@ -258,20 +283,26 @@ TLogScanResult ScanMainLog(
                         continue;
                     }
                     if (!haveHeader) {
-                        issues.Warning("log", TStringBuilder() << "Orphan continuation page chunk# " << chunkIdx
-                            << " sector# " << sectorIdx, true);
+                        damaged.Add("Orphan continuation page", pageOffset);
                         offsetInSector += pageHeader->Size;
                         continue;
                     }
-                    if (lastWrite + pageHeader->Size > lastData.size()) {
-                        issues.Warning("log", "Log record size mismatch", true);
+                    const ui64 take = ClampSpan(offsetInSector, pageHeader->Size, payloadSize);
+                    if (take != pageHeader->Size || lastWrite + take > lastData.size()) {
+                        damaged.Add("Continuation page size exceeds the sector or the record", pageOffset);
                         haveHeader = false;
                         offsetInSector += pageHeader->Size;
                         continue;
                     }
-                    memcpy(lastData.Detach() + lastWrite, data + offsetInSector, pageHeader->Size);
-                    lastWrite += pageHeader->Size;
+                    memcpy(lastData.Detach() + lastWrite, data + offsetInSector, take);
+                    lastWrite += static_cast<ui32>(take);
                     offsetInSector += pageHeader->Size;
+                }
+                if (offsetInSector <= pageOffset) {
+                    // Every branch above advances by at least a header, so this only happens on a
+                    // corrupt page; without the guard the sector would be walked forever.
+                    damaged.Add("Log page makes no progress", pageOffset);
+                    break;
                 }
                 if (haveHeader && (pageHeader->Flags & NPDisk::LogPageLast)) {
                     finishRecord(restored.Nonce, lastHeaderChunk);
@@ -322,6 +353,7 @@ TLogScanResult ScanMainLog(
         chunkIdx = nextChunk;
     }
 
+    damaged.Flush(issues, "warning");
     return result;
 }
 
@@ -352,6 +384,7 @@ bool WriteLogExport(
         ++count;
     }
     out.Write(&count, sizeof(count));
+    bytesWritten = sizeof(magic) + sizeof(version) + sizeof(guid) + sizeof(chunkSize) + sizeof(sectorSize) + sizeof(count);
     for (const auto& rec : scan.Records) {
         if (ownerFilter != Max<ui32>() && rec.OwnerId != ownerFilter) {
             continue;
@@ -368,23 +401,19 @@ bool WriteLogExport(
         out.Write(&rec.ChunkIdx, sizeof(rec.ChunkIdx));
         out.Write(&payloadSize, sizeof(payloadSize));
         out.Write(rec.RawPayload.data(), rec.RawPayload.size());
+        bytesWritten += sizeof(owner) + sizeof(signature) + sizeof(reserved) + sizeof(rec.Lsn)
+            + sizeof(rec.Nonce) + sizeof(rec.ChunkIdx) + sizeof(payloadSize) + rec.RawPayload.size();
     }
     out.Flush();
-    bytesWritten = sizeof(magic) + sizeof(version) + sizeof(guid) + sizeof(chunkSize) + sizeof(sectorSize) + sizeof(count);
-    for (const auto& rec : scan.Records) {
-        if (ownerFilter != Max<ui32>() && rec.OwnerId != ownerFilter) {
-            continue;
-        }
-        bytesWritten += sizeof(ui8) + sizeof(ui8) + sizeof(ui16) + sizeof(rec.Lsn) + sizeof(rec.Nonce)
-            + sizeof(rec.ChunkIdx) + sizeof(ui32) + rec.RawPayload.size();
-    }
     Y_UNUSED(issues);
     return true;
 }
 
 TLogScanResult ReadLogExport(const TString& path, TIssueLog& issues) {
     TLogScanResult result;
-    TFileInput in(path);
+    TFile file(path, OpenExisting | RdOnly);
+    const i64 fileSize = file.GetLength();
+    TFileInput in(file);
     ui32 magic = 0;
     ui32 version = 0;
     if (in.Load(&magic, sizeof(magic)) != sizeof(magic) || magic != LogExportMagic) {
@@ -420,6 +449,13 @@ TLogScanResult ReadLogExport(const TString& path, TIssueLog& issues) {
         in.Load(&rec.Nonce, sizeof(rec.Nonce));
         in.Load(&rec.ChunkIdx, sizeof(rec.ChunkIdx));
         in.Load(&payloadSize, sizeof(payloadSize));
+        if (fileSize > 0 && payloadSize > static_cast<ui64>(fileSize)) {
+            // The size field is part of the export, so a truncated or damaged file can claim more
+            // than the file holds; refuse to allocate it.
+            issues.Error("parse-log", TStringBuilder() << "Log export record claims " << payloadSize
+                << " payload bytes but the file is only " << fileSize << " bytes");
+            break;
+        }
         rec.OwnerId = owner;
         rec.Signature = signature;
         rec.RawPayload = TString::Uninitialized(payloadSize);

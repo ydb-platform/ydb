@@ -238,13 +238,22 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         PutMessage(scheme, Settings.GetSchemeKey(), SchemeChecksum, &TThis::StateUploadScheme, Settings.EncryptionSettings.GetSchemeIV());
     }
 
+    void PutCreateTableQuery(const TString& query) {
+        Buffer = query;
+        PutDataWithChecksum(std::move(Buffer), Settings.GetCreateTableQueryKey(), SchemeChecksum,
+            &TThis::StateUploadScheme, Settings.EncryptionSettings.GetSchemeIV());
+    }
+
     void UploadScheme() {
         Y_ENSURE(!SchemeUploaded);
 
-        if (!Scheme) {
-            return Finish(false, "Cannot infer scheme");
+        if (CreateTableQuery) {
+            return PutCreateTableQuery(CreateTableQuery.GetRef());
         }
-        PutScheme(Scheme.GetRef());
+        if (Scheme) {
+            return PutScheme(Scheme.GetRef());
+        }
+        Finish(false, "Cannot infer scheme");
     }
 
     void PutPermissions(const Ydb::Scheme::ModifyPermissionsRequest& permissions) {
@@ -331,8 +340,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         };
 
         if (EnableChecksums) {
-            TString checksumKey = ChecksumKey(Settings.GetSchemeKey());
-            UploadChecksum(std::move(SchemeChecksum), checksumKey, SchemeKeySuffix(false), nextStep);
+            const auto schemaKey = CreateTableQuery
+                ? Settings.GetCreateTableQueryKey()
+                : Settings.GetSchemeKey();
+            const auto schemaKeySuffix = CreateTableQuery
+                ? CreateTableQueryKeySuffix(false)
+                : SchemeKeySuffix(false);
+            UploadChecksum(std::move(SchemeChecksum), ChecksumKey(schemaKey), schemaKeySuffix, nextStep);
         } else {
             nextStep();
         }
@@ -838,6 +852,9 @@ public:
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
+        , CreateTableQuery(task.HasCreateTableQuery() && !task.GetCreateTableQuery().empty()
+            ? TMaybe<TString>(task.GetCreateTableQuery())
+            : Nothing())
         , Changefeeds(std::move(changefeeds))
         , Metadata(std::move(metadata))
         , Permissions(std::move(permissions))
@@ -993,6 +1010,7 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
+    const TMaybe<TString> CreateTableQuery;
     const TVector<TChangefeedExportDescriptions> Changefeeds;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -1058,7 +1076,8 @@ IActor* CreateUploaderBySettingsType(
 }
 
 IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
-    auto scheme = (Task.GetShardNum() == 0)
+    const bool useCreateQuery = Task.HasCreateTableQuery();
+    auto scheme = (Task.GetShardNum() == 0 && !useCreateQuery)
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 

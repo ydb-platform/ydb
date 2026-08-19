@@ -401,7 +401,11 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         env.TestWaitNotification(runtime, txId);
     }
 
-    Y_UNIT_TEST(ShouldRejectBackupOfTableWithGeneratedColumn) {
+    void TestBackupOfTableWithGeneratedColumn(
+            const TString& settings,
+            const TVector<TExpectedResult>& expectedResults,
+            bool replaceS3WithYT = false)
+    {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
@@ -429,14 +433,58 @@ Y_UNIT_TEST_SUITE(TBackupTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        TestBackup(runtime, ++txId, "/MyRoot", R"(
+        auto request = BackupRequest(++txId, "/MyRoot", Sprintf(R"(
             TableName: "Table"
+            %s
+        )", settings.c_str()));
+        if (replaceS3WithYT) {
+            auto* task = request->Record.MutableTransaction(0)->MutableBackup();
+            task->ClearS3Settings();
+            task->MutableYTSettings()->SetHost("localhost");
+            task->MutableYTSettings()->SetPort(1);
+        }
+
+        AsyncSend(runtime, TTestTxConfig::SchemeShard, request);
+        TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    Y_UNIT_TEST(ShouldAllowS3BackupOfTableWithGeneratedColumnAndCreateQuery) {
+        TestBackupOfTableWithGeneratedColumn(R"(
+            CreateTableQuery: "CREATE TABLE `Table` (sum Int32 GENERATED ALWAYS AS (a + b) STORED, PRIMARY KEY (sum));"
             S3Settings {
                 Endpoint: "localhost:1"
                 Scheme: HTTP
             }
-        )",
-            { { NKikimrScheme::StatusPreconditionFailed, "Cannot backup table with generated column 'sum'" } });
+        )", { { NKikimrScheme::StatusAccepted, "" } });
+    }
+
+    Y_UNIT_TEST(ShouldAllowFSBackupOfTableWithGeneratedColumnAndCreateQuery) {
+        TestBackupOfTableWithGeneratedColumn(R"(
+            CreateTableQuery: "CREATE TABLE `Table` (sum Int32 GENERATED ALWAYS AS (a + b) STORED, PRIMARY KEY (sum));"
+            FSSettings {
+                BasePath: "/tmp"
+                Path: "generated"
+            }
+        )", { { NKikimrScheme::StatusAccepted, "" } });
+    }
+
+    Y_UNIT_TEST(ShouldRejectS3BackupOfTableWithGeneratedColumnWithoutCreateQuery) {
+        TestBackupOfTableWithGeneratedColumn(R"(
+            S3Settings {
+                Endpoint: "localhost:1"
+                Scheme: HTTP
+            }
+        )", { { NKikimrScheme::StatusPreconditionFailed, "Cannot backup table with generated column 'sum'" } });
+    }
+
+    Y_UNIT_TEST(ShouldRejectYTBackupOfTableWithGeneratedColumn) {
+        TestBackupOfTableWithGeneratedColumn(R"(
+            CreateTableQuery: "CREATE TABLE `Table` (sum Int32 GENERATED ALWAYS AS (a + b) STORED, PRIMARY KEY (sum));"
+            S3Settings {
+                Endpoint: "localhost:1"
+                Scheme: HTTP
+            }
+        )", { { NKikimrScheme::StatusPreconditionFailed, "Cannot backup table with generated column 'sum'" } }, true);
     }
 
 } // TBackupTests

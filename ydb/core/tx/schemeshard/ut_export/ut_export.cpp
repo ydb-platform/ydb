@@ -2,6 +2,7 @@
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/table_index.h>
@@ -1731,6 +1732,128 @@ partitioning_settings {
 
         Runtime().WaitFor("backup task is sent to datashards", [&]{ return block.size() >= 1; });
         block.Stop();
+    }
+
+    Y_UNIT_TEST(ShouldExportGeneratedTableAsCreateTableQuery) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        Run(Runtime(), Env(), TVector<TString>{R"(
+            Name: "GeneratedTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a"   Type: "Int32"  }
+            Columns { Name: "b"   Type: "Int32"  }
+            Columns {
+              Name: "sum"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + b"
+                Stored: true
+                DependencyColumnNames: ["a", "b"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )"}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/GeneratedTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        UNIT_ASSERT(HasS3File("/create_table.sql"));
+        UNIT_ASSERT(!HasS3File("/scheme.pb"));
+        const auto createTableQuery = GetS3FileContent("/create_table.sql");
+        UNIT_ASSERT_STRING_CONTAINS(createTableQuery,
+            "GENERATED ALWAYS AS (a + b) STORED");
+
+        UNIT_ASSERT(HasS3File("/create_table.sql.sha256"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetS3FileContent("/create_table.sql.sha256"),
+            NBackup::ComputeChecksum(createTableQuery) + " create_table.sql");
+    }
+
+    Y_UNIT_TEST(ShouldPreserveOrdinaryTableSchemeNextToGeneratedTableContract) {
+        Env();
+
+        Run(Runtime(), Env(), TVector<TString>{R"(
+            Name: "OrdinaryTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )"}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/OrdinaryTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        UNIT_ASSERT(HasS3File("/scheme.pb"));
+        UNIT_ASSERT(!HasS3File("/create_table.sql"));
+    }
+
+    Y_UNIT_TEST(ShouldExportEncryptedGeneratedTableAsCreateTableQuery) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+        Run(Runtime(), Env(), TVector<TString>{R"(
+            Name: "GeneratedTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a"   Type: "Int32"  }
+            Columns { Name: "b"   Type: "Int32"  }
+            Columns {
+              Name: "sum"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + b"
+                Stored: true
+                DependencyColumnNames: ["a", "b"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )"}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/GeneratedTable"
+                destination_prefix: ""
+              }
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                  key: "0123456789012345"
+                }
+              }
+            }
+        )", S3Port()));
+
+        UNIT_ASSERT(HasS3File("/create_table.sql.enc"));
+        UNIT_ASSERT(!HasS3File("/create_table.sql"));
+        UNIT_ASSERT(!HasS3File("/scheme.pb"));
+        UNIT_ASSERT(!HasS3File("/scheme.pb.enc"));
+
+        const auto encryptedQuery = GetS3FileContent("/create_table.sql.enc");
+        TBuffer decryptedData;
+        NBackup::TEncryptionIV iv;
+        UNIT_ASSERT_NO_EXCEPTION(std::tie(decryptedData, iv) =
+            NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                NBackup::TEncryptionKey("0123456789012345"),
+                TBuffer(encryptedQuery.data(), encryptedQuery.size())));
+        UNIT_ASSERT_STRING_CONTAINS(
+            TString(decryptedData.Data(), decryptedData.Size()),
+            "GENERATED ALWAYS AS (a + b) STORED");
     }
 
     Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {

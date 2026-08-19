@@ -125,6 +125,7 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
             "service_account_id",
             "login",
             "aws_region",
+            "resource_id",
         };
         for (const auto& names : EDS_SECRETS_SETTINGS) {
             settings.insert(names.Name);
@@ -156,7 +157,7 @@ bool ValidateExternalDataSourceAuthMethod(const std::map<TString, TDeferredAtom>
                               TSecretSettingsNames("password_secret"),
                           })},
         {"IAM", TExternalDataSourceAuthFields(
-                    {"service_account_id"},
+                    {"service_account_id", "resource_id"},
                     {
                         TSecretSettingsNames("initial_token_secret"),
                     })},

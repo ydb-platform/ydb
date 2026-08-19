@@ -18,13 +18,15 @@ public:
 
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitingQueueSize;
     const ::NMonitoring::TDynamicCounters::TCounterPtr WaitingQueueSizeLimit;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr OverlimitRate;
 
     TCategorySignals(NColumnShard::TCommonCountersOwner& base, const ESpecialTaskCategory cat)
         : TBase(base, "category", ::ToString(cat))
         , Category(cat)
         , ProcessesCount(TBase::GetValue("ProcessesCount"))
         , WaitingQueueSize(TBase::GetValue("WaitingQueueSize"))
-        , WaitingQueueSizeLimit(TBase::GetValue("WaitingQueueSizeLimit")) {
+        , WaitingQueueSizeLimit(TBase::GetValue("WaitingQueueSizeLimit"))
+        , OverlimitRate(TBase::GetDeriviative("Overlimit")) {
     }
 };
 

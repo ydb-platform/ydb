@@ -18,7 +18,7 @@ private:
     THashMap<TString, std::shared_ptr<TProcessScope>> Scopes;
     THashMap<ui64, std::shared_ptr<TProcess>> Processes;
     std::map<TDuration, std::deque<std::shared_ptr<TProcess>>> WeightedProcesses;
-    ui64 QueueSizeLimit = 0;
+    YDB_READONLY(ui64, QueueSizeLimit, 256 * 1024);
 
     [[nodiscard]] bool RemoveWeightedProcess(const std::shared_ptr<TProcess>& process);
 
@@ -26,6 +26,7 @@ public:
     ui64 GetWaitingQueueSize() const {
         return WaitingTasksCount->Val();
     }
+
     TProcessCategory(const NConfig::TCategory& config, TCounters& counters)
         : Category(config.GetCategory())
         , QueueSizeLimit(config.GetQueueSizeLimit()) {

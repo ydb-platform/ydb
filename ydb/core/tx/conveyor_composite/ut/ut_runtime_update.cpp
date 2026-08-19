@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <numeric>
 #include <set>
 
 namespace NKikimr::NConveyorComposite {
@@ -76,6 +77,7 @@ class TCounterTask: public NConveyor::ITask {
 private:
     TAtomicCounter& Counter;
     const TDuration ExecutionDuration;
+    TAtomicCounter* RejectedCounter;
 
     void DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
         const auto start = TMonotonic::Now();
@@ -84,10 +86,17 @@ private:
         Counter.Inc();
     }
 
+    void DoOnCannotExecute(const TString& /*reason*/) override {
+        UNIT_ASSERT(RejectedCounter);
+        RejectedCounter->Inc();
+    }
+
 public:
-    explicit TCounterTask(TAtomicCounter& counter, const TDuration executionDuration = TDuration::Zero())
+    explicit TCounterTask(TAtomicCounter& counter, const TDuration executionDuration = TDuration::Zero(),
+        TAtomicCounter* rejectedCounter = nullptr)
         : Counter(counter)
-        , ExecutionDuration(executionDuration) {
+        , ExecutionDuration(executionDuration)
+        , RejectedCounter(rejectedCounter) {
     }
 
     TString GetTaskClassIdentifier() const override {
@@ -186,9 +195,10 @@ public:
     }
 
     void Submit(TAtomicCounter& counter, const ESpecialTaskCategory category, const ui64 processId = 0,
-        const TDuration executionDuration = TDuration::Zero()) {
+        const TDuration executionDuration = TDuration::Zero(), TAtomicCounter* rejectedCounter = nullptr) {
         Runtime.Send(Distributor, Sink,
-            new TEvExecution::TEvNewTask(std::make_shared<TCounterTask>(counter, executionDuration), category, processId));
+            new TEvExecution::TEvNewTask(
+                std::make_shared<TCounterTask>(counter, executionDuration, rejectedCounter), category, processId));
     }
 
     ui64 Run(const ESpecialTaskCategory category) {
@@ -282,6 +292,42 @@ std::pair<ui32, ui32> RunWeightedPhase(TRuntimeFixture& fixture, const ESpecialT
         insertTasks += completed[i] == ESpecialTaskCategory::Insert;
     }
     return {scanTasks, insertTasks};
+}
+
+std::vector<ui64> RunMaxBatchUpdatePhase(TRuntimeFixture& fixture,
+    const NKikimrConfig::TCompositeConveyorConfig& config, const ui64 queuedTasksCount) {
+    TAtomicCounter counter;
+    TAutoPtr<NActors::IEventHandle> heldTask;
+    auto previousObserver = fixture.Runtime.SetObserverFunc([&](TAutoPtr<NActors::IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType && !heldTask) {
+            heldTask = ev.Release();
+            return NActors::TTestActorRuntime::EEventAction::DROP;
+        }
+        return NActors::TTestActorRuntime::EEventAction::PROCESS;
+    });
+    fixture.Submit(counter, ESpecialTaskCategory::Scan);
+    fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    UNIT_ASSERT(heldTask);
+
+    for (ui64 i = 0; i < queuedTasksCount; ++i) {
+        fixture.Submit(counter, ESpecialTaskCategory::Scan);
+    }
+    fixture.Update(config);
+    fixture.Runtime.SetObserverFunc(previousObserver);
+
+    std::vector<ui64> batchSizes;
+    auto resultObserver = fixture.Runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {
+        if (ev->Get()->GetWorkersPoolId() == 1) {
+            batchSizes.emplace_back(ev->Get()->GetResults().size());
+        }
+    });
+    fixture.Runtime.Send(heldTask.Release(), 0, true);
+    const i64 expectedTasksCount = queuedTasksCount + 1;
+    for (ui32 attempt = 0; attempt < 1000 && counter.Val() != expectedTasksCount; ++attempt) {
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(counter.Val(), expectedTasksCount);
+    return batchSizes;
 }
 
 Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
@@ -393,9 +439,9 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         // settings change without moving tasks to another pool.
         auto initial = BuildTopologyConfig(
             {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Insert, 100}}}, {1},
-            {{ESpecialTaskCategory::Scan, 10}});
+            {{ESpecialTaskCategory::Scan, 100}});
         TRuntimeFixture fixture(initial);
-        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Scan), 10);
+        UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Scan), 100);
         UNIT_ASSERT_VALUES_EQUAL(GetQueueSizeLimitCounter(fixture, ESpecialTaskCategory::Insert), 256 * 1024);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 1);
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 100);
@@ -413,6 +459,56 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Insert), 1);
         const auto [scanAfter, insertAfter] = RunWeightedPhase(fixture, ESpecialTaskCategory::Insert);
         UNIT_ASSERT(insertAfter > scanAfter);
+    }
+
+    Y_UNIT_TEST(QueueSizeLimitUpdateControlsAdmission) {
+        // queued tasks survive a lower limit; admission follows each new runtime value.
+        auto config = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 1}}}, {1}, {{ESpecialTaskCategory::Scan, 2}});
+        TRuntimeFixture fixture(config);
+        TAtomicCounter executed;
+        TAtomicCounter rejected;
+        TAutoPtr<NActors::IEventHandle> heldTask;
+        auto previousObserver = fixture.Runtime.SetObserverFunc([&](TAutoPtr<NActors::IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType && !heldTask) {
+                heldTask = ev.Release();
+                return NActors::TTestActorRuntime::EEventAction::DROP;
+            }
+            return NActors::TTestActorRuntime::EEventAction::PROCESS;
+        });
+        fixture.Submit(executed, ESpecialTaskCategory::Scan, 0, TDuration::Zero(), &rejected);
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(heldTask);
+
+        fixture.Submit(executed, ESpecialTaskCategory::Scan, 0, TDuration::Zero(), &rejected);
+        fixture.Submit(executed, ESpecialTaskCategory::Scan, 0, TDuration::Zero(), &rejected);
+        fixture.Submit(executed, ESpecialTaskCategory::Scan, 0, TDuration::Zero(), &rejected);
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(rejected.Val(), 1);
+
+        config = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 1}}}, {1}, {{ESpecialTaskCategory::Scan, 1}});
+        fixture.Update(config);
+        fixture.Submit(executed, ESpecialTaskCategory::Scan, 0, TDuration::Zero(), &rejected);
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(rejected.Val(), 2);
+
+        config = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 1}}}, {1}, {{ESpecialTaskCategory::Scan, 3}});
+        fixture.Update(config);
+        fixture.Submit(executed, ESpecialTaskCategory::Scan, 0, TDuration::Zero(), &rejected);
+        fixture.Submit(executed, ESpecialTaskCategory::Scan, 0, TDuration::Zero(), &rejected);
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(rejected.Val(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 0);
+
+        fixture.Runtime.SetObserverFunc(previousObserver);
+        fixture.Runtime.Send(heldTask.Release(), 0, true);
+        for (ui32 attempt = 0; attempt < 1000 && executed.Val() != 4; ++attempt) {
+            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(executed.Val(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(rejected.Val(), 3);
     }
 
     Y_UNIT_TEST(RuntimeValidationIsAtomic) {
@@ -438,12 +534,6 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         // pool identity is immutable.
         candidate = initial;
         candidate.MutableWorkerPools(0)->SetName("renamed");
-        fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
-
-        // MaxBatchSize is immutable.
-        candidate = initial;
-        candidate.MutableWorkerPools(0)->SetMaxBatchSize(100);
         fixture.Update(candidate);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
 
@@ -581,46 +671,21 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         RunHeldTasks(fixture, heldTasks, activeTask, 1);
     }
 
-    Y_UNIT_TEST(MaxBatchClaimsQueuedWork) {
-        // the first released pool can take the whole queued batch.
-        auto config = BuildTopologyConfig(
-            {{{ESpecialTaskCategory::Scan, 1}}, {{ESpecialTaskCategory::Scan, 1}}}, {1, 1}, {}, 100);
+    Y_UNIT_TEST(MaxBatchSizeUpdateControlsNextBatch) {
+        // BATCH-001: increasing and decreasing the limit affects the next batch.
+        auto config = BuildTopologyConfig({{{ESpecialTaskCategory::Scan, 1}}}, {1}, {}, 2);
         TRuntimeFixture fixture(config);
-        TAtomicCounter counter;
-        std::vector<TAutoPtr<NActors::IEventHandle>> heldTasks;
-        auto previousObserver = fixture.Runtime.SetObserverFunc([&](TAutoPtr<NActors::IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType && heldTasks.size() < 2) {
-                heldTasks.emplace_back(ev.Release());
-                return NActors::TTestActorRuntime::EEventAction::DROP;
-            }
-            return NActors::TTestActorRuntime::EEventAction::PROCESS;
-        });
-        fixture.Submit(counter, ESpecialTaskCategory::Scan);
-        fixture.Submit(counter, ESpecialTaskCategory::Scan);
-        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        UNIT_ASSERT_VALUES_EQUAL(heldTasks.size(), 2);
-        fixture.Runtime.SetObserverFunc(previousObserver);
 
-        for (ui32 i = 0; i < 10; ++i) {
-            fixture.Submit(counter, ESpecialTaskCategory::Scan);
-        }
-        ui64 maxBatch = 0;
-        auto resultObserver = fixture.Runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {
-            if (ev->Get()->GetWorkersPoolId() == 1) {
-                maxBatch = Max<ui64>(maxBatch, ev->Get()->GetResults().size());
-            }
-        });
+        config = BuildTopologyConfig({{{ESpecialTaskCategory::Scan, 1}}}, {1}, {}, 5);
+        const auto increasedBatchSizes = RunMaxBatchUpdatePhase(fixture, config, 5);
+        UNIT_ASSERT(std::find(increasedBatchSizes.begin(), increasedBatchSizes.end(), 5) != increasedBatchSizes.end());
 
-        fixture.Runtime.Send(heldTasks.front().Release(), 0, true);
-        for (ui32 attempt = 0; attempt < 1000 && counter.Val() < 11; ++attempt) {
-            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        config = BuildTopologyConfig({{{ESpecialTaskCategory::Scan, 1}}}, {1}, {}, 2);
+        const auto decreasedBatchSizes = RunMaxBatchUpdatePhase(fixture, config, 5);
+        UNIT_ASSERT_VALUES_EQUAL(std::accumulate(decreasedBatchSizes.begin(), decreasedBatchSizes.end(), ui64(0)), 6);
+        for (const auto batchSize : decreasedBatchSizes) {
+            UNIT_ASSERT(batchSize <= 2);
         }
-        UNIT_ASSERT_VALUES_EQUAL(maxBatch, 10);
-        fixture.Runtime.Send(heldTasks.back().Release(), 0, true);
-        for (ui32 attempt = 0; attempt < 100 && counter.Val() != 12; ++attempt) {
-            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
-        }
-        UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 12);
     }
 
     Y_UNIT_TEST(MixedBatchKeepsRemovedCompletionContexts) {

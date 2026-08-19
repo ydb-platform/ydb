@@ -91,6 +91,16 @@ namespace {
         return result;
     }
 
+    ui64 ParseUInt64(const TString& name, const TString& value, ui64 minValue, ui64 maxValue, TString& error) {
+        ui64 result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+            return result;
+        }
+        ValidateSettingInRange(name, result, minValue, maxValue, error);
+        return result;
+    }
+
     double ParseDouble(const TString& name, const TString& value, TString& error) {
         double result = 0;
         if (!TryFromString(value, result)) {
@@ -1124,7 +1134,7 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
         settings.set_adaptive_clusters(ParseBool(nameLower, value, error));
     } else if (nameLower == "hnsw_min_rows") {
         settings.mutable_settings()->set_hnsw_min_rows(
-            ParseUInt32(nameLower, value, 0, Max<ui32>(), error));
+            ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
     } else if (nameLower == "hnsw_connectivity") {
         settings.mutable_settings()->set_hnsw_connectivity(
             ParseUInt32(nameLower, value, 1, MaxHnswConnectivity, error));

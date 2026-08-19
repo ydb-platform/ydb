@@ -8233,6 +8233,14 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             proto->SetVectorIndexEmbeddingColumnId(
                 alterData->TableDescriptionFull->GetVectorIndexEmbeddingColumnId());
         }
+        proto->MutableVectorIndexTablePathId()->CopyFrom(
+            alterData->TableDescriptionFull->GetVectorIndexTablePathId());
+        proto->SetVectorIndexTablePath(
+            alterData->TableDescriptionFull->GetVectorIndexTablePath());
+        proto->MutableVectorIndexPathId()->CopyFrom(
+            alterData->TableDescriptionFull->GetVectorIndexPathId());
+        proto->SetVectorIndexPath(
+            alterData->TableDescriptionFull->GetVectorIndexPath());
     }
 
     TString txBody;

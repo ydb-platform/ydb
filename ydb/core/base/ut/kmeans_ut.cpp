@@ -748,6 +748,14 @@ Y_UNIT_TEST_SUITE(NKMeans) {
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_construction_candidates(), 200);
         UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_search_candidates(), 15);
 
+        UNIT_ASSERT(FillSetting(settings, "hnsw_min_rows", "4294967296", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_min_rows(), 4294967296ULL);
+        UNIT_ASSERT(FillSetting(settings, "hnsw_min_rows", "18446744073709551615", error));
+        UNIT_ASSERT_VALUES_EQUAL(settings.settings().hnsw_min_rows(), Max<ui64>());
+        UNIT_ASSERT(!FillSetting(settings, "hnsw_min_rows", "18446744073709551616", error));
+        UNIT_ASSERT(!FillSetting(settings, "hnsw_min_rows", "-1", error));
+        UNIT_ASSERT(!FillSetting(settings, "hnsw_min_rows", "not-a-number", error));
+
         UNIT_ASSERT(!FillSetting(settings, "hnsw_connectivity", "0", error));
         UNIT_ASSERT(!FillSetting(settings, "hnsw_construction_candidates", "0", error));
         UNIT_ASSERT(!FillSetting(settings, "hnsw_search_candidates", "0", error));

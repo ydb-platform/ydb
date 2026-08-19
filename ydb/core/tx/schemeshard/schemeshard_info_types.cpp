@@ -1030,6 +1030,14 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
             alterData->TableDescriptionFull->SetVectorIndexEmbeddingColumnId(
                 op.GetVectorIndexEmbeddingColumnId());
         }
+        alterData->TableDescriptionFull->MutableVectorIndexTablePathId()->CopyFrom(
+            op.GetVectorIndexTablePathId());
+        alterData->TableDescriptionFull->SetVectorIndexTablePath(
+            op.GetVectorIndexTablePath());
+        alterData->TableDescriptionFull->MutableVectorIndexPathId()->CopyFrom(
+            op.GetVectorIndexPathId());
+        alterData->TableDescriptionFull->SetVectorIndexPath(
+            op.GetVectorIndexPath());
     }
 
     alterData->IsBackup = op.GetIsBackup();

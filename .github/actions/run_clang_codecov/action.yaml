@@ -125,6 +125,7 @@ runs:
         ./ya make "${params[@]}" "${TARGETS[@]}"
 
     - name: Export filtered LCOV
+      id: export
       shell: bash
       env:
         SUITE: ${{ inputs.suite }}
@@ -187,11 +188,36 @@ runs:
         fi
         codecovcli upload-coverage "${upload_args[@]}"
 
+    - name: Generate filtered HTML report
+      id: html
+      if: >-
+        ${{
+          always() &&
+          steps.ya.outcome == 'success' &&
+          steps.export.outcome == 'success' &&
+          inputs.aws_access_key_id != '' &&
+          inputs.aws_secret_access_key != ''
+        }}
+      continue-on-error: true
+      shell: bash
+      env:
+        SUITE: ${{ inputs.suite }}
+        OUT: ${{ steps.ya.outputs.out_dir }}
+      run: |
+        set -euo pipefail
+        python3 .github/scripts/codecov/export_coverage_lcov.py \
+          --suite "${SUITE}" \
+          --ya-output "$OUT" \
+          --html-input "$OUT/coverage.lcov" \
+          --html-output "$OUT/coverage.filtered.report"
+
     - name: Install AWS CLI
       if: >-
         ${{
           always() &&
           steps.ya.outcome == 'success' &&
+          steps.export.outcome == 'success' &&
+          steps.html.outcome == 'success' &&
           inputs.aws_access_key_id != '' &&
           inputs.aws_secret_access_key != ''
         }}
@@ -210,6 +236,8 @@ runs:
         ${{
           always() &&
           steps.ya.outcome == 'success' &&
+          steps.export.outcome == 'success' &&
+          steps.html.outcome == 'success' &&
           inputs.aws_access_key_id != '' &&
           inputs.aws_secret_access_key != ''
         }}
@@ -242,9 +270,11 @@ runs:
         fi
         prefix="${STORAGE_PREFIX}"
 
-        report_dir="${OUT}/coverage.report"
-        if [ ! -d "${report_dir}" ]; then
-          echo "No coverage.report directory; skip object storage upload"
+        # Publish the same suite-owned source set that is uploaded to Codecov,
+        # not ya's raw report for the complete dependency closure.
+        report_dir="${OUT}/coverage.filtered.report"
+        if [ ! -f "${report_dir}/index.html" ]; then
+          echo "No filtered coverage HTML directory; skip object storage upload"
           exit 0
         fi
 

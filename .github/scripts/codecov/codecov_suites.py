@@ -28,14 +28,14 @@ SHARED_PATHS = {
 SUITES: dict[str, dict] = {
     "cpp_sdk": {
         "flag": "cpp_sdk",
-        "regexp": "ydb/public/sdk/cpp",
+        "regexp": r"^ydb/public/sdk/cpp(?:/|$)",
         "targets": ["ydb/public/sdk/cpp"],
         "lcov_prefixes": ["ydb/public/sdk/cpp/"],
         "path_prefixes": ["ydb/public/sdk/cpp/"],
     },
     "cli": {
         "flag": "cli",
-        "regexp": "ydb/apps/ydb/|ydb/public/lib/ydb_cli",
+        "regexp": r"^(?:ydb/apps/ydb|ydb/public/lib/ydb_cli)(?:/|$)",
         "targets": [
             "ydb/apps/ydb",
             "ydb/public/lib/ydb_cli",
@@ -50,7 +50,7 @@ SUITES: dict[str, dict] = {
     },
     "cli_workload": {
         "flag": "cli_workload",
-        "regexp": "ydb/library/workload",
+        "regexp": r"^ydb/library/workload(?:/|$)",
         "targets": ["ydb/library/workload"],
         "lcov_prefixes": ["ydb/library/workload/"],
         "path_prefixes": ["ydb/library/workload/"],

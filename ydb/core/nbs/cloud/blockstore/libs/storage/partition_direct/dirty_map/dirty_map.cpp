@@ -71,6 +71,7 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
     for (auto indx: added) {
         const auto watermark = vChunkConfig.GetWatermark(indx);
         DDiskStates[indx].Init(
+            this,
             BlockCount,
             watermark ? *watermark / BlockSize : BlockCount);
     }
@@ -264,6 +265,11 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
         Y_ABORT_UNLESS(item);
 
         auto& val = item->Value;
+
+        if (!CheckEraseAbility(item->Range, val)) {
+            ReadyToErase.insert(lsn);
+            continue;
+        }
 
         for (THostIndex host: val.GetEraseNeeded()) {
             val.RequestErase(host);
@@ -714,6 +720,11 @@ void TBlocksDirtyMap::DataFromPBufferReleased(
     }
 }
 
+void TBlocksDirtyMap::OnBehindAheadChanged()
+{
+    ++BehindAheadGeneration;
+}
+
 bool TBlocksDirtyMap::NeedFlush() const
 {
     return !ReadyToFlush.empty();
@@ -722,6 +733,35 @@ bool TBlocksDirtyMap::NeedFlush() const
 bool TBlocksDirtyMap::NeedErase() const
 {
     return !ReadyToErase.empty() || !ReadyToEraseBelated.empty();
+}
+
+bool TBlocksDirtyMap::NeedPersist() const
+{
+    return BehindAheadGeneration > PersistedGeneration;
+}
+
+PartitionDirect::NProto::TDirtyMapState
+TBlocksDirtyMap::GetStateForPersist() const
+{
+    PartitionDirect::NProto::TDirtyMapState result;
+    result.SetStateGeneration(GetCurrentGeneration());
+    for (const auto& ddiskState: DDiskStates) {
+        ddiskState.Save(result.AddDDiskStates());
+    }
+    return result;
+}
+
+void TBlocksDirtyMap::StatePersisted(ui32 persistGeneration)
+{
+    Y_ABORT_UNLESS(persistGeneration > PersistedGeneration);
+    Y_ABORT_UNLESS(persistGeneration <= BehindAheadGeneration);
+
+    PersistedGeneration = persistGeneration;
+}
+
+ui64 TBlocksDirtyMap::GetCurrentGeneration() const
+{
+    return BehindAheadGeneration;
 }
 
 TString TBlocksDirtyMap::DebugPrintPBuffers()
@@ -830,6 +870,20 @@ TString TBlocksDirtyMap::DebugPrintBehind() const
             continue;
         }
         result << "  " << PrintHostIndex(h) << ": " << behind << "\n";
+    }
+    return result;
+}
+
+TString TBlocksDirtyMap::DebugPrintAheadBehindBrief() const
+{
+    TStringBuilder result;
+    result << "gen:" << GetCurrentGeneration() << "/" << PersistedGeneration
+           << " ";
+    for (THostIndex h = 0; h < GetHostCount(); ++h) {
+        auto brief = DDiskStates[h].DebugPrintAheadBehindBrief();
+        if (brief) {
+            result << PrintHostIndex(h) << ":" << brief;
+        }
     }
     return result;
 }
@@ -967,6 +1021,36 @@ void TBlocksDirtyMap::InflightFlushFinished(TBlockRange64 range)
 
             return TInflightDDiskSyncMap::EEnumerateContinuation::Continue;
         });
+}
+
+bool TBlocksDirtyMap::CheckEraseAbility(
+    TBlockRange64 range,
+    TInflightInfo& inflightInfo)
+{
+    if (BehindAheadGeneration == 0) {
+        return true;
+    }
+
+    if (inflightInfo.GetPersistGeneration() < PersistedGeneration) {
+        return true;
+    }
+
+    bool eraseBlocked = AnyOf(
+        DDiskStates,
+        [&](const TDDiskState& ddiskState)
+        {
+            return ddiskState.IsTrackingEnabled() &&
+                   ddiskState.HasBehindOverlapping(range);
+        });
+
+    if (!eraseBlocked) {
+        return true;
+    }
+
+    if (!inflightInfo.GetPersistGeneration()) {
+        inflightInfo.SetPersistGeneration(BehindAheadGeneration);
+    }
+    return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

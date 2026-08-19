@@ -1,14 +1,12 @@
 import grpc
 import logging
 
-from ydb.public.tools.federation_recipe.proto.logbroker.public.api.admin import config_manager_admin_pb2
-from ydb.public.tools.federation_recipe.proto.logbroker.public.api.grpc import (
-    config_manager_pb2_grpc,
-    config_manager_admin_pb2_grpc,
-)
-from ydb.public.tools.federation_recipe.proto.logbroker.public.api.common import ydb_operation_pb2
-from ydb.public.tools.federation_recipe.proto.logbroker.public.api.common import ydb_status_codes_pb2
-from ydb.public.tools.federation_recipe.proto.logbroker.public.api.common import common_pb2
+from ydb.public.tools.federation_recipe.proto import config_manager_admin_pb2
+from ydb.public.tools.federation_recipe.proto import config_manager_service_pb2_grpc as config_manager_pb2_grpc
+from ydb.public.tools.federation_recipe.proto import config_manager_admin_service_pb2_grpc as config_manager_admin_pb2_grpc
+from ydb.public.tools.federation_recipe.proto import ydb_operation_pb2
+from ydb.public.tools.federation_recipe.proto import ydb_status_codes_pb2
+from ydb.public.tools.federation_recipe.proto import common_pb2
 
 logger = logging.getLogger(__name__)
 

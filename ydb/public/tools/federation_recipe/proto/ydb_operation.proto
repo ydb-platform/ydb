@@ -3,10 +3,10 @@ syntax = "proto3";
 import "google/protobuf/any.proto";
 import "google/protobuf/duration.proto";
 
-import "ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/validation.proto";
-import "ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/ydb_common.proto";
-import "ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/ydb_issue_message.proto";
-import "ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/ydb_status_codes.proto";
+import "ydb/public/tools/federation_recipe/proto/validation.proto";
+import "ydb/public/tools/federation_recipe/proto/ydb_common.proto";
+import "ydb/public/tools/federation_recipe/proto/ydb_issue_message.proto";
+import "ydb/public/tools/federation_recipe/proto/ydb_status_codes.proto";
 
 package NLogBroker.Operations;
 

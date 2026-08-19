@@ -1,10 +1,10 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/admin/config_manager_admin.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/grpc/config_manager_admin.grpc.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/common.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/ydb_operation.pb.h>
-#include <ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/ydb_status_codes.pb.h>
+#include <ydb/public/tools/federation_recipe/proto/config_manager_admin.pb.h>
+#include <ydb/public/tools/federation_recipe/proto/config_manager_admin_service.grpc.pb.h>
+#include <ydb/public/tools/federation_recipe/proto/common.pb.h>
+#include <ydb/public/tools/federation_recipe/proto/ydb_operation.pb.h>
+#include <ydb/public/tools/federation_recipe/proto/ydb_status_codes.pb.h>
 
 
 using namespace NYdb;

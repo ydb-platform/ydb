@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package NLogBroker;
 
-import "ydb/public/tools/federation_recipe/proto/logbroker/public/api/common/ydb_operation.proto";
+import "ydb/public/tools/federation_recipe/proto/ydb_operation.proto";
 
 option cc_enable_arenas = true;
 option go_package = "a.yandex-team.ru/logbroker/public/api/common;logbroker_common";

@@ -3981,6 +3981,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             .SetupKqpProxy(true);
         TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
 
         TTestDataWithScheme data;
         data.Metadata = R"({"version": 1})";
@@ -3989,7 +3991,8 @@ Y_UNIT_TEST_SUITE(TImportTests) {
     a Int32,
     g Int32 GENERATED ALWAYS AS (a + 1) STORED,
     PRIMARY KEY (key),
-    INDEX by_a GLOBAL ON (a)
+    INDEX by_a GLOBAL ON (a),
+    INDEX by_key LOCAL USING bloom_filter ON (key)
 );
 )";
         data.Data.emplace_back("1,41,42\n2,99,100\n", EmptyYsonStr);
@@ -4028,6 +4031,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
+              index_population_mode: INDEX_POPULATION_MODE_BUILD
               items {
                 source_prefix: ""
                 destination_path: "/MyRoot/Restored"
@@ -4041,7 +4045,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT_C(schemeGetterError.empty(), schemeGetterError);
         UNIT_ASSERT_C(schemeQueryError.empty(), schemeQueryError);
         const auto& executableQuery = createTableBlocker.front()->Get()->Record.GetTransaction(0);
-        UNIT_ASSERT_VALUES_EQUAL(executableQuery.GetCreateIndexedTable().IndexDescriptionSize(), 0);
+        const auto& executableIndexes = executableQuery.GetCreateIndexedTable().GetIndexDescription();
+        UNIT_ASSERT_VALUES_EQUAL(executableIndexes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(executableIndexes.Get(0).GetName(), "by_key");
+        UNIT_ASSERT_VALUES_EQUAL(executableIndexes.Get(0).GetType(), EIndexTypeLocalBloomFilter);
         createTableBlocker.Stop();
 
         env.TestWaitNotification(runtime, importId);
@@ -4051,12 +4058,97 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NLs::IndexType(EIndexTypeGlobal),
             NLs::IndexState(EIndexStateReady),
         });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored/by_key", false, false, true), {
+            NLs::PathExist,
+            NLs::IndexType(EIndexTypeLocalBloomFilter),
+            NLs::IndexState(EIndexStateReady),
+        });
 
         const auto select = ExecuteKqpDataQuery(runtime,
             "SELECT key, a, g FROM `/MyRoot/Restored` VIEW by_a WHERE a = 99;");
         UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
         NKqp::CompareYson(
             "[[2u;[99];[100]]]",
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
+    }
+
+    Y_UNIT_TEST(CreateTableQueryRestoresVirtualGeneratedColumn) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        TTestDataWithScheme data;
+        data.Metadata = R"({"version": 1})";
+        data.CreationQuery = R"(PRAGMA classic_division = '0';
+CREATE TABLE `/OldRoot/Original` (
+    key Uint32 NOT NULL,
+    a Int32,
+    g Int32 GENERATED ALWAYS AS (a + 1) VIRTUAL,
+    PRIMARY KEY (key)
+);
+)";
+        data.Data.emplace_back("1,41\n2,99\n", EmptyYsonStr);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Restored");
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+
+        const NKikimrSchemeOp::TColumnDescription* generated = nullptr;
+        for (const auto& column : describe.GetPathDescription().GetTable().GetColumns()) {
+            if (column.GetName() == "g") {
+                generated = &column;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(generated, describe.ShortDebugString());
+        UNIT_ASSERT(generated->HasDefaultFromExpression());
+        const auto& expression = generated->GetDefaultFromExpression();
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetExprText(), "a + 1");
+        UNIT_ASSERT(!expression.GetStored());
+        UNIT_ASSERT_VALUES_EQUAL(expression.DependencyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetDependencyColumnNames(0), "a");
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetContext(),
+            "PRAGMA classic_division = \"0\";");
+
+        auto select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, g FROM `/MyRoot/Restored` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        NKqp::CompareYson(
+            "[[1u;[41];[42]];[2u;[99];[100]]]",
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
+
+        ExecuteKqpDataQuery(runtime,
+            "UPSERT INTO `/MyRoot/Restored` (key, a) VALUES (3u, 7);");
+        select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, g FROM `/MyRoot/Restored` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        NKqp::CompareYson(
+            "[[1u;[41];[42]];[2u;[99];[100]];[3u;[7];[8]]]",
             NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
     }
 

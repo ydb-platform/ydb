@@ -55,6 +55,15 @@ concept HasIndexPopulationMode = requires(const T& t) {
     { t.index_population_mode() } -> std::same_as<Ydb::Import::ImportFromS3Settings::IndexPopulationMode>;
 };
 
+bool IsLocalTableIndex(const NKikimrSchemeOp::TIndexCreationConfig& index) {
+    return IsIn({
+        NKikimrSchemeOp::EIndexTypeLocalBloomFilter,
+        NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter,
+        NKikimrSchemeOp::EIndexTypeLocalMinMax,
+        NKikimrSchemeOp::EIndexTypeLocalCountMinSketch,
+    }, NTableIndex::GetIndexType(index));
+}
+
 bool PrepareNextBuildableIndex(const TImportInfo& importInfo, ui32 itemIdx, TItem& item) {
     if (!NeedToBuildIndexes(importInfo, itemIdx)) {
         return false;
@@ -76,13 +85,7 @@ bool PrepareNextBuildableIndex(const TImportInfo& importInfo, ui32 itemIdx, TIte
 
     const auto& indexes = item.PreparedCreationQuery->GetCreateIndexedTable().GetIndexDescription();
     while (item.NextIndexIdx < indexes.size()) {
-        const auto indexType = NTableIndex::GetIndexType(indexes.Get(item.NextIndexIdx));
-        if (!IsIn({
-            NKikimrSchemeOp::EIndexTypeLocalBloomFilter,
-            NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter,
-            NKikimrSchemeOp::EIndexTypeLocalMinMax,
-            NKikimrSchemeOp::EIndexTypeLocalCountMinSketch,
-        }, indexType)) {
+        if (!IsLocalTableIndex(indexes.Get(item.NextIndexIdx))) {
             break;
         }
         ++item.NextIndexIdx;
@@ -800,7 +803,14 @@ private:
         modifyScheme = *item.PreparedCreationQuery;
         if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexedTable &&
             NeedToBuildIndexes(*importInfo, itemIdx)) {
-            modifyScheme.MutableCreateIndexedTable()->ClearIndexDescription();
+            auto& executableIndexes = *modifyScheme.MutableCreateIndexedTable()->MutableIndexDescription();
+            executableIndexes.Clear();
+            for (const auto& index :
+                 item.PreparedCreationQuery->GetCreateIndexedTable().GetIndexDescription()) {
+                if (IsLocalTableIndex(index)) {
+                    executableIndexes.Add()->CopyFrom(index);
+                }
+            }
         }
         modifyScheme.SetInternal(true);
 

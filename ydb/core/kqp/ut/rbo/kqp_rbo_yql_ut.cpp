@@ -4561,13 +4561,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    enum EBenchType { TPCH = 0, TPCDS };
-    static constexpr std::array<const char*, 2> BenchmarkSchemaPathPrefix{R"(data/)", R"(data/)"};
-    static constexpr std::array<const char*, 2> BenchmarkSchemaPath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)"};
-    static constexpr std::array<const char*, 2> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)"};
+    enum EBenchType { TPCH = 0, TPCDS, CLICKBENCH };
+    static constexpr std::array<const char*, 3> BenchmarkSchemaPathPrefix{R"(data/)", R"(data/)", R"(data/)"};
+    static constexpr std::array<const char*, 3> BenchmarkSchemaPath{R"(schema/tpch.sql)", R"(schema/tpcds.sql)", R"(schema/clickbench.sql)"};
+    static constexpr std::array<const char*, 3> BenchmarkQueryPath{R"(data/yql-tpch/q)", R"(data/yql-tpcds/q)", R"(data/yql-clickbench/q)"};
     static constexpr const char* BenchmarkTraceSuiteName = "KqpRboYql";
-    static constexpr std::array<const char*, 2> BenchmarkTraceName{"TPCH_YQL", "TPCDS_YQL"};
-    static constexpr std::array<ui32, 2> BenchmarkQueryCount{22, 99};
+    static constexpr std::array<const char*, 3> BenchmarkTraceName{"TPCH_YQL", "TPCDS_YQL", "CLICKBENCH_YQL"};
+    static constexpr std::array<ui32, 3> BenchmarkQueryCount{22, 99, 43};
 
     bool PlanHasJoin(const NJson::TJsonValue& planNode) {
         if (!planNode.IsMap()) {
@@ -4632,7 +4632,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL_C(optimized, total, statsContext);
     }
 
-    void RunTPC_YqlBenchmark(const EBenchType type, const bool columnStore, std::set<ui32>&& queriesStatus, std::set<ui32>&& skipList, const bool newRbo,
+    void RunPerf_YqlTest(const EBenchType type, const bool columnStore, std::set<ui32>&& queriesStatus, std::set<ui32>&& skipList, const bool newRbo,
                              const bool printStatus = false, const bool compareResults = false, const bool checkNewRBOCbo = false,
                              std::set<ui32>&& queriesWithoutCboCheck = {}) {
         NKikimrConfig::TAppConfig appConfig;
@@ -4699,7 +4699,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         }
     }
 
-    std::set<ui32> MakeTPC_YqlSingleQuerySkipList(const EBenchType type, const ui32 queryId) {
+    std::set<ui32> MakePerf_YqlSingleQuerySkipList(const EBenchType type, const ui32 queryId) {
         std::set<ui32> skipList;
         for (ui32 qId = 1, e = BenchmarkQueryCount[type]; qId <= e; ++qId) {
             if (qId != queryId) {
@@ -4718,12 +4718,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             expectedSuccessQueries.insert(BenchmarkQueryCount[EBenchType::TPCH] + 1);
         }
 
-        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, std::move(expectedSuccessQueries),
-                            MakeTPC_YqlSingleQuerySkipList(EBenchType::TPCH, queryId),
-                            /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
+        RunPerf_YqlTest(EBenchType::TPCH, /*columnstore=*/true, std::move(expectedSuccessQueries), MakePerf_YqlSingleQuerySkipList(EBenchType::TPCH, queryId),
+                        /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true);
     }
 
-    void RunTPC_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
+    void RunPerf_YqlTest(const EBenchType type, ui32 queryId, const bool columnStore, const bool newRbo) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
@@ -7931,20 +7930,39 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     Y_UNIT_TEST(TPCH_YQL) {
         // RunTPCHYqlBenchmark(/*columnstore*/ true, {}, {}, /*new rbo*/ false);
         // Q11 is intentionally omitted: it is not accepted by the current New RBO benchmark path.
-        RunTPC_YqlBenchmark(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22},
-                            {}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
+        RunPerf_YqlTest(EBenchType::TPCH, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}, {},
+                        /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                         /*queriesWithoutCboCheck=*/{13});
     }
 
     Y_UNIT_TEST(TPCDS_YQL) {
-        // RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
-        RunTPC_YqlBenchmark(EBenchType::TPCDS, /*columnstore=*/true, {1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 13, 15, 16, 18, 19, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 40, 42, 43, 45, 46, 48,
-                                                                      50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 81, 82, 83,
-                                                                      84, 85, 87, 88, 90, 91, 92, 93, 94, 95, 96, 97, 99},
-                           /*rbo never finish*/{}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
-                           // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
-                           // in the query or until the known gaps are fixed.
-                           /*queriesWithoutCboCheck=*/{4, 15, 31, 58, 64, 66, 72, 78, 85});
+        // RunPerf_YqlTest(EBenchType::TPCDS, /*columnstore*/ true, {}, {}, /*new rbo*/ false);
+        RunPerf_YqlTest(EBenchType::TPCDS, /*columnstore=*/true,
+                        {1,  2,  3,  4,  5,  6,  7,  8,  10, 11, 13, 15, 16, 18, 19, 21, 22, 24, 25, 26, 28, 29, 30, 31, 32, 33,
+                         34, 35, 37, 38, 40, 42, 43, 45, 46, 48, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 71,
+                         72, 73, 74, 75, 76, 77, 78, 79, 81, 82, 83, 84, 85, 87, 88, 90, 91, 92, 93, 94, 95, 96, 97, 99},
+                        /*rbo never finish*/ {}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
+                        // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
+                        // in the query or until the known gaps are fixed.
+                        /*queriesWithoutCboCheck=*/{4, 15, 31, 58, 64, 66, 72, 78, 85});
+    }
+
+    Y_UNIT_TEST(ClickBench_YQL) {
+        // Queries - q19, q29, q40, q43 not supported, because of yql error - not support `GROUP BY ... AS <alias>`.
+        RunPerf_YqlTest(EBenchType::CLICKBENCH, /*columnstore=*/true,
+                        /*queriesStatus=*/{1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21,
+                                           22, 23, 24, 25, 26, 27, 28, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 41, 42},
+                        /*skipList=*/{}, /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true,
+                        /*checkNewRBOCbo=*/false, /*queriesWithoutCboCheck=*/{});
+    }
+
+    Y_UNIT_TEST(ClickBench_YQL_Single) {
+        const ui32 query = 10;
+        auto skipList = MakePerf_YqlSingleQuerySkipList(EBenchType::CLICKBENCH, query);
+        RunPerf_YqlTest(EBenchType::CLICKBENCH, /*columnstore=*/true,
+                        /*queriesStatus=*/{query},
+                        /*skipList=*/std::move(skipList), /*new rbo=*/true, /*printStatus=*/false, /*compareResults=*/true,
+                        /*checkNewRBOCbo=*/false, /*queriesWithoutCboCheck=*/{});
     }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {

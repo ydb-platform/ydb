@@ -43,6 +43,10 @@ NYdb::TStatus CreateTopicViaSdk(
     const std::string& path,
     const NYdb::NPersQueue::TCreateTopicSettings& settings = {});
 
+NYdb::TStatus CreateDlqTopicViaSdk(
+    NYdb::NPersQueue::TPersQueueClient& client,
+    const std::string& dlqTopicName = DEFAULT_DEAD_LETTER_QUEUE);
+
 NYdb::NPersQueue::TDescribeTopicResult DescribeTopicViaSdk(
     NYdb::NPersQueue::TPersQueueClient& client,
     const std::string& path);

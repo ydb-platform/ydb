@@ -188,7 +188,8 @@ public:
 
     void GetInputTables(TTableList& tableList) const override {
         if (Source_) {
-            return Source_->GetInputTables(tableList);
+            Source_->GetInputTables(tableList);
+            return;
         }
     }
 

@@ -2458,7 +2458,7 @@ public:
     }
 
     void Rewind() final {
-        return Inner_.Rewind();
+        Inner_.Rewind();
     }
 
     TStatistics GetStatistics() const final {

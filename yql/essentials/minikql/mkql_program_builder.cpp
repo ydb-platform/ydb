@@ -84,8 +84,10 @@ void EnsureScriptSpecificTypes(
     std::vector<TNode*>& nodeStack)
 {
     switch (scriptType) {
-        case EScriptType::Lua:
-            return TLuaTypeChecker().Walk(funcType, nodeStack);
+        case EScriptType::Lua: {
+            TLuaTypeChecker().Walk(funcType, nodeStack);
+            return;
+        }
         case EScriptType::Python:
         case EScriptType::Python2:
         case EScriptType::Python3:
@@ -103,10 +105,14 @@ void EnsureScriptSpecificTypes(
         case EScriptType::SystemPython3_11:
         case EScriptType::SystemPython3_12:
         case EScriptType::SystemPython3_13:
-        case EScriptType::SystemPython3_14:
-            return TPythonTypeChecker().Walk(funcType, nodeStack);
-        case EScriptType::Javascript:
-            return TJavascriptTypeChecker().Walk(funcType, nodeStack);
+        case EScriptType::SystemPython3_14: {
+            TPythonTypeChecker().Walk(funcType, nodeStack);
+            return;
+        }
+        case EScriptType::Javascript: {
+            TJavascriptTypeChecker().Walk(funcType, nodeStack);
+            return;
+        }
         default:
             MKQL_ENSURE(false, "Unknown script type " << static_cast<ui32>(scriptType));
     }

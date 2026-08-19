@@ -994,7 +994,8 @@ private:
 
     void VisitSmartParenthesis(const TRule_smart_parenthesis& msg) {
         if (!IsSelect(msg)) {
-            return VisitAllFields(msg.GetDescriptor(), msg);
+            VisitAllFields(msg.GetDescriptor(), msg);
+            return;
         }
 
         Y_ENSURE(msg.GetBlock2().HasAlt1());

@@ -67,8 +67,8 @@ public:
             auto end() const {
                 return c.end();
             }
-            auto clear() {
-                return c.clear();
+            void clear() {
+                c.clear();
             }
         };
 

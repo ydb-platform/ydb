@@ -515,7 +515,7 @@ TFileLinkPtr TStorage::HardlinkFromStorage(const TString& existingStorageFileNam
 
 void TStorage::MoveToStorage(const TFsPath& src, const TString& dstStorageFileName)
 {
-    return Impl_->MoveToStorage(src, dstStorageFileName);
+    Impl_->MoveToStorage(src, dstStorageFileName);
 }
 
 bool TStorage::RemoveFromStorage(const TString& existingStorageFileName)

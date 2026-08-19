@@ -153,7 +153,7 @@ public:
             return;
         }
 
-        return InputBufReadManySlowThunk(*this, buffer, count);
+        InputBufReadManySlowThunk(*this, buffer, count);
     }
 
     void SkipMany(size_t count) {
@@ -162,7 +162,7 @@ public:
             return;
         }
 
-        return InputBufSkipManySlowThunk(*this, count);
+        InputBufSkipManySlowThunk(*this, count);
     }
 
     void CopyMany(size_t count, TVector<char>& yson) {

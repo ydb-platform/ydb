@@ -476,7 +476,7 @@ protected:
 
     void AllColumns() override {
         Y_DEBUG_ABORT_UNLESS(Source_);
-        return Source_->AllColumns();
+        Source_->AllColumns();
     }
 
     const TColumns* GetColumns() const override {
@@ -3278,7 +3278,7 @@ public:
     }
 
     void AddTmpWindowColumn(const TString& column) override {
-        return Source_->AddTmpWindowColumn(column);
+        Source_->AddTmpWindowColumn(column);
     }
 
     bool AddAggregation(TContext& ctx, TAggregationPtr aggr) override {

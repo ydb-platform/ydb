@@ -14,10 +14,29 @@ class TestS3TpchImport(S3ImportTestBase):
         l_suppkey, l_tax
     """
 
-    def _table_stats(self, table_name: str, with_hash: bool = True):
+    _LINEITEM_COLUMNS_OPTIONAL = """
+        l_linenumber, l_orderkey,
+        JUST(l_comment) AS l_comment,
+        JUST(l_commitdate) AS l_commitdate,
+        JUST(l_discount) AS l_discount,
+        JUST(l_extendedprice) AS l_extendedprice,
+        JUST(l_linestatus) AS l_linestatus,
+        JUST(l_partkey) AS l_partkey,
+        JUST(l_quantity) AS l_quantity,
+        JUST(l_receiptdate) AS l_receiptdate,
+        JUST(l_returnflag) AS l_returnflag,
+        JUST(l_shipdate) AS l_shipdate,
+        JUST(l_shipinstruct) AS l_shipinstruct,
+        JUST(l_shipmode) AS l_shipmode,
+        JUST(l_suppkey) AS l_suppkey,
+        JUST(l_tax) AS l_tax
+    """
+
+    def _table_stats(self, table_name: str, with_hash: bool = True, optional_payload: bool = False):
         if with_hash:
-            projected = f"$t = SELECT {self._LINEITEM_COLUMNS} FROM {table_name};\n"
-            query = projected + """
+            columns = self._LINEITEM_COLUMNS_OPTIONAL if optional_payload else self._LINEITEM_COLUMNS
+            query = f"""
+                $t = SELECT {columns} FROM {table_name};
                 SELECT
                     String::Hex(Sum(Digest::MurMurHash32(Pickle(TableRow())))) AS hash,
                     COUNT(*) AS size
@@ -59,20 +78,20 @@ class TestS3TpchImport(S3ImportTestBase):
             CREATE EXTERNAL TABLE s3_table (
                 l_linenumber Int32 NOT NULL,
                 l_orderkey Int64 NOT NULL,
-                l_comment Utf8 NOT NULL,
-                l_commitdate Date NOT NULL,
-                l_discount Double NOT NULL,
-                l_extendedprice Double NOT NULL,
-                l_linestatus Utf8 NOT NULL,
-                l_partkey Int64 NOT NULL,
-                l_quantity Double NOT NULL,
-                l_receiptdate Date NOT NULL,
-                l_returnflag Utf8 NOT NULL,
-                l_shipdate Date NOT NULL,
-                l_shipinstruct Utf8 NOT NULL,
-                l_shipmode Utf8 NOT NULL,
-                l_suppkey Int64 NOT NULL,
-                l_tax Double NOT NULL
+                l_comment Utf8,
+                l_commitdate Date,
+                l_discount Double,
+                l_extendedprice Double,
+                l_linestatus Utf8,
+                l_partkey Int64,
+                l_quantity Double,
+                l_receiptdate Date,
+                l_returnflag Utf8,
+                l_shipdate Date,
+                l_shipinstruct Utf8,
+                l_shipmode Utf8,
+                l_suppkey Int64,
+                l_tax Double
             ) WITH (
                 DATA_SOURCE="s3_source",
                 LOCATION="/test_folder/",
@@ -84,7 +103,7 @@ class TestS3TpchImport(S3ImportTestBase):
         self.ydb_client.run_cli_comand(["workload", "tpch", "init", "--datetime-types=dt32", "--store", "column"])
         self.ydb_client.run_cli_comand(["workload", "tpch", "import", "generator", "--scale", "1"])
 
-        lineitem = self._table_stats("lineitem", with_hash=True)
+        lineitem = self._table_stats("lineitem", with_hash=True, optional_payload=True)
         logger.info(f"Lineitem reference: size={lineitem.size}, hash={lineitem.hash}")
 
         logger.info("Exporting into s3...")

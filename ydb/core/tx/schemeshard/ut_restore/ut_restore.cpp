@@ -6,6 +6,7 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
@@ -19,6 +20,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_scheme_builders.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/wrappers/events/get_object.h>
@@ -48,6 +50,7 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
+#include <util/string/subst.h>
 
 #include <regex>
 
@@ -70,6 +73,41 @@ namespace {
     }
 
     const TString EmptyYsonStr = R"([[[[];%false]]])";
+
+    NKikimrKqp::TEvQueryResponse ExecuteKqpDataQuery(
+        TTestBasicRuntime& runtime,
+        const TString& query)
+    {
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto kqpProxy = NKqp::MakeKqpProxyID(runtime.GetNodeId(0));
+
+        auto createSession = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        createSession->Record.MutableRequest()->SetDatabase("/MyRoot");
+        runtime.Send(new IEventHandle(kqpProxy, sender, createSession.Release()));
+        const auto createSessionResponse = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvCreateSessionResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            createSessionResponse->Get()->Record.GetYdbStatus(),
+            Ydb::StatusIds::SUCCESS,
+            createSessionResponse->Get()->Record.ShortDebugString());
+
+        auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto& record = *request->Record.MutableRequest();
+        record.SetSessionId(createSessionResponse->Get()->Record.GetResponse().GetSessionId());
+        record.SetDatabase("/MyRoot");
+        record.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        record.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        record.SetQuery(query);
+        record.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+        record.MutableTxControl()->set_commit_tx(true);
+
+        runtime.Send(new IEventHandle(kqpProxy, sender, request.Release()));
+        const auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response->Get()->Record.GetYdbStatus(),
+            Ydb::StatusIds::SUCCESS,
+            response->Get()->Record.ShortDebugString());
+        return response->Get()->Record;
+    }
 
     TString GenerateScheme(const TPathDescription& pathDesc) {
         UNIT_ASSERT(pathDesc.HasTable());
@@ -3775,24 +3813,49 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         TTestDataWithScheme data;
         data.Metadata = R"({"version": 1})";
-        data.CreationQuery = R"(PRAGMA classic_division = '0';
-CREATE TABLE `/OldRoot/Original` (
-    key Uint32 NOT NULL,
-    a Int32,
-    g Int32 GENERATED ALWAYS AS (a + 1) STORED,
-    PRIMARY KEY (key)
-);
-)";
-        data.Data.emplace_back("1,41\n", EmptyYsonStr);
+        NKikimrSchemeOp::TPathDescription sourceDescription;
+        auto& sourceTable = *sourceDescription.MutableTable();
+        auto& generatedSource = *sourceTable.AddColumns();
+        generatedSource.SetId(11);
+        generatedSource.SetName("g");
+        generatedSource.SetType("Int32");
+        generatedSource.MutableDefaultFromExpression()->SetExprText("a + 1");
+        generatedSource.MutableDefaultFromExpression()->SetStored(true);
+        generatedSource.MutableDefaultFromExpression()->AddDependencyColumnNames("a");
+        generatedSource.MutableDefaultFromExpression()->SetContext(
+            "PRAGMA classic_division = \"0\";");
+        auto& keySource = *sourceTable.AddColumns();
+        keySource.SetId(2);
+        keySource.SetName("key");
+        keySource.SetType("Uint32");
+        keySource.SetNotNull(true);
+        auto& dependencySource = *sourceTable.AddColumns();
+        dependencySource.SetId(7);
+        dependencySource.SetName("a");
+        dependencySource.SetType("Int32");
+        sourceTable.AddKeyColumnIds(2);
+        sourceTable.AddKeyColumnNames("key");
 
-        const TString expectedQuery = R"(PRAGMA classic_division = '0';
-CREATE TABLE `/MyRoot/Restored` (
+        TString createTableQuery;
+        TString createTableQueryError;
+        UNIT_ASSERT_C(
+            BuildCreateTableQuery(
+                "/OldRoot/Original",
+                sourceDescription,
+                createTableQuery,
+                createTableQueryError),
+            createTableQueryError);
+        UNIT_ASSERT_STRING_CONTAINS(createTableQuery, R"(CREATE TABLE `/OldRoot/Original` (
     key Uint32 NOT NULL,
     a Int32,
-    g Int32 GENERATED ALWAYS AS (a + 1) STORED,
-    PRIMARY KEY (key)
-);
-)";
+    g Int32 GENERATED ALWAYS AS (a + 1) STORED,)");
+        data.CreationQuery = createTableQuery;
+        data.Data.emplace_back("1,41,42\n2,99,100\n", EmptyYsonStr);
+
+        const TString expectedQuery = SubstGlobalCopy(
+            createTableQuery,
+            "/OldRoot/Original",
+            "/MyRoot/Restored");
 
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
@@ -3853,6 +3916,14 @@ CREATE TABLE `/MyRoot/Restored` (
         const auto& preparedQuery = createTableBlocker.front()->Get()->Record.GetTransaction(0);
         UNIT_ASSERT_VALUES_EQUAL(preparedQuery.GetWorkingDir(), "/MyRoot");
         UNIT_ASSERT_VALUES_EQUAL(preparedQuery.GetCreateTable().GetName(), "Restored");
+        const auto& preparedColumns = preparedQuery.GetCreateTable().GetColumns();
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(0).GetName(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(1).GetName(), "a");
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(2).GetName(), "g");
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(0).GetId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(1).GetId(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(2).GetId(), 3);
 
         createTableBlocker.Stop();
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
@@ -3878,9 +3949,115 @@ CREATE TABLE `/MyRoot/Restored` (
         }
         UNIT_ASSERT_C(generated, describe.ShortDebugString());
         UNIT_ASSERT(generated->HasDefaultFromExpression());
-        UNIT_ASSERT_VALUES_EQUAL(generated->GetDefaultFromExpression().GetExprText(), "a + 1");
-        UNIT_ASSERT_VALUES_EQUAL(generated->GetDefaultFromExpression().GetContext(),
+        const auto& generatedExpression = generated->GetDefaultFromExpression();
+        UNIT_ASSERT_VALUES_EQUAL(generatedExpression.GetExprText(), "a + 1");
+        UNIT_ASSERT(generatedExpression.GetStored());
+        UNIT_ASSERT_VALUES_EQUAL(generatedExpression.DependencyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(generatedExpression.GetDependencyColumnNames(0), "a");
+        UNIT_ASSERT_VALUES_EQUAL(generatedExpression.GetContext(),
             "PRAGMA classic_division = \"0\";");
+
+        auto select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, g FROM `/MyRoot/Restored` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        NKqp::CompareYson(
+            "[[1u;[41];[42]];[2u;[99];[100]]]",
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
+
+        ExecuteKqpDataQuery(runtime,
+            "UPSERT INTO `/MyRoot/Restored` (key, a) VALUES (3u, 7);");
+        select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, g FROM `/MyRoot/Restored` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        NKqp::CompareYson(
+            "[[1u;[41];[42]];[2u;[99];[100]];[3u;[7];[8]]]",
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
+    }
+
+    Y_UNIT_TEST(CreateTableQueryWithIndexRestoresDataBeforeBuildingIndex) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        TTestDataWithScheme data;
+        data.Metadata = R"({"version": 1})";
+        data.CreationQuery = R"(CREATE TABLE `/OldRoot/Original` (
+    key Uint32 NOT NULL,
+    a Int32,
+    g Int32 GENERATED ALWAYS AS (a + 1) STORED,
+    PRIMARY KEY (key),
+    INDEX by_a GLOBAL ON (a)
+);
+)";
+        data.Data.emplace_back("1,41,42\n2,99,100\n", EmptyYsonStr);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TString schemeGetterError;
+        auto schemeGetterObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeReady>([&](auto& ev) {
+            if (!ev->Get()->Success) {
+                schemeGetterError = ev->Get()->Error;
+            }
+        });
+
+        TString schemeQueryError;
+        auto schemeQueryObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeQueryResult>([&](auto& ev) {
+            if (std::holds_alternative<TString>(ev->Get()->Result)) {
+                schemeQueryError = std::get<TString>(ev->Get()->Result);
+                if (schemeQueryError.empty()) {
+                    schemeQueryError = TStringBuilder()
+                        << "scheme query failed with status " << ev->Get()->Status;
+                }
+            }
+        });
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> createTableBlocker(runtime, [](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1
+                && record.GetTransaction(0).GetOperationType() == ESchemeOpCreateIndexedTable;
+        });
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("prepared indexed CREATE TABLE query", [&] {
+            return !createTableBlocker.empty() || !schemeGetterError.empty() || !schemeQueryError.empty();
+        });
+        UNIT_ASSERT_C(schemeGetterError.empty(), schemeGetterError);
+        UNIT_ASSERT_C(schemeQueryError.empty(), schemeQueryError);
+        const auto& executableQuery = createTableBlocker.front()->Get()->Record.GetTransaction(0);
+        UNIT_ASSERT_VALUES_EQUAL(executableQuery.GetCreateIndexedTable().IndexDescriptionSize(), 0);
+        createTableBlocker.Stop();
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored/by_a", false, false, true), {
+            NLs::PathExist,
+            NLs::IndexType(EIndexTypeGlobal),
+            NLs::IndexState(EIndexStateReady),
+        });
+
+        const auto select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, g FROM `/MyRoot/Restored` VIEW by_a WHERE a = 99;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        NKqp::CompareYson(
+            "[[2u;[99];[100]]]",
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
     }
 
     enum class ECreateTableQueryCompileResult {

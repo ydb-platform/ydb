@@ -56,16 +56,39 @@ concept HasIndexPopulationMode = requires(const T& t) {
 };
 
 bool PrepareNextBuildableIndex(const TImportInfo& importInfo, ui32 itemIdx, TItem& item) {
-    if (!NeedToBuildIndexes(importInfo, itemIdx) || !item.Table) {
+    if (!NeedToBuildIndexes(importInfo, itemIdx)) {
         return false;
     }
 
-    while (item.NextIndexIdx < item.Table->indexes_size() &&
-           NTableIndex::IsLocalTableIndex(item.Table->indexes(item.NextIndexIdx).type_case())) {
+    if (item.Table) {
+        while (item.NextIndexIdx < item.Table->indexes_size() &&
+               NTableIndex::IsLocalTableIndex(item.Table->indexes(item.NextIndexIdx).type_case())) {
+            ++item.NextIndexIdx;
+        }
+
+        return item.NextIndexIdx < item.Table->indexes_size();
+    }
+
+    if (!item.PreparedCreationQuery ||
+        item.PreparedCreationQuery->GetOperationType() != NKikimrSchemeOp::ESchemeOpCreateIndexedTable) {
+        return false;
+    }
+
+    const auto& indexes = item.PreparedCreationQuery->GetCreateIndexedTable().GetIndexDescription();
+    while (item.NextIndexIdx < indexes.size()) {
+        const auto indexType = NTableIndex::GetIndexType(indexes.Get(item.NextIndexIdx));
+        if (!IsIn({
+            NKikimrSchemeOp::EIndexTypeLocalBloomFilter,
+            NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter,
+            NKikimrSchemeOp::EIndexTypeLocalMinMax,
+            NKikimrSchemeOp::EIndexTypeLocalCountMinSketch,
+        }, indexType)) {
+            break;
+        }
         ++item.NextIndexIdx;
     }
 
-    return item.NextIndexIdx < item.Table->indexes_size();
+    return item.NextIndexIdx < indexes.size();
 }
 
 THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
@@ -87,9 +110,20 @@ bool AllDoneOrWaiting(const THashMap<EState, int>& stateCounts) {
     });
 }
 
-// the item is to be created by query, i.e. it is not a table
+// The item's schema object is created by executing its exported DDL.
 bool IsCreatedByQuery(const TItem& item) {
     return !item.CreationQuery.empty();
+}
+
+bool IsTableCreatedByQuery(const TItem& item) {
+    if (!item.PreparedCreationQuery) {
+        return false;
+    }
+
+    return IsIn({
+        NKikimrSchemeOp::ESchemeOpCreateTable,
+        NKikimrSchemeOp::ESchemeOpCreateIndexedTable,
+    }, item.PreparedCreationQuery->GetOperationType());
 }
 
 bool IsCreateViewQuery(const TString& query) {
@@ -764,6 +798,10 @@ private:
 
         auto& modifyScheme = *record.AddTransaction();
         modifyScheme = *item.PreparedCreationQuery;
+        if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexedTable &&
+            NeedToBuildIndexes(*importInfo, itemIdx)) {
+            modifyScheme.MutableCreateIndexedTable()->ClearIndexDescription();
+        }
         modifyScheme.SetInternal(true);
 
         if (importInfo->UserSID) {
@@ -1131,7 +1169,7 @@ private:
     }
 
     TMaybe<TString> GetIssues(const TImportInfo::TItem& item, TTxId restoreTxId) {
-        if (item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
+        if (item.Table && item.Table->store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
             Y_ABORT_UNLESS(Self->ColumnTables.contains(item.DstPathId));
             TColumnTableInfo::TPtr table = Self->ColumnTables.at(item.DstPathId).GetPtr();
             return GetIssues(table, restoreTxId);
@@ -1876,17 +1914,24 @@ private:
         Self->TxIdToImport.erase(txId);
 
         switch (item.State) {
-        case EState::CreateSchemeObject:
-            if (IsCreatedByQuery(item)) {
+        case EState::CreateSchemeObject: {
+            const bool tableCreatedByQuery = IsTableCreatedByQuery(item);
+            if (IsCreatedByQuery(item) && !tableCreatedByQuery) {
                 item.State = EState::Done;
                 break;
             } else if (item.Topic) {
                 item.State = EState::Done;
                 break;
             }
-            if (item.Table) {
+            if (item.Table || tableCreatedByQuery) {
+                if (tableCreatedByQuery) {
+                    UpdateItemDstPathId(db, *importInfo, itemIdx);
+                }
                 for (auto childIdx : item.ChildItems) {
                     Y_ABORT_UNLESS(childIdx < importInfo->Items.size());
+                    if (tableCreatedByQuery) {
+                        UpdateItemDstPathId(db, *importInfo, childIdx);
+                    }
                     auto& childItem = importInfo->Items.at(childIdx);
 
                     childItem.State = EState::Transferring;
@@ -1899,6 +1944,7 @@ private:
             item.State = EState::Transferring;
             AllocateTxId(*importInfo, itemIdx);
             break;
+        }
 
         case EState::Transferring:
             if (const auto issue = GetIssues(item, txId)) {
@@ -1925,9 +1971,7 @@ private:
                 Cancel(*importInfo, itemIdx, "issues during index building");
                 Self->EraseEncryptionKey(db, *importInfo);
             } else {
-                if (item.Table) {
-                    ++item.NextIndexIdx;
-                }
+                ++item.NextIndexIdx;
                 if (PrepareNextBuildableIndex(*importInfo, itemIdx, item)) {
                     AllocateTxId(*importInfo, itemIdx);
                 } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&

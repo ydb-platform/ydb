@@ -45,6 +45,7 @@
 | `ignore_unknown_components` | bool | true | Игнорировать запросы логирования от неизвестных компонентов. |
 | `entry` | array | [] | Конфигурация уровня логирования и/или семплирования для конкретных компонентов {{ ydb-short-name }}, cм. [{#T}](#entry-objects) ниже. |
 | `uaclient_config` | object | — | Конфигурация для клиента Unified Agent, см. [{#T}](#uaclient-config) ниже. |
+| `json_text_message_with_values` | bool | true | При выводе журнала в формате `json` текст сообщения (поле `message`) содержит поля структурированного журнала в формате `key=value`. |
 
 ### Объекты Entry {#entry-objects}
 

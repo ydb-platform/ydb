@@ -45,6 +45,7 @@ When both `sys_log` and `uaclient_config` are enabled simultaneously, logs will 
 | `ignore_unknown_components` | bool | true | Ignore logging requests from unknown components. |
 | `entry` | array | [] | Configuration of logging level and/or sampling for specific {{ ydb-short-name }} components, see [{#T}](#entry-objects) below. |
 | `uaclient_config` | object | — | Configuration for the Unified Agent client, see [{#T}](#uaclient-config) below. |
+| `json_text_message_with_values` | bool | true | If log output format is json, then message field contains structured log values (added to message text in key-value manner). |
 
 ### Entry Objects {#entry-objects}
 

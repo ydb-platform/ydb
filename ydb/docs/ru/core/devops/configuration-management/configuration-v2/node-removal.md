@@ -24,7 +24,7 @@
 [SelfHeal](../../../maintenance/manual/selfheal.md) динамических групп включён по умолчанию. Перед удалением узла убедитесь, что он также включён для остальных ресурсов, размещённых на этом узле:
 
 * Если на узле есть VDisk статической группы, [включите SelfHeal статической группы](static-group-self-heal.md#on-off). Как альтернативу можно перенести VDisk статической группы с узла вручную, см. [{#T}](static-group-move.md).
-* Если узел содержит реплики State Storage, Board или SchemeBoard, включите [Self Heal State Storage](../../../maintenance/manual/selfheal_statestorage.md#on-off). Как альтернативу можно перенести эти реплики с узла вручную, см. [{#T}](state-storage-move.md).
+* Если узел содержит реплики State Storage, Board или SchemeBoard, включите [Self Heal State Storage](../../../maintenance/manual/selfheal_statestorage.md#on-off). Как альтернативу можно перенести эти реплики с узла вручную, см. [{#T}](state-storage-reconfiguration.md).
 
 Чтобы удалить статический узел:
 

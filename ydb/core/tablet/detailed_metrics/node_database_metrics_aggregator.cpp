@@ -9,17 +9,19 @@
 #include <util/string/cast.h>
 #include <util/system/mutex.h>
 
-namespace NKikimr {
+#include <tuple>
 
-namespace {
+namespace NKikimr {
 
 /**
  * Process-wide as there's only two TCA per node: leader and follower. Finer granularity will not buy anything.
  */
-TMutex& Lock() {
+TMutex& DetailedMetricsLock() {
     static TMutex lock;
     return lock;
 }
+
+namespace {
 
 // Labels of the detailed metrics counter tree
 const TString DATABASE_LABEL = "database";
@@ -219,7 +221,7 @@ public:
         const TTabletCountersBase& appCounters,
         TInstant now
     ) override {
-        TGuard<TMutex> guard(Lock());
+        TGuard<TMutex> guard(DetailedMetricsLock());
 
         CheckSingleRole(followerId);
 
@@ -242,6 +244,8 @@ public:
             TabletToTableMap.erase(mapIt);
             mapIt = TabletToTableMap.end();
         }
+
+        ReconcileTable(relativePath, table);
 
         if (IsFollowerRole && IsTableLevel(table)) {
             return;
@@ -306,7 +310,7 @@ public:
     }
 
     void ForgetTablet(ui64 tabletId, ui32 followerId) override {
-        TGuard<TMutex> guard(Lock());
+        TGuard<TMutex> guard(DetailedMetricsLock());
 
         const TTabletKey tablet(tabletId, followerId);
 
@@ -325,13 +329,15 @@ public:
     }
 
     /**
-     * Deliberately takes no lock: it only recomputes counter VALUES over state private
-     * to this instance
-     *
-     * This stops being safe once something reads these values concurrently with this
-     * recalculation
+     * Republish every aggregate of the tree, taking DetailedMetricsLock() for the whole
+     * walk. See the lock's own comment for what it does and does not cover.
      */
     void RecalculateAllCounters() override {
+        // The guard is here  for the READER of the published counter VALUES
+        // TAggregatedTabletCounters republishes every HIST(x) by clearing and
+        // refilling it one tablet at a time
+        TGuard<TMutex> guard(DetailedMetricsLock());
+
         for (auto& [_, entry] : Tables) {
             if (entry.TableBucket) {
                 entry.TableBucket->RecalcAll();
@@ -389,6 +395,28 @@ private:
         return entry.PerPartitionGroup;
     }
 
+    void ReconcileTable(const TStringBuf relativePath, const TDetailedMetricsTableInfo& table) {
+        auto it = Tables.find(relativePath);
+        if (it == Tables.end()) {
+            return;
+        }
+
+        const TDetailedMetricsTableInfo& stored = it->second.Info;
+
+        if (table.MetricsLevel != stored.MetricsLevel) {
+            DropTableEntry(it);
+            return;
+        }
+
+        // A table recreated at this path restarts SchemaVersion low, so a plain
+        // SchemaVersion comparison would pin Info to the older, already deleted table
+        // forever. A recreated table always gets a newer PathId, so the identity is
+        // ordered by the PathId first, and only then by SchemaVersion within one PathId.
+        if (std::tie(table.TableId, table.SchemaVersion) > std::tie(stored.TableId, stored.SchemaVersion)) {
+            it->second.Info = table;
+        }
+    }
+
     /**
      * @return The per-table state, or nullptr if the table collects no detailed metrics
      */
@@ -409,12 +437,6 @@ private:
 
             return &it->second;
         }
-
-        // NOTE: Reconciling an existing entry on a schema version or a metrics level
-        //       change is implemented in a separate step (the level and rename step of
-        //       the detailed metrics plan). Until then the level of a table is frozen at
-        //       the very first report, which MetricsLevelChangeIsIgnoredUntilReconciliation
-        //       pins, so that the step has to flip an explicit assertion
 
         // A new entry: this is the one place the key is actually materialized into a
         // TString, once, shared between the map key and the GetSubgroup() call
@@ -442,11 +464,35 @@ private:
         }
 
         if (entry.IsEmpty()) {
-            Tables.erase(it);
+            EraseTableEntry(it);
+        }
+    }
 
-            if (Tables.empty()) {
-                DatabaseGroup.Reset();
-            }
+    void DropTableEntry(THashMap<TString, TTableEntry>::iterator it) {
+        auto& entry = it->second;
+
+        TVector<TTabletKey> tablets;
+        tablets.reserve(entry.Leaves.size());
+        for (const auto& [tablet, _] : entry.Leaves) {
+            tablets.push_back(tablet);
+        }
+
+        for (const auto& tablet : tablets) {
+            ForgetLeaf(it->first, entry, tablet);
+        }
+
+        DropTableBucket(it->first, entry);
+
+        Y_DEBUG_ABORT_UNLESS(entry.IsEmpty());
+
+        EraseTableEntry(it);
+    }
+
+    void EraseTableEntry(THashMap<TString, TTableEntry>::iterator it) {
+        Tables.erase(it);
+
+        if (Tables.empty()) {
+            DatabaseGroup.Reset();
         }
     }
 
@@ -460,12 +506,18 @@ private:
 
         bucket->Forget(tablet);
 
-        if (!bucket->IsEmpty()) {
+        if (bucket->IsEmpty()) {
+            DropTableBucket(relativePath, entry);
+        }
+    }
+
+    void DropTableBucket(const TString& relativePath, TTableEntry& entry) {
+        if (!entry.TableBucket) {
             return;
         }
 
         const TTabletTypes::EType tabletType = entry.RegisteredTabletType;
-        bucket.Reset();
+        entry.TableBucket.Reset();
 
         TargetCounterGroup->RemoveSubgroupChain({
             {DATABASE_LABEL, DatabasePath},

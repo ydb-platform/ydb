@@ -615,6 +615,7 @@ public:
             .EnableColumnStatistics = AppData()->FeatureFlags.GetEnableColumnStatistics(),
             .EnableGeneratedStored = AppData()->FeatureFlags.GetEnableGeneratedStored(),
             .EnableGeneratedVirtual = AppData()->FeatureFlags.GetEnableGeneratedVirtual(),
+            .EnableDefaultFromExpression = AppData()->FeatureFlags.GetEnableDefaultFromExpression(),
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(
             nullptr,

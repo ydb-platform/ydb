@@ -103,9 +103,16 @@ message TColumnCompression {
 }
 
 message TDefaultExpressionColumnDescription {
+    enum EKind {
+        GENERATED_STORED = 0;
+        GENERATED_VIRTUAL = 1;
+        DEFAULT = 2;
+    }
+
     optional string ExprText = 1;
-    repeated string DependencyColumnNames = 2;
-    optional bool Stored = 3 [default = false];
+    optional string Context = 2;
+    repeated string DependencyColumnNames = 3; // Always empty for Kind == DEFAULT
+    optional EKind Kind = 4;
 }
 
 message TColumnDescription {

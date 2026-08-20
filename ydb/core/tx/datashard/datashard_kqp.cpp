@@ -524,6 +524,9 @@ void KqpFillTxStats(TDataShard& dataShard, const NMiniKQL::TEngineHostCounters& 
         perTable.MutableEraseRow()->SetRows(counters.NEraseRow);
         perTable.MutableEraseRow()->SetBytes(counters.EraseRowBytes);
     }
+    if (counters.NAffectedRows) {
+        perTable.SetAffectedRows(counters.NAffectedRows);
+    }
 }
 
 }  // namespace NDataShard

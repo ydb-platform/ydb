@@ -137,6 +137,7 @@ private:
     YDB_READONLY_DEF(bool, MvccSnapshotRead);
     YDB_READONLY_DEF(std::optional<TRowVersion>, MvccSnapshot);
     YDB_READONLY(TDataShardUserDb::ELockMode, LockMode, TDataShardUserDb::ELockMode::Optimistic);
+    YDB_READONLY_DEF(bool, CollectAffectedRows);
 
     YDB_READONLY_DEF(ui64, TxSize);
 

@@ -85,7 +85,13 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
         return;
     }
 
-    AFL_VERIFY(!PendingConfigNotification);
+    if (PendingConfigNotification) {
+        YDB_LOG_INFO("",
+            {"name", ConveyorName},
+            {"action", "composite_conveyor_config_update_queued"});
+        QueuedConfigNotification = std::move(ev);
+        return;
+    }
     PendingConfigNotification = std::move(ev);
     if (Manager->StartConfigUpdate(desiredConfig, SelfId(), Counters)) {
         CompleteConfigUpdate();
@@ -101,6 +107,13 @@ void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfig
 void TDistributor::CompleteConfigUpdate() {
     AFL_VERIFY(PendingConfigNotification);
     AFL_VERIFY(!Manager->HasWorkersUpdateInProgress());
+
+    if (QueuedConfigNotification) {
+        PendingConfigNotification.Reset();
+        auto queuedConfigNotification = std::move(QueuedConfigNotification);
+        HandleMain(queuedConfigNotification);
+        return;
+    }
 
     ReplyConfigNotification(PendingConfigNotification);
     PendingConfigNotification.Reset();

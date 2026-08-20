@@ -418,6 +418,23 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
         // (the gen-5 keep and the gen-6 delete) as dropped.
         UNIT_ASSERT_VALUES_EQUAL(gcLogic.TakeSentinelDroppedMarks(), 2u);
     }
+
+    Y_UNIT_TEST(HistoryCuttingUnsoundForExternalBlobWriters) {
+        // The seen-generations criterion only covers executor-written blobs; a tablet
+        // whose channels also hold externally-written blobs (ColumnShard portions via
+        // TBlobManager) must not be cut by the executor at all. Observed live: entries
+        // cut under external blobs leave GroupFor() resolving to Max<ui32> and GC
+        // retrying an invalid group until the tablet is unusable.
+        auto makeInfo = [](TTabletTypes::EType type) {
+            auto info = MakeIntrusive<TTabletStorageInfo>();
+            info->TabletID = 1;
+            info->TabletType = type;
+            return info;
+        };
+        UNIT_ASSERT(!NTabletFlatExecutor::TExecutorGCLogic::IsHistoryCuttingSound(*makeInfo(TTabletTypes::ColumnShard)));
+        UNIT_ASSERT(NTabletFlatExecutor::TExecutorGCLogic::IsHistoryCuttingSound(*makeInfo(TTabletTypes::DataShard)));
+        UNIT_ASSERT(NTabletFlatExecutor::TExecutorGCLogic::IsHistoryCuttingSound(*makeInfo(TTabletTypes::KeyValue)));
+    }
 }
 
 }

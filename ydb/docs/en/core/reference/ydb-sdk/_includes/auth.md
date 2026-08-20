@@ -17,6 +17,16 @@ You can click any of the methods below to go to the source code of an example in
 
 {% list tabs %}
 
+- C++
+
+  | Mode | Method |
+  | ----- | ----- |
+  | Anonymous | `NYdb::CreateInsecureCredentialsProviderFactory()` |
+  | Access Token | `NYdb::CreateOAuthCredentialsProviderFactory(token)` |
+  | Static Credentials | `NYdb::CreateLoginCredentialsProviderFactory(params)` |
+  | OAuth 2.0 token exchange | `NYdb::CreateOauth2TokenExchangeCredentialsProviderFactory(params)` |
+  | OIDC/OAuth | `NYdb::CreateOidcCredentialsProviderFactory(config)`; see the [console-parameter](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/examples/auth/oidc/console_params/main.cpp) and [file-configuration](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/examples/auth/oidc/file_config/main.cpp) examples. Supports Static, Client Credentials, and Device Authorization flows. |
+
 - Python
 
   | Mode | Method |

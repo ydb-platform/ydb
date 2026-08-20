@@ -101,6 +101,7 @@ Y_UNIT_TEST_SUITE(CompletionData) {
         settings.UseStaticCredentials = false;
         settings.MentionUserAccount = false;
         settings.UseOauth2TokenExchange = false;
+        settings.UseOidcAuth = false;
         settings.YdbDir = "ydb";
 
         TClientCommandRootCommon root("ydb", settings);

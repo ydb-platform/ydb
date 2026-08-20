@@ -1,0 +1,1 @@
+- Otherwise, if `YDB_OIDC_CONFIG` is set, OIDC/OAuth authentication is used and its value is interpreted as the path to the OIDC YAML configuration file.

@@ -39,6 +39,7 @@ int NewInternalClient(int argc, char** argv) {
     settings.UseIamAuth = true;
     settings.UseStaticCredentials = true;
     settings.UseOauth2TokenExchange = true;
+    settings.UseOidcAuth = true;
     settings.UseExportToYt = false;
     settings.MentionUserAccount = false;
     settings.YdbDir = "ydb";

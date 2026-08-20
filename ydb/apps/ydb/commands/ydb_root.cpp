@@ -2,6 +2,7 @@
 #include "ydb_update.h"
 #include "ydb_version.h"
 
+#include <ydb/public/lib/ydb_cli/common/oidc.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_path_completer.h>
 #include <ydb/public/lib/ydb_cli/common/ydb_updater.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
@@ -40,6 +41,9 @@ void TClientCommandRoot::SetCredentialsGetter(TConfig& config) {
                 return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
             }
         }
+            if (config.UseOidcAuth && config.OidcConfigFile) {
+                return CreateOidcCredentialsProviderFactory(ReadOidcConfig(config.OidcConfigFile));
+            }
         if (config.UseIamAuth) {
             if (config.YCToken) {
                 return CreateIamOAuthCredentialsProviderFactory(
@@ -111,6 +115,7 @@ int NewYdbClient(int argc, char** argv) {
     settings.UseIamAuth = true;
     settings.UseStaticCredentials = true;
     settings.UseOauth2TokenExchange = true;
+        settings.UseOidcAuth = true;
     settings.UseExportToYt = false;
     settings.MentionUserAccount = false;
     settings.StorageUrl = "https://storage.yandexcloud.net/yandexcloud-ydb/release";

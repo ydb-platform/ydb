@@ -1511,4 +1511,71 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         );
         UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "oauth2-key-file: " << oauth2KeyFile << Endl);
     }
+
+    Y_UNIT_TEST_F(OidcConfig, TCliTestFixture) {
+        const TString oidcConfig = EnvFile(R"yaml(
+issuer: https://idp.example
+static_credentials:
+  access_token: oidc-static-token
+)yaml", "oidc_config.yaml");
+
+        ExpectToken("Bearer oidc-static-token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--oidc-config", oidcConfig,
+                "scheme", "ls",
+            },
+            {}
+        );
+
+        ExpectToken("Bearer oidc-static-token");
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "scheme", "ls",
+            },
+            {
+                {"YDB_OIDC_CONFIG", oidcConfig},
+            }
+        );
+
+        TString profile = fmt::format(R"yaml(
+        profiles:
+            active_test_profile:
+                endpoint: {endpoint}
+                database: {database}
+                authentication:
+                    method: oidc-config
+                    data: {oidc_config}
+        active_profile: active_test_profile
+        )yaml",
+        "endpoint"_a = GetEndpoint(),
+        "database"_a = GetDatabase(),
+        "oidc_config"_a = oidcConfig
+        );
+
+        ExpectToken("Bearer oidc-static-token");
+        RunCli(
+            {
+                "-v",
+                "scheme", "ls",
+            },
+            {},
+            profile
+        );
+
+        TString output = RunCli(
+            {
+                "config", "info",
+            },
+            {},
+            profile
+        );
+        UNIT_ASSERT_STRING_CONTAINS(output, TStringBuilder() << "oidc-config: " << oidcConfig << Endl);
+    }
 }

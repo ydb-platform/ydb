@@ -36,6 +36,8 @@ struct TClientSettings {
     TMaybe<bool> UseStaticCredentials;
     // Whether to use OAuth 2.0 token exchange credentials or not
     TMaybe<bool> UseOauth2TokenExchange;
+    // Whether to use OIDC/OAuth credentials or not
+    TMaybe<bool> UseOidcAuth;
     // Whether to use export to YT command or not
     TMaybe<bool> UseExportToYt;
     // Whether to mention user account in --help command or not

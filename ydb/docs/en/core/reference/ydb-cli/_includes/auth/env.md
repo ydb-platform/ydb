@@ -5,3 +5,5 @@
 {% include [env_static.md](env_static.md) %}
 
 {% include [env_oauth2.md](env_oauth2.md) %}
+
+{% include [env_oidc.md](env_oidc.md) %}

@@ -27,6 +27,7 @@ SRCS(
     local_paths.cpp
     markdown.cpp
     normalize_path.cpp
+    oidc.cpp
     parameter_stream.cpp
     parameters.cpp
     pg_dump_parser.cpp
@@ -64,6 +65,7 @@ PEERDIR(
     contrib/restricted/patched/replxx
     library/cpp/getopt
     library/cpp/http/simple
+    library/cpp/json
     library/cpp/json/writer
     library/cpp/logger
     library/cpp/regex/pcre
@@ -84,6 +86,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types
     ydb/public/sdk/cpp/src/client/types/credentials
     ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange
+    ydb/public/sdk/cpp/src/client/types/credentials/oidc
     ydb/public/sdk/cpp/src/client/types/status
     ydb/library/arrow_parquet
     ydb/library/plan2svg

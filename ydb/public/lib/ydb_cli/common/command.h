@@ -142,6 +142,8 @@ public:
         bool UsePerChannelTcpConnection = false;
         TString Oauth2KeyFile;
         TString Oauth2KeyParams;
+        TString OidcConfigFile;
+        TString OidcConfigParams;
 
         ui32 VerbosityLevel = 0;
         size_t HelpCommandVerbosityLevel = 1; // No options -h or one - 1, -hh - 2, -hhh - 3 etc
@@ -170,6 +172,7 @@ public:
         bool UseIamAuth = false;
         bool UseStaticCredentials = false;
         bool UseOauth2TokenExchange = false;
+        bool UseOidcAuth = false;
         bool UseExportToYt = true;
         // Whether a command needs a connection to YDB
         bool NeedToConnect = true;

@@ -78,6 +78,7 @@ int NewTestClient(int argc, char** argv) {
     settings.UseStaticCredentials = true;
     settings.UseExportToYt = true;
     settings.UseOauth2TokenExchange = true;
+    settings.UseOidcAuth = true;
     settings.MentionUserAccount = true;
     settings.EnableAiInteractive = true;
     settings.YdbDir = ".ydb";

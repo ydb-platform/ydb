@@ -1,3 +1,5 @@
+* Added OIDC/OAuth credentials providers for static tokens, Client Credentials Grant, and Device Authorization Grant, including token refresh, caching interfaces, and interactive authorization callbacks.
+
 * Fixed query parameters with incomplete types being sent to the server; the parameter builder now reports the error locally.
 
 ## v3.21.1

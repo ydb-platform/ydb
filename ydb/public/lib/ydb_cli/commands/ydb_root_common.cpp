@@ -24,6 +24,7 @@
 #include <ydb/public/lib/ydb_cli/common/cert_format_converter.h>
 #include <ydb/public/lib/ydb_cli/common/colors.h>
 #include <ydb/public/lib/ydb_cli/common/log.h>
+#include <ydb/public/lib/ydb_cli/common/oidc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
@@ -291,6 +292,8 @@ void TClientCommandRootCommon::ValidateSettings() {
         Cerr << "Missing user account mentioning flag in client settings" << Endl;
     } else if (!Settings.UseOauth2TokenExchange.Defined()) {
         Cerr << "Missing OAuth 2.0 token exchange credentials usage flag in client settings" << Endl;
+    } else if (!Settings.UseOidcAuth.Defined()) {
+        Cerr << "Missing OIDC credentials usage flag in client settings" << Endl;
     } else if (!Settings.YdbDir) {
         Cerr << "Missing YDB directory in client settings" << Endl;
     } else {
@@ -304,6 +307,7 @@ void TClientCommandRootCommon::FillConfig(TConfig& config) {
     config.UseIamAuth = Settings.UseIamAuth.GetRef();
     config.UseStaticCredentials = Settings.UseStaticCredentials.GetRef();
     config.UseOauth2TokenExchange = Settings.UseOauth2TokenExchange.GetRef();
+    config.UseOidcAuth = Settings.UseOidcAuth.GetRef();
     config.UseExportToYt = Settings.UseExportToYt.GetRef();
     config.StorageUrl = Settings.StorageUrl;
     config.UsageInfoGetter = [this, config](const std::vector<TString>& commands) {
@@ -340,6 +344,10 @@ void TClientCommandRootCommon::SetCredentialsGetter(TConfig& config) {
             if (config.Oauth2KeyFile) {
                 return CreateOauth2TokenExchangeFileCredentialsProviderFactory(config.Oauth2KeyFile, config.IamEndpoint);
             }
+        }
+
+        if (config.UseOidcAuth && config.OidcConfigFile) {
+            return CreateOidcCredentialsProviderFactory(ReadOidcConfig(config.OidcConfigFile));
         }
 
         return CreateInsecureCredentialsProviderFactory();
@@ -416,6 +424,7 @@ void TClientCommandRootCommon::Config(TConfig& config) {
     TAuthMethodOption* ydbTokenAuth = nullptr;
     TAuthMethodOption* ydbUserAuth = nullptr;
     TAuthMethodOption* oauth2TokenExchangeAuth = nullptr;
+    TAuthMethodOption* oidcAuth = nullptr;
 
     if (config.UseIamAuth) {
         const TString docsUrl = "cloud.yandex.ru/docs";
@@ -634,6 +643,19 @@ void TClientCommandRootCommon::Config(TConfig& config) {
 #undef FIELD
     }
 
+    if (config.UseOidcAuth) {
+        oidcAuth = &opts.AddAuthMethodOption("oidc-config", "OIDC/OAuth credentials YAML file");
+        (*oidcAuth)
+            .AuthMethod("oidc-config")
+            .SimpleProfileDataParam("oidc-config", true)
+            .LogToConnectionParams("oidc-config")
+            .Env("YDB_OIDC_CONFIG", true, "OIDC config file")
+            .RequiredArgument("PATH")
+            .FileName("OIDC config file")
+            .StoreFilePath(&config.OidcConfigFile)
+            .StoreResult(&config.OidcConfigParams);
+    }
+
     if (config.UseIamAuth) {
         opts.AddLongOption("iam-endpoint", "Endpoint of IAM service")
             .RequiredArgument("STR")
@@ -657,7 +679,8 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         saKeyAuth,
         ydbTokenAuth,
         ydbUserAuth,
-        oauth2TokenExchangeAuth
+        oauth2TokenExchangeAuth,
+        oidcAuth
     );
 
     const TString programName(config.ArgC > 0 ? config.ArgV[0] : GetExecPath().data());

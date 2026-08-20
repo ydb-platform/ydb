@@ -184,7 +184,7 @@ namespace {
     }
 
     std::string TryBlurValue(const TString& authMethod, const TString& value) {
-        if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file" || authMethod == "oauth2-key-file") {
+        if (!IsStdoutInteractive() || authMethod == "sa-key-file" || authMethod == "token-file" || authMethod == "yc-token-file" || authMethod == "oauth2-key-file" || authMethod == "oidc-config") {
             return value;
         }
         if (authMethod == "password") {
@@ -204,7 +204,7 @@ namespace {
             auto authValue = profile->GetValue(AuthNode);
             TString authMethod = authValue["method"].as<TString>();
             Cout << "  " << authMethod;
-            if (authMethod == "ydb-token" || authMethod == "oauth2-key-file" || authMethod == "iam-token"
+            if (authMethod == "ydb-token" || authMethod == "oauth2-key-file" || authMethod == "oidc-config" || authMethod == "iam-token"
                 || authMethod == "yc-token" || authMethod == "sa-key-file"
                 || authMethod == "token-file" || authMethod == "yc-token-file") {
                 Cout << ": " << TryBlurValue(authMethod, authValue["data"].as<TString>());
@@ -275,6 +275,9 @@ void TCommandConnectionInfo::PrintInfo(TConfig& config) {
         if (config.Oauth2KeyFile) {
             Cout << "oauth2-key-file: " << config.Oauth2KeyFile << Endl;
         }
+    }
+    if (config.UseOidcAuth && config.OidcConfigFile) {
+        Cout << "oidc-config: " << config.OidcConfigFile << Endl;
     }
     if (config.UseIamAuth) {
         if (config.YCToken) {
@@ -384,6 +387,7 @@ void TCommandProfileCommon::GetOptionsFromStdin() {
         {"database", Database},
         {"token-file", TokenFile},
         {"oauth2-key-file", Oauth2KeyFile},
+        {"oidc-config", OidcConfigFile},
         {"yc-token-file", YcTokenFile},
         {"iam-token-file", IamTokenFile},
         {"sa-key-file", SaKeyFile},
@@ -565,6 +569,13 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
             SetAuthMethod("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file", profile, profileName, /* hideInput */ false);
         });
 
+        if (config.UseOidcAuth) {
+            options.push_back("Use OIDC/OAuth credentials\t(oidc-config)");
+            actions.push_back([&profile, &profileName]() {
+                SetAuthMethod("oidc-config", "OIDC/OAuth credentials YAML file", profile, profileName, /* hideInput */ false);
+            });
+        }
+
         options.push_back("Use metadata service on a virtual machine\t(use-metadata-credentials) cloud.yandex.ru/docs/compute/operations/vm-connect/auth-inside-vm");
         actions.push_back([&profile, &profileName]() {
             PutAuthMethodWithoutPars(profile, "use-metadata-credentials");
@@ -602,7 +613,7 @@ void TCommandProfileCommon::SetupProfileAuthentication(bool existingProfile, con
             description << "Use current settings\t" << method;
             if (method == "iam-token" || method == "yc-token" || method == "ydb-token") {
                 description << ": " << BlurSecret(authValue["data"].as<TString>());
-            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file" || method == "oauth2-key-file") {
+            } else if (method == "sa-key-file" || method == "token-file" || method == "yc-token-file" || method == "oauth2-key-file" || method == "oidc-config") {
                 description << ": " << authValue["data"].as<TString>();
             }
             options.push_back(description);
@@ -627,6 +638,8 @@ bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> pro
         PutAuthMethod(profile, "token-file", TokenFile);
     } else if (Oauth2KeyFile) {
         PutAuthMethod(profile, "oauth2-key-file", Oauth2KeyFile);
+    } else if (OidcConfigFile) {
+        PutAuthMethod(profile, "oidc-config", OidcConfigFile);
     } else if (IamTokenFile) {
         // no error here, we take the iam-token-file option as just a token-file authentication
         PutAuthMethod(profile, "token-file", IamTokenFile);
@@ -648,7 +661,7 @@ bool TCommandProfileCommon::SetAuthFromCommandLine(std::shared_ptr<IProfile> pro
 
 void TCommandProfileCommon::ValidateAuth() {
     size_t authMethodCount =
-            (bool) (TokenFile) + (bool) (Oauth2KeyFile) +
+            (bool) (TokenFile) + (bool) (Oauth2KeyFile) + (bool) (OidcConfigFile) +
             (bool) (IamTokenFile) +
             (bool) (YcTokenFile) + UseMetadataCredentials +
             (bool) (SaKeyFile) + AnonymousAuth +
@@ -666,6 +679,9 @@ void TCommandProfileCommon::ValidateAuth() {
         }
         if (Oauth2KeyFile) {
             str << " OAuth2KeyFile (" << Oauth2KeyFile << ")";
+        }
+        if (OidcConfigFile) {
+            str << " OidcConfigFile (" << OidcConfigFile << ")";
         }
         if (IamTokenFile) {
             str << " IamTokenFile (" << IamTokenFile << ")";
@@ -694,7 +710,7 @@ void TCommandProfileCommon::ValidateAuth() {
 }
 
 bool TCommandProfileCommon::AnyProfileOptionInCommandLine() {
-    return Endpoint || Database || TokenFile || Oauth2KeyFile ||
+    return Endpoint || Database || TokenFile || Oauth2KeyFile || OidcConfigFile ||
            IamTokenFile || YcTokenFile ||
            SaKeyFile || UseMetadataCredentials || User ||
            PasswordFile || IamEndpoint || AnonymousAuth || CaCertsFile ||
@@ -718,6 +734,9 @@ void TCommandProfileCommon::Config(TConfig& config) {
     opts.AddLongOption("token-file", "Access token file").RequiredArgument("PATH").StoreResult(&TokenFile);
     if (config.UseOauth2TokenExchange) {
         opts.AddLongOption("oauth2-key-file", "OAuth 2.0 RFC8693 token exchange credentials parameters json file").RequiredArgument("PATH").StoreResult(&Oauth2KeyFile);
+    }
+    if (config.UseOidcAuth) {
+        opts.AddLongOption("oidc-config", "OIDC/OAuth credentials YAML file").RequiredArgument("PATH").StoreResult(&OidcConfigFile);
     }
     opts.AddLongOption("iam-token-file", "Access token file").RequiredArgument("PATH").Hidden().StoreResult(&IamTokenFile);
     opts.AddLongOption("anonymous-auth", "Anonymous authentication").Optional().StoreTrue(&AnonymousAuth);

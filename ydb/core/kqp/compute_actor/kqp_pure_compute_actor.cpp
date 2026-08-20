@@ -44,6 +44,10 @@ TKqpComputeActor::TKqpComputeActor(
     }
 }
 
+TKqpComputeActor::~TKqpComputeActor() {
+    FreeComputeCtxData();
+}
+
 void TKqpComputeActor::DoBootstrap() {
     const TActorSystem* actorSystem = TlsActivationContext->ActorSystem();
 
@@ -273,11 +277,10 @@ void TKqpComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool 
     }
 }
 
-void TKqpComputeActor::PassAway() {
-    if (SysViewActorId) {
-        Send(SysViewActorId, new TEvents::TEvPoison);
-    }
-
+void TKqpComputeActor::FreeComputeCtxData() {
+    // Clear must run under the MKQL allocator. Prefer TaskRunner's bind (same path as
+    // AddData); if TaskRunner is already gone (e.g. destructor after a partial
+    // Terminate), fall back to the actor Alloc so RowBatches never leak into ~TRowBatchReader.
     if (TaskRunner) {
         if (TaskRunner->IsAllocatorAttached()) {
             ComputeCtx.Clear();
@@ -285,9 +288,26 @@ void TKqpComputeActor::PassAway() {
             auto guard = TaskRunner->BindAllocator(GetMkqlMemoryLimit());
             ComputeCtx.Clear();
         }
+    } else if (!ComputeCtx.GetTableScans().empty()) {
+        auto guard = BindAllocator();
+        ComputeCtx.Clear();
+    }
+    ScanData = nullptr;
+}
+
+//! Must run before TDqSyncComputeActorBase::DoTerminateImpl resets TaskRunner:
+//! PassAway is too late — RowBatches would then be destroyed without Clear().
+void TKqpComputeActor::DoTerminateImpl() {
+    LogWasmResidentStringStats();
+    FreeComputeCtxData();
+    TBase::DoTerminateImpl();
+}
+
+void TKqpComputeActor::PassAway() {
+    if (SysViewActorId) {
+        Send(SysViewActorId, new TEvents::TEvPoison);
     }
 
-    LogWasmResidentStringStats();
     WasmQueryCompartment_.reset();
     TBase::PassAway();
 }

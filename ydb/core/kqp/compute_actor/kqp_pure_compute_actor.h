@@ -39,6 +39,8 @@ public:
         const TString& database
     );
 
+    ~TKqpComputeActor();
+
     void DoBootstrap();
 
     STFUNC(StateFunc);
@@ -58,7 +60,10 @@ public:
 private:
     void PassAway() override;
 
-private:
+    void DoTerminateImpl() override;
+
+    void FreeComputeCtxData();
+
     void HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev);
 
     void HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev);

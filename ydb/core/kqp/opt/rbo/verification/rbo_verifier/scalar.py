@@ -176,12 +176,12 @@ class Encoder:
             assert expression.result_type is not None
             return self.null(expression.result_type)
 
-        if expression.kind == "window_sum":
+        if expression.kind in {"window_sum", "window_avg"}:
             try:
                 return relational_values[expression]
             except KeyError as error:
                 raise AssertionError(
-                    "window_sum requires its enclosing Project relation"
+                    f"{expression.kind} requires its enclosing Project relation"
                 ) from error
 
         if expression.kind == "not":
@@ -307,6 +307,19 @@ class Encoder:
                 expression.result_type,
                 operand_is_null,
                 _wrap_integer(raw, expression.result_type),
+            )
+
+        if expression.kind == "decimal_abs":
+            assert expression.result_type is not None
+            argument = self._evaluate(
+                expression.args[0], row, bindings, relational_values
+            )
+            assert argument.type == expression.result_type
+            return Value(
+                expression.result_type,
+                argument.is_null,
+                decimal.absolute(argument.value),
+                argument.decimal_finite_abs_bound,
             )
 
         if expression.kind == "cast_decimal":

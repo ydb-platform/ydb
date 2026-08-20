@@ -218,6 +218,17 @@ def subtract(left: smt.Term, right: smt.Term, result_type: str) -> smt.Term:
     return _add_or_subtract("sub", left, right, result_type)
 
 
+def absolute(value: smt.Term) -> smt.Term:
+    """Exact MiniKQL Decimal Abs over the signed 128-bit value code.
+
+    The builtin negates precisely the negative raw codes.  Consequently finite
+    negatives and ``-Inf`` become positive, while ``+Inf`` and the positive NaN
+    sentinel pass through unchanged.
+    """
+
+    return smt.ite(smt.lt(value, smt.ZERO), smt.sub(smt.ZERO, value), value)
+
+
 def cast_integral(value: smt.Term, source_type: str, result_type: str) -> smt.Term:
     """Exactly cast a non-NULL YQL integer to ``Decimal(p,s)``.
 

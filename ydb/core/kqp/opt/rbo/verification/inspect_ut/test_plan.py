@@ -49,11 +49,23 @@ class ExpressionRendererTest(unittest.TestCase):
                 ir.Expr(
                     kind="window_sum",
                     window_input="group_total",
-                    partition_by="i_class",
+                    partition_by=("i_class",),
                     result_type="Decimal(35,2)",
                     nullable=True,
                 ),
                 'window_sum(input="group_total", partition_by="i_class", '
+                'type="Decimal(35,2)", nullable=true)',
+            ),
+            (
+                ir.Expr(
+                    kind="window_avg",
+                    window_input="group_total",
+                    partition_by=("i_category", "i_brand"),
+                    result_type="Decimal(35,2)",
+                    nullable=True,
+                ),
+                'window_avg(input="group_total", '
+                'partition_by=["i_category", "i_brand"], '
                 'type="Decimal(35,2)", nullable=true)',
             ),
             (
@@ -142,6 +154,16 @@ class ExpressionRendererTest(unittest.TestCase):
             ),
             (
                 ir.Expr(
+                    kind="decimal_abs",
+                    args=(_column(),),
+                    result_type="Decimal(35,2)",
+                    nullable=True,
+                ),
+                'decimal_abs(arg=column("x"), '
+                'type="Decimal(35,2)", nullable=true)',
+            ),
+            (
+                ir.Expr(
                     kind="if",
                     args=(
                         _column("condition"),
@@ -202,6 +224,26 @@ class ExpressionRendererTest(unittest.TestCase):
     def test_unknown_or_malformed_expression_fails_closed(self):
         with self.assertRaisesRegex(InspectionError, "unknown expression kind"):
             render_expression(ir.Expr(kind="future"))
+        with self.assertRaisesRegex(InspectionError, "exactly one partition"):
+            render_expression(
+                ir.Expr(
+                    kind="window_sum",
+                    window_input="x",
+                    partition_by="x",  # type: ignore[arg-type]
+                    result_type="Decimal(35,2)",
+                    nullable=True,
+                )
+            )
+        with self.assertRaisesRegex(InspectionError, "between one and four"):
+            render_expression(
+                ir.Expr(
+                    kind="window_avg",
+                    window_input="x",
+                    partition_by=("x", "x"),
+                    result_type="Decimal(35,2)",
+                    nullable=True,
+                )
+            )
         with self.assertRaisesRegex(InspectionError, "exactly two arguments"):
             render_expression(ir.Expr(kind="eq", args=(_literal(),)))
         with self.assertRaisesRegex(InspectionError, "between 1 and 512 items"):

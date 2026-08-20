@@ -3436,6 +3436,194 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         }
     }
 
+    Y_UNIT_TEST(RealHostCapturesExactTpcdsWholePartitionWindowAvgs) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateTpcdsColumnTables(kikimr);
+
+        struct TCase {
+            ui32 Query;
+            TVector<TString> InitialPartitionBy;
+            TVector<TString> FinalPartitionBy;
+            TVector<size_t> AggregateKeyIndices;
+            TString PartitionType;
+        };
+        const TCase cases[] = {
+            {
+                53,
+                {"/Root/test/ds/item.i_manufact_id"},
+                {"i_manufact_id"},
+                {0},
+                "Int64",
+            },
+            {
+                63,
+                {"/Root/test/ds/item.i_manager_id"},
+                {"i_manager_id"},
+                {0},
+                "Int64",
+            },
+            {
+                89,
+                {
+                    "/Root/test/ds/item.i_category",
+                    "/Root/test/ds/item.i_brand",
+                    "/Root/test/ds/store.s_store_name",
+                    "/Root/test/ds/store.s_company_name",
+                },
+                {
+                    "i_category",
+                    "i_brand",
+                    "s_store_name",
+                    "s_company_name",
+                },
+                {0, 2, 3, 4},
+                "String",
+            },
+        };
+
+        for (const auto& test : cases) {
+            NYql::IModuleResolver::TPtr moduleResolver;
+            UNIT_ASSERT(
+                NYql::GetYqlDefaultModuleResolverWithContext(moduleResolver));
+
+            auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+            auto host = MakeHost(
+                kikimr.GetTestServer(),
+                std::move(moduleResolver),
+                sink);
+            IKqpHost::TPrepareSettings settings;
+            settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+            const TString query = TpcdsQuery(test.Query);
+            const auto prepared =
+                kikimr.GetTestServer().GetRuntime()->RunCall([
+                    host,
+                    query,
+                    settings
+                ] {
+                    return host->SyncPrepareDataQuery(query, settings);
+                });
+            UNIT_ASSERT(!prepared.Success());
+            UNIT_ASSERT_STRING_CONTAINS(
+                prepared.Issues().ToString(),
+                "YqlAggWin");
+
+            const auto results = sink->Extract();
+            UNIT_ASSERT_VALUES_EQUAL_C(results.size(), 2, test.Query);
+            UNIT_ASSERT(
+                results[0].Boundary ==
+                ERBOSemanticSnapshotBoundaryV1::Initial);
+            UNIT_ASSERT(
+                results[1].Boundary ==
+                ERBOSemanticSnapshotBoundaryV1::Final);
+            const auto initial = ParseSnapshot(results[0]);
+            const auto final = ParseSnapshot(results[1]);
+
+            const auto assertWindow = [&test](
+                const NJson::TJsonValue& snapshot,
+                const TVector<TString>& expectedPartitionBy)
+            {
+                TVector<const NJson::TJsonValue*> windows;
+                CollectExpressions(snapshot, "window_avg", windows);
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    windows.size(),
+                    1,
+                    test.Query);
+                const auto& window = *windows.front();
+                UNIT_ASSERT_VALUES_EQUAL(
+                    window["partition_by"].GetArraySafe().size(),
+                    expectedPartitionBy.size());
+                for (size_t index = 0;
+                     index < expectedPartitionBy.size();
+                     ++index)
+                {
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        window["partition_by"][index].GetStringSafe(),
+                        expectedPartitionBy[index]);
+                }
+                UNIT_ASSERT_VALUES_EQUAL(
+                    window["type"].GetStringSafe(),
+                    "Decimal(35,2)");
+                UNIT_ASSERT(window["nullable"].GetBooleanSafe());
+
+                for (const auto* aggregate :
+                     PlanNodes(snapshot, "aggregate"))
+                {
+                    const auto& keys = (*aggregate)["keys"].GetArraySafe();
+                    UNIT_ASSERT(
+                        keys.size() > test.AggregateKeyIndices.back());
+                    for (size_t index = 0;
+                         index < expectedPartitionBy.size();
+                         ++index)
+                    {
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            keys[test.AggregateKeyIndices[index]]
+                                .GetStringSafe(),
+                            expectedPartitionBy[index]);
+                    }
+                }
+
+                TVector<const NJson::TJsonValue*> absoluteValues;
+                CollectExpressions(snapshot, "decimal_abs", absoluteValues);
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    absoluteValues.size(),
+                    1,
+                    test.Query);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    (*absoluteValues.front())["arg"]["kind"].GetStringSafe(),
+                    "sub");
+            };
+            assertWindow(initial, test.InitialPartitionBy);
+            assertWindow(final, test.FinalPartitionBy);
+
+            for (const auto& partition : test.FinalPartitionBy) {
+                size_t matchingColumns = 0;
+                for (const auto& table :
+                     initial["schema"]["tables"].GetArraySafe())
+                {
+                    for (const auto& column :
+                         table["columns"].GetArraySafe())
+                    {
+                        if (column["name"].GetStringSafe() != partition) {
+                            continue;
+                        }
+                        ++matchingColumns;
+                        UNIT_ASSERT_VALUES_EQUAL(
+                            column["type"].GetStringSafe(),
+                            test.PartitionType);
+                        UNIT_ASSERT(column["nullable"].GetBooleanSafe());
+                    }
+                }
+                UNIT_ASSERT_VALUES_EQUAL_C(
+                    matchingColumns,
+                    1,
+                    partition);
+            }
+
+            bool sawWindowShuffle = false;
+            for (const auto& edge :
+                 final["stage_graph"]["edges"].GetArraySafe())
+            {
+                if (edge["kind"].GetStringSafe() != "hash_shuffle" ||
+                    edge["keys"].GetArraySafe().size() !=
+                        test.FinalPartitionBy.size())
+                {
+                    continue;
+                }
+                bool matches = true;
+                for (size_t index = 0;
+                     index < test.FinalPartitionBy.size();
+                     ++index)
+                {
+                    matches = matches &&
+                        edge["keys"][index].GetStringSafe() ==
+                            test.FinalPartitionBy[index];
+                }
+                sawWindowShuffle = sawWindowShuffle || matches;
+            }
+            UNIT_ASSERT_C(sawWindowShuffle, test.Query);
+        }
+    }
+
     Y_UNIT_TEST(RealHostVerifiesTpcdsQuery96) {
         auto kikimr = MakeTpcdsRunner();
         CreateTpcdsColumnTables(kikimr);

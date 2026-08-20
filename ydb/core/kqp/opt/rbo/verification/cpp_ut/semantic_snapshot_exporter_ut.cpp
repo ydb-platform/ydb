@@ -6225,6 +6225,583 @@ TSemanticSnapshotExportResult ExportWholePartitionWindowSum(
     return ExportSemanticSnapshotV1(root, ctx.RboCtx);
 }
 
+enum class EWholePartitionWindowAvgShape {
+    Int64Key,
+    FourStringKeys,
+};
+
+enum class EWholePartitionWindowAvgMutation {
+    None,
+    DefinitionName,
+    Factory,
+    Options,
+    Frame,
+    Order,
+    NoPartitions,
+    TooManyPartitions,
+    WrongIndex,
+    NoncanonicalIndex,
+    DuplicateIndex,
+    DuplicateName,
+    DescriptorType,
+    ReferenceType,
+    ReferenceName,
+    ContextualOrderedPartition,
+    ResultType,
+    Split,
+    SplitIntermediatePhase,
+    SplitKeyMismatch,
+    SplitStateProducer,
+    SplitStateUse,
+};
+
+struct TWholePartitionWindowKeyFixture {
+    TString Name;
+    NUdf::EDataSlot Slot;
+    ui32 Index;
+};
+
+TExprNode::TPtr WholePartitionWindowAvgDefinition(
+    TExportTestContext& ctx,
+    EWholePartitionWindowAvgShape shape,
+    EWholePartitionWindowAvgMutation mutation)
+{
+    const auto pos = TPositionHandle();
+    TVector<TWholePartitionWindowKeyFixture> keys;
+    if (shape == EWholePartitionWindowAvgShape::Int64Key) {
+        keys.push_back({"a.manager", NUdf::EDataSlot::Int64, 0});
+    } else {
+        keys = {
+            {"a.category", NUdf::EDataSlot::String, 0},
+            {"a.brand", NUdf::EDataSlot::String, 2},
+            {"a.store", NUdf::EDataSlot::String, 3},
+            {"a.company", NUdf::EDataSlot::String, 4},
+        };
+    }
+    if (mutation == EWholePartitionWindowAvgMutation::NoPartitions) {
+        keys.clear();
+    } else if (
+        mutation == EWholePartitionWindowAvgMutation::TooManyPartitions)
+    {
+        keys = {
+            {"a.category", NUdf::EDataSlot::String, 0},
+            {"a.class", NUdf::EDataSlot::String, 1},
+            {"a.brand", NUdf::EDataSlot::String, 2},
+            {"a.store", NUdf::EDataSlot::String, 3},
+            {"a.company", NUdf::EDataSlot::String, 4},
+        };
+    } else if (
+        mutation == EWholePartitionWindowAvgMutation::DuplicateIndex &&
+        keys.size() > 1)
+    {
+        keys[1].Index = keys[0].Index;
+    } else if (
+        mutation == EWholePartitionWindowAvgMutation::DuplicateName &&
+        keys.size() > 1)
+    {
+        keys[1].Name = keys[0].Name;
+    } else if (
+        mutation == EWholePartitionWindowAvgMutation::WrongIndex)
+    {
+        keys[0].Index = 1;
+    }
+
+    TExprNode::TListType groups;
+    groups.reserve(keys.size());
+    for (size_t ordinal = 0; ordinal < keys.size(); ++ordinal) {
+        const auto& key = keys[ordinal];
+        const auto* fieldType = ScalarType(ctx, key.Slot, true);
+        const auto descriptorSlot =
+            mutation == EWholePartitionWindowAvgMutation::DescriptorType &&
+                ordinal == 0
+            ? (key.Slot == NUdf::EDataSlot::String
+                    ? NUdf::EDataSlot::Int64
+                    : NUdf::EDataSlot::String)
+            : key.Slot;
+        const auto referenceSlot =
+            mutation == EWholePartitionWindowAvgMutation::ReferenceType &&
+                ordinal == 0
+            ? (key.Slot == NUdf::EDataSlot::String
+                    ? NUdf::EDataSlot::Int64
+                    : NUdf::EDataSlot::String)
+            : key.Slot;
+        const auto* descriptorDataType = ScalarType(ctx, descriptorSlot);
+        const auto* descriptorOptionalType =
+            ScalarType(ctx, descriptorSlot, true);
+        const auto* referenceDataType = ScalarType(ctx, referenceSlot);
+        const auto* referenceOptionalType =
+            ScalarType(ctx, referenceSlot, true);
+        const TString descriptorTypeName =
+            descriptorSlot == NUdf::EDataSlot::String ? "String" : "Int64";
+        const TString referenceTypeName =
+            referenceSlot == NUdf::EDataSlot::String ? "String" : "Int64";
+        const auto* rowType = ctx.ExprCtx.MakeType<TStructExprType>(
+            TVector<const TItemExprType*>{
+                ctx.ExprCtx.MakeType<TItemExprType>(key.Name, fieldType),
+            });
+
+        auto row = ctx.ExprCtx.NewArgument(pos, "window_row");
+        row->SetTypeAnn(rowType);
+        TExprNode::TPtr body;
+        if (mutation ==
+                EWholePartitionWindowAvgMutation::ContextualOrderedPartition &&
+            ordinal == 0)
+        {
+            body = TypedCallable(
+                ctx,
+                "Member",
+                {
+                    row,
+                    ctx.ExprCtx.NewAtom(pos, key.Name),
+                },
+                fieldType);
+        } else {
+            TString referenceName = key.Name;
+            if (mutation ==
+                    EWholePartitionWindowAvgMutation::ReferenceName &&
+                ordinal == 0)
+            {
+                referenceName = "a.other";
+            }
+            const TString index =
+                mutation ==
+                        EWholePartitionWindowAvgMutation::NoncanonicalIndex &&
+                    ordinal == 0
+                ? TString("00")
+                : ToString(key.Index);
+            body = TypedCallable(
+                ctx,
+                "YqlGroupRef",
+                {
+                    row,
+                    OptionalDataTypeDescriptor(
+                        ctx,
+                        referenceTypeName,
+                        referenceDataType,
+                        referenceOptionalType),
+                    ctx.ExprCtx.NewAtom(pos, index),
+                    ctx.ExprCtx.NewAtom(pos, referenceName),
+                },
+                referenceOptionalType);
+        }
+
+        auto rowDescriptor = TypedCallable(
+            ctx,
+            "StructType",
+            {
+                ctx.ExprCtx.NewList(
+                    pos,
+                    {
+                        ctx.ExprCtx.NewAtom(pos, key.Name),
+                        OptionalDataTypeDescriptor(
+                            ctx,
+                            descriptorTypeName,
+                            descriptorDataType,
+                            descriptorOptionalType),
+                    }),
+            },
+            ctx.ExprCtx.MakeType<TTypeExprType>(rowType));
+        groups.push_back(TypedCallable(
+            ctx,
+            "YqlGroup",
+            {
+                std::move(rowDescriptor),
+                ctx.ExprCtx.NewLambda(
+                    pos,
+                    ctx.ExprCtx.NewArguments(pos, {row}),
+                    std::move(body)),
+            },
+            nullptr));
+    }
+
+    TExprNode::TListType order;
+    if (mutation == EWholePartitionWindowAvgMutation::Order ||
+        mutation ==
+            EWholePartitionWindowAvgMutation::ContextualOrderedPartition)
+    {
+        order.push_back(ctx.ExprCtx.NewAtom(pos, "unsupported"));
+    }
+    const auto frameSetting = [&](TStringBuf name, TStringBuf value) {
+        return ctx.ExprCtx.NewList(
+            pos,
+            {
+                ctx.ExprCtx.NewAtom(pos, name),
+                ctx.ExprCtx.NewAtom(pos, value),
+            });
+    };
+    auto frame = ctx.ExprCtx.NewList(
+        pos,
+        {
+            frameSetting("type", "rows"),
+            frameSetting("from", "up"),
+            frameSetting(
+                "to",
+                mutation == EWholePartitionWindowAvgMutation::Frame
+                    ? TStringBuf("cf")
+                    : TStringBuf("uf")),
+        });
+
+    return TypedCallable(
+        ctx,
+        "YqlWindow",
+        {
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutation ==
+                        EWholePartitionWindowAvgMutation::DefinitionName
+                    ? "_other_window"
+                    : "_window"),
+            ctx.ExprCtx.NewAtom(pos, ""),
+            ctx.ExprCtx.NewList(pos, std::move(groups)),
+            ctx.ExprCtx.NewList(pos, std::move(order)),
+            std::move(frame),
+        },
+        nullptr);
+}
+
+TExpression WholePartitionWindowAvg(
+    TExportTestContext& ctx,
+    EWholePartitionWindowAvgShape shape,
+    EWholePartitionWindowAvgMutation mutation,
+    TStringBuf input)
+{
+    const auto pos = TPositionHandle();
+    const auto* decimalType = DecimalType(ctx, "35", "2");
+    const auto* optionalDecimalType = DecimalType(ctx, "35", "2", true);
+    const bool wrongResultType =
+        mutation == EWholePartitionWindowAvgMutation::ResultType;
+    const auto* windowDecimalType = wrongResultType
+        ? DecimalType(ctx, "34", "2")
+        : decimalType;
+    const auto* optionalWindowDecimalType = wrongResultType
+        ? DecimalType(ctx, "34", "2", true)
+        : optionalDecimalType;
+
+    auto row = ctx.ExprCtx.NewArgument(pos, "row");
+    auto member = TypedCallable(
+        ctx,
+        "Member",
+        {
+            row,
+            ctx.ExprCtx.NewAtom(pos, input),
+        },
+        optionalDecimalType);
+    auto factory = TypedCallable(
+        ctx,
+        "YqlWinFactory",
+        {
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutation == EWholePartitionWindowAvgMutation::Factory
+                    ? "sum"
+                    : "avg"),
+        },
+        ctx.ExprCtx.MakeType<TUnitExprType>());
+    TExprNode::TListType options;
+    if (mutation == EWholePartitionWindowAvgMutation::Options) {
+        options.push_back(ctx.ExprCtx.NewAtom(pos, "distinct"));
+    }
+    auto window = TypedCallable(
+        ctx,
+        "YqlAggWin",
+        {
+            std::move(factory),
+            ctx.ExprCtx.NewAtom(pos, "_window"),
+            ctx.ExprCtx.NewList(pos, std::move(options)),
+            OptionalDecimalDataTypeDescriptor(
+                ctx,
+                wrongResultType ? TStringBuf("34") : TStringBuf("35"),
+                "2",
+                windowDecimalType,
+                optionalWindowDecimalType),
+            std::move(member),
+        },
+        optionalWindowDecimalType);
+    auto lambda = ctx.ExprCtx.NewLambda(
+        pos,
+        ctx.ExprCtx.NewArguments(pos, {row}),
+        std::move(window));
+    return TExpression(
+        std::move(lambda),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps,
+        WholePartitionWindowAvgDefinition(ctx, shape, mutation));
+}
+
+TSemanticSnapshotExportResult ExportWholePartitionWindowAvg(
+    EWholePartitionWindowAvgShape shape,
+    EWholePartitionWindowAvgMutation mutation =
+        EWholePartitionWindowAvgMutation::None)
+{
+    TExportTestContext ctx;
+    const bool four =
+        shape == EWholePartitionWindowAvgShape::FourStringKeys;
+    TVector<TColumnSpec> columns;
+    TVector<TString> readColumns;
+    if (four) {
+        columns = {
+            {"category", "String", false},
+            {"class", "String", false},
+            {"brand", "String", false},
+            {"store", "String", false},
+            {"company", "String", false},
+            {"month", "Int64", false},
+            {"x", "Decimal(35,2)", false},
+        };
+        readColumns = {
+            "category", "class", "brand", "store", "company", "month", "x",
+        };
+    } else {
+        columns = {
+            {"manager", "Int64", false},
+            {"month", "Int64", false},
+            {"x", "Decimal(35,2)", false},
+        };
+        readColumns = {"manager", "month", "x"};
+    }
+    const auto& table = AddTable(ctx, "/Root/WindowAvg", columns);
+    const auto pos = TPositionHandle();
+    const auto* optionalStringType =
+        ScalarType(ctx, NUdf::EDataSlot::String, true);
+    const auto* optionalInt64Type =
+        ScalarType(ctx, NUdf::EDataSlot::Int64, true);
+    const auto* valueType = DecimalType(ctx, "35", "2", true);
+    auto read = MakeRead(ctx, table, "a", readColumns);
+    TVector<std::pair<TString, const TTypeAnnotationNode*>> readOutput;
+    for (const auto& column : readColumns) {
+        const auto* type = column == "x"
+            ? valueType
+            : (column == "month" || column == "manager"
+                    ? optionalInt64Type
+                    : optionalStringType);
+        readOutput.emplace_back(TStringBuilder() << "a." << column, type);
+    }
+    SetExactOutputType(ctx, *read, readOutput);
+
+    TVector<TInfoUnit> keys;
+    if (four) {
+        keys = {
+            TInfoUnit("a.category"),
+            TInfoUnit("a.class"),
+            TInfoUnit("a.brand"),
+            TInfoUnit("a.store"),
+            TInfoUnit("a.company"),
+            TInfoUnit("a.month"),
+        };
+    } else {
+        keys = {TInfoUnit("a.manager"), TInfoUnit("a.month")};
+    }
+
+    const bool split =
+        mutation == EWholePartitionWindowAvgMutation::Split ||
+        mutation ==
+            EWholePartitionWindowAvgMutation::SplitIntermediatePhase ||
+        mutation == EWholePartitionWindowAvgMutation::SplitKeyMismatch ||
+        mutation == EWholePartitionWindowAvgMutation::SplitStateProducer ||
+        mutation == EWholePartitionWindowAvgMutation::SplitStateUse;
+    TIntrusivePtr<TOpAggregate> aggregate;
+    if (split) {
+        auto intermediateKeys = keys;
+        if (mutation ==
+                EWholePartitionWindowAvgMutation::SplitKeyMismatch)
+        {
+            std::reverse(
+                intermediateKeys.begin(),
+                intermediateKeys.end());
+        }
+        auto intermediate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(
+                    TInfoUnit("a.x"), "sum", TInfoUnit("_sum_state")),
+                TOpAggregationTraits(
+                    TInfoUnit("a.x"),
+                    mutation ==
+                            EWholePartitionWindowAvgMutation::SplitStateProducer
+                        ? "max"
+                        : "sum",
+                    TInfoUnit("_window_state")),
+            },
+            intermediateKeys,
+            mutation ==
+                    EWholePartitionWindowAvgMutation::SplitIntermediatePhase
+                ? EOpPhase::Undefined
+                : EOpPhase::Intermediate,
+            false,
+            pos);
+        TVector<std::pair<TString, const TTypeAnnotationNode*>>
+            intermediateOutput;
+        for (const auto& key : intermediateKeys) {
+            const TString name = key.GetFullName();
+            const auto* type = name == "a.month" || name == "a.manager"
+                ? optionalInt64Type
+                : optionalStringType;
+            intermediateOutput.emplace_back(name, type);
+        }
+        intermediateOutput.emplace_back("_sum_state", valueType);
+        intermediateOutput.emplace_back("_window_state", valueType);
+        SetExactOutputType(ctx, *intermediate, intermediateOutput);
+
+        TVector<TOpAggregationTraits> finalTraits{
+            TOpAggregationTraits(
+                TInfoUnit("_sum_state"), "sum", TInfoUnit("sum_sales")),
+            TOpAggregationTraits(
+                TInfoUnit("_window_state"), "sum", TInfoUnit("window_input")),
+        };
+        if (mutation == EWholePartitionWindowAvgMutation::SplitStateUse) {
+            finalTraits.emplace_back(
+                TInfoUnit("_window_state"),
+                "sum",
+                TInfoUnit("other_window_input"));
+        }
+        aggregate = MakeIntrusive<TOpAggregate>(
+            intermediate,
+            std::move(finalTraits),
+            keys,
+            EOpPhase::Final,
+            false,
+            pos);
+    } else {
+        aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(
+                    TInfoUnit("a.x"), "sum", TInfoUnit("sum_sales")),
+                TOpAggregationTraits(
+                    TInfoUnit("a.x"), "sum", TInfoUnit("window_input")),
+            },
+            keys,
+            EOpPhase::Undefined,
+            false,
+            pos);
+    }
+
+    TVector<std::pair<TString, const TTypeAnnotationNode*>> aggregateOutput;
+    for (const auto& key : keys) {
+        const TString name = key.GetFullName();
+        const auto* type = name == "a.month" || name == "a.manager"
+            ? optionalInt64Type
+            : optionalStringType;
+        aggregateOutput.emplace_back(name, type);
+    }
+    aggregateOutput.emplace_back("sum_sales", valueType);
+    aggregateOutput.emplace_back("window_input", valueType);
+    if (mutation == EWholePartitionWindowAvgMutation::SplitStateUse) {
+        aggregateOutput.emplace_back("other_window_input", valueType);
+    }
+    SetExactOutputType(ctx, *aggregate, aggregateOutput);
+
+    auto project = MakeIntrusive<TOpMap>(
+        aggregate,
+        pos,
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit("window_avg"),
+            WholePartitionWindowAvg(
+                ctx,
+                shape,
+                mutation,
+                "window_input"))});
+    auto projectOutput = aggregateOutput;
+    projectOutput.emplace_back("window_avg", valueType);
+    SetExactOutputType(ctx, *project, projectOutput);
+
+    TOpRoot root(project, pos, {"window_avg"});
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
+enum class EDecimalAbsMutation {
+    None,
+    ArgumentType,
+    ResultType,
+    Arity,
+};
+
+TSemanticSnapshotExportResult ExportDecimalAbs(
+    EDecimalAbsMutation mutation = EDecimalAbsMutation::None)
+{
+    TExportTestContext ctx;
+    const auto& table = AddTable(ctx, "/Root/DecimalAbs", {
+        {"x", "Decimal(35,2)", false},
+        {"y", "Decimal(35,2)", false},
+    });
+    const auto pos = TPositionHandle();
+    const auto* optionalDecimalType = DecimalType(ctx, "35", "2", true);
+    const auto* wrongDecimalType = DecimalType(ctx, "34", "2", true);
+    auto read = MakeRead(ctx, table, "a", {"x", "y"});
+    SetExactOutputType(ctx, *read, {
+        {"a.x", optionalDecimalType},
+        {"a.y", optionalDecimalType},
+    });
+
+    auto row = ctx.ExprCtx.NewArgument(pos, "row");
+    const auto member = [&](TStringBuf name) {
+        return TypedCallable(
+            ctx,
+            "Member",
+            {
+                row,
+                ctx.ExprCtx.NewAtom(pos, name),
+            },
+            optionalDecimalType);
+    };
+    auto difference = TypedCallable(
+        ctx,
+        "-",
+        {member("a.x"), member("a.y")},
+        mutation == EDecimalAbsMutation::ArgumentType
+            ? wrongDecimalType
+            : optionalDecimalType);
+    TExprNode::TListType arguments{std::move(difference)};
+    if (mutation == EDecimalAbsMutation::Arity) {
+        arguments.push_back(member("a.x"));
+    }
+    const auto* absType =
+        mutation == EDecimalAbsMutation::ResultType
+            ? wrongDecimalType
+            : optionalDecimalType;
+    auto abs = TypedCallable(
+        ctx,
+        "Abs",
+        std::move(arguments),
+        absType);
+    auto denominator = TypedCallable(
+        ctx,
+        "Member",
+        {
+            row,
+            ctx.ExprCtx.NewAtom(pos, "a.y"),
+        },
+        absType);
+    auto relativeDifference = TypedCallable(
+        ctx,
+        "DecimalDiv",
+        {std::move(abs), std::move(denominator)},
+        absType);
+    TExpression expression(
+        ctx.ExprCtx.NewLambda(
+            pos,
+            ctx.ExprCtx.NewArguments(pos, {row}),
+            std::move(relativeDifference)),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps);
+    auto project = MakeIntrusive<TOpMap>(
+        read,
+        pos,
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit("absolute_difference"),
+            std::move(expression))});
+    SetExactOutputType(ctx, *project, {
+        {"a.x", optionalDecimalType},
+        {"a.y", optionalDecimalType},
+        {
+            "absolute_difference",
+            absType,
+        },
+    });
+    TOpRoot root(project, pos, {"absolute_difference"});
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
         UNIT_ASSERT_VALUES_EQUAL(ExportDeterministicPlan(), ExportDeterministicPlan());
@@ -18648,6 +19225,286 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 test.Reason);
+        }
+    }
+
+    Y_UNIT_TEST(ExportsWholePartitionDecimalWindowAvgWithInt64Partition) {
+        const auto snapshot = ParseSupported(ExportWholePartitionWindowAvg(
+            EWholePartitionWindowAvgShape::Int64Key));
+
+        const auto& aggregate = FindNode(snapshot, "aggregate");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Strings(aggregate["keys"]),
+            (TVector<TString>{"a.manager", "a.month"}));
+        UNIT_ASSERT_VALUES_EQUAL(
+            aggregate["aggregates"].GetArraySafe().size(),
+            2);
+
+        const NJson::TJsonValue* average = nullptr;
+        for (const auto& column :
+             FindNode(snapshot, "project")["columns"].GetArraySafe())
+        {
+            if (column["output"].GetStringSafe() == "window_avg") {
+                average = &column["expression"];
+                break;
+            }
+        }
+        UNIT_ASSERT(average);
+        UNIT_ASSERT_VALUES_EQUAL(average->GetMapSafe().size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*average)["kind"].GetStringSafe(),
+            "window_avg");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*average)["input"].GetStringSafe(),
+            "window_input");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Strings((*average)["partition_by"]),
+            TVector<TString>{"a.manager"});
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*average)["type"].GetStringSafe(),
+            "Decimal(35,2)");
+        UNIT_ASSERT((*average)["nullable"].GetBooleanSafe());
+    }
+
+    Y_UNIT_TEST(ExportsQ89FourKeyWholePartitionDecimalWindowAvg) {
+        const auto snapshot = ParseSupported(ExportWholePartitionWindowAvg(
+            EWholePartitionWindowAvgShape::FourStringKeys));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            Strings(FindNode(snapshot, "aggregate")["keys"]),
+            (TVector<TString>{
+                "a.category",
+                "a.class",
+                "a.brand",
+                "a.store",
+                "a.company",
+                "a.month",
+            }));
+
+        const NJson::TJsonValue* average = nullptr;
+        for (const auto& column :
+             FindNode(snapshot, "project")["columns"].GetArraySafe())
+        {
+            if (column["output"].GetStringSafe() == "window_avg") {
+                average = &column["expression"];
+                break;
+            }
+        }
+        UNIT_ASSERT(average);
+        UNIT_ASSERT_VALUES_EQUAL(
+            Strings((*average)["partition_by"]),
+            (TVector<TString>{
+                "a.category",
+                "a.brand",
+                "a.store",
+                "a.company",
+            }));
+    }
+
+    Y_UNIT_TEST(ExportsSplitWholePartitionDecimalWindowAvg) {
+        const auto snapshot = ParseSupported(ExportWholePartitionWindowAvg(
+            EWholePartitionWindowAvgShape::Int64Key,
+            EWholePartitionWindowAvgMutation::Split));
+
+        TVector<const NJson::TJsonValue*> aggregates;
+        for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+            if (node["op"].GetStringSafe() == "aggregate") {
+                aggregates.push_back(&node);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(aggregates.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*aggregates[0])["phase"].GetStringSafe(),
+            "intermediate");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*aggregates[1])["phase"].GetStringSafe(),
+            "final");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*aggregates[0])["aggregates"].GetArraySafe().size(),
+            2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*aggregates[1])["aggregates"].GetArraySafe().size(),
+            2);
+    }
+
+    Y_UNIT_TEST(WholePartitionDecimalWindowAvgMutationsFailClosed) {
+        struct TCase {
+            EWholePartitionWindowAvgShape Shape;
+            EWholePartitionWindowAvgMutation Mutation;
+            TStringBuf Reason;
+        };
+        const TCase cases[] = {
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::DefinitionName,
+                "definition name does not match",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::Factory,
+                "exact avg YqlWinFactory",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::Options,
+                "does not admit aggregation options",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::Frame,
+                "frame setting value",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::Order,
+                "does not admit window ordering",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::NoPartitions,
+                "between one and four partition expressions",
+            },
+            {
+                EWholePartitionWindowAvgShape::FourStringKeys,
+                EWholePartitionWindowAvgMutation::TooManyPartitions,
+                "between one and four partition expressions",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::WrongIndex,
+                "partition index/name must match",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::NoncanonicalIndex,
+                "noncanonical partition index",
+            },
+            {
+                EWholePartitionWindowAvgShape::FourStringKeys,
+                EWholePartitionWindowAvgMutation::DuplicateIndex,
+                "partition names and indices must be unique",
+            },
+            {
+                EWholePartitionWindowAvgShape::FourStringKeys,
+                EWholePartitionWindowAvgMutation::DuplicateName,
+                "partition names and indices must be unique",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::DescriptorType,
+                "row descriptor annotation disagrees",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::ReferenceType,
+                "partition descriptor type disagrees",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::ReferenceName,
+                "direct named YqlGroupRef",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::ContextualOrderedPartition,
+                "direct named YqlGroupRef",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::ResultType,
+                "Optional<Decimal(35,2)> YqlAggWin",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::SplitIntermediatePhase,
+                "preserve one matching intermediate grouped SUM",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::SplitKeyMismatch,
+                "preserve one matching intermediate grouped SUM",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::SplitStateProducer,
+                "exactly one matching Optional<Decimal(35,2)> intermediate "
+                "SUM state",
+            },
+            {
+                EWholePartitionWindowAvgShape::Int64Key,
+                EWholePartitionWindowAvgMutation::SplitStateUse,
+                "exactly one matching Optional<Decimal(35,2)> intermediate "
+                "SUM state",
+            },
+        };
+
+        for (const auto& test : cases) {
+            const auto result = ExportWholePartitionWindowAvg(
+                test.Shape,
+                test.Mutation);
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder()
+                    << "accepted avg mutation "
+                    << static_cast<ui32>(test.Mutation));
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                test.Reason);
+        }
+    }
+
+    Y_UNIT_TEST(ExportsExactNullableDecimalAbs) {
+        const auto snapshot = ParseSupported(ExportDecimalAbs());
+        const auto& project = FindNode(snapshot, "project");
+        const NJson::TJsonValue* absolute = nullptr;
+        for (const auto& column : project["columns"].GetArraySafe()) {
+            if (column["output"].GetStringSafe() ==
+                "absolute_difference")
+            {
+                absolute = &column["expression"];
+                break;
+            }
+        }
+        UNIT_ASSERT(absolute);
+        UNIT_ASSERT_VALUES_EQUAL((*absolute)["kind"].GetStringSafe(), "div");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*absolute)["type"].GetStringSafe(),
+            "Decimal(35,2)");
+        UNIT_ASSERT((*absolute)["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*absolute)["right"]["column"].GetStringSafe(),
+            "a.y");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*absolute)["left"]["kind"].GetStringSafe(),
+            "decimal_abs");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*absolute)["left"]["type"].GetStringSafe(),
+            "Decimal(35,2)");
+        UNIT_ASSERT((*absolute)["left"]["nullable"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*absolute)["left"]["arg"]["kind"].GetStringSafe(),
+            "sub");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*absolute)["left"]["arg"]["left"]["column"].GetStringSafe(),
+            "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*absolute)["left"]["arg"]["right"]["column"].GetStringSafe(),
+            "a.y");
+    }
+
+    Y_UNIT_TEST(DecimalAbsMutationsFailClosed) {
+        for (const auto mutation : {
+                 EDecimalAbsMutation::ArgumentType,
+                 EDecimalAbsMutation::ResultType,
+                 EDecimalAbsMutation::Arity,
+             })
+        {
+            const auto result = ExportDecimalAbs(mutation);
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                "Decimal Abs requires one Optional<Decimal(35,2)> argument "
+                "and result");
         }
     }
 

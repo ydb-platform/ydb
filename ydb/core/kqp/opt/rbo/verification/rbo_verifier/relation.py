@@ -707,30 +707,35 @@ class Evaluator:
         if isinstance(node, Project):
             source = self._input(node.id, 0, node.input)
             columns = self._columns(node.id)
-            window_sums = tuple(
+            windows = tuple(
                 window
                 for projection in node.columns
-                if (window := _window_sum_expression(projection.expression)) is not None
+                if (
+                    window := _whole_partition_decimal_window_expression(
+                        projection.expression
+                    )
+                )
+                is not None
             )
-            assert len(window_sums) <= 1
-            window_sum = window_sums[0] if window_sums else None
+            assert len(windows) <= 1
+            window = windows[0] if windows else None
 
             def project(
                 relation: Relation,
                 bindings: Callable[[int, Row], Mapping[str, Value]],
             ) -> Relation:
                 relational_values: tuple[Mapping[Expr, Value], ...]
-                if window_sum is None:
+                if window is None:
                     relational_values = tuple({} for _row in relation.rows)
                 else:
                     _require_relation_row_pairs(
                         len(relation.rows) * len(relation.rows),
-                        "window sum",
+                        window.kind.replace("_", " "),
                     )
                     relational_values = tuple(
                         {
-                            window_sum: self._window_sum_value(
-                                window_sum,
+                            window: self._whole_partition_decimal_window_value(
+                                window,
                                 relation,
                                 row,
                             )
@@ -967,26 +972,28 @@ class Evaluator:
 
         raise AssertionError(f"unknown plan node {type(node).__name__}")
 
-    def _window_sum_value(
+    def _whole_partition_decimal_window_value(
         self,
         expression: Expr,
         source: Relation,
         candidate: Row,
     ) -> Value:
-        """Exact unordered whole-partition SUM for one Project input row."""
+        """Exact unordered whole-partition SUM/AVG for one Project input row."""
 
-        assert expression.kind == "window_sum"
+        assert expression.kind in {"window_sum", "window_avg"}
         assert expression.window_input is not None
         assert expression.partition_by is not None
         assert expression.result_type is not None
-        partition = candidate.values[expression.partition_by]
         guarded_values = tuple(
             (
                 smt.and_(
                     row.present,
-                    self.scalar.not_distinct(
-                        partition,
-                        row.values[expression.partition_by],
+                    *(
+                        self.scalar.not_distinct(
+                            candidate.values[partition],
+                            row.values[partition],
+                        )
+                        for partition in expression.partition_by
                     ),
                     smt.not_(row.values[expression.window_input].is_null),
                 ),
@@ -994,11 +1001,31 @@ class Evaluator:
             )
             for row in source.rows
         )
-        return _decimal_sum_value(
-            guarded_values,
-            expression.result_type,
-            True,
-            "Decimal window sum",
+        if expression.kind == "window_sum":
+            return _decimal_sum_value(
+                guarded_values,
+                expression.result_type,
+                True,
+                "Decimal window sum",
+            )
+        finite_abs_bound = sum(
+            _decimal_finite_abs_bound(value)
+            for _guard, value in guarded_values
+        )
+        return _finish_decimal_average(
+            tuple((guard, value.value) for guard, value in guarded_values),
+            tuple(
+                smt.ite(guard, smt.ONE, smt.ZERO)
+                for guard, _value in guarded_values
+            ),
+            sum_type=expression.result_type,
+            count_type="Uint64",
+            output_type=expression.result_type,
+            output_nullable=True,
+            finite_abs_bound=finite_abs_bound,
+            count_bound=len(guarded_values),
+            carry_state=False,
+            operation="Decimal window avg",
         )
 
     def _aggregate(self, node: Aggregate, source: Relation) -> Relation:
@@ -1415,60 +1442,17 @@ class Evaluator:
                 count_bound += 1
                 count_terms.append(smt.ite(guard, smt.ONE, smt.ZERO))
 
-        state_type = decimal.parse_type(trait.state.sum_type)
-        assert state_type is not None
-        if finite_abs_bound >= 10**state_type.precision:
-            raise RelationError(
-                f"Decimal avg sum may overflow its {trait.state.sum_type} "
-                "accumulator within the current bound; non-associative "
-                "overflow is not modeled"
-            )
-        if count_bound >= 1 << 64:
-            raise RelationError(
-                "Decimal avg count may wrap its Uint64 accumulator "
-                "within the current bound"
-            )
-        total = decimal.sum_with_headroom(
+        return _finish_decimal_average(
             tuple(guarded_sums),
-            trait.state.sum_type,
-            finite_abs_bound,
-        )
-        count = smt.add(*count_terms)
-        average = decimal.narrow_same_scale(
-            decimal.divide(
-                total,
-                count,
-                trait.state.sum_type,
-                trait.state.count_type,
-            ),
-            trait.state.sum_type,
-            trait.output_type,
-        )
-        output_type = decimal.parse_type(trait.output_type)
-        assert output_type is not None
-        return Value(
-            trait.output_type,
-            (
-                smt.not_(smt.or_(*non_null))
-                if trait.output_nullable
-                else smt.FALSE
-            ),
-            average,
-            decimal_finite_abs_bound=min(
-                finite_abs_bound,
-                10**output_type.precision - 1,
-            ),
-            average_metadata=(
-                DecimalAverageState(
-                    sum_type=trait.state.sum_type,
-                    sum=total,
-                    count=count,
-                    finite_abs_bound=finite_abs_bound,
-                    count_bound=count_bound,
-                )
-                if node.phase == "intermediate"
-                else None
-            ),
+            tuple(count_terms),
+            sum_type=trait.state.sum_type,
+            count_type=trait.state.count_type,
+            output_type=trait.output_type,
+            output_nullable=trait.output_nullable,
+            finite_abs_bound=finite_abs_bound,
+            count_bound=count_bound,
+            carry_state=node.phase == "intermediate",
+            operation="Decimal avg",
         )
 
     def _integral_average_value(
@@ -2761,15 +2745,18 @@ def _integral_extremum(
     return level[0][1]
 
 
-def _window_sum_expression(expression: Expr) -> Expr | None:
+def _whole_partition_decimal_window_expression(expression: Expr) -> Expr | None:
     """Return the one validated relation-dependent leaf below an expression."""
 
-    if expression.kind == "window_sum":
+    if expression.kind in {"window_sum", "window_avg"}:
         return expression
     matches = tuple(
         match
         for argument in expression.args
-        if (match := _window_sum_expression(argument)) is not None
+        if (
+            match := _whole_partition_decimal_window_expression(argument)
+        )
+        is not None
     )
     assert len(matches) <= 1
     return matches[0] if matches else None
@@ -2804,6 +2791,70 @@ def _decimal_sum_value(
             finite_abs_bound,
         ),
         decimal_finite_abs_bound=finite_abs_bound,
+    )
+
+
+def _finish_decimal_average(
+    guarded_sums: tuple[tuple[smt.Term, smt.Term], ...],
+    count_terms: tuple[smt.Term, ...],
+    *,
+    sum_type: str,
+    count_type: str,
+    output_type: str,
+    output_nullable: bool,
+    finite_abs_bound: int,
+    count_bound: int,
+    carry_state: bool,
+    operation: str,
+) -> Value:
+    """Finish an exact Decimal AVG from audited sum/count contributions."""
+
+    if len(guarded_sums) != len(count_terms):
+        raise AssertionError("Decimal average sum/count contributions disagree")
+    accumulator = decimal.parse_type(sum_type)
+    result = decimal.parse_type(output_type)
+    assert accumulator is not None and result is not None
+    if finite_abs_bound >= 10**accumulator.precision:
+        raise RelationError(
+            f"{operation} sum may overflow its {sum_type} accumulator "
+            "within the current bound; non-associative overflow is not modeled"
+        )
+    if count_bound >= 1 << 64:
+        raise RelationError(
+            f"{operation} count may wrap its Uint64 accumulator "
+            "within the current bound"
+        )
+
+    total = decimal.sum_with_headroom(
+        guarded_sums,
+        sum_type,
+        finite_abs_bound,
+    )
+    count = smt.add(*count_terms)
+    average = decimal.narrow_same_scale(
+        decimal.divide(total, count, sum_type, count_type),
+        sum_type,
+        output_type,
+    )
+    return Value(
+        output_type,
+        smt.eq(count, smt.ZERO) if output_nullable else smt.FALSE,
+        average,
+        decimal_finite_abs_bound=min(
+            finite_abs_bound,
+            10**result.precision - 1,
+        ),
+        average_metadata=(
+            DecimalAverageState(
+                sum_type=sum_type,
+                sum=total,
+                count=count,
+                finite_abs_bound=finite_abs_bound,
+                count_bound=count_bound,
+            )
+            if carry_state
+            else None
+        ),
     )
 
 

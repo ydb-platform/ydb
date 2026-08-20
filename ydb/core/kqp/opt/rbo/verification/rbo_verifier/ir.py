@@ -112,7 +112,10 @@ class Expr:
     null_safe: bool = False
     source_type: str | None = None
     window_input: str | None = None
-    partition_by: str | None = None
+    # Relation-dependent window leaves normalize their partition columns to an
+    # ordered tuple.  window_sum deliberately retains its one-string wire
+    # spelling; window_avg uses an explicit 1..4 element JSON array.
+    partition_by: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -647,7 +650,34 @@ def _parse_expr(
             result_type=result_type,
             nullable=nullable,
             window_input=_string(obj["input"], f"{path}.input"),
-            partition_by=_string(obj["partition_by"], f"{path}.partition_by"),
+            partition_by=(
+                _string(obj["partition_by"], f"{path}.partition_by"),
+            ),
+        )
+
+    if kind == "window_avg":
+        _keys(obj, {"kind", "input", "partition_by", "type", "nullable"}, path)
+        result_type = _scalar_type(obj["type"], f"{path}.type")
+        nullable = _bool(obj["nullable"], f"{path}.nullable")
+        if result_type != WHOLE_PARTITION_DECIMAL_SUM_TYPE or not nullable:
+            _fail(
+                path,
+                "window_avg result must be Optional<Decimal(35,2)>",
+            )
+        raw_partition = _array(obj["partition_by"], f"{path}.partition_by")
+        if not 1 <= len(raw_partition) <= 4:
+            _fail(f"{path}.partition_by", "must contain between 1 and 4 columns")
+        partition_by = tuple(
+            _string(column, f"{path}.partition_by[{index}]")
+            for index, column in enumerate(raw_partition)
+        )
+        _unique(partition_by, f"{path}.partition_by")
+        return Expr(
+            kind=kind,
+            result_type=result_type,
+            nullable=nullable,
+            window_input=_string(obj["input"], f"{path}.input"),
+            partition_by=partition_by,
         )
 
     if kind in {"and", "or"}:
@@ -719,6 +749,19 @@ def _parse_expr(
             ),
             result_type=_scalar_type(obj["type"], f"{path}.type"),
             nullable=_bool(obj["nullable"], f"{path}.nullable"),
+        )
+
+    if kind == "decimal_abs":
+        _keys(obj, {"kind", "arg", "type", "nullable"}, path)
+        result_type = _scalar_type(obj["type"], f"{path}.type")
+        nullable = _bool(obj["nullable"], f"{path}.nullable")
+        if result_type != WHOLE_PARTITION_DECIMAL_SUM_TYPE or not nullable:
+            _fail(path, "decimal_abs result must be Optional<Decimal(35,2)>")
+        return Expr(
+            kind=kind,
+            args=(parse_child(obj["arg"], f"{path}.arg"),),
+            result_type=result_type,
+            nullable=nullable,
         )
 
     if kind == "cast_decimal":
@@ -1598,27 +1641,44 @@ def _infer_expr(
                 _infer_expr(arg, columns, f"{path}.args[{index}]", bindings)
         return ValueType(expr.result_type, expr.nullable)
 
-    if expr.kind == "window_sum":
+    if expr.kind in {"window_sum", "window_avg"}:
         if (
             expr.result_type != WHOLE_PARTITION_DECIMAL_SUM_TYPE
             or expr.nullable is not True
             or expr.window_input is None
             or expr.partition_by is None
         ):
-            _fail(path, "window_sum must carry the audited whole-partition shape")
+            _fail(
+                path,
+                f"{expr.kind} must carry the audited whole-partition shape",
+            )
         window_input = columns.get(expr.window_input)
         if window_input is None:
             _fail(path, f"window input column {expr.window_input!r} is not available")
         if window_input.value_type != ValueType(WHOLE_PARTITION_DECIMAL_SUM_TYPE, True):
             _fail(
                 path,
-                "window_sum input must be Optional<Decimal(35,2)>",
+                f"{expr.kind} input must be Optional<Decimal(35,2)>",
             )
-        partition = columns.get(expr.partition_by)
-        if partition is None:
-            _fail(path, f"window partition column {expr.partition_by!r} is not available")
-        if partition.value_type != ValueType("String", True):
-            _fail(path, "window_sum partition key must be Optional<String>")
+        expected_partition_types = (
+            {ValueType("String", True)}
+            if expr.kind == "window_sum"
+            else {ValueType("Int64", True), ValueType("String", True)}
+        )
+        for partition_name in expr.partition_by:
+            partition = columns.get(partition_name)
+            if partition is None:
+                _fail(
+                    path,
+                    f"window partition column {partition_name!r} is not available",
+                )
+            if partition.value_type not in expected_partition_types:
+                expected = (
+                    "Optional<String>"
+                    if expr.kind == "window_sum"
+                    else "Optional<Int64> or Optional<String>"
+                )
+                _fail(path, f"{expr.kind} partition key must be {expected}")
         return ValueType(WHOLE_PARTITION_DECIMAL_SUM_TYPE, True)
 
     if expr.kind == "checked_concat":
@@ -1793,6 +1853,16 @@ def _infer_expr(
                 ),
             )
         return ValueType(expr.result_type, nullable)
+
+    if expr.kind == "decimal_abs":
+        assert expr.result_type is not None and expr.nullable is not None
+        argument = _infer_expr(expr.args[0], columns, f"{path}.arg", bindings)
+        expected = ValueType(WHOLE_PARTITION_DECIMAL_SUM_TYPE, True)
+        if ValueType(expr.result_type, expr.nullable) != expected:
+            _fail(path, "decimal_abs result must be Optional<Decimal(35,2)>")
+        if argument != expected:
+            _fail(path, "decimal_abs input must be Optional<Decimal(35,2)>")
+        return expected
 
     if expr.kind == "cast_decimal":
         assert expr.result_type is not None and expr.nullable is not None
@@ -2653,40 +2723,51 @@ def checked_concat_corridor(snapshot: Snapshot) -> CheckedConcatCorridor | None:
     )
 
 
-def _validate_window_sum_dataflow(
+def _validate_whole_partition_decimal_window_dataflow(
     snapshot: Snapshot,
     schemas: Mapping[str, Mapping[str, Column]],
 ) -> None:
-    """Admit one relation-dependent expression on one exact logical shape."""
+    """Admit one SUM/AVG window leaf on one private grouped-SUM corridor."""
 
-    owners: list[PlanNode] = []
+    window_kinds = ("window_sum", "window_avg")
+    owners: list[tuple[str, PlanNode]] = []
     for node in snapshot.plan.nodes:
-        owners.extend(
-            node
-            for expression in _node_expressions(node)
-            for _ in range(_expression_kind_count(expression, "window_sum"))
-        )
-    predicate_count = sum(
-        _expression_kind_count(subplan.predicate, "window_sum")
+        for expression in _node_expressions(node):
+            for kind in window_kinds:
+                owners.extend(
+                    (kind, node)
+                    for _ in range(_expression_kind_count(expression, kind))
+                )
+    predicate_kinds = tuple(
+        kind
         for subplan in snapshot.plan.subplans
         if isinstance(subplan, ExistsSubplan) and subplan.predicate is not None
+        for kind in window_kinds
+        for _ in range(_expression_kind_count(subplan.predicate, kind))
     )
-    if not owners and not predicate_count:
+    if not owners and not predicate_kinds:
         return
-    if len(owners) + predicate_count != 1:
-        _fail(
-            "snapshot.plan",
-            "exactly one window_sum expression is modeled",
+    observed_kinds = tuple(kind for kind, _node in owners) + predicate_kinds
+    if len(observed_kinds) != 1:
+        label = (
+            observed_kinds[0]
+            if observed_kinds and len(set(observed_kinds)) == 1
+            else "relation-dependent window"
         )
-    if snapshot.plan.subplans:
-        _fail("snapshot.plan.subplans", "window_sum does not admit subplans")
-    if predicate_count or not isinstance(owners[0], Project):
         _fail(
             "snapshot.plan",
-            "window_sum may appear only inside one main-plan Project",
+            f"exactly one {label} expression is modeled",
+        )
+    kind = observed_kinds[0]
+    if snapshot.plan.subplans:
+        _fail("snapshot.plan.subplans", f"{kind} does not admit subplans")
+    if predicate_kinds or not isinstance(owners[0][1], Project):
+        _fail(
+            "snapshot.plan",
+            f"{kind} may appear only inside one main-plan Project",
         )
 
-    project = owners[0]
+    project = owners[0][1]
     assert isinstance(project, Project)
     nodes = snapshot.plan.node_map()
     aggregate = nodes.get(project.input)
@@ -2698,34 +2779,34 @@ def _validate_window_sum_dataflow(
     ):
         _fail(
             f"node {project.id!r}.input",
-            "window_sum Project must directly consume one grouped, "
+            f"{kind} Project must directly consume one grouped, "
             "logical or final Aggregate",
         )
 
     expressions = tuple(
         projection.expression
         for projection in project.columns
-        if _expression_kind_count(projection.expression, "window_sum")
+        if _expression_kind_count(projection.expression, kind)
     )
     assert len(expressions) == 1
 
     def find(expression: Expr) -> Expr:
-        if expression.kind == "window_sum":
+        if expression.kind == kind:
             return expression
         matches = tuple(
             find(argument)
             for argument in expression.args
-            if _expression_kind_count(argument, "window_sum")
+            if _expression_kind_count(argument, kind)
         )
         assert len(matches) == 1
         return matches[0]
 
     window = find(expressions[0])
     assert window.window_input is not None and window.partition_by is not None
-    if window.partition_by not in aggregate.keys:
+    if any(partition not in aggregate.keys for partition in window.partition_by):
         _fail(
             f"node {project.id!r}.columns",
-            "window_sum partition must be a direct key of its Aggregate input",
+            f"{kind} partition must contain only direct keys of its Aggregate input",
         )
     matching_traits = tuple(
         trait
@@ -2742,7 +2823,7 @@ def _validate_window_sum_dataflow(
     ):
         _fail(
             f"node {project.id!r}.columns",
-            "window_sum input must be the direct Optional<Decimal(35,2)> "
+            f"{kind} input must be the direct Optional<Decimal(35,2)> "
             "SUM output of its Aggregate input",
         )
 
@@ -2757,7 +2838,7 @@ def _validate_window_sum_dataflow(
         ):
             _fail(
                 f"node {aggregate.id!r}.input",
-                "final window_sum Aggregate must directly consume one "
+                f"final {kind} Aggregate must directly consume one "
                 "matching intermediate Aggregate",
             )
         intermediate = candidate
@@ -2783,7 +2864,7 @@ def _validate_window_sum_dataflow(
         ):
             _fail(
                 f"node {aggregate.id!r}.aggregates",
-                "final window_sum must consume exactly one matching "
+                f"final {kind} must consume exactly one matching "
                 "Optional<Decimal(35,2)> intermediate SUM state",
             )
 
@@ -2796,24 +2877,29 @@ def _validate_window_sum_dataflow(
     if consumers[aggregate.id] != [project]:
         _fail(
             f"node {aggregate.id!r}",
-            "a window_sum Aggregate must have one direct Project consumer and no fanout",
+            f"a {kind} Aggregate must have one direct Project consumer and no fanout",
         )
     if intermediate is not None and consumers[intermediate.id] != [aggregate]:
         _fail(
             f"node {intermediate.id!r}",
-            "a window_sum intermediate Aggregate must have one direct final "
+            f"a {kind} intermediate Aggregate must have one direct final "
             "Aggregate consumer and no fanout",
         )
     if len(consumers[project.id]) > 1:
         _fail(
             f"node {project.id!r}",
-            "a window_sum Project must not fan out",
+            f"a {kind} Project must not fan out",
         )
 
     # The ordinary type checker already established both direct operands.
-    assert schemas[aggregate.id][window.partition_by].value_type == ValueType(
-        "String",
-        True,
+    expected_partition_types = (
+        {ValueType("String", True)}
+        if kind == "window_sum"
+        else {ValueType("Int64", True), ValueType("String", True)}
+    )
+    assert all(
+        schemas[aggregate.id][partition].value_type in expected_partition_types
+        for partition in window.partition_by
     )
     assert schemas[aggregate.id][window.window_input].value_type == ValueType(
         WHOLE_PARTITION_DECIMAL_SUM_TYPE,
@@ -3239,11 +3325,16 @@ def expression_columns(expression: Expr) -> frozenset[str]:
         column
         for column in (
             expression.column if expression.kind == "column" else None,
-            expression.window_input if expression.kind == "window_sum" else None,
-            expression.partition_by if expression.kind == "window_sum" else None,
+            (
+                expression.window_input
+                if expression.kind in {"window_sum", "window_avg"}
+                else None
+            ),
         )
         if column is not None
     )
+    if expression.kind in {"window_sum", "window_avg"}:
+        columns |= frozenset(expression.partition_by or ())
     for argument in expression.args:
         columns |= expression_columns(argument)
     return columns
@@ -4521,7 +4612,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     )
     _validate_error_projection_dataflow(snapshot)
     checked_concat_corridor(snapshot)
-    _validate_window_sum_dataflow(snapshot, schemas)
+    _validate_whole_partition_decimal_window_dataflow(snapshot, schemas)
     _validate_void_dataflow(snapshot, schemas)
     _validate_stage_graph(snapshot, schemas, average_state_carriers)
     return schemas

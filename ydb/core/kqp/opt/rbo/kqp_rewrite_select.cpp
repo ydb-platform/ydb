@@ -52,12 +52,12 @@ TExprNode::TPtr GetCallable(TExprNode::TPtr input, const TString& callableName) 
     return FindNode(input, isCallable);
 }
 
-bool IsOptionalStringTypeDescriptor(const TExprNode& node) {
+bool IsOptionalWindowPartitionTypeDescriptor(const TExprNode& node) {
     return node.IsCallable("OptionalType") &&
         node.ChildrenSize() == 1 &&
         node.Child(0)->IsCallable("DataType") &&
         node.Child(0)->ChildrenSize() == 1 &&
-        node.Child(0)->Child(0)->IsAtom("String");
+        node.Child(0)->Child(0)->IsAtom({"String", "Int64"});
 }
 
 bool IsWholePartitionFrameSetting(
@@ -85,49 +85,62 @@ bool IsTransportSafeWindowDefinition(
     }
 
     const auto& partitions = *definition.Child(2);
-    if (!partitions.IsList() || partitions.ChildrenSize() != 1) {
+    if (!partitions.IsList() || partitions.ChildrenSize() < 1 ||
+        partitions.ChildrenSize() > 4)
+    {
         return false;
     }
-    const auto& group = *partitions.Child(0);
-    if (!group.IsCallable("YqlGroup") || group.ChildrenSize() != 2) {
-        return false;
-    }
+    THashSet<TStringBuf> names;
+    THashSet<ui32> indices;
+    for (const auto& partition : partitions.Children()) {
+        const auto& group = *partition;
+        if (!group.IsCallable("YqlGroup") || group.ChildrenSize() != 2) {
+            return false;
+        }
 
-    const auto& rowDescriptor = *group.Child(0);
-    if (!rowDescriptor.IsCallable("StructType") ||
-        rowDescriptor.ChildrenSize() != 1)
-    {
-        return false;
-    }
-    const auto& field = *rowDescriptor.Child(0);
-    if (!field.IsList() ||
-        field.ChildrenSize() != 2 ||
-        !field.Child(0)->IsAtom() ||
-        field.Child(0)->Content().empty() ||
-        !IsOptionalStringTypeDescriptor(*field.Child(1)))
-    {
-        return false;
-    }
+        const auto& rowDescriptor = *group.Child(0);
+        if (!rowDescriptor.IsCallable("StructType") ||
+            rowDescriptor.ChildrenSize() != 1)
+        {
+            return false;
+        }
+        const auto& field = *rowDescriptor.Child(0);
+        if (!field.IsList() ||
+            field.ChildrenSize() != 2 ||
+            !field.Child(0)->IsAtom() ||
+            field.Child(0)->Content().empty() ||
+            !IsOptionalWindowPartitionTypeDescriptor(*field.Child(1)))
+        {
+            return false;
+        }
 
-    const auto& lambda = *group.Child(1);
-    if (!lambda.IsLambda() ||
-        lambda.ChildrenSize() != 2 ||
-        !lambda.Child(0)->IsArguments() ||
-        lambda.Child(0)->ChildrenSize() != 1 ||
-        !lambda.Child(0)->Child(0)->IsArgument())
-    {
-        return false;
-    }
-    const auto* argument = lambda.Child(0)->Child(0);
-    const auto& groupRef = *lambda.Child(1);
-    if (!groupRef.IsCallable("YqlGroupRef") ||
-        groupRef.ChildrenSize() != 4 ||
-        groupRef.Child(0) != argument ||
-        !IsOptionalStringTypeDescriptor(*groupRef.Child(1)) ||
-        !groupRef.Child(2)->IsAtom("3") ||
-        !groupRef.Child(3)->IsAtom(field.Child(0)->Content()))
-    {
-        return false;
+        const auto& lambda = *group.Child(1);
+        if (!lambda.IsLambda() ||
+            lambda.ChildrenSize() != 2 ||
+            !lambda.Child(0)->IsArguments() ||
+            lambda.Child(0)->ChildrenSize() != 1 ||
+            !lambda.Child(0)->Child(0)->IsArgument())
+        {
+            return false;
+        }
+        const auto* argument = lambda.Child(0)->Child(0);
+        const auto& groupRef = *lambda.Child(1);
+        ui32 index = 0;
+        if (!groupRef.IsCallable("YqlGroupRef") ||
+            groupRef.ChildrenSize() != 4 ||
+            groupRef.Child(0) != argument ||
+            !IsOptionalWindowPartitionTypeDescriptor(*groupRef.Child(1)) ||
+            !groupRef.Child(2)->IsAtom() ||
+            !TryFromString<ui32>(groupRef.Child(2)->Content(), index) ||
+            groupRef.Child(2)->Content() != ToString(index) ||
+            !groupRef.Child(3)->IsAtom(field.Child(0)->Content()) ||
+            groupRef.Child(1)->Child(0)->Child(0)->Content() !=
+                field.Child(1)->Child(0)->Child(0)->Content() ||
+            !names.insert(field.Child(0)->Content()).second ||
+            !indices.insert(index).second)
+        {
+            return false;
+        }
     }
 
     const auto& order = *definition.Child(3);

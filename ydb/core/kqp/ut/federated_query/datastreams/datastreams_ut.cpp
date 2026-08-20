@@ -351,6 +351,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
 
         const auto executeQuery = [&](TScriptQuerySettings settings) {
             const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 INSERT INTO `{s3_sink}`.`folder/` WITH (FORMAT = "json_each_row")
                 SELECT * FROM `{source}`.`{topic}` WITH (
                     STREAMING = "TRUE",
@@ -398,6 +399,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         std::vector<std::string> expectedMessages;
         const auto executeQuery = [&](TScriptQuerySettings settings) {
             const auto& [executionId, operationId] = ExecScriptNative(fmt::format(R"(
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 $input = SELECT * FROM `{source}`.`{source_topic}` WITH (
                     STREAMING = "TRUE",
                     FORMAT = "json_each_row",
@@ -459,6 +461,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         CreateS3Source(writeBucket, s3SinkName);
 
         const auto& [_, operationId] = ExecScriptNative(fmt::format(R"(
+            PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
             PRAGMA s3.AtomicUploadCommit = "true";
 
             INSERT INTO `{s3_sink}`.`folder/` WITH (FORMAT = "json_each_row")

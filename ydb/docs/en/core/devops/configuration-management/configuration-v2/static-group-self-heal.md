@@ -40,7 +40,7 @@ To enable or disable automatic static group management:
        automatic_static_group_management: true
    ```
 
-   `self_management_config.automatic_static_group_management: true` enables automatic static group management; `false` disables it. If DistConf is not enabled yet, also set `self_management_config.enabled: true`.
+   `self_management_config.automatic_static_group_management: true` enables automatic static group management; `false` disables it.
 
 1. Apply the updated configuration using the [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md) command:
 

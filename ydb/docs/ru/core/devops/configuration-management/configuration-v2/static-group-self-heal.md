@@ -40,7 +40,7 @@
         automatic_static_group_management: true
     ```
 
-    Значение `self_management_config.automatic_static_group_management: true` включает автоматическое управление статической группой, а `false` — выключает. Если DistConf ещё не включён, одновременно укажите `self_management_config.enabled: true`.
+    Значение `self_management_config.automatic_static_group_management: true` включает автоматическое управление статической группой, а `false` — выключает.
 
 1. Примените новую конфигурацию с помощью команды [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 

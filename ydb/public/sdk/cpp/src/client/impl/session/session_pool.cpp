@@ -4,6 +4,7 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
 #include <util/random/random.h>
@@ -39,6 +40,71 @@ TDuration RandomizeThreshold(TDuration duration) {
     }
     return TDuration::FromValue(value);
 }
+
+namespace {
+
+static const std::string ServerHintsKey{NYdb::YDB_SERVER_HINTS};
+
+} // namespace
+
+bool IsSessionCloseRequested(const TStatus& status) {
+    const auto& meta = status.GetResponseMetadata();
+    auto hints = meta.equal_range(ServerHintsKey);
+    for (auto it = hints.first; it != hints.second; ++it) {
+        if (it->second == NYdb::YDB_SESSION_CLOSE) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void TSessionCloseCommand::Execute(TKqpSessionCommon& session, ISessionClient* client) const {
+    if ((session.*Transition)() && client) {
+        client->RecordSessionClosed(Reason);
+    }
+}
+
+namespace NSessionCloseCommands {
+
+const TSessionCloseCommand PoolIdleTimeout{"pool_idle_timeout", &TKqpSessionCommon::MarkBroken};
+const TSessionCloseCommand PoolGracefulShutdown{"pool_graceful_shutdown", &TKqpSessionCommon::MarkBroken};
+const TSessionCloseCommand ClientTimeout{"client_timeout", &TKqpSessionCommon::MarkBroken};
+const TSessionCloseCommand ClientCancelled{"client_cancelled", &TKqpSessionCommon::MarkBroken};
+const TSessionCloseCommand AttachClosed{"attach_closed", &TKqpSessionCommon::MarkBroken};
+const TSessionCloseCommand TransportError{"transport_error", &TKqpSessionCommon::MarkBroken};
+const TSessionCloseCommand NodeShutdown{"node_shutdown", &TKqpSessionCommon::MarkAsClosing};
+const TSessionCloseCommand SessionShutdown{"session_shutdown", &TKqpSessionCommon::MarkAsClosing};
+const TSessionCloseCommand BadSession{"bad_session", &TKqpSessionCommon::MarkBroken};
+const TSessionCloseCommand SessionBusy{"session_busy", &TKqpSessionCommon::MarkBroken};
+
+const TSessionCloseCommand* FromStatus(const TStatus& status) {
+    const auto code = status.GetStatus();
+    if (code == EStatus::CLIENT_DEADLINE_EXCEEDED) {
+        return &ClientTimeout;
+    }
+    if (code == EStatus::CLIENT_CANCELLED) {
+        return &ClientCancelled;
+    }
+    if (status.IsTransportError()
+        && code != EStatus::CLIENT_RESOURCE_EXHAUSTED
+        && code != EStatus::CLIENT_OUT_OF_RANGE)
+    {
+        return &TransportError;
+    }
+    if (code == EStatus::SESSION_BUSY) {
+        return &SessionBusy;
+    }
+    if (code == EStatus::BAD_SESSION || code == EStatus::SESSION_EXPIRED) {
+        return &BadSession;
+    }
+    if (IsSessionCloseRequested(status)) {
+        return &SessionShutdown;
+    }
+    return nullptr;
+}
+
+} // namespace NSessionCloseCommands
 
 TSessionPool::TWaitersQueue::TWaitersQueue(std::uint32_t maxQueueSize)
     : MaxQueueSize_(maxQueueSize)
@@ -421,6 +487,10 @@ void TSessionPool::SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatC
 
 void TSessionPool::RecordConnectionCreateTime(double seconds) {
     ExternalStatCollector_.RecordConnectionCreateTime(seconds);
+}
+
+void TSessionPool::RecordSessionClosed(std::string_view reason) {
+    ExternalStatCollector_.IncSessionClosed(reason);
 }
 
 void TSessionPool::UpdateStats() {

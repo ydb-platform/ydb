@@ -3,7 +3,7 @@
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
-#include <ydb/public/sdk/cpp/src/client/impl/session/session_close_command.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>

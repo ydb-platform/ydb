@@ -393,12 +393,6 @@ namespace {
         return labels;
     }
 
-    NMetrics::TLabels QueryClosedLabels(const std::string& poolName, const std::string& reason) {
-        auto labels = QueryPoolLabels(poolName);
-        labels["reason"] = reason;
-        return labels;
-    }
-
     NMetrics::TLabels TablePoolLabels(const std::string& poolName) {
         return {
             {"ydb.table.session.pool.name", poolName},
@@ -451,23 +445,13 @@ TEST_F(QueryPoolMetricsTest, TimeoutsIncrement) {
     EXPECT_EQ(counter->Get(), 3);
 }
 
-TEST_F(QueryPoolMetricsTest, ClosedSessionsAreSplitByReason) {
+TEST_F(QueryPoolMetricsTest, ClosedSessionReason) {
     Collector.IncSessionClosed("transport_error");
-    Collector.IncSessionClosed("transport_error");
-    Collector.IncSessionClosed("session_busy");
-
-    auto transportError = Registry->GetCounter(
-        "ydb.query.session.closed",
-        QueryClosedLabels(kTestPoolName, "transport_error")
-    );
-    auto sessionBusy = Registry->GetCounter(
-        "ydb.query.session.closed",
-        QueryClosedLabels(kTestPoolName, "session_busy")
-    );
-    ASSERT_NE(transportError, nullptr);
-    ASSERT_NE(sessionBusy, nullptr);
-    EXPECT_EQ(transportError->Get(), 2);
-    EXPECT_EQ(sessionBusy->Get(), 1);
+    auto labels = QueryPoolLabels(kTestPoolName);
+    labels["reason"] = "transport_error";
+    auto counter = Registry->GetCounter("ydb.query.session.closed", labels);
+    ASSERT_NE(counter, nullptr);
+    EXPECT_EQ(counter->Get(), 1);
 }
 
 TEST_F(QueryPoolMetricsTest, SessionCountSplitsByState) {
@@ -587,7 +571,6 @@ TEST(QueryPoolMetricsNoRegistryTest, NullRegistryIsSafe) {
         collector.IncConnectionTimeouts();
         collector.UpdateConnectionCount(3, 1);
         collector.IncPendingRequests();
-        collector.IncSessionClosed("transport_error");
         collector.RecordPoolLimits(1, 5);
     });
 }

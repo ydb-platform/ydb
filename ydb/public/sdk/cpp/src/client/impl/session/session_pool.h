@@ -1,7 +1,6 @@
 #pragma once
 
 #include "kqp_session_common.h"
-#include "session_close_command.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
@@ -31,17 +30,39 @@ TStatus GetStatus(const TOperation& operation);
 TStatus GetStatus(const TStatus& status);
 
 TDuration RandomizeThreshold(TDuration duration);
+bool IsSessionCloseRequested(const TStatus& status);
+
+struct TSessionCloseCommand {
+    std::string_view Reason;
+    bool (TKqpSessionCommon::*Transition)();
+
+    void Execute(TKqpSessionCommon& session, ISessionClient* client) const;
+};
+
+namespace NSessionCloseCommands {
+extern const TSessionCloseCommand PoolIdleTimeout;
+extern const TSessionCloseCommand PoolGracefulShutdown;
+extern const TSessionCloseCommand ClientTimeout;
+extern const TSessionCloseCommand ClientCancelled;
+extern const TSessionCloseCommand AttachClosed;
+extern const TSessionCloseCommand TransportError;
+extern const TSessionCloseCommand NodeShutdown;
+extern const TSessionCloseCommand SessionShutdown;
+extern const TSessionCloseCommand BadSession;
+extern const TSessionCloseCommand SessionBusy;
+
+const TSessionCloseCommand* FromStatus(const TStatus& status);
+}
 
 template<typename TResponse>
 NThreading::TFuture<TResponse> InjectSessionStatusInterception(
         std::shared_ptr<::NYdb::TKqpSessionCommon> impl, NThreading::TFuture<TResponse> asyncResponse,
         bool updateTimeout,
         TDuration timeout,
-        std::function<void(const TResponse&, TKqpSessionCommon&)> cb = {},
-        std::shared_ptr<ISessionClient> sessionClient = {})
+        std::function<void(const TResponse&, TKqpSessionCommon&)> cb = {})
 {
     auto promise = NThreading::NewPromise<TResponse>();
-    asyncResponse.Subscribe([impl, promise, cb, sessionClient, updateTimeout, timeout](NThreading::TFuture<TResponse> future) mutable {
+    asyncResponse.Subscribe([impl, promise, cb, updateTimeout, timeout](NThreading::TFuture<TResponse> future) mutable {
         Y_ABORT_UNLESS(future.HasValue());
 
         // TResponse can hold refcounted user provided data (TSession for example)
@@ -52,7 +73,8 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
 
         const TStatus& status = GetStatus(value);
         if (const auto* command = NSessionCloseCommands::FromStatus(status)) {
-            command->Execute(*impl, sessionClient.get());
+            const auto client = impl->GetSessionClient();
+            command->Execute(*impl, client.get());
         } else {
             // NOTE: About GetState and lock
             // Simultanious call multiple requests on the same session make no sence, due to server limitation.
@@ -119,6 +141,7 @@ public:
     void SetStatCollector(NSdkStats::TStatCollector::TSessionPoolStatCollector collector);
 
     void RecordConnectionCreateTime(double seconds);
+    void RecordSessionClosed(std::string_view reason);
 
     void OnCloseSession(TKqpSessionCommon*, std::shared_ptr<ISessionClient> client,
         const TSessionCloseCommand& command) override;

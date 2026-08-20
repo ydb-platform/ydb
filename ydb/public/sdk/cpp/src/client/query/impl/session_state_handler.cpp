@@ -1,6 +1,6 @@
 #include "session_state_handler.h"
 
-#include <ydb/public/sdk/cpp/src/client/impl/session/session_close_command.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
 
 namespace NYdb::inline Dev::NQuery {
 

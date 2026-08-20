@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     kqp_session_common.cpp
-    session_close_command.cpp
     session_pool.cpp
 )
 

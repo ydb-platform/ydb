@@ -38,7 +38,7 @@ public:
 
     static void MakeImplAsync(TStreamProcessorPtr processor, std::shared_ptr<TAttachSessionArgs> args);
 
-    std::shared_ptr<ISessionClient> GetSessionClient() const;
+    std::shared_ptr<ISessionClient> GetSessionClient() const override;
 
 private:
     static void NewSmartShared(TStreamProcessorPtr ptr, std::shared_ptr<TAttachSessionArgs> args, NYdb::TStatus status);

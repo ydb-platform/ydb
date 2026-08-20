@@ -73,19 +73,18 @@ public:
     TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TClientSettings& settings)
         : TClientImplCommon(std::move(connections), settings)
         , Settings_(settings)
-        , SessionPoolStatCollector_(
-            DbDriverState_->StatCollector.GetSessionPoolStatCollector(
-                "Query",
-                Settings_.PoolName_
-            )
-        )
         , SessionPool_(
             Settings_.SessionPoolSettings_.MaxActiveSessions_,
             Settings_.SessionPoolSettings_.MinPoolSize_
         )
     {
         SetStatCollector(DbDriverState_->StatCollector.GetClientStatCollector("Query"));
-        SessionPool_.SetStatCollector(SessionPoolStatCollector_);
+        SessionPool_.SetStatCollector(
+            DbDriverState_->StatCollector.GetSessionPoolStatCollector(
+                "Query",
+                Settings_.PoolName_
+            )
+        );
 
         if (auto traceProvider = Connections_->GetTraceProvider()) {
             Tracer_ = traceProvider->GetTracer("ydb-cpp-sdk-query");
@@ -94,7 +93,6 @@ public:
 
     ~TImpl() {
         std::vector<std::unique_ptr<TKqpSessionCommon>> sessions;
-        sessions.reserve(SessionPool_.GetCurrentPoolSize());
         SessionPool_.Drain([&sessions](std::unique_ptr<TKqpSessionCommon>&& session) {
             sessions.emplace_back(std::move(session));
             return true;
@@ -471,7 +469,7 @@ public:
     }
 
     void RecordSessionClosed(std::string_view reason) override {
-        SessionPoolStatCollector_.IncSessionClosed(reason);
+        SessionPool_.RecordSessionClosed(reason);
     }
 
     void DoAttachSession(Ydb::Query::CreateSessionResponse* resp
@@ -738,7 +736,6 @@ private:
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> QuerySizeHistogram_;
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> ParamsSizeHistogram_;
 
-    NSdkStats::TStatCollector::TSessionPoolStatCollector SessionPoolStatCollector_;
     NSessionPool::TSessionPool SessionPool_;
 };
 
@@ -992,9 +989,7 @@ TAsyncExecuteQueryResult TSession::ExecuteQuery(const std::string& query, const 
         SessionImpl_,
         Client_->ExecuteQuery(query, txControl, {}, settings, *this),
         true,
-        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_,
-        {},
-        Client_);
+        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
 TAsyncExecuteQueryResult TSession::ExecuteQuery(const std::string& query, const TTxControl& txControl,
@@ -1004,9 +999,7 @@ TAsyncExecuteQueryResult TSession::ExecuteQuery(const std::string& query, const 
         SessionImpl_,
         Client_->ExecuteQuery(query, txControl, params, settings, *this),
         true,
-        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_,
-        {},
-        Client_);
+        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
 TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
@@ -1016,9 +1009,7 @@ TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const std::string& query
         SessionImpl_,
         Client_->StreamExecuteQuery(query, txControl, {}, settings, *this),
         true,
-        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_,
-        {},
-        Client_);
+        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
 TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const std::string& query, const TTxControl& txControl,
@@ -1028,9 +1019,7 @@ TAsyncExecuteQueryIterator TSession::StreamExecuteQuery(const std::string& query
         SessionImpl_,
         Client_->StreamExecuteQuery(query, txControl, params, settings, *this),
         true,
-        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_,
-        {},
-        Client_);
+        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
 TAsyncBeginTransactionResult TSession::BeginTransaction(const TTxSettings& txSettings,
@@ -1040,9 +1029,7 @@ TAsyncBeginTransactionResult TSession::BeginTransaction(const TTxSettings& txSet
         SessionImpl_,
         Client_->BeginTransaction(txSettings, settings, *this),
         true,
-        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_,
-        {},
-        Client_);
+        Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
 class TTransaction::TImpl : public std::enable_shared_from_this<TImpl> {

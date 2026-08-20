@@ -136,9 +136,7 @@ public:
             Session_->SessionImpl_,
             DoReadNext(std::move(self)),
             false, // no need to ping stream session
-            TDuration::Zero(),
-            {},
-            Session_->SessionImpl_->GetSessionClient());
+            TDuration::Zero());
     }
 
 private:

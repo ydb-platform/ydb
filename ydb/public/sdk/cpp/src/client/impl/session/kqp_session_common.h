@@ -16,7 +16,7 @@ std::uint64_t GetNodeIdFromSession(const std::string& sessionId);
 
 class TKqpSessionCommon;
 namespace NSessionPool {
-class TSessionCloseCommand;
+struct TSessionCloseCommand;
 }
 
 class IServerCloseHandler {
@@ -47,7 +47,6 @@ public:
     const std::string& GetId() const;
     const std::string& GetEndpoint() const;
     const TEndpointKey& GetEndpointKey() const;
-    // Return true only for the first transition into a terminal state.
     bool MarkBroken();
     bool MarkAsClosing();
     void MarkActive();
@@ -56,6 +55,9 @@ public:
     EState GetState() const;
     void SetNeedUpdateActiveCounter(bool flag);
     bool NeedUpdateActiveCounter() const;
+    virtual std::shared_ptr<ISessionClient> GetSessionClient() const {
+        return {};
+    }
     void InvalidateQueryInCache(const std::string& key);
     void InvalidateQueryCache();
     void ScheduleTimeToTouch(TDuration interval, bool updateTimeInPast);

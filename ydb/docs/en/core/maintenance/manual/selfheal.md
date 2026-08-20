@@ -5,7 +5,7 @@
 1. **Storage SelfHeal** (this article) — for disks and [storage groups](../../concepts/glossary.md#storage-group) that hold data.
 2. **State Storage SelfHeal** — for [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas. See [{#T}](selfheal_statestorage.md).
 
-Both restore fault-tolerance guarantees when nodes or disks cannot be repaired quickly by hand.
+Both keep the cluster available and fault-tolerant when nodes or disks fail.
 
 {% note info %}
 
@@ -17,9 +17,11 @@ State Storage SelfHeal is available only with [configuration V2](../../devops/co
 
 [CMS](../../concepts/glossary.md#cms) (the Sentinel component) continuously monitors [PDisk](../../concepts/glossary.md#pdisk) and node health. If a fault lasts long enough (about one hour by default), CMS starts moving the affected [VDisks](../../concepts/glossary.md#vdisk) to healthy hardware so the [failure model](../../concepts/topology.md#cluster-config) is restored.
 
+If the node or disk recovers within that window, SelfHeal does not start: it is meant for prolonged failures, not brief outages. Fast manual recovery does not make SelfHeal useless; relocation simply never begins.
+
 The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The move itself can take from minutes to a day, depending on data volume and hardware. Once the command is accepted, CMS treats the task as issued; distributed storage is responsible for finishing replication.
 
-Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../../devops/configuration-management/configuration-v2/static-group-self-heal.md).
+Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../../devops/configuration-management/configuration-v2/static-group-self-heal.md). With configuration V1, static group SelfHeal cannot be enabled.
 
 Below: how to enable, disable, and configure storage SelfHeal.
 
@@ -29,23 +31,36 @@ You can enable and disable SelfHeal using the [{{ ydb-short-name }} DSTool](../.
 
 To enable SelfHeal, run the command:
 
-
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
 ```
-
 
 `<bs_endpoint>` is the endpoint of any [storage node](../../concepts/glossary.md#storage-node) in the cluster.
 
 To disable SelfHeal, run the command:
 
-
 ```bash
 ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 ```
 
+### When to disable SelfHeal {#when-to-disable}
+
+Leave SelfHeal enabled in normal operation. Temporarily disable it only in situations such as:
+
+* a SelfHeal bug is making data worse instead of recovering it;
+* many nodes failed at once, the cluster is overloaded, recovery will take longer than an hour, and extra background replication from SelfHeal would only add load.
+
+Re-enable SelfHeal after the cluster stabilizes.
 
 ## SelfHeal settings {#settings}
+
+The parameters below control how often CMS polls disks and after how many observation cycles it changes the PDisk status in the [Blob Storage Controller](../../concepts/glossary.md#ds-controller). The poll interval multiplied by the number of cycles is the delay before a status change (and then before relocation starts), including the familiar “about one hour” with the defaults.
+
+{% note warning %}
+
+Do not change these parameters in normal operation. The defaults are chosen for typical clusters. Change them only if you understand how shifting the delay affects SelfHeal reaction time, for example on advice from {{ ydb-short-name }} developers.
+
+{% endnote %}
 
 You can configure SelfHeal in **Viewer** → **Cluster Management System** → **CmsConfigItems**.
 

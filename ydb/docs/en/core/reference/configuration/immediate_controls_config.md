@@ -16,4 +16,4 @@ immediate_controls_config:
 
 |Parameter|Minimum value|Maximum value|Default value|Description|
 |:---|:---|:---|:---|:---|
-|`scheme_shard_controls.force_shard_split_data_size`|10 MiB|16 GiB|2 GiB|A table partition is split when it reaches the specified data size, regardless of other [table partitioning settings](../../concepts/datamodel/table.md#partitioning_row_table).|
+|`scheme_shard_controls.force_shard_split_data_size`|10 MiB|16 GiB|2 GiB|A table partition is forcibly split when it reaches the specified data size, even if the table's [partition size threshold or maximum partition count](../../concepts/datamodel/table.md#partitioning_row_table) would otherwise prevent the split. Specify the value in bytes.|

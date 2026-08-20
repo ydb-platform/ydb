@@ -12,7 +12,7 @@
 
 Общий механизм SelfHeal обнаруживает неисправный PDisk и инициирует перенос VDisk. Для динамических групп конфигурацию изменяет [Blob Storage Controller](../../../concepts/glossary.md#ds-controller), а конфигурацию статической группы изменяет [распределённая конфигурация](../../../concepts/glossary.md#distributed-configuration).
 
-Чтобы разрешить распределённой конфигурации автоматически изменять статическую группу, включите параметр [`automatic_static_group_management`](../../../reference/configuration/self_management_config.md#parameters). По умолчанию этот параметр выключен.
+Чтобы разрешить распределённой конфигурации автоматически изменять статическую группу, включите параметр [`self_management_config.automatic_static_group_management`](../../../reference/configuration/self_management_config.md#parameters). По умолчанию этот параметр выключен.
 
 ## Включение и выключение SelfHeal статической группы {#on-off}
 
@@ -21,7 +21,7 @@
 * [распределённая конфигурация](../../../concepts/glossary.md#distributed-configuration) V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
 * общий механизм SelfHeal, который [включён по умолчанию](../../../maintenance/manual/selfheal.md#on-off).
 
-Параметр `self_management_config.enabled` включает саму распределённую конфигурацию. Параметр `automatic_static_group_management` отдельно разрешает автоматический перенос VDisk статической группы.
+Параметр `self_management_config.enabled` включает саму распределённую конфигурацию. Параметр `self_management_config.automatic_static_group_management` отдельно разрешает автоматический перенос VDisk статической группы.
 
 Чтобы включить или выключить автоматическое управление статической группой:
 
@@ -31,7 +31,7 @@
     ydb [global options...] admin cluster config fetch > config.yaml
     ```
 
-1. В конфигурационном файле `config.yaml` установите значения параметров `enabled` и `automatic_static_group_management`:
+1. В конфигурационном файле `config.yaml` установите значения параметров `self_management_config.enabled` и `self_management_config.automatic_static_group_management`:
 
     ```yaml
     config:
@@ -40,7 +40,7 @@
         automatic_static_group_management: true
     ```
 
-    Значение `automatic_static_group_management: true` включает автоматическое управление статической группой, а `false` — выключает. Если DistConf ещё не включён, одновременно укажите `enabled: true`.
+    Значение `self_management_config.automatic_static_group_management: true` включает автоматическое управление статической группой, а `false` — выключает. Если DistConf ещё не включён, одновременно укажите `self_management_config.enabled: true`.
 
 1. Примените новую конфигурацию с помощью команды [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md):
 

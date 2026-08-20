@@ -12,7 +12,7 @@ On clusters with [configuration V1](../configuration-v1/config-overview.md), sta
 
 The general SelfHeal mechanism detects a faulty PDisk and initiates VDisk relocation. For dynamic groups, the [Blob Storage Controller](../../../concepts/glossary.md#ds-controller) changes the configuration, while [distributed configuration](../../../concepts/glossary.md#distributed-configuration) changes the static group configuration.
 
-To allow distributed configuration to change the static group automatically, enable the [`automatic_static_group_management`](../../../reference/configuration/self_management_config.md#parameters) parameter. This parameter is disabled by default.
+To allow distributed configuration to change the static group automatically, enable the [`self_management_config.automatic_static_group_management`](../../../reference/configuration/self_management_config.md#parameters) parameter. This parameter is disabled by default.
 
 ## Enabling and disabling static group SelfHeal {#on-off}
 
@@ -21,7 +21,7 @@ Static group SelfHeal requires the following to be enabled:
 * [distributed configuration](../../../concepts/glossary.md#distributed-configuration) in configuration V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
 * the general SelfHeal mechanism, which is [enabled by default](../../../maintenance/manual/selfheal.md#on-off).
 
-The `self_management_config.enabled` parameter turns on distributed configuration itself. The `automatic_static_group_management` parameter separately allows automatic relocation of static group VDisks.
+The `self_management_config.enabled` parameter turns on distributed configuration itself. The `self_management_config.automatic_static_group_management` parameter separately allows automatic relocation of static group VDisks.
 
 To enable or disable automatic static group management:
 
@@ -31,7 +31,7 @@ To enable or disable automatic static group management:
    ydb [global options...] admin cluster config fetch > config.yaml
    ```
 
-1. In `config.yaml`, set `enabled` and `automatic_static_group_management`:
+1. In `config.yaml`, set `self_management_config.enabled` and `self_management_config.automatic_static_group_management`:
 
    ```yaml
    config:
@@ -40,7 +40,7 @@ To enable or disable automatic static group management:
        automatic_static_group_management: true
    ```
 
-   `automatic_static_group_management: true` enables automatic static group management; `false` disables it. If DistConf is not enabled yet, also set `enabled: true`.
+   `self_management_config.automatic_static_group_management: true` enables automatic static group management; `false` disables it. If DistConf is not enabled yet, also set `self_management_config.enabled: true`.
 
 1. Apply the updated configuration using the [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md) command:
 

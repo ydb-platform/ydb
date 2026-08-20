@@ -18,7 +18,8 @@ TSysViewProcessor::TSysViewProcessor(const NActors::TActorId& tablet, TTabletSto
     , ExternalGroup(new ::NMonitoring::TDynamicCounters)
     , LabeledGroup(new ::NMonitoring::TDynamicCounters)
     , DetailedGroup(new ::NMonitoring::TDynamicCounters)
-    , DetailedRawGroup(new ::NMonitoring::TDynamicCounters(::NMonitoring::EVisibility::Private))
+    , DetailedRawGroup(new ::NMonitoring::TDynamicCounters(
+        ::NMonitoring::TCountableBase::EVisibility::Private))
 {
     InternalGroups["kqp_serverless"] = new ::NMonitoring::TDynamicCounters;
     InternalGroups["tablets_serverless"] = new ::NMonitoring::TDynamicCounters;

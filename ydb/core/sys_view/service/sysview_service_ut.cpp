@@ -21,8 +21,8 @@ namespace {
 constexpr ui64 ProcessorTabletId = 100500;
 const TString Database = "/Root/db1";
 
-constexpr ui64 TableOwnerId = 1;
-constexpr ui64 TablePathId = 2;
+// TDetailedTableCounters carries no path id - TablePath is the key (see the
+// sys_view.proto message, whose OwnerId/PathId fields were dropped in favour of it).
 const TString TablePath = "/Root/db1/Table";
 
 // Records every generation it was asked to Pack() and emits one canned
@@ -36,8 +36,6 @@ public:
         PackedGenerations.push_back(generation);
 
         auto* table = out.Add();
-        table->SetOwnerId(TableOwnerId);
-        table->SetPathId(TablePathId);
         table->SetTablePath(TablePath);
         table->SetLevel(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable);
     }
@@ -118,27 +116,6 @@ TServiceIds SetupService(TTestBasicRuntime& runtime) {
     return {serviceId, pipeCacheEdge};
 }
 
-TServiceIds SetupServiceWithLabeledCounters(TTestBasicRuntime& runtime) {
-    runtime.Initialize(TAppPrepare().Unwrap());
-    runtime.UpdateCurrentTime(TInstant::Now());
-    runtime.GetAppData().FeatureFlags.SetEnableDbCounters(true);
-    runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
-    runtime.GetAppData().FeatureFlags.SetEnablePersistentQueryStats(false);
-
-    TActorId schemeCacheId = runtime.Register(new TFakeSchemeCache());
-    runtime.RegisterService(MakeSchemeCacheID(), schemeCacheId);
-
-    TActorId pipeCacheEdge = runtime.AllocateEdgeActor();
-    runtime.RegisterService(MakePipePerNodeCacheID(false), pipeCacheEdge);
-
-    TActorId serviceId = runtime.Register(CreateSysViewServiceForTests().Release());
-    runtime.RegisterService(MakeSysViewServiceID(runtime.GetNodeId(0)), serviceId);
-    runtime.EnableScheduleForActor(serviceId);
-    runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
-
-    return {serviceId, pipeCacheEdge};
-}
-
 TIntrusivePtr<TStubDetailedCounters> RegisterStream(TTestBasicRuntime& runtime, const TActorId& serviceId,
     NKikimrSysView::EDbCountersService service)
 {
@@ -184,10 +161,7 @@ Y_UNIT_TEST_SUITE(SysViewServiceDetailedCounters) {
         for (const auto& detailed : req.GetDetailedCounters()) {
             services.insert(detailed.GetService());
             UNIT_ASSERT_VALUES_EQUAL(detailed.TablesSize(), 1);
-            const auto& table = detailed.GetTables(0);
-            UNIT_ASSERT_VALUES_EQUAL(table.GetTablePath(), TablePath);
-            UNIT_ASSERT_VALUES_EQUAL(table.GetOwnerId(), TableOwnerId);
-            UNIT_ASSERT_VALUES_EQUAL(table.GetPathId(), TablePathId);
+            UNIT_ASSERT_VALUES_EQUAL(detailed.GetTables(0).GetTablePath(), TablePath);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(services.size(), 2u);
@@ -234,9 +208,12 @@ Y_UNIT_TEST_SUITE(SysViewServiceDetailedCounters) {
         auto req2 = GrabRequest(runtime, pipeCacheEdge);
 
         UNIT_ASSERT_VALUES_EQUAL(req1.GetGeneration(), req2.GetGeneration());
-        // Both packing attempts should have happened with the same generation
-        UNIT_ASSERT_VALUES_EQUAL(stub->PackedGenerations.size(), 2u);
+        // Both packing attempts should have happened with the same generation. Not an
+        // equality on the count: the runtime may have dispatched a further unacked tick
+        // before the assert runs, and every one of those packs the same generation too.
+        UNIT_ASSERT(stub->PackedGenerations.size() >= 2);
         UNIT_ASSERT_VALUES_EQUAL(stub->PackedGenerations[0], stub->PackedGenerations[1]);
+        UNIT_ASSERT_VALUES_EQUAL(stub->PackedGenerations.back(), req1.GetGeneration());
     }
 
     Y_UNIT_TEST(StaleAckIgnored) {
@@ -268,7 +245,8 @@ Y_UNIT_TEST_SUITE(SysViewServiceDetailedCounters) {
         // Should have DetailedCounters but empty ServiceCounters
         UNIT_ASSERT_VALUES_EQUAL(req.ServiceCountersSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(req.DetailedCountersSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(req.GetDetailedCounters(0).GetService(), NKikimrSysView::TABLETS);
+        UNIT_ASSERT_VALUES_EQUAL((int)req.GetDetailedCounters(0).GetService(),
+            (int)NKikimrSysView::TABLETS);
         UNIT_ASSERT_VALUES_EQUAL(req.GetDetailedCounters(0).TablesSize(), 1);
     }
 

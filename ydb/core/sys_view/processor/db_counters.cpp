@@ -424,7 +424,12 @@ void TSysViewProcessor::DetachDetailedCounters() {
 }
 
 TProcessorDatabaseMetricsAggregator* TSysViewProcessor::GetDetailedAggregator() {
-    if (!DetailedAggregator && Database) {
+    // The same two conditions AttachDetailedCounters() checks: with the flag off there
+    // is nothing to publish into, and without a database the target group is not scoped
+    // yet. Gating here rather than at the call site keeps every caller honest - the
+    // request handler runs whenever EITHER flag is on, so an ungated aggregator would
+    // be built and fed on a plain db counters deployment.
+    if (!DetailedAggregator && Database && AppData()->FeatureFlags.GetEnableDataShardDetailedMetrics()) {
         DetailedAggregator = CreateProcessorDatabaseMetricsAggregator(
             DetailedRawGroup,
             DetailedGroup,

@@ -519,7 +519,11 @@ private:
             }
         }
 
-        ui64 detailedTableCount = 0;
+        // The labeled request has no DetailedCounters field at all - detailed metrics
+        // ride the plain db counters stream only, so every mention of the field has to
+        // stay inside the constexpr branch, the log line below included.
+        size_t detailedStreamCount = 0;
+        size_t detailedTableCount = 0;
         if constexpr (!isLabeled) {
             for (auto& [service, state] : dbCounters.DetailedStates) {
                 auto* entry = record.AddDetailedCounters();
@@ -528,6 +532,7 @@ private:
                 state->Pack(*entry->MutableTables(), dbCounters.Generation);
                 detailedTableCount += entry->TablesSize();
             }
+            detailedStreamCount = record.DetailedCountersSize();
         }
 
         SVLOG_D("Send counters: "
@@ -538,7 +543,7 @@ private:
             << ", node id# " << record.GetNodeId()
             << ", is retrying# " << dbCounters.IsRetrying
             << ", is labeled# " << isLabeled
-            << ", detailed streams# " << record.DetailedCountersSize()
+            << ", detailed streams# " << detailedStreamCount
             << ", detailed tables# " << detailedTableCount);
 
         Send(MakePipePerNodeCacheID(false),

@@ -5,7 +5,8 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/testing/unittest
-    ydb/core/testlib/default
+    ydb/core/testlib/basics/default
+    ydb/core/tx/scheme_cache
 )
 
 YQL_LAST_ABI_VERSION()

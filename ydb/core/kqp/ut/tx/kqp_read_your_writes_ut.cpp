@@ -299,6 +299,8 @@ public:
     TInsertThenDeleteAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
+        // TODO: SnapshotRW + row table: DELETE doesn't see uncommitted INSERT from same tx without mid-tx read
+        if (!GetIsOlap() && TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) return;
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
@@ -307,25 +309,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(InsertThenDeleteAfterCommit_Serializable, IsOlap) {
-    TInsertThenDeleteAfterCommit tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(InsertThenDeleteAfterCommit_Snapshot, IsOlap) {
-    if (!IsOlap) {
-        return; // TODO: SnapshotRW: DELETE doesn't see uncommitted INSERT from same tx without mid-tx read
-    }
-    TInsertThenDeleteAfterCommit tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenDeleteAfterCommit_ReadCommitted) {
-    TInsertThenDeleteAfterCommit tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(InsertThenDeleteAfterCommit)
 
 // UPDATE → (SELECT sees new value) → UPDATE using new value → SELECT sees final value.
 // Uses the Test table (has an Amount column suitable for arithmetic).
@@ -354,6 +338,8 @@ public:
     TUpdateThenUpdateBasedOnNewValueAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
+        // TODO: OLAP: second UPDATE doesn't see first UPDATE's value without mid-tx read
+        if (GetIsOlap()) return;
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul);)");
         tx.Begin();
@@ -364,28 +350,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(UpdateThenUpdateBasedOnNewValueAfterCommit_Serializable, IsOlap) {
-    if (IsOlap) {
-        return; // TODO: OLAP: second UPDATE doesn't see first UPDATE's value without mid-tx read
-    }
-    TUpdateThenUpdateBasedOnNewValueAfterCommit tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(UpdateThenUpdateBasedOnNewValueAfterCommit_Snapshot, IsOlap) {
-    if (IsOlap) {
-        return; // TODO: OLAP: second UPDATE doesn't see first UPDATE's value without mid-tx read
-    }
-    TUpdateThenUpdateBasedOnNewValueAfterCommit tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(UpdateThenUpdateBasedOnNewValueAfterCommit_ReadCommitted) {
-    TUpdateThenUpdateBasedOnNewValueAfterCommit tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(UpdateThenUpdateBasedOnNewValueAfterCommit)
 
 // UPDATE → (SELECT sees new value) → DELETE WHERE updated value → row is gone.
 class TUpdateThenPredicateDeleteThenSelect : public TTableDataModificationTester {
@@ -413,6 +378,8 @@ public:
     TUpdateThenPredicateDeleteAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
+        // TODO: OLAP: predicate DELETE doesn't see UPDATE from same tx without mid-tx read
+        if (GetIsOlap()) return;
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "B");)");
         tx.Begin();
@@ -422,28 +389,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(UpdateThenPredicateDeleteAfterCommit_Serializable, IsOlap) {
-    if (IsOlap) {
-        return; // TODO: OLAP: predicate DELETE doesn't see UPDATE from same tx without mid-tx read
-    }
-    TUpdateThenPredicateDeleteAfterCommit tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(UpdateThenPredicateDeleteAfterCommit_Snapshot, IsOlap) {
-    if (IsOlap) {
-        return; // TODO: OLAP: predicate DELETE doesn't see UPDATE from same tx without mid-tx read
-    }
-    TUpdateThenPredicateDeleteAfterCommit tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(UpdateThenPredicateDeleteAfterCommit_ReadCommitted) {
-    TUpdateThenPredicateDeleteAfterCommit tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(UpdateThenPredicateDeleteAfterCommit)
 
 // DELETE → (SELECT sees nothing) → INSERT same key → SELECT sees new value.
 class TDeleteThenInsertSameKeyThenSelect : public TTableDataModificationTester {
@@ -471,6 +417,9 @@ public:
     TDeleteThenInsertSameKeyAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
+        // TODO: OLAP: INSERT doesn't see DELETE from same tx without mid-tx read
+        // TODO: SnapshotRW: INSERT doesn't see DELETE from same tx without mid-tx read
+        if (GetIsOlap() || TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) return;
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "original");)");
         tx.Begin();
@@ -480,26 +429,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(DeleteThenInsertSameKeyAfterCommit_Serializable, IsOlap) {
-    if (IsOlap) {
-        return; // TODO: OLAP: INSERT doesn't see DELETE from same tx without mid-tx read
-    }
-    TDeleteThenInsertSameKeyAfterCommit tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(DeleteThenInsertSameKeyAfterCommit_Snapshot, IsOlap) {
-    return; // TODO: SnapshotRW + row table: INSERT doesn't see DELETE from same tx without mid-tx read; OLAP same issue
-    TDeleteThenInsertSameKeyAfterCommit tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(DeleteThenInsertSameKeyAfterCommit_ReadCommitted) {
-    TDeleteThenInsertSameKeyAfterCommit tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(DeleteThenInsertSameKeyAfterCommit)
 
 // INSERT → (SELECT) → UPDATE → (SELECT) → DELETE → SELECT sees nothing.
 class TInsertThenUpdateThenDeleteThenSelect : public TTableDataModificationTester {
@@ -528,6 +458,8 @@ public:
     TInsertThenUpdateThenDeleteAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
+        // TODO: SnapshotRW + row table: DELETE doesn't see uncommitted writes from same tx without mid-tx read
+        if (!GetIsOlap() && TxSettings_.GetMode() == TTxSettings::TS_SNAPSHOT_RW) return;
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
@@ -537,25 +469,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(InsertThenUpdateThenDeleteAfterCommit_Serializable, IsOlap) {
-    TInsertThenUpdateThenDeleteAfterCommit tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(InsertThenUpdateThenDeleteAfterCommit_Snapshot, IsOlap) {
-    if (!IsOlap) {
-        return; // TODO: SnapshotRW: DELETE doesn't see uncommitted writes from same tx without mid-tx read
-    }
-    TInsertThenUpdateThenDeleteAfterCommit tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenUpdateThenDeleteAfterCommit_ReadCommitted) {
-    TInsertThenUpdateThenDeleteAfterCommit tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(InsertThenUpdateThenDeleteAfterCommit)
 
 // UPDATE row B → (SELECT B sees new value) → write that value into row A → SELECT A sees it.
 class TUpdateBasedOnEarlierUpdatedRowThenSelect : public TTableDataModificationTester {

@@ -5,7 +5,7 @@
 1. **SelfHeal хранилища** (эта статья) — для дисков и [групп хранения](../../concepts/glossary.md#storage-group) с данными.
 2. **SelfHeal State Storage** — для реплик [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board) и [SchemeBoard](../../concepts/glossary.md#scheme-board). См. [{#T}](selfheal_statestorage.md).
 
-Оба нужны, чтобы кластер снова соблюдал гарантии отказоустойчивости, если узлы или диски нельзя быстро починить вручную.
+Оба механизма сохраняют работоспособность и отказоустойчивость кластера, если вышедшие из строя узлы или диски нельзя быстро восстановить.
 
 {% note info %}
 

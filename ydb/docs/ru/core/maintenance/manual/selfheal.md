@@ -1,17 +1,27 @@
 # Работа с SelfHeal
 
-В процессе работы кластеров могут выходить из строя узлы целиком или отдельные блочные устройства, на которых работает {{ ydb-short-name }}.
+В {{ ydb-short-name }} есть два механизма автоматического восстановления (SelfHeal):
 
-SelfHeal используется для сохранения работоспособности и отказоустойчивости кластера, если невозможно быстро восстановить вышедшие из строя узлы или устройства.
+1. **SelfHeal хранилища** (эта статья) — для дисков и [групп хранения](../../concepts/glossary.md#storage-group) с данными.
+2. **SelfHeal State Storage** — для реплик [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board) и [SchemeBoard](../../concepts/glossary.md#scheme-board). См. [{#T}](selfheal_statestorage.md).
 
-SelfHeal позволяет:
+Оба нужны, чтобы кластер снова соблюдал гарантии отказоустойчивости, если узлы или диски нельзя быстро починить вручную.
 
-* обнаружить неисправные элементы системы;
-* перенести неисправные элементы в щадящем режиме без потери данных и расформирования групп хранения.
+{% note info %}
 
-SelfHeal включен по умолчанию и автоматически изменяет конфигурацию [динамических групп](../../concepts/glossary.md#dynamic-group). В кластерах с конфигурацией V2 можно также включить [SelfHeal статической группы](../../devops/configuration-management/configuration-v2/static-group-self-heal.md).
+SelfHeal State Storage доступен только при [конфигурации V2](../../devops/configuration-management/configuration-v2/config-overview.md). SelfHeal хранилища от версии конфигурации не зависит.
 
-Компонент {{ ydb-short-name }}, отвечающий за SelfHeal, называется Sentinel.
+{% endnote %}
+
+## Как работает SelfHeal хранилища {#how-it-works}
+
+[CMS](../../concepts/glossary.md#cms) (компонент Sentinel) постоянно следит за состоянием [PDisk](../../concepts/glossary.md#pdisk) и узлов. Если неисправность сохраняется достаточно долго (по умолчанию около часа), CMS инициирует перенос затронутых [VDisk](../../concepts/glossary.md#vdisk) на исправное оборудование, чтобы снова соблюдалась [модель отказа](../../concepts/topology.md#cluster-config).
+
+Команду исполняет [Blob Storage Controller](../../concepts/glossary.md#ds-controller): данные реплицируются в фоне. Сам перенос может занять от минут до суток в зависимости от объёма данных и оборудования. После принятия команды для CMS задача уже поставлена; завершение репликации обеспечивает распределённое хранилище.
+
+SelfHeal хранилища включён по умолчанию для [динамических групп](../../concepts/glossary.md#dynamic-group). В кластерах с конфигурацией V2 можно также включить [SelfHeal статической группы](../../devops/configuration-management/configuration-v2/static-group-self-heal.md).
+
+Ниже — как включать, выключать и настраивать SelfHeal хранилища.
 
 ## Включение и выключение SelfHeal {#on-off}
 

@@ -64,7 +64,7 @@ public:
 class TWorkersPool {
 private:
     TString PoolName;
-    YDB_READONLY(ui32, WorkersPoolId, 0);
+    YDB_READONLY(ui64, WorkersPoolId, 0);
     YDB_READONLY_DEF(TThreadsCountInfo, WorkersCountInfo);
     YDB_READONLY_DEF(std::vector<TWorkerPoolCategoryUsage>, Links);
     YDB_READONLY(ui64, MaxBatchSize, 30);
@@ -100,7 +100,7 @@ public:
 class TCategory {
 private:
     YDB_READONLY(ESpecialTaskCategory, Category, ESpecialTaskCategory::Insert);
-    YDB_READONLY_DEF(std::vector<ui32>, WorkerPools);
+    YDB_READONLY_DEF(std::vector<ui64>, WorkerPools);
 
 public:
     TString DebugString() const;

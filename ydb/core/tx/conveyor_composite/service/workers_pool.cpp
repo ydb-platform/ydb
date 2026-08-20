@@ -7,7 +7,7 @@
 #include <numeric>
 
 namespace NKikimr::NConveyorComposite {
-TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
+TWorkersPool::TWorkersPool(const TString& poolName, const ui64 workersPoolId, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
     const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories)
     : WorkersCount(config.GetWorkersCountInfo().GetThreadsCount(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
     , MaxWorkerThreads(config.GetWorkersCountInfo().GetCPUUsageDouble(NKqp::TStagePredictor::GetPossibleMaxLimitThreads()))
@@ -15,7 +15,7 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
     , MaxBatchSize(config.GetMaxBatchSize())
     , PoolName(poolName)
     , DistributorId(distributorId)
-    , WorkersPoolId(config.GetWorkersPoolId()) {
+    , WorkersPoolId(workersPoolId) {
     Workers.reserve(WorkersCount);
     for (auto&& i : config.GetLinks()) {
         AFL_VERIFY((ui64)i.GetCategory() < categories.size());
@@ -24,7 +24,7 @@ TWorkersPool::TWorkersPool(const TString& poolName, const NActors::TActorId& dis
     for (ui64 i = 0; i < WorkersCount; ++i) {
         const double cpuLimit = config.GetWorkerCPUUsage(i, NKqp::TStagePredictor::GetPossibleMaxLimitThreads());
         Workers.emplace_back(
-            std::make_unique<TWorker>(poolName, cpuLimit, distributorId, i, config.GetWorkersPoolId()), cpuLimit);
+            std::make_unique<TWorker>(poolName, cpuLimit, distributorId, i, workersPoolId), cpuLimit);
         ActiveWorkersIdx.emplace_back(i);
     }
     AFL_VERIFY(WorkersCount)("name", poolName)("action", "conveyor_registered")("config", config.DebugString())("actor_id", distributorId)(
@@ -100,6 +100,21 @@ bool TWorkersPool::StartWorkersUpdate(const std::vector<double>& desiredCPULimit
         DecreaseWorkers(desiredCPULimits);
     } else {
         UpdateWorkerCPULimit(Workers.size() - 1, desiredCPULimits.back());
+    }
+    return TryFinishWorkersUpdate();
+}
+
+bool TWorkersPool::StartWorkersRetirement() {
+    AFL_VERIFY(!WorkersUpdate);
+    WorkersUpdate.emplace();
+    WorkersUpdate->DesiredWorkersCount = 0;
+    for (ui64 workerIdx = 0; workerIdx < Workers.size(); ++workerIdx) {
+        auto& worker = Workers[workerIdx];
+        if (!worker.GetRunningTask()) {
+            RemoveFreeWorker(workerIdx);
+        }
+        WorkersUpdate->WorkersWaitingForStop.emplace(workerIdx);
+        TActivationContext::Send(worker.GetWorkerId(), std::make_unique<TEvInternal::TEvRetireWorker>());
     }
     return TryFinishWorkersUpdate();
 }
@@ -262,6 +277,13 @@ void TWorkersPool::ApplyTopologyUpdate(
         }
     }
     Processes = std::move(newProcesses);
+}
+
+void TWorkersPool::ClearTopology() {
+    for (auto& process : Processes) {
+        process.GetCounters()->ValueWeight->Set(0);
+    }
+    Processes.clear();
 }
 
 }   // namespace NKikimr::NConveyorComposite

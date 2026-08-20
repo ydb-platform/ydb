@@ -597,6 +597,33 @@ Y_UNIT_TEST_SUITE(TICDirectStorageTransportTest)
         WaitFuture(executor, readB2Future, WaitTimeout);
         UNIT_ASSERT_VALUES_EQUAL(writeB, readB2);
     }
+
+    Y_UNIT_TEST_F(DestroysOwnedActorAndRejectsPendingConnect, TDBGFixture)
+    {
+        auto transport =
+            std::make_unique<TICStorageTransportTestAdapter>(Runtime.get());
+        const TActorId transportActorId = transport->GetTransportActorId();
+        const auto& ddiskId = transport->GetDDiskIds()[0];
+
+        transport->SetPendingConnect(EConnectionType::DDisk, ddiskId);
+        auto connect = transport->Connect(MakeDDiskConnection(ddiskId));
+        DrainRuntime();
+
+        UNIT_ASSERT(Runtime->FindActor(transportActorId));
+        UNIT_ASSERT(!connect.ConnectFuture.HasValue());
+
+        transport.reset();
+        DrainRuntime();
+
+        UNIT_ASSERT(!Runtime->FindActor(transportActorId));
+        UNIT_ASSERT(connect.ConnectFuture.HasValue());
+        UNIT_ASSERT(
+            connect.ConnectFuture.GetValueSync().GetStatus() ==
+            NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR);
+        UNIT_ASSERT_STRINGS_EQUAL(
+            DestroyErrorMessage,
+            connect.ConnectFuture.GetValueSync().GetErrorReason());
+    }
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

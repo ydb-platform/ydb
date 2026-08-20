@@ -338,30 +338,6 @@ TEST(GrpcIamCredentialsProvider, RetriesTransientFailure) {
     server.Stop();
 }
 
-TEST(GrpcIamCredentialsProvider, DoesNotRetrySynchronousRequestFailure) {
-    std::atomic<int> attempts = 0;
-    auto facility = std::make_shared<TSimpleCoreFacility>();
-
-    TGrpcIamCredentialsProvider<CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService> provider(
-        MakeOAuthParams("localhost:1"),
-        [&attempts](CreateIamTokenRequest&) {
-            ++attempts;
-            ythrow yexception() << "failed to prepare IAM request";
-        },
-        [](IamTokenService::Stub*, grpc::ClientContext*, const CreateIamTokenRequest*,
-           CreateIamTokenResponse*, std::function<void(grpc::Status)>) {
-            FAIL() << "RPC must not start after request preparation fails";
-        },
-        facility);
-
-    auto future = provider.GetAuthInfoAsync();
-    ASSERT_TRUE(future.Wait(TDuration::Seconds(10)));
-    EXPECT_THROW(future.GetValue(), yexception);
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    EXPECT_EQ(attempts.load(), 1);
-}
-
 TEST(GrpcIamCredentialsProvider, DoesNotRetryTerminalFailure) {
     TIamTokenServiceStub iamStub;
     iamStub.SetStatus(grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "terminal"));

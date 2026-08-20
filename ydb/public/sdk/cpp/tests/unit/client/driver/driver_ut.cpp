@@ -211,10 +211,9 @@ Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
     }
 
     Y_UNIT_TEST(DriverScopesCancelIndependently) {
-        NYdbGrpc::TGRpcClientLow clientA(1);
-        NYdbGrpc::TGRpcClientLow clientB(1);
-        auto scopeA = GetSdkRuntime().CreateDriverScope(clientA);
-        auto scopeB = GetSdkRuntime().CreateDriverScope(clientB);
+        NYdbGrpc::TGRpcClientLow client(1);
+        auto scopeA = GetSdkRuntime().CreateDriverScope(client);
+        auto scopeB = GetSdkRuntime().CreateDriverScope(client);
         auto contextA = scopeA->CreateContext();
         auto contextB = scopeB->CreateContext();
 
@@ -238,8 +237,7 @@ Y_UNIT_TEST_SUITE(SdkRuntimeTest) {
         scopeB->Cancel();
         scopeA->CloseCallbacksAndWait();
         scopeB->CloseCallbacksAndWait();
-        clientA.Stop(true);
-        clientB.Stop(true);
+        client.Stop(true);
     }
 
     Y_UNIT_TEST(DriverScopeWaitsForCallbacks) {

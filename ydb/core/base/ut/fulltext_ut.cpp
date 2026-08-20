@@ -9,6 +9,43 @@
 
 namespace NKikimr::NFulltext {
 
+namespace {
+
+struct TDeltaItem {
+    ui64 DocId;
+    ui32 Freq;
+};
+
+TVector<TDeltaItem> RoundTrip(const TVector<TDeltaItem>& items, bool withFreq, bool sign = false) {
+    TDeltaWriter writer;
+    writer.Reset(withFreq, sign);
+    for (const auto& item : items) {
+        writer.Add(item.DocId, item.Freq);
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(writer.GetCount(), items.size());
+    UNIT_ASSERT_VALUES_EQUAL(writer.GetMaxId(), items.empty() ? 0 : items.back().DocId);
+
+    TDeltaReader reader(writer.GetBuf(), withFreq, sign);
+    TVector<TDeltaItem> result;
+    ui64 docId = 0;
+    ui32 freq = 0;
+    while (reader.Read(docId, freq)) {
+        result.push_back({docId, freq});
+    }
+    return result;
+}
+
+void AssertDeltaItemsEqual(const TVector<TDeltaItem>& actual, const TVector<TDeltaItem>& expected) {
+    UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        UNIT_ASSERT_VALUES_EQUAL_C(actual[i].DocId, expected[i].DocId, "item " << i);
+        UNIT_ASSERT_VALUES_EQUAL_C(actual[i].Freq, expected[i].Freq, "item " << i);
+    }
+}
+
+} // anonymous namespace
+
 Y_UNIT_TEST_SUITE(NFulltext) {
 
     // The compact rowid-mode doc-id layout: __ydb_row_id carries a dense seq in its low bits and a
@@ -69,6 +106,130 @@ Y_UNIT_TEST_SUITE(NFulltext) {
             UNIT_ASSERT_VALUES_EQUAL(freq, 1);
         }
         UNIT_ASSERT(!rdr.Read(docId, freq));
+    }
+
+    Y_UNIT_TEST(DeltaCodecEmptyAndSingle) {
+        AssertDeltaItemsEqual(RoundTrip({}, false), {});
+        AssertDeltaItemsEqual(RoundTrip({{0, 1}}, false), {{0, 1}});
+        AssertDeltaItemsEqual(RoundTrip({{Max<ui64>(), 1}}, false), {{Max<ui64>(), 1}});
+
+        // Frequency one is implicit in relevance segments, while larger values are stored explicitly.
+        AssertDeltaItemsEqual(RoundTrip({{0, 1}}, true), {{0, 1}});
+        AssertDeltaItemsEqual(RoundTrip({{Max<ui64>(), Max<ui32>()}}, true),
+            {{Max<ui64>(), Max<ui32>()}});
+    }
+
+    Y_UNIT_TEST(DeltaCodecVarintBoundaries) {
+        // Exercise one-byte/multi-byte transitions for regular delta varints (7 payload bits).
+        const TVector<TDeltaItem> plain = {
+            {0, 1},
+            {127, 1},
+            {255, 1},       // delta 128
+            {16638, 1},     // delta 16383
+            {33022, 1},     // delta 16384
+            {Max<ui64>(), 1},
+        };
+        AssertDeltaItemsEqual(RoundTrip(plain, false), plain);
+
+        // Relevance doc-id varints reserve a flag bit, so their first transition is 63 -> 64.
+        // Frequencies independently cross the regular 127 -> 128 transition.
+        const TVector<TDeltaItem> relevance = {
+            {0, 1},
+            {63, 2},
+            {127, 127},     // delta 64
+            {8254, 128},    // delta 8127
+            {16446, Max<ui32>()}, // delta 8192
+            {Max<ui64>(), 1},
+        };
+        AssertDeltaItemsEqual(RoundTrip(relevance, true), relevance);
+    }
+
+    Y_UNIT_TEST(DeltaCodecSignedExtremes) {
+        const TVector<TDeltaItem> items = {
+            {static_cast<ui64>(Min<i64>()), 1},
+            {static_cast<ui64>(-1), 2},
+            {0, 127},
+            {static_cast<ui64>(Max<i64>()), Max<ui32>()},
+        };
+        AssertDeltaItemsEqual(RoundTrip(items, true, true), items);
+    }
+
+    Y_UNIT_TEST(DeltaCodecManyAndRandomizedRoundTrip) {
+        TVector<TDeltaItem> many;
+        many.reserve(10000);
+        for (ui64 i = 0; i < 10000; ++i) {
+            many.push_back({i * i + i, 1 + static_cast<ui32>(i % 257)});
+        }
+        AssertDeltaItemsEqual(RoundTrip(many, true), many);
+
+        // Fixed-seed xorshift64 property test. Generate strictly increasing ids with deltas spanning
+        // every varint width normally encountered by compact posting segments.
+        ui64 random = 0x9e3779b97f4a7c15ULL;
+        auto nextRandom = [&]() {
+            random ^= random << 13;
+            random ^= random >> 7;
+            random ^= random << 17;
+            return random;
+        };
+
+        for (ui32 iteration = 0; iteration < 100; ++iteration) {
+            TVector<TDeltaItem> items;
+            ui64 docId = nextRandom() & 0xFFFF;
+            const size_t count = 1 + nextRandom() % 500;
+            items.reserve(count);
+            for (size_t i = 0; i < count; ++i) {
+                const ui32 shift = nextRandom() % 28;
+                const ui64 delta = 1 + (nextRandom() & ((1ULL << shift) - 1));
+                if (Max<ui64>() - docId < delta) {
+                    break;
+                }
+                docId += delta;
+                const ui32 freq = 1 + static_cast<ui32>(nextRandom() % 100000);
+                items.push_back({docId, freq});
+            }
+            AssertDeltaItemsEqual(RoundTrip(items, true), items);
+            AssertDeltaItemsEqual(RoundTrip(items, false), [&] {
+                TVector<TDeltaItem> result = items;
+                for (auto& item : result) {
+                    item.Freq = 1;
+                }
+                return result;
+            }());
+        }
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderGenerationMerge) {
+        auto encode = [](std::initializer_list<TDeltaItem> items) {
+            TDeltaWriter writer;
+            writer.Reset(true, false);
+            for (const auto& item : items) {
+                writer.Add(item.DocId, item.Freq);
+            }
+            return TVector<ui8>(writer.GetBuf().begin(), writer.GetBuf().end());
+        };
+
+        const auto base = encode({{1, 2}, {2, 1}, {4, 5}, {8, 1}});
+        const auto deleted = encode({{1, 1}, {2, 1}, {4, 7}, {6, 1}});
+        const auto added = encode({{1, 3}, {3, 1}, {4, 2}, {6, 2}});
+
+        TMultiDeltaReader reader;
+        reader.Reset(true, false);
+        reader.Add(true, base);
+        reader.Add(false, deleted);
+        reader.Add(true, added);
+        reader.Start();
+
+        TVector<TDeltaItem> actual;
+        ui64 docId = 0;
+        ui32 freq = 0;
+        while (reader.Read(docId, freq)) {
+            actual.push_back({docId, freq});
+        }
+
+        // Frequencies from add generations are summed, deletes are subtracted, and non-positive
+        // totals disappear. A delete of an absent id is canceled if a later generation adds it.
+        const TVector<TDeltaItem> expected = {{1, 4}, {3, 1}, {6, 1}, {8, 1}};
+        AssertDeltaItemsEqual(actual, expected);
     }
 
     Y_UNIT_TEST(MultiDeltaReader2) {

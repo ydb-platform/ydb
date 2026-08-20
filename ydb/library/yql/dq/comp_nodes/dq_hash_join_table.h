@@ -153,7 +153,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
                 BuildData_.PackedTuples.data() + resumeIndex * RowWidth_,
                 BuildData_.Overflow.data()
             });
-            if (false && isFull()) {
+            if (isFull()) {
                 ++resumeIndex;
                 return false;
             }

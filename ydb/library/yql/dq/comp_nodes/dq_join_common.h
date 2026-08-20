@@ -16,6 +16,17 @@
 
 namespace NKikimr::NMiniKQL {
 
+// The join a hash join node actually computes: the SQL kind plus the physical side whose rows that
+// kind preserves. Passed as a single template argument so nothing has to carry the side at runtime.
+struct TPhysicalJoin {
+    EJoinKind Kind;
+    ESide Preserved = ESide::Probe;
+
+    constexpr ESide NullSupplying() const {
+        return OtherSide(Preserved);
+    }
+};
+
 struct TColumnsMetadata {
     TMKQLVector<ui32> KeyColumns;
     TMKQLVector<TType*> ColumnTypes;
@@ -253,6 +264,7 @@ struct TTableAndSomeData {
     TMKQLDeque<TFuturePage> Futures;
     std::optional<TPackResult> CurrentProbePack;
     ui32 ProbeResumeIndex = 0;
+    size_t PreservedResumeIndex = 0;
 };
 
 namespace NJoinPackedTuples {
@@ -356,7 +368,7 @@ template <typename Source> class TInMemoryHashJoin {
     ui32 ResumeIndex_ = 0;
 };
 
-template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THybridHashJoin {
+template <typename Source, TSpillerSettings Settings, TPhysicalJoin Join> class THybridHashJoin {
     struct Logger {
         Logger(TComputationContext& ctx, TString name)
         : Logger_(ctx.MakeLogger())
@@ -369,7 +381,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         }
     };
 
-    using Self = THybridHashJoin<Source, Settings, Kind>;
+    using Self = THybridHashJoin<Source, Settings, Join>;
 
   public:
     using TTable = NJoinTable::TNeumannJoinTable;
@@ -377,8 +389,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     static constexpr bool FlushOnYield = false;
 
     // Row-preserving side is hashed, so its rows are emitted by scanning the table after the probe is done
-    bool PreservedRowsInBuildTable() const {
-        return PreservedSide_ == ESide::Build && (Kind == EJoinKind::Left || LeftSemiOrOnly(Kind));
+    static constexpr bool PreservedRowsInBuildTable() {
+        return Join.Preserved == ESide::Build && (Join.Kind == EJoinKind::Left || LeftSemiOrOnly(Join.Kind));
     }
 
     struct Init {};
@@ -400,9 +412,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         BuildingInMemoryTable(Self& self, TBucketsSpiller<Settings> spiller)
             : Spiller(std::move(spiller))
         {
-            const bool trackUsed = self.PreservedRowsInBuildTable();
             for(int index = 0; index < std::ssize(Spiller.GetBuckets()); ++index) {
-                ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, trackUsed});
+                ProbeState.Buckets.push_back(TTable{self.Layouts_.Build, PreservedRowsInBuildTable()});
             }
             self.Logger_.LogDebug("BuildingInMemoryTable stage started");
         }
@@ -432,6 +443,9 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         TProbeSpiller<Settings> Spiller;
         std::optional<TPackResult> FetchedPack;
         ui32 ResumeIndex = 0;
+        // Cursor of the post-probe scan over preserved rows left in the in-memory tables
+        int PreservedBucketIndex = 0;
+        size_t PreservedResumeIndex = 0;
     };
 
     using DumpedBuckets = std::unordered_map<int, TSpilledBucket>;
@@ -495,12 +509,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     };
 
     THybridHashJoin(TSides<Source> sources, TComputationContext& ctx, TString componentName,
-                    TSides<const NPackedTuple::TTupleLayout*> layouts, ESide preservedSide = ESide::Probe)
+                    TSides<const NPackedTuple::TTupleLayout*> layouts)
         : Logger_(ctx, componentName)
         , Layouts_(layouts)
         , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
-        , PreservedSide_(preservedSide)
     {
     }
 
@@ -546,20 +559,19 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 }
                 found = true;
                 table.MarkUsed(tableMatch);
-                if constexpr (Kind == EJoinKind::Inner || Kind == EJoinKind::Left) {
+                if constexpr (Join.Kind == EJoinKind::Inner || Join.Kind == EJoinKind::Left) {
                     consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
                 }
             });
-            if (PreservedRowsInBuildTable()) {
-                return;
-            }
-            if constexpr (Kind == EJoinKind::Left || Kind == EJoinKind::LeftOnly) {
-                if (!found) {
-                    consume(probeRow);
-                }
-            } else if constexpr (Kind == EJoinKind::LeftSemi) {
-                if (found) {
-                    consume(probeRow);
+            if constexpr (!PreservedRowsInBuildTable()) {
+                if constexpr (Join.Kind == EJoinKind::Left || Join.Kind == EJoinKind::LeftOnly) {
+                    if (!found) {
+                        consume(probeRow);
+                    }
+                } else if constexpr (Join.Kind == EJoinKind::LeftSemi) {
+                    if (found) {
+                        consume(probeRow);
+                    }
                 }
             }
         };
@@ -651,8 +663,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     state.FetchedPack = std::move(GetPayload(var));
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
-                    if (PreservedRowsInBuildTable()) {
-                        EmitPreservedBuildRowsFromInMemoryBuckets(state.Spiller, consume);
+                    if constexpr (PreservedRowsInBuildTable()) {
+                        if (!EmitPreservedBuildRowsFromInMemoryBuckets(state.Spiller, state.PreservedBucketIndex,
+                                                                       state.PreservedResumeIndex, consume, isFull)) {
+                            return EFetchResult::One;
+                        }
                     }
                     std::unordered_map<int, TSpilledBucket> alreadyDumped;
                     TMKQLVector<TValueAndLocation<NThreading::TFuture<ISpiller::TKey>>> futures;
@@ -793,8 +808,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         table->ProbeResumeIndex = 0;
                     } else if (table->Futures.empty()) {
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
-                        if (PreservedRowsInBuildTable()) {
-                            EmitPreservedBuildRows(table->Table, consume);
+                        if constexpr (PreservedRowsInBuildTable()) {
+                            if (!EmitPreservedBuildRows(table->Table, table->PreservedResumeIndex, consume, isFull)) {
+                                return EFetchResult::One;
+                            }
                         }
                         state.SelectedPair = std::nullopt;
                     } else {
@@ -816,22 +833,29 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         return EFetchResult::One;
     }
 
-    template <typename F>
-    void EmitPreservedBuildRows(TTable& table, F&& consume) {
-        table.ForEachWhereUsed(Kind == EJoinKind::LeftSemi, std::forward<F>(consume));
+    // Both emit helpers return false when they stopped on a full output; the caller must return
+    // control to the batch loop and call MatchRows again to pick the scan up where it left off.
+    bool EmitPreservedBuildRows(TTable& table, size_t& resumeIndex, auto consume, auto isFull) {
+        return table.ForEachWhereUsed(Join.Kind == EJoinKind::LeftSemi, resumeIndex, consume, isFull);
     }
 
-    template <typename TSpiller, typename F>
-    void EmitPreservedBuildRowsFromInMemoryBuckets(TSpiller& spiller, F&& consume) {
-        for (int index = 0; index < std::ssize(spiller.GetState().Buckets); ++index) {
-            if (spiller.IsBucketSpilled(index)) {
+    template <typename TSpiller>
+    bool EmitPreservedBuildRowsFromInMemoryBuckets(TSpiller& spiller, int& bucketIndex, size_t& resumeIndex,
+                                                   auto consume, auto isFull) {
+        for (; bucketIndex < std::ssize(spiller.GetState().Buckets); ++bucketIndex) {
+            if (spiller.IsBucketSpilled(bucketIndex)) {
                 continue;
             }
-            TTable* table = std::get_if<TTable>(&spiller.GetState().Buckets[index]);
-            if (table && !table->Empty()) {
-                EmitPreservedBuildRows(*table, consume);
+            TTable* table = std::get_if<TTable>(&spiller.GetState().Buckets[bucketIndex]);
+            if (!table || table->Empty()) {
+                continue;
             }
+            if (!EmitPreservedBuildRows(*table, resumeIndex, consume, isFull)) {
+                return false;
+            }
+            resumeIndex = 0;
         }
+        return true;
     }
 
   private:
@@ -839,7 +863,6 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
     Sources Sources_;
-    ESide PreservedSide_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
 };
@@ -881,18 +904,30 @@ inline TDqRenames<ESide> BuildImplRenames(const TDqUserRenames& userRenames, ESi
     return renames;
 }
 
-template <template <EJoinKind> class Wrapper, typename TResult, typename... Args>
-TResult* DispatchHashJoinByKind(EJoinKind kind, TStringBuf unsupportedMessage, Args&&... args) {
+template <template <TPhysicalJoin> class Wrapper, typename TResult, EJoinKind Kind, typename... Args>
+TResult* DispatchHashJoinByPreservedSide(ESide preservedSide, Args&&... args) {
+    switch (preservedSide) {
+    case ESide::Probe:
+        return new Wrapper<TPhysicalJoin{Kind, ESide::Probe}>(std::forward<Args>(args)...);
+    case ESide::Build:
+        return new Wrapper<TPhysicalJoin{Kind, ESide::Build}>(std::forward<Args>(args)...);
+    }
+    Y_UNREACHABLE();
+}
+
+template <template <TPhysicalJoin> class Wrapper, typename TResult, typename... Args>
+TResult* DispatchHashJoinByKind(EJoinKind kind, ESide preservedSide, TStringBuf unsupportedMessage, Args&&... args) {
     using enum EJoinKind;
     switch (kind) {
     case Inner:
-        return new Wrapper<Inner>(std::forward<Args>(args)...);
+        // Inner keeps no rows of its own, so there is nothing to instantiate per side
+        return new Wrapper<TPhysicalJoin{Inner}>(std::forward<Args>(args)...);
     case LeftOnly:
-        return new Wrapper<LeftOnly>(std::forward<Args>(args)...);
+        return DispatchHashJoinByPreservedSide<Wrapper, TResult, LeftOnly>(preservedSide, std::forward<Args>(args)...);
     case LeftSemi:
-        return new Wrapper<LeftSemi>(std::forward<Args>(args)...);
+        return DispatchHashJoinByPreservedSide<Wrapper, TResult, LeftSemi>(preservedSide, std::forward<Args>(args)...);
     case Left:
-        return new Wrapper<Left>(std::forward<Args>(args)...);
+        return DispatchHashJoinByPreservedSide<Wrapper, TResult, Left>(preservedSide, std::forward<Args>(args)...);
     default:
         break;
     }
@@ -973,15 +1008,14 @@ inline TSides<TVector<TType*>> ForceOptionalOnNullableSide(const TSides<TVector<
     return userTypes;
 }
 
-template <EJoinKind Kind, typename Converter>
+template <TPhysicalJoin Join, typename Converter>
 struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
     struct Empty {};
-    using BuildNullIfNeeded = std::conditional_t<Kind == EJoinKind::Left, TPackResult, Empty>;
+    using BuildNullIfNeeded = std::conditional_t<Join.Kind == EJoinKind::Left, TPackResult, Empty>;
 
-    TPackedTupleOutputBase(const TDqRenames<ESide>* renames, TSides<Converter*> converters, ESide preservedSide)
+    TPackedTupleOutputBase(const TDqRenames<ESide>* renames, TSides<Converter*> converters)
         : Renames_(renames)
         , Converters_(converters)
-        , PreservedSide_(preservedSide)
     {}
 
     int Columns() const {
@@ -990,7 +1024,7 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
 
     i64 SizeTuples() const {
         AssertSizeIsSane();
-        return Output_.SelectSide(PreservedSide_).NTuples;
+        return Output_.SelectSide(Join.Preserved).NTuples;
     }
 
     auto MakeConsumeFn() {
@@ -1005,16 +1039,16 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
             }
 
             void operator()(TSingleTuple tuple) {
-                if constexpr (Kind == EJoinKind::Left) {
+                if constexpr (Join.Kind == EJoinKind::Left) {
                     const TSingleTuple null{.PackedData = Self.Nulls_.PackedTuples.data(),
                                             .OverflowBegin = Self.Nulls_.Overflow.data()};
                     TSides<TSingleTuple> row;
-                    row.SelectSide(Self.PreservedSide_) = tuple;
-                    row.SelectSide(OtherSide(Self.PreservedSide_)) = null;
+                    row.SelectSide(Join.Preserved) = tuple;
+                    row.SelectSide(Join.NullSupplying()) = null;
                     (*this)(row);
-                } else if constexpr (SemiOrOnlyJoin(Kind)) {
-                    Self.Output_.SelectSide(Self.PreservedSide_)
-                        .AppendTuple(tuple, Self.Converters_.SelectSide(Self.PreservedSide_)->GetTupleLayout());
+                } else if constexpr (SemiOrOnlyJoin(Join.Kind)) {
+                    Self.Output_.SelectSide(Join.Preserved)
+                        .AppendTuple(tuple, Self.Converters_.SelectSide(Join.Preserved)->GetTupleLayout());
                 }
             }
         };
@@ -1023,10 +1057,10 @@ struct TPackedTupleOutputBase : NNonCopyable::TMoveOnly {
 
 protected:
     void AssertSizeIsSane() const {
-        if constexpr (LeftSemiOrOnly(Kind)) {
-            MKQL_ENSURE(Output_.SelectSide(OtherSide(PreservedSide_)).NTuples == 0,
+        if constexpr (LeftSemiOrOnly(Join.Kind)) {
+            MKQL_ENSURE(Output_.SelectSide(Join.NullSupplying()).NTuples == 0,
                         "Left Only and Left Semi join types shouldn't collect any tuples on the non-output side");
-        } else if constexpr (Kind == EJoinKind::Left || Kind == EJoinKind::Inner) {
+        } else if constexpr (Join.Kind == EJoinKind::Left || Join.Kind == EJoinKind::Inner) {
             MKQL_ENSURE(Output_.Build.NTuples == Output_.Probe.NTuples,
                         "Inner and Left join types must collect same amount of tuples from build and probe");
         }
@@ -1036,7 +1070,6 @@ protected:
     TSides<Converter*> Converters_;
     TSides<TPackResult> Output_;
     BuildNullIfNeeded Nulls_;
-    ESide PreservedSide_;
 };
 
 template <i64 MaxOutputRows, typename JoinType, typename OutputType, typename FlushSink>

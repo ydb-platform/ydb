@@ -1043,6 +1043,42 @@ TJoinTestData OutputBufferBoundedTestData() {
     return td;
 }
 
+constexpr int OutputBufferBoundedLeftIsBuildRows = 50000;
+
+// Left is hashed, so every preserved row is emitted by the post-probe scan of the build table
+// rather than by the probe loop. That scan has its own batching, which this data exercises.
+TJoinTestData OutputBufferBoundedLeftIsBuildTestData(EJoinKind kind) {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = OutputBufferBoundedLeftIsBuildRows;
+    TVector<ui64> leftKeys(leftSize);
+    TVector<ui64> leftValues(leftSize);
+    for (int i = 0; i < leftSize; ++i) {
+        leftKeys[i] = i;
+        leftValues[i] = i * 3;
+    }
+
+    // LeftSemi keeps matched rows and LeftOnly keeps unmatched ones, so the right side either
+    // matches everything or nothing; both cases must preserve all left rows
+    const bool matchEverything = kind == EJoinKind::LeftSemi;
+    const int rightSize = matchEverything ? leftSize : 100;
+    TVector<ui64> rightKeys(rightSize);
+    TVector<ui64> rightValues(rightSize);
+    for (int i = 0; i < rightSize; ++i) {
+        rightKeys[i] = matchEverything ? i : leftSize + i;
+        rightValues[i] = i;
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Kind = kind;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
 TJoinTestData ScalarPayloadInnerJoinTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1404,6 +1440,53 @@ TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     return descr;
 }
 
+struct TOutputBlockStats {
+    i64 TotalRows = 0;
+    i64 MaxBlockRows = 0;
+    int BlockCount = 0;
+};
+
+TOutputBlockStats MeasureOutputBlocks(TJoinTestData& td) {
+    auto descr = MakeJoinDescription(td);
+    descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(td.JoinMemoryConstraint.has_value());
+    THolder<IComputationGraph> graph =
+        ConstructJoinGraphStream(td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
+    if (td.JoinMemoryConstraint) {
+        td.SetHardLimitIncreaseMemCallback(*td.JoinMemoryConstraint + 3000_MB + td.Setup->Alloc.GetUsed());
+    }
+
+    const size_t tupleWidth = td.Renames.size() + 1;
+    std::vector<NUdf::TUnboxedValue> buff(tupleWidth);
+    auto stream = graph->GetValue();
+
+    TOutputBlockStats stats;
+    while (true) {
+        auto status = stream.WideFetch(buff.data(), tupleWidth);
+        if (status == NYql::NUdf::EFetchStatus::Finish) {
+            break;
+        }
+        if (status == NYql::NUdf::EFetchStatus::Yield) {
+            continue;
+        }
+        const i64 rows = ArrowScalarAsInt(TArrowBlock::From(buff[tupleWidth - 1]));
+        stats.TotalRows += rows;
+        stats.MaxBlockRows = std::max(stats.MaxBlockRows, rows);
+        ++stats.BlockCount;
+    }
+    return stats;
+}
+
+void AssertOutputBufferBounded(const TOutputBlockStats& stats, i64 expectedTotal) {
+    constexpr i64 maxOutputRows = 10000;
+    UNIT_ASSERT_VALUES_EQUAL(stats.TotalRows, expectedTotal);
+    UNIT_ASSERT_C(stats.BlockCount > 1,
+        TStringBuilder() << "Expected multiple output blocks but got " << stats.BlockCount
+                         << " (all " << stats.TotalRows << " rows in one block)");
+    UNIT_ASSERT_C(stats.MaxBlockRows <= maxOutputRows,
+        TStringBuilder() << "Max block size " << stats.MaxBlockRows
+                         << " should be at most " << maxOutputRows);
+}
+
 void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
     auto descr = MakeJoinDescription(testData);
     if (testData.JoinMemoryConstraint){
@@ -1687,42 +1770,22 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
     }
     Y_UNIT_TEST(TestOutputBufferBounded) {
         auto td = OutputBufferBoundedTestData();
-        auto descr = MakeJoinDescription(td);
+        AssertOutputBufferBounded(MeasureOutputBlocks(td), 200 * 200);
+    }
 
-        THolder<IComputationGraph> graph = ConstructJoinGraphStream(
-            td.Kind, ETestedJoinAlgo::kBlockHash, descr, true, td.JoinSettings);
+    Y_UNIT_TEST(TestOutputBufferBoundedLeftSemiLeftIsBuild) {
+        auto td = OutputBufferBoundedLeftIsBuildTestData(EJoinKind::LeftSemi);
+        AssertOutputBufferBounded(MeasureOutputBlocks(td), OutputBufferBoundedLeftIsBuildRows);
+    }
 
-        const size_t tupleWidth = td.Renames.size() + 1;
-        std::vector<NUdf::TUnboxedValue> buff(tupleWidth);
-        auto stream = graph->GetValue();
+    Y_UNIT_TEST(TestOutputBufferBoundedLeftOnlyLeftIsBuild) {
+        auto td = OutputBufferBoundedLeftIsBuildTestData(EJoinKind::LeftOnly);
+        AssertOutputBufferBounded(MeasureOutputBlocks(td), OutputBufferBoundedLeftIsBuildRows);
+    }
 
-        i64 totalRows = 0;
-        i64 maxBlockRows = 0;
-        int blockCount = 0;
-
-        while (true) {
-            auto status = stream.WideFetch(buff.data(), tupleWidth);
-            if (status == NYql::NUdf::EFetchStatus::Finish) {
-                break;
-            }
-            if (status == NYql::NUdf::EFetchStatus::Yield) {
-                continue;
-            }
-            int rows = ArrowScalarAsInt(TArrowBlock::From(buff[tupleWidth - 1]));
-            totalRows += rows;
-            maxBlockRows = std::max(maxBlockRows, static_cast<i64>(rows));
-            ++blockCount;
-        }
-
-        constexpr i64 expectedTotal = 200 * 200;
-        constexpr i64 maxOutputRows = 10000;
-        UNIT_ASSERT_VALUES_EQUAL(totalRows, expectedTotal);
-        UNIT_ASSERT_C(blockCount > 1,
-            TStringBuilder() << "Expected multiple output blocks but got " << blockCount
-                             << " (all " << totalRows << " rows in one block)");
-        UNIT_ASSERT_C(maxBlockRows <= maxOutputRows,
-            TStringBuilder() << "Max block size " << maxBlockRows
-                             << " should be at most " << maxOutputRows);
+    Y_UNIT_TEST(TestOutputBufferBoundedLeftSemiSpillingLeftIsBuild) {
+        auto td = LeftSemiSpillingTestDataLeftIsBuild();
+        AssertOutputBufferBounded(MeasureOutputBlocks(td), 100000);
     }
 }
 } // namespace NKikimr::NMiniKQL

@@ -31,9 +31,6 @@ struct TDqBlockJoinContext {
     EJoinKind Kind;
     TSides<i32> TempStateIndes;
     TBlockHashJoinSettings Settings;
-    // Side whose rows the join kind preserves, derived from Settings.BuildSide once in
-    // WrapDqBlockHashJoin so that the rest of the code never branches on LeftIsBuild()
-    ESide PreservedSide;
     // Pre-computed during graph construction in WrapDqBlockHashJoin using the
     // program's TTypeEnvironment.  This avoids creating TOptionalType objects
     // at runtime (inside DoCalculate) whose lifetime depends on the
@@ -136,13 +133,13 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     TVector<int> ColumnPermutation_;
 };
 
-template<EJoinKind Kind>
-struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Kind, IBlockLayoutConverter> {
-    using TBase = TPackedTupleOutputBase<Kind, IBlockLayoutConverter>;
+template<TPhysicalJoin Join>
+struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Join, IBlockLayoutConverter> {
+    using TBase = TPackedTupleOutputBase<Join, IBlockLayoutConverter>;
 
     TRenamesPackedTupleOutput(const TDqBlockJoinContext* meta, TSides<IBlockLayoutConverter*> converters,
                               const TVector<TType*>& userNullTypes, arrow::MemoryPool& arrowPool)
-        : TBase(&meta->Renames, converters, meta->PreservedSide)
+        : TBase(&meta->Renames, converters)
     {
         if constexpr (!std::is_same_v<typename TBase::BuildNullIfNeeded, typename TBase::Empty>) {
             TVector<arrow::Datum> nulls;
@@ -154,7 +151,7 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Kind, IBlockLayoutConv
                 builder->Add(NYql::NUdf::TBlockItem{});
                 nulls.push_back(builder->Build(true));
             }
-            this->Converters_.SelectSide(OtherSide(this->PreservedSide_))->Pack(nulls, this->Nulls_);
+            this->Converters_.SelectSide(Join.NullSupplying())->Pack(nulls, this->Nulls_);
         }
     }
 
@@ -171,13 +168,13 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Kind, IBlockLayoutConv
     }
 
     TVector<arrow::Datum> FlushAndApplyRenames() {
-        if constexpr(LeftSemiOrOnly(Kind)) {
+        if constexpr(LeftSemiOrOnly(Join.Kind)) {
             TVector<arrow::Datum> out;
-            this->Converters_.SelectSide(this->PreservedSide_)->Unpack(this->Output_.SelectSide(this->PreservedSide_), out);
-            this->Output_.SelectSide(this->PreservedSide_).Clear();
+            this->Converters_.SelectSide(Join.Preserved)->Unpack(this->Output_.SelectSide(Join.Preserved), out);
+            this->Output_.SelectSide(Join.Preserved).Clear();
             TVector<arrow::Datum> renamed;
             for(auto rename: *this->Renames_){
-                MKQL_ENSURE(rename.Side == this->PreservedSide_, "renames in Semi or Only Left Join shouldn't contain columns from right side");
+                MKQL_ENSURE(rename.Side == Join.Preserved, "renames in Semi or Only Left Join shouldn't contain columns from right side");
                 renamed.push_back(out[rename.Index]);
             }
             return renamed;
@@ -196,7 +193,7 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Kind, IBlockLayoutConv
     }
 };
 
-template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Kind>> {
+template <TPhysicalJoin Join> class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Join>> {
   private:
     using TBaseComputation = TMutableComputationNode<TBlockHashJoinWrapper>;
 
@@ -217,7 +214,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
-        const auto& userNullTypes = userTypes.SelectSide(OtherSide(Meta_->PreservedSide));
+        const auto& userNullTypes = userTypes.SelectSide(Join.NullSupplying());
 
         return ctx.HolderFactory.Create<TStreamValue>(
             ctx, Streams_, std::move(layouts), Meta_.get(), userNullTypes,
@@ -227,7 +224,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
   private:
     class TStreamValue : public TComputationValue<TStreamValue> {
         using TBase = TComputationValue<TStreamValue>;
-        using JoinType = NJoinPackedTuples::THybridHashJoin<TBlockPackedTupleSource, TestStorageSettings, Kind>;
+        using JoinType = NJoinPackedTuples::THybridHashJoin<TBlockPackedTupleSource, TestStorageSettings, Join>;
 
       public:
         TStreamValue(TMemoryUsageInfo* memInfo, TComputationContext& ctx, TSides<IComputationNode*> streams,
@@ -240,14 +237,13 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                                                     .Probe = {ctx, streams, meta, Converters_, ESide::Probe}},
                     ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
-                                                              .Probe = Converters_.Probe->GetTupleLayout()},
-                    meta->PreservedSide)
+                                                              .Probe = Converters_.Probe->GetTupleLayout()})
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
             , PairFilter_(std::move(pairFilter))
         {}
 
-        void WriteFlushToOutput(NUdf::TUnboxedValue* output, typename TRenamesPackedTupleOutput<Kind>::TFlushResult flush) {
+        void WriteFlushToOutput(NUdf::TUnboxedValue* output, typename TRenamesPackedTupleOutput<Join>::TFlushResult flush) {
             const int cols = Output_.Columns();
             for (int colIndex = 0; colIndex < cols; ++colIndex) {
                 output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(flush.Columns[colIndex]), Ctx_->RuntimeSettings.DatumValidation.Get());
@@ -280,7 +276,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         TSides<std::unique_ptr<IBlockLayoutConverter>> Converters_;
         JoinType Join_;
         TComputationContext* Ctx_;
-        TRenamesPackedTupleOutput<Kind> Output_;
+        TRenamesPackedTupleOutput<Join> Output_;
         std::optional<TPackedTuplePairFilter> PairFilter_;
         static constexpr i64 MaxOutputRows_ = 10000;
     };
@@ -324,7 +320,6 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     // or Build when the optimizer asks to hash the smaller left input.
     const ESide leftSide = meta.Settings.LeftIsBuild() ? ESide::Build : ESide::Probe;
     const ESide rightSide = OtherSide(leftSide);
-    meta.PreservedSide = leftSide;
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");
@@ -396,7 +391,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
 
     return DispatchHashJoinByKind<TBlockHashJoinWrapper, IComputationNode>(
-        joinKind, "unsupported join type in block hash join", ctx.Mutables, std::move(meta), streams,
+        joinKind, leftSide, "unsupported join type in block hash join", ctx.Mutables, std::move(meta), streams,
         std::move(filters));
 }
 

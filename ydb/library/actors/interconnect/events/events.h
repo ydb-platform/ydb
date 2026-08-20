@@ -50,7 +50,6 @@ namespace NActors {
         HandshakeBrokerFree,
         HandshakeBrokerPermit,
 
-        EvForwardSubscribeSession,
         EvProxyCall,
         EvRdmaSyncResult,
 

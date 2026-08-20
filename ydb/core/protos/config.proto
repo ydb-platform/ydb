@@ -492,7 +492,6 @@ message TInterconnectConfig {
     optional ERdmaCqMode RdmaCqMode = 55;
     optional uint32 RdmaMemPoolSizeLimitMb = 56 [default = 4096];
     optional bool UseKernelKeepAlive = 58 [default = false];
-    optional bool CollectSubscriptionStackTrace = 59 [default = false];
     optional uint32 RdmaPayloadCopySizeThreshold = 60 [default = 65536]; // 0 disables copying RDMA payload to regular memory
     optional uint32 MaxRdmaRetryBackoffLevel = 61 [default = 8]; // 5s * 2^8 = 1280s, about 21 minutes by default
     optional bool EnableRdmaSendReceive = 69 [default = false];

@@ -114,7 +114,6 @@ namespace NActors {
         TAutoPtr<ISchedulerThread> Scheduler;
 
         TInterconnectSetup Interconnect;
-        bool InterconnectCollectSubscriptionStackTrace = false;
 
         bool MonitorStuckActors = false;
 

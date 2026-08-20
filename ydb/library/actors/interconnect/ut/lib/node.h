@@ -68,7 +68,6 @@ public:
         if (settingsCustomizer) {
             settingsCustomizer(nodeId, common->Settings);
         }
-        setup.InterconnectCollectSubscriptionStackTrace = common->Settings.CollectSubscriptionStackTrace;
 
         #if !defined(_msan_enabled_)
         if (withRdma) {

@@ -64,7 +64,6 @@ namespace NActors {
         STATEFN(StateFunc) {
             STRICT_STFUNC_BODY(
                 fFunc(TEvInterconnect::EvForward, Forward)
-                fFunc(TEvForwardSubscribeSession::EventType, ForwardWithSubscribe)
                 fFunc(TEvInterconnect::TEvConnectNode::EventType, HandleSubscribe)
                 fFunc(TEvents::TEvSubscribe::EventType, HandleSubscribe)
                 fFunc(TEvents::TEvUnsubscribe::EventType, HandleUnsubscribe)
@@ -74,7 +73,6 @@ namespace NActors {
         }
 
         void Forward(STATEFN_SIG);
-        void ForwardWithSubscribe(STATEFN_SIG);
         void HandleSubscribe(STATEFN_SIG);
         void HandleUnsubscribe(STATEFN_SIG);
         void HandlePoison();

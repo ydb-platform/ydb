@@ -1,6 +1,5 @@
 #include "ic_mock.h"
 #include <ydb/library/actors/core/interconnect.h>
-#include <ydb/library/actors/interconnect/events_local.h>
 #include <util/system/yield.h>
 #include <thread>
 #include <deque>
@@ -130,24 +129,11 @@ namespace NActors {
                         if (ev->Flags & IEventHandle::FlagSubscribeOnSession) {
                             Subscribe(ev->Sender, ev->Cookie);
                         }
-                        EnqueueForward(std::move(ev));
+                        if (Queue.empty()) {
+                            TActivationContext::Send(new IEventHandle(EvRam, 0, SelfId(), {}, {}, 0));
+                        }
+                        Queue.emplace_back(ev.Release());
                     }
-                }
-
-                void HandleForwardWithSubscribe(TEvForwardSubscribeSession::TPtr ev) {
-                    if (CheckNodeStatus(ev)) {
-                        auto *msg = ev->Get();
-                        Y_ABORT_UNLESS(msg->Event);
-                        Subscribe(msg->Event->Sender, msg->Event->Cookie);
-                        EnqueueForward(TAutoPtr<IEventHandle>(msg->Event.Release()));
-                    }
-                }
-
-                void EnqueueForward(TAutoPtr<IEventHandle> ev) {
-                    if (Queue.empty()) {
-                        TActivationContext::Send(new IEventHandle(EvRam, 0, SelfId(), {}, {}, 0));
-                    }
-                    Queue.emplace_back(ev.Release());
                 }
 
                 void HandleRam() {
@@ -182,7 +168,6 @@ namespace NActors {
 
                 STRICT_STFUNC(StateFunc,
                     fFunc(TEvInterconnect::EvForward, HandleForward)
-                    hFunc(TEvForwardSubscribeSession, HandleForwardWithSubscribe)
                     hFunc(TEvInterconnect::TEvConnectNode, Handle)
                     hFunc(TEvents::TEvSubscribe, Handle)
                     hFunc(TEvents::TEvUnsubscribe, Handle)
@@ -241,16 +226,6 @@ namespace NActors {
                                 }
                                 TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::move(ev), TEvents::TEvUndelivered::Disconnected));
                                 break;
-
-                            case TEvForwardSubscribeSession::EventType: {
-                                auto msg = ev->Release<TEvForwardSubscribeSession>();
-                                if (msg->Event) {
-                                    Send(msg->Event->Sender, new TEvInterconnect::TEvNodeDisconnected(Proxy->PeerNodeId), 0, msg->Event->Cookie);
-                                    TActivationContext::Send(IEventHandle::ForwardOnNondelivery(std::unique_ptr<IEventHandle>(msg->Event.Release()),
-                                        TEvents::TEvUndelivered::Disconnected));
-                                }
-                                break;
-                            }
 
                             case TEvents::TEvSubscribe::EventType:
                             case TEvInterconnect::TEvConnectNode::EventType:
@@ -316,7 +291,7 @@ namespace NActors {
                         auto fw = std::make_unique<IEventHandle>(
                             session->SelfId(),
                             ev->Type,
-                            ev->Flags & ~(IEventHandle::FlagForwardOnNondelivery | IEventHandle::FlagSubscribeOnSession),
+                            ev->Flags & ~IEventHandle::FlagForwardOnNondelivery,
                             ev->Recipient,
                             ev->Sender,
                             ev->ReleaseChainBuffer(),
@@ -371,7 +346,6 @@ namespace NActors {
             STRICT_STFUNC(StateFunc,
                 cFunc(TEvents::TSystem::Poison, PassAway)
                 fFunc(TEvInterconnect::EvForward, HandleSessionEvent)
-                fFunc(TEvForwardSubscribeSession::EventType, HandleSessionEvent)
                 fFunc(TEvInterconnect::EvConnectNode, HandleSessionEvent)
                 fFunc(TEvents::TSystem::Subscribe, HandleSessionEvent)
                 fFunc(TEvents::TSystem::Unsubscribe, HandleSessionEvent)

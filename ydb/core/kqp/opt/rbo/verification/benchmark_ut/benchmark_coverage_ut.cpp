@@ -49,10 +49,10 @@ constexpr const char* CoverageReportFormat =
 constexpr ui64 CoverageReportVersion = 5;
 constexpr const char* CoveragePolicyFormat =
     "ydb-rbo-benchmark-coverage-policy";
-constexpr ui64 CoveragePolicyVersion = 4;
+constexpr ui64 CoveragePolicyVersion = 5;
 constexpr const char* CoveragePolicyEvaluationFormat =
     "ydb-rbo-benchmark-coverage-policy-evaluation";
-constexpr ui64 CoveragePolicyEvaluationVersion = 3;
+constexpr ui64 CoveragePolicyEvaluationVersion = 4;
 
 enum class ECoverageRun {
     Environment,
@@ -81,6 +81,7 @@ const TSuite Tpcds{
 struct TSuiteCoveragePolicy {
     ui32 QueryCount = 0;
     std::set<ui32> RequiredPrepareSuccessQueries;
+    std::set<ui32> RequiredSnapshotPairQueries;
     std::set<ui32> RequiredVerifierEntryQueries;
     std::set<ui32> RequiredFormulaQueries;
     std::set<ui32> RequiredVerifiedQueries;
@@ -95,6 +96,7 @@ struct TPolicyEvaluation {
     ECoverageMode Mode = ECoverageMode::FormulaDashboard;
     bool FullSelection = false;
     bool PrepareSuccessFloorEnforced = false;
+    bool SnapshotPairFloorEnforced = false;
     bool VerifierEntryFloorEnforced = false;
     bool FormulaFloorEnforced = false;
     bool ProofFloorEnforced = false;
@@ -102,6 +104,9 @@ struct TPolicyEvaluation {
     std::set<ui32> RequiredPrepareSuccessQueries;
     std::set<ui32> PrepareSuccessFloorQueries;
     std::set<ui32> PrepareSuccessQueries;
+    std::set<ui32> RequiredSnapshotPairQueries;
+    std::set<ui32> SnapshotPairFloorQueries;
+    std::set<ui32> SnapshotPairQueries;
     std::set<ui32> RequiredVerifierEntryQueries;
     std::set<ui32> VerifierEntryQueries;
     std::set<ui32> RequiredFormulaQueries;
@@ -235,6 +240,7 @@ TCoveragePolicy DecodeCoveragePolicy(TStringBuf text) {
             {
                 "query_count",
                 "required_prepare_success_queries",
+                "required_snapshot_pair_queries",
                 "required_verifier_entry_queries",
                 "required_formula_queries",
                 "required_verified_queries",
@@ -253,6 +259,11 @@ TCoveragePolicy DecodeCoveragePolicy(TStringBuf text) {
             *suite,
             "required_prepare_success_queries",
             context);
+        suitePolicy.RequiredSnapshotPairQueries = PolicyQueryIds(
+            encoded["required_snapshot_pair_queries"],
+            *suite,
+            "required_snapshot_pair_queries",
+            context);
         suitePolicy.RequiredVerifierEntryQueries = PolicyQueryIds(
             encoded["required_verifier_entry_queries"],
             *suite,
@@ -268,6 +279,18 @@ TCoveragePolicy DecodeCoveragePolicy(TStringBuf text) {
             *suite,
             "required_verified_queries",
             context);
+        for (const ui32 queryId : suitePolicy.RequiredSnapshotPairQueries) {
+            if (suitePolicy.RequiredVerifierEntryQueries.contains(queryId)) {
+                ythrow yexception()
+                    << context << " required snapshot-pair query q" << queryId
+                    << " is also a required verifier-entry query";
+            }
+            if (suitePolicy.RequiredFormulaQueries.contains(queryId)) {
+                ythrow yexception()
+                    << context << " required snapshot-pair query q" << queryId
+                    << " is also a required formula query";
+            }
+        }
         if (suitePolicy.RequiredVerifiedQueries.empty()) {
             ythrow yexception()
                 << context << " required_verified_queries must not be empty";
@@ -313,6 +336,29 @@ std::set<ui32> OutcomeIds(const TMap<ui32, TString>& statuses) {
     return result;
 }
 
+std::set<ui32> SnapshotPairFloorQueries(
+    const TSuiteCoveragePolicy& suitePolicy)
+{
+    auto result = suitePolicy.RequiredSnapshotPairQueries;
+    result.insert(
+        suitePolicy.RequiredVerifierEntryQueries.begin(),
+        suitePolicy.RequiredVerifierEntryQueries.end());
+    result.insert(
+        suitePolicy.RequiredFormulaQueries.begin(),
+        suitePolicy.RequiredFormulaQueries.end());
+    return result;
+}
+
+std::set<ui32> FormulaDashboardFloorVerifierEntries(
+    const TSuiteCoveragePolicy& suitePolicy)
+{
+    auto result = suitePolicy.RequiredVerifierEntryQueries;
+    result.insert(
+        suitePolicy.RequiredFormulaQueries.begin(),
+        suitePolicy.RequiredFormulaQueries.end());
+    return result;
+}
+
 TMap<ui32, TString> FormulaDashboardFloorStatuses(
     const TCoveragePolicy& policy,
     const TSuite& suite)
@@ -325,6 +371,9 @@ TMap<ui32, TString> FormulaDashboardFloorStatuses(
     for (const ui32 queryId : suitePolicy.RequiredVerifierEntryQueries) {
         result.try_emplace(queryId, "UNSUPPORTED");
     }
+    for (const ui32 queryId : suitePolicy.RequiredSnapshotPairQueries) {
+        result.try_emplace(queryId, "UNSUPPORTED");
+    }
     return result;
 }
 
@@ -333,6 +382,7 @@ TPolicyEvaluation EvaluateCoveragePolicy(
     const TSuite& suite,
     const std::set<ui32>& selected,
     const TMap<ui32, TString>& statuses,
+    const std::set<ui32>& snapshotPairQueries,
     const std::set<ui32>& verifierEntryQueries,
     const std::set<ui32>& prepareSuccessQueries,
     ECoverageMode mode)
@@ -352,6 +402,11 @@ TPolicyEvaluation EvaluateCoveragePolicy(
     result.RequiredPrepareSuccessQueries =
         suitePolicy->second.RequiredPrepareSuccessQueries;
     result.PrepareSuccessQueries = prepareSuccessQueries;
+    result.RequiredSnapshotPairQueries =
+        suitePolicy->second.RequiredSnapshotPairQueries;
+    result.SnapshotPairFloorQueries =
+        SnapshotPairFloorQueries(suitePolicy->second);
+    result.SnapshotPairQueries = snapshotPairQueries;
     result.RequiredVerifierEntryQueries =
         suitePolicy->second.RequiredVerifierEntryQueries;
     result.VerifierEntryQueries = verifierEntryQueries;
@@ -373,6 +428,7 @@ TPolicyEvaluation EvaluateCoveragePolicy(
 
     if (mode == ECoverageMode::FormulaDashboard) {
         result.PrepareSuccessFloorEnforced = result.FullSelection;
+        result.SnapshotPairFloorEnforced = result.FullSelection;
         result.VerifierEntryFloorEnforced = result.FullSelection;
         result.FormulaFloorEnforced = result.FullSelection;
         if (!result.FormulaFloorEnforced) {
@@ -385,6 +441,23 @@ TPolicyEvaluation EvaluateCoveragePolicy(
                 result.Violations.push_back(TStringBuilder()
                     << suite.Name << " q" << queryId
                     << " regressed before successful query preparation");
+            }
+        }
+        for (const ui32 queryId : result.SnapshotPairFloorQueries) {
+            if (result.SnapshotPairQueries.contains(queryId)) {
+                continue;
+            }
+            const auto status = statuses.find(queryId);
+            if (status == statuses.end()) {
+                result.Violations.push_back(TStringBuilder()
+                    << suite.Name << " q" << queryId
+                    << " has no coverage outcome; expected exact Initial/Final"
+                       " snapshot pair");
+            } else {
+                result.Violations.push_back(TStringBuilder()
+                    << suite.Name << " q" << queryId
+                    << " regressed before exact Initial/Final snapshot pair with status "
+                    << status->second);
             }
         }
         for (const ui32 queryId : result.RequiredVerifierEntryQueries) {
@@ -470,6 +543,14 @@ private:
     std::mutex Mutex;
     TVector<TRBOSemanticSnapshotBoundaryResultV1> Results;
 };
+
+bool IsExactSnapshotPair(
+    const TVector<TRBOSemanticSnapshotBoundaryResultV1>& captures)
+{
+    return captures.size() == 2 &&
+        captures[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial &&
+        captures[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final;
+}
 
 TString DataPath(TStringBuf relative) {
     return ArcadiaSourceRoot() +
@@ -724,6 +805,8 @@ NJson::TJsonValue PolicyEvaluationJson(
     result["full_selection"] = evaluation.FullSelection;
     result["prepare_success_floor_enforced"] =
         evaluation.PrepareSuccessFloorEnforced;
+    result["snapshot_pair_floor_enforced"] =
+        evaluation.SnapshotPairFloorEnforced;
     result["verifier_entry_floor_enforced"] =
         evaluation.VerifierEntryFloorEnforced;
     result["formula_floor_enforced"] = evaluation.FormulaFloorEnforced;
@@ -735,6 +818,12 @@ NJson::TJsonValue PolicyEvaluationJson(
         JsonIds(evaluation.PrepareSuccessFloorQueries);
     result["prepare_success_queries"] =
         JsonIds(evaluation.PrepareSuccessQueries);
+    result["required_snapshot_pair_queries"] =
+        JsonIds(evaluation.RequiredSnapshotPairQueries);
+    result["snapshot_pair_floor_queries"] =
+        JsonIds(evaluation.SnapshotPairFloorQueries);
+    result["snapshot_pair_queries"] =
+        JsonIds(evaluation.SnapshotPairQueries);
     result["required_verifier_entry_queries"] =
         JsonIds(evaluation.RequiredVerifierEntryQueries);
     result["verifier_entry_queries"] =
@@ -799,6 +888,7 @@ struct TOutcome {
     TString PrepareStatus = "NOT_RUN";
     TString PrepareReason;
     TVector<std::pair<TString, TString>> UnsupportedReasons;
+    bool SnapshotPairCaptured = false;
     bool Fatal = false;
 };
 
@@ -1195,6 +1285,7 @@ TOutcome ClassifyQuery(
     });
     const ui64 prepareMs = (TInstant::Now() - started).MilliSeconds();
     const auto captures = sink->Take();
+    const bool snapshotPairCaptured = IsExactSnapshotPair(captures);
     const bool prepareSucceeded = prepared.Success();
     TString prepareReason = prepareSucceeded
         ? TString()
@@ -1264,6 +1355,7 @@ TOutcome ClassifyQuery(
         preserveExceptionalPair();
     }
     SetPreparationOutcome(outcome, prepareSucceeded, prepareReason);
+    outcome.SnapshotPairCaptured = snapshotPairCaptured;
     return outcome;
 }
 
@@ -1276,6 +1368,7 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
     std::set<ui32> selected;
     TMap<ui32, TString> statuses;
     std::set<ui32> prepareSuccessQueries;
+    std::set<ui32> snapshotPairQueries;
     std::set<ui32> verifierEntryQueries;
     TVector<TString> policyLoadViolations;
     ui64 timeoutMs = DefaultTimeoutMs;
@@ -1302,6 +1395,9 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
             statuses[queryId] = outcome.Status;
             if (outcome.PrepareStatus == "SUCCEEDED") {
                 prepareSuccessQueries.insert(queryId);
+            }
+            if (outcome.SnapshotPairCaptured) {
+                snapshotPairQueries.insert(queryId);
             }
             if (outcome.Layer == "verifier") {
                 verifierEntryQueries.insert(queryId);
@@ -1397,6 +1493,8 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
         policyEvaluation.PrepareSuccessFloorEnforced =
             mode == ECoverageMode::FormulaDashboard ||
             mode == ECoverageMode::ProofFloor;
+        policyEvaluation.SnapshotPairFloorEnforced =
+            mode == ECoverageMode::FormulaDashboard;
         policyEvaluation.VerifierEntryFloorEnforced =
             mode == ECoverageMode::FormulaDashboard;
         policyEvaluation.FormulaFloorEnforced =
@@ -1411,6 +1509,7 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
                 suite,
                 selected,
                 statuses,
+                snapshotPairQueries,
                 verifierEntryQueries,
                 prepareSuccessQueries,
                 mode);
@@ -1419,6 +1518,8 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
             policyEvaluation.PrepareSuccessFloorEnforced =
                 mode == ECoverageMode::FormulaDashboard ||
                 mode == ECoverageMode::ProofFloor;
+            policyEvaluation.SnapshotPairFloorEnforced =
+                mode == ECoverageMode::FormulaDashboard;
             policyEvaluation.VerifierEntryFloorEnforced =
                 mode == ECoverageMode::FormulaDashboard;
             policyEvaluation.FormulaFloorEnforced =
@@ -1432,6 +1533,8 @@ void RunCoverage(const TSuite& suite, ECoverageRun run) {
             policyEvaluation.PrepareSuccessFloorEnforced =
                 mode == ECoverageMode::FormulaDashboard ||
                 mode == ECoverageMode::ProofFloor;
+            policyEvaluation.SnapshotPairFloorEnforced =
+                mode == ECoverageMode::FormulaDashboard;
             policyEvaluation.VerifierEntryFloorEnforced =
                 mode == ECoverageMode::FormulaDashboard;
             policyEvaluation.FormulaFloorEnforced =
@@ -1516,6 +1619,8 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                 21, 22,
             }));
         UNIT_ASSERT(
+            policy.Suites.at(Tpch.Name).RequiredSnapshotPairQueries.empty());
+        UNIT_ASSERT(
             policy.Suites.at(Tpch.Name).RequiredVerifierEntryQueries ==
             std::set<ui32>({1, 13, 16}));
         UNIT_ASSERT(
@@ -1529,6 +1634,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({
                 3, 4, 6, 11, 12, 13, 14, 15, 16, 18, 19, 21, 22,
             }));
+        UNIT_ASSERT_VALUES_EQUAL(
+            SnapshotPairFloorQueries(policy.Suites.at(Tpch.Name)).size(),
+            20);
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries ==
             std::set<ui32>({
@@ -1540,16 +1648,19 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                 79, 80, 82, 83, 84, 85, 87, 88, 90, 91, 93, 94, 95, 96, 97, 99,
             }));
         UNIT_ASSERT(
+            policy.Suites.at(Tpcds.Name).RequiredSnapshotPairQueries ==
+            std::set<ui32>({49, 51, 53, 63, 89}));
+        UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
             std::set<ui32>({5, 8, 9, 59, 65, 72, 78, 80}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredFormulaQueries ==
             std::set<ui32>({
-                2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 16, 18, 19, 21, 22, 24,
-                25, 26, 28, 29, 31, 33, 34, 35, 37, 38, 40, 42, 43, 45, 46, 48, 50,
-                52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 71, 72,
-                73, 74, 75, 76, 77, 78, 79, 80, 82, 83, 84, 85, 87, 88, 90, 91, 93,
-                94, 95, 96, 97, 99,
+                2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 18, 19, 20, 21,
+                22, 24, 25, 26, 28, 29, 31, 33, 34, 35, 37, 38, 40, 42, 43, 45,
+                46, 48, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68,
+                69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 82, 83, 84, 85, 87,
+                88, 90, 91, 93, 94, 95, 96, 97, 98, 99,
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
@@ -1557,6 +1668,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                 3, 8, 9, 16, 28, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95,
                 96,
             }));
+        UNIT_ASSERT_VALUES_EQUAL(
+            SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name)).size(),
+            81);
 
         const auto report = CoverageReportHeader(Tpcds);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -1746,6 +1860,19 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT_STRING_CONTAINS(outcome.Reason, "count or order");
     }
 
+    Y_UNIT_TEST(PolicySnapshotPairPredicateRequiresExactlyInitialThenFinal) {
+        const TRBOSemanticSnapshotBoundaryResultV1 initial{
+            ERBOSemanticSnapshotBoundaryV1::Initial, {}, {}, {}};
+        const TRBOSemanticSnapshotBoundaryResultV1 final{
+            ERBOSemanticSnapshotBoundaryV1::Final, {}, {}, {}};
+
+        UNIT_ASSERT(!IsExactSnapshotPair({}));
+        UNIT_ASSERT(!IsExactSnapshotPair({initial}));
+        UNIT_ASSERT(!IsExactSnapshotPair({final, initial}));
+        UNIT_ASSERT(IsExactSnapshotPair({initial, final}));
+        UNIT_ASSERT(!IsExactSnapshotPair({initial, final, final}));
+    }
+
     Y_UNIT_TEST(PolicyAllowsMonotonicCoverageImprovements) {
         const auto policy = LoadCoveragePolicy();
         std::set<ui32> selected;
@@ -1764,12 +1891,20 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
         UNIT_ASSERT(improvementQuery);
         statuses[improvementQuery] = "FORMULA_EMITTED";
+        auto snapshotPairs =
+            SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name));
+        snapshotPairs.insert(improvementQuery);
+        auto verifierEntries =
+            FormulaDashboardFloorVerifierEntries(
+                policy.Suites.at(Tpcds.Name));
+        verifierEntries.insert(improvementQuery);
         const auto evaluation = EvaluateCoveragePolicy(
             policy,
             Tpcds,
             selected,
             statuses,
-            OutcomeIds(statuses),
+            snapshotPairs,
+            verifierEntries,
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(evaluation.VerifierEntryFloorEnforced);
@@ -1808,7 +1943,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
         UNIT_ASSERT_VALUES_EQUAL(
             report["verifier_entry_queries"].GetArraySafe().size(),
-            statuses.size());
+            verifierEntries.size());
     }
 
     Y_UNIT_TEST(PolicyTracksPreparationIndependently) {
@@ -1826,7 +1961,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             selected,
             statuses,
-            OutcomeIds(statuses),
+            SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name)),
+            FormulaDashboardFloorVerifierEntries(
+                policy.Suites.at(Tpcds.Name)),
             prepareSuccess,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(evaluation.PrepareSuccessFloorEnforced);
@@ -1851,7 +1988,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             selected,
             statuses,
-            OutcomeIds(statuses),
+            SnapshotPairFloorQueries(
+                independentPolicy.Suites.at(Tpcds.Name)),
+            FormulaDashboardFloorVerifierEntries(
+                independentPolicy.Suites.at(Tpcds.Name)),
             prepareSuccess,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(independent.FormulaEmittedQueries.contains(2));
@@ -1883,12 +2023,17 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         }
         const auto statuses = FormulaDashboardFloorStatuses(policy, Tpch);
 
-        auto verifierEntries = OutcomeIds(statuses);
+        const auto snapshotPairs =
+            SnapshotPairFloorQueries(policy.Suites.at(Tpch.Name));
+        auto verifierEntries =
+            FormulaDashboardFloorVerifierEntries(
+                policy.Suites.at(Tpch.Name));
         const auto current = EvaluateCoveragePolicy(
             policy,
             Tpch,
             selected,
             statuses,
+            snapshotPairs,
             verifierEntries,
             policy.Suites.at(Tpch.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
@@ -1905,6 +2050,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpch,
             selected,
             regressedStatuses,
+            snapshotPairs,
             verifierEntries,
             policy.Suites.at(Tpch.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
@@ -1925,7 +2071,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpch,
             selected,
             statuses,
-            OutcomeIds(statuses),
+            SnapshotPairFloorQueries(policy.Suites.at(Tpch.Name)),
+            FormulaDashboardFloorVerifierEntries(
+                policy.Suites.at(Tpch.Name)),
             policy.Suites.at(Tpch.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(current.VerifierEntryFloorEnforced);
@@ -1945,7 +2093,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                 Tpch,
                 selected,
                 regressedStatuses,
-                OutcomeIds(regressedStatuses),
+                SnapshotPairFloorQueries(policy.Suites.at(Tpch.Name)),
+                FormulaDashboardFloorVerifierEntries(
+                    policy.Suites.at(Tpch.Name)),
                 policy.Suites.at(Tpch.Name).RequiredPrepareSuccessQueries,
                 ECoverageMode::FormulaDashboard);
             UNIT_ASSERT_VALUES_EQUAL(regressed.Violations.size(), 1);
@@ -1972,7 +2122,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
                 Tpcds,
                 selected,
                 statuses,
-                OutcomeIds(statuses),
+                SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name)),
+                FormulaDashboardFloorVerifierEntries(
+                    policy.Suites.at(Tpcds.Name)),
                 policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
                 ECoverageMode::FormulaDashboard);
             UNIT_ASSERT(evaluation.VerifierEntryFloorEnforced);
@@ -2001,7 +2153,11 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
 
         auto statuses = FormulaDashboardFloorStatuses(policy, Tpcds);
         statuses[65] = "UNSUPPORTED";
-        auto verifierEntries = OutcomeIds(statuses);
+        auto snapshotPairs =
+            SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name));
+        auto verifierEntries =
+            FormulaDashboardFloorVerifierEntries(
+                policy.Suites.at(Tpcds.Name));
         verifierEntries.erase(65);
 
         const auto beforeVerifier = EvaluateCoveragePolicy(
@@ -2009,6 +2165,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             selected,
             statuses,
+            snapshotPairs,
             verifierEntries,
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
@@ -2020,18 +2177,23 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             "q65 regressed from FORMULA_EMITTED to UNSUPPORTED"));
 
         statuses[65] = "OPTIMIZER_FAILURE";
+        snapshotPairs.erase(65);
         const auto optimizerFailure = EvaluateCoveragePolicy(
             policy,
             Tpcds,
             selected,
             statuses,
+            snapshotPairs,
             verifierEntries,
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
-        UNIT_ASSERT_VALUES_EQUAL(optimizerFailure.Violations.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(optimizerFailure.Violations.size(), 3);
         UNIT_ASSERT(optimizerFailure.Violations[0].Contains(
-            "q65 regressed before verifier entry with status OPTIMIZER_FAILURE"));
+            "q65 regressed before exact Initial/Final snapshot pair with status "
+            "OPTIMIZER_FAILURE"));
         UNIT_ASSERT(optimizerFailure.Violations[1].Contains(
+            "q65 regressed before verifier entry with status OPTIMIZER_FAILURE"));
+        UNIT_ASSERT(optimizerFailure.Violations[2].Contains(
             "q65 regressed from FORMULA_EMITTED to OPTIMIZER_FAILURE"));
 
         statuses.erase(65);
@@ -2040,14 +2202,81 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             selected,
             statuses,
+            snapshotPairs,
             verifierEntries,
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
-        UNIT_ASSERT_VALUES_EQUAL(missing.Violations.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(missing.Violations.size(), 3);
         UNIT_ASSERT(missing.Violations[0].Contains(
-            "q65 has no coverage outcome; expected verifier entry"));
+            "q65 has no coverage outcome; expected exact Initial/Final snapshot pair"));
         UNIT_ASSERT(missing.Violations[1].Contains(
+            "q65 has no coverage outcome; expected verifier entry"));
+        UNIT_ASSERT(missing.Violations[2].Contains(
             "q65 has no coverage outcome; expected FORMULA_EMITTED"));
+    }
+
+    Y_UNIT_TEST(PolicyReportsQ51ZeroCaptureRegression) {
+        const auto policy = LoadCoveragePolicy();
+        std::set<ui32> selected;
+        for (ui32 queryId = 1; queryId <= Tpcds.QueryCount; ++queryId) {
+            selected.insert(queryId);
+        }
+        auto statuses = FormulaDashboardFloorStatuses(policy, Tpcds);
+        auto snapshotPairs =
+            SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name));
+        const auto verifierEntries =
+            FormulaDashboardFloorVerifierEntries(
+                policy.Suites.at(Tpcds.Name));
+
+        const auto baseline = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            selected,
+            statuses,
+            snapshotPairs,
+            verifierEntries,
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
+            ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT(baseline.SnapshotPairFloorEnforced);
+        UNIT_ASSERT(baseline.Violations.empty());
+        UNIT_ASSERT_VALUES_EQUAL(
+            baseline.RequiredSnapshotPairQueries.size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairFloorQueries.size(), 81);
+        UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairQueries.size(), 81);
+
+        const auto zeroCapture = OptimizerFailure(
+            51, 17, 0, "window metadata references a missing member");
+        UNIT_ASSERT(!zeroCapture.SnapshotPairCaptured);
+        UNIT_ASSERT_VALUES_EQUAL(
+            zeroCapture.Json["capture_count"].GetUIntegerSafe(), 0);
+        statuses[51] = zeroCapture.Status;
+        snapshotPairs.erase(51);
+
+        const auto regressed = EvaluateCoveragePolicy(
+            policy,
+            Tpcds,
+            selected,
+            statuses,
+            snapshotPairs,
+            verifierEntries,
+            policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
+            ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT_VALUES_EQUAL(regressed.Violations.size(), 1);
+        UNIT_ASSERT(regressed.Violations.front().Contains(
+            "q51 regressed before exact Initial/Final snapshot pair with status "
+            "OPTIMIZER_FAILURE"));
+
+        const auto report = PolicyEvaluationJson(regressed);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["version"].GetUIntegerSafe(),
+            CoveragePolicyEvaluationVersion);
+        UNIT_ASSERT(report["snapshot_pair_floor_enforced"].GetBooleanSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["required_snapshot_pair_queries"].GetArraySafe().size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["snapshot_pair_floor_queries"].GetArraySafe().size(), 81);
+        UNIT_ASSERT_VALUES_EQUAL(
+            report["snapshot_pair_queries"].GetArraySafe().size(), 80);
     }
 
     Y_UNIT_TEST(PolicyReportsEveryFloorRegression) {
@@ -2059,31 +2288,41 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         auto statuses = FormulaDashboardFloorStatuses(policy, Tpcds);
         statuses[88] = "UNSUPPORTED";
         statuses.erase(96);
-        auto verifierEntries = OutcomeIds(statuses);
+        auto snapshotPairs =
+            SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name));
+        snapshotPairs.erase(96);
+        auto verifierEntries =
+            FormulaDashboardFloorVerifierEntries(
+                policy.Suites.at(Tpcds.Name));
         verifierEntries.erase(88);
         const auto evaluation = EvaluateCoveragePolicy(
             policy,
             Tpcds,
             selected,
             statuses,
+            snapshotPairs,
             verifierEntries,
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::FormulaDashboard);
         UNIT_ASSERT(evaluation.VerifierEntryFloorEnforced);
+        UNIT_ASSERT(evaluation.SnapshotPairFloorEnforced);
         UNIT_ASSERT(evaluation.FormulaFloorEnforced);
         UNIT_ASSERT(!evaluation.ProofFloorEnforced);
-        UNIT_ASSERT_VALUES_EQUAL(evaluation.Violations.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(evaluation.Violations.size(), 3);
         UNIT_ASSERT(evaluation.Violations[0].Contains(
-            "q88 regressed from FORMULA_EMITTED to UNSUPPORTED"));
+            "q96 has no coverage outcome; expected exact Initial/Final snapshot pair"));
         UNIT_ASSERT(evaluation.Violations[1].Contains(
+            "q88 regressed from FORMULA_EMITTED to UNSUPPORTED"));
+        UNIT_ASSERT(evaluation.Violations[2].Contains(
             "q96 has no coverage outcome"));
 
         const auto report = PolicyEvaluationJson(evaluation);
+        UNIT_ASSERT(report["snapshot_pair_floor_enforced"].GetBooleanSafe());
         UNIT_ASSERT(report["formula_floor_enforced"].GetBooleanSafe());
         UNIT_ASSERT(!report["proof_floor_enforced"].GetBooleanSafe());
         UNIT_ASSERT_VALUES_EQUAL(
             report["violations"].GetArraySafe().size(),
-            2);
+            3);
     }
 
     Y_UNIT_TEST(PolicyEnforcesCuratedProofFloor) {
@@ -2118,8 +2357,10 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             selected,
             statuses,
             {},
+            {},
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::ProofFloor);
+        UNIT_ASSERT(!evaluation.SnapshotPairFloorEnforced);
         UNIT_ASSERT(!evaluation.VerifierEntryFloorEnforced);
         UNIT_ASSERT(!evaluation.FormulaFloorEnforced);
         UNIT_ASSERT(evaluation.PrepareSuccessFloorEnforced);
@@ -2177,6 +2418,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {3, 8, 9, 16, 28, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
             statuses,
             {},
+            {},
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::ProofFloor);
         UNIT_ASSERT(evaluation.ProofFloorEnforced);
@@ -2198,6 +2440,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             {3, 8, 9, 16, 28, 34, 38, 42, 48, 52, 55, 69, 73, 87, 90, 93, 94, 95, 96},
             optimizerFailureStatuses,
             {},
+            {},
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::ProofFloor);
         UNIT_ASSERT(optimizerFailure.Violations.back().Contains(
@@ -2208,6 +2451,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             Tpcds,
             {3, 42, 48, 52, 55, 69, 90, 93},
             statuses,
+            {},
             {},
             policy.Suites.at(Tpcds.Name).RequiredPrepareSuccessQueries,
             ECoverageMode::ProofFloor);
@@ -2225,7 +2469,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             statuses,
             {},
             {},
+            {},
             ECoverageMode::FormulaDashboard);
+        UNIT_ASSERT(!focused.SnapshotPairFloorEnforced);
         UNIT_ASSERT(!focused.VerifierEntryFloorEnforced);
         UNIT_ASSERT(!focused.FormulaFloorEnforced);
         UNIT_ASSERT(!focused.ProofFloorEnforced);
@@ -2242,7 +2488,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             statuses,
             {},
             {},
+            {},
             ECoverageMode::SolverExperiment);
+        UNIT_ASSERT(!solver.SnapshotPairFloorEnforced);
         UNIT_ASSERT(!solver.VerifierEntryFloorEnforced);
         UNIT_ASSERT(!solver.FormulaFloorEnforced);
         UNIT_ASSERT(!solver.ProofFloorEnforced);
@@ -2255,7 +2503,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             statuses,
             {},
             {},
+            {},
             ECoverageMode::SolverExperiment);
+        UNIT_ASSERT(!coincidentalProofSelection.SnapshotPairFloorEnforced);
         UNIT_ASSERT(!coincidentalProofSelection.ProofFloorEnforced);
         UNIT_ASSERT(coincidentalProofSelection.Violations.empty());
     }
@@ -2350,6 +2600,73 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
             yexception,
             "required_prepare_success_queries must be an array");
+
+        encoded = baseline;
+        encoded["suites"][Tpcds.Name].EraseValue(
+            "required_snapshot_pair_queries");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "is missing field required_snapshot_pair_queries");
+
+        encoded = baseline;
+        encoded["suites"][Tpcds.Name]["required_snapshot_pair_queries"] = true;
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "required_snapshot_pair_queries must be an array");
+
+        encoded = baseline;
+        NJson::TJsonValue unorderedSnapshotPairs(NJson::JSON_ARRAY);
+        unorderedSnapshotPairs.AppendValue(51);
+        unorderedSnapshotPairs.AppendValue(49);
+        encoded["suites"][Tpcds.Name]["required_snapshot_pair_queries"] =
+            std::move(unorderedSnapshotPairs);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "required_snapshot_pair_queries query ids must be strictly increasing");
+
+        encoded = baseline;
+        NJson::TJsonValue duplicateSnapshotPair(NJson::JSON_ARRAY);
+        duplicateSnapshotPair.AppendValue(49);
+        duplicateSnapshotPair.AppendValue(49);
+        encoded["suites"][Tpcds.Name]["required_snapshot_pair_queries"] =
+            std::move(duplicateSnapshotPair);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "required_snapshot_pair_queries query ids must be strictly increasing");
+
+        encoded = baseline;
+        NJson::TJsonValue outsideSnapshotPair(NJson::JSON_ARRAY);
+        outsideSnapshotPair.AppendValue(100);
+        encoded["suites"][Tpcds.Name]["required_snapshot_pair_queries"] =
+            std::move(outsideSnapshotPair);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "required_snapshot_pair_queries query id 100 is outside the corpus");
+
+        encoded = baseline;
+        encoded["suites"][Tpcds.Name]["required_snapshot_pair_queries"] =
+            NJson::TJsonValue(NJson::JSON_ARRAY);
+        encoded["suites"][Tpcds.Name]["required_snapshot_pair_queries"]
+            .AppendValue(5);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "required snapshot-pair query q5 is also a required verifier-entry query");
+
+        encoded = baseline;
+        encoded["suites"][Tpcds.Name]["required_snapshot_pair_queries"] =
+            NJson::TJsonValue(NJson::JSON_ARRAY);
+        encoded["suites"][Tpcds.Name]["required_snapshot_pair_queries"]
+            .AppendValue(2);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            DecodeCoveragePolicy(NJson::WriteJson(encoded, false, true)),
+            yexception,
+            "required snapshot-pair query q2 is also a required formula query");
 
         encoded = baseline;
         encoded["suites"][Tpcds.Name].EraseValue(

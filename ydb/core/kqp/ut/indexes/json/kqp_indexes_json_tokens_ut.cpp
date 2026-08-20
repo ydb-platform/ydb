@@ -9,7 +9,8 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesTokens) {
     Y_UNIT_TEST(JsonExistsFullRangeIsRejected) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
             ValidateError(db, R"(JSON_EXISTS(Text, '$[*]'))",
-                "JSON index cannot be used: full-range search cannot be performed using full-text search");
+                "JSON index cannot be used: full-range search cannot be performed using full-text search",
+                "Failed to extract jsonpath tokens from the predicate");
         });
     }
 

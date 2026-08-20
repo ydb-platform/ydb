@@ -835,7 +835,7 @@ std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
 
         const TString message = selectionMode == EJsonIndexSelectionMode::Automatic
             ? TStringBuilder() << "JSON index was not auto-selected: " << kFullRangeSearchMessage
-            : TStringBuilder() << kErrorMessage << "JSON index cannot be used: " << kFullRangeSearchMessage;
+            : TStringBuilder() << "JSON index cannot be used: " << kFullRangeSearchMessage;
         TIssue issue(ctx.GetPosition(node.Pos()), message);
 
         if (selectionMode == EJsonIndexSelectionMode::Automatic) {

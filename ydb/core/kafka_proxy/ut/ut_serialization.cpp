@@ -348,7 +348,7 @@ Y_UNIT_TEST(TKafkaInt8_PresentVersion_TaggedVersion) {
     ui32 size = readable.readUnsignedVarint<ui32>();
     UNIT_ASSERT_EQUAL(size, sizeof(TKafkaInt8));
 
-    NKafka::NPrivate::ReadTag<Meta_TKafkaInt8>(readable, 11, result);
+    NKafka::NPrivate::ReadTag<Meta_TKafkaInt8>(readable, 11, size, result);
     UNIT_ASSERT_EQUAL(result, value); // Must read same that write
 }
 
@@ -434,7 +434,7 @@ Y_UNIT_TEST(TKafkaString_PresentVersion_TaggedVersion) {
     ui32 size = readable.readUnsignedVarint<ui32>();
     UNIT_ASSERT_EQUAL(size, value->size() + NKafka::NPrivate::SizeOfUnsignedVarint(value->size() + 1)); // "+1" because serialized as unsigned int, and null serialized with size equals 0
 
-    NKafka::NPrivate::ReadTag<Meta_TKafkaString>(readable, 11, result);
+    NKafka::NPrivate::ReadTag<Meta_TKafkaString>(readable, 11, size, result);
     UNIT_ASSERT_EQUAL(result, value); // Must read same that write
 }
 
@@ -498,7 +498,7 @@ Y_UNIT_TEST(TKafkaArray_PresentVersion_TaggedVersion) {
         + NKafka::NPrivate::SizeOfUnsignedVarint(v.length() + 1) // string size. +1 because null string serialize as 0-length
     );
 
-    NKafka::NPrivate::ReadTag<Meta_TKafkaArray>(readable, 11, result);
+    NKafka::NPrivate::ReadTag<Meta_TKafkaArray>(readable, 11, size, result);
     UNIT_ASSERT_EQUAL(result, value); // Must read same that write
 }
 
@@ -563,7 +563,7 @@ Y_UNIT_TEST(TKafkaBytes_PresentVersion_TaggedVersion) {
         + NKafka::NPrivate::SizeOfUnsignedVarint(value->size() + 1) // buffer size. +1 because null value stored as size 0
     );
 
-    NKafka::NPrivate::ReadTag<Meta_TKafkaBytes>(readable, 11, result);
+    NKafka::NPrivate::ReadTag<Meta_TKafkaBytes>(readable, 11, size, result);
     UNIT_ASSERT_EQUAL(result->size(), value->size());
     UNIT_ASSERT_EQUAL(TString(result->begin(), result->size()), TString(value->begin(), value->size())); // Must read same that write
 }
@@ -573,6 +573,105 @@ Y_UNIT_TEST(TKafkaBytes_PresentVersion_TaggedVersion_Default) {
 
     NKafka::NPrivate::Write<Meta_TKafkaBytes>(collector, writable, 11, value);
     UNIT_ASSERT_EQUAL(collector.NumTaggedFields, 0u); // not serialize default value for tagged version
+}
+
+Y_UNIT_TEST(TKafkaArray_RejectsLengthLargerThanRemaining) {
+    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWritable writable(sb);
+    const TKafkaInt32 length = 2147483647;
+    writable << length;
+
+    TKafkaReadable readable(sb.GetFrontBuffer());
+    Meta_TKafkaArray::Type result;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        NKafka::NPrivate::Read<Meta_TKafkaArray>(readable, 3, result),
+        yexception,
+        "had invalid length");
+    UNIT_ASSERT(result.empty());
+}
+
+Y_UNIT_TEST(TKafkaArray_RejectsCompactLengthLargerThanRemaining) {
+    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWritable writable(sb);
+    writable.writeUnsignedVarint<ui32>(2147483647u + 1u);
+
+    TKafkaReadable readable(sb.GetFrontBuffer());
+    Meta_TKafkaArray::Type result;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        NKafka::NPrivate::Read<Meta_TKafkaArray>(readable, 7, result),
+        yexception,
+        "had invalid length");
+    UNIT_ASSERT(result.empty());
+}
+
+Y_UNIT_TEST(TKafkaArray_RejectsAllocationLargerThanMaxArrayBytes) {
+    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWritable writable(sb);
+    const TKafkaInt32 length = 2;
+    writable << length;
+    const char pad[2] = {};
+    writable.write(pad, sizeof(pad));
+
+    TKafkaReadable readable(sb.GetFrontBuffer());
+    readable.SetMaxArrayBytes(sizeof(TKafkaString));
+    Meta_TKafkaArray::Type result;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        NKafka::NPrivate::Read<Meta_TKafkaArray>(readable, 3, result),
+        yexception,
+        "had invalid length");
+    UNIT_ASSERT(result.empty());
+}
+
+Y_UNIT_TEST(TKafkaBytes_RejectsLengthLargerThanRemaining) {
+    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWritable writable(sb);
+    const TKafkaInt32 length = 2147483647;
+    writable << length;
+
+    TKafkaReadable readable(sb.GetFrontBuffer());
+    Meta_TKafkaBytes::Type result;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        NKafka::NPrivate::Read<Meta_TKafkaBytes>(readable, 3, result),
+        yexception,
+        "had invalid length");
+}
+
+Y_UNIT_TEST(TKafkaString_RejectsLengthLargerThanRemaining) {
+    TWritableBuf sb(nullptr, BUFFER_SIZE);
+    TKafkaWritable writable(sb);
+    const TKafkaInt16 length = 100;
+    writable << length;
+
+    TKafkaReadable readable(sb.GetFrontBuffer());
+    Meta_TKafkaString::Type result;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+        NKafka::NPrivate::Read<Meta_TKafkaString>(readable, 3, result),
+        yexception,
+        "had invalid length");
+}
+
+Y_UNIT_TEST(ReadableCheckEofDoesNotOverflow) {
+    TBuffer buf("x", 1);
+    TKafkaReadable readable(buf);
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(readable.take(Max<size_t>()), yexception, "unexpected end of stream");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(readable.skip(Max<size_t>()), yexception, "unexpected end of stream");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(readable.Bytes(Max<size_t>()), yexception, "unexpected end of stream");
+
+    char unused = 0;
+    UNIT_ASSERT_EXCEPTION_CONTAINS(readable.read(&unused, Max<size_t>()), yexception, "unexpected end of stream");
+    UNIT_ASSERT_VALUES_EQUAL(readable.take(0), 'x');
+    UNIT_ASSERT_EXCEPTION_CONTAINS(readable.take(1), yexception, "unexpected end of stream");
+}
+
+Y_UNIT_TEST(ReadableLeftIsZeroOnEmptyBuffer) {
+    TBuffer buf;
+    TKafkaReadable readable(buf);
+
+    UNIT_ASSERT_VALUES_EQUAL(readable.left(), 0u);
+    UNIT_ASSERT_EXCEPTION_CONTAINS(readable.take(0), yexception, "unexpected end of stream");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(readable.skip(1), yexception, "unexpected end of stream");
+    UNIT_ASSERT_EXCEPTION_CONTAINS(readable.Bytes(1), yexception, "unexpected end of stream");
 }
 
 

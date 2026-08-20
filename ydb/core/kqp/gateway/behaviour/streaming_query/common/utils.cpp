@@ -5,6 +5,7 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/sql/v1/translation/node.h>
 
 namespace NKikimr::NKqp {
@@ -28,6 +29,12 @@ TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeO
         } else if (name == TStreamingQueryMeta::TProperties::StreamingDisposition) {
             StreamingDisposition = std::make_shared<NYql::NPq::NProto::StreamingDisposition>();
             Y_VALIDATE(StreamingDisposition->ParseFromString(value), "Failed to parse StreamingDisposition");
+        } else if (name == TStreamingQueryMeta::TProperties::CheckpointInterval) {
+            if (CheckpointIntervalString = value) {
+                const auto duration = NMiniKQL::ValueFromString(NYql::NUdf::EDataSlot::Interval, value);
+                Y_VALIDATE(duration, "Failed to parse CheckpointInterval");
+                CheckpointInterval = TDuration::MicroSeconds(duration.Get<ui64>());
+            }
         }
     }
 

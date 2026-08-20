@@ -124,6 +124,7 @@ TYqlConclusion<std::optional<TString>> ParseWatermarkLateEventsPolicy(NYql::TFea
         TStreamingQueryConfig::TProperties::Run,
         TStreamingQueryConfig::TProperties::ResourcePool,
         TStreamingQueryConfig::TProperties::Force,
+        TStreamingQueryConfig::TProperties::CheckpointInterval,
     }) {
         if (const auto& value = featuresExtractor.Extract(property)) {
             if (!properties.emplace(property, *value).second) {

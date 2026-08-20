@@ -393,6 +393,14 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
             "    placement: 1\n"
             "    type: BASIC\n"))));
 
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
+            "BS",
+            "    threads: 1\n"
+            "    affinity:\n"
+            "      cpu_list: 0-1\n"
+            "      exclude_cpu_list: 1\n"
+            "    type: BASIC\n"))));
+
         UNIT_ASSERT(!validator.Validate(makeConfig(
             "IO",
             "    threads: 1\n"
@@ -410,13 +418,16 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
             "    placement: -1\n"
             "    type: BASIC\n")).Ok());
 
-        UNIT_ASSERT(!validator.Validate(makeConfig(
+        UNIT_ASSERT(HasOnlyThisIssues(validator.Validate(makeConfig(
             "BS",
             "    threads: 1\n"
             "    placement: 0\n"
             "    affinity:\n"
             "      cpu_list: 0-1\n"
-            "    type: BASIC\n")).Ok());
+            "    type: BASIC\n")), {{
+                "/actor_system_config/executor/0",
+                "Check \"Executor placement settings\" failed: executor must not define both affinity and placement"
+            }}));
 
     }
 

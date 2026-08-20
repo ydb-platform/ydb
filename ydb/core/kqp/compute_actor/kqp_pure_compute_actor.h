@@ -67,6 +67,8 @@ private:
 
     bool IsDebugLogEnabled(const TActorSystem* actorSystem);
 
+    void LogWasmResidentStringStats();
+
     ui64 CalculateFreeSpace() const;
 
 private:

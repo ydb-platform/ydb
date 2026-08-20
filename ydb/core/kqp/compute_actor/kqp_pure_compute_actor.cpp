@@ -283,8 +283,36 @@ void TKqpComputeActor::PassAway() {
         }
     }
 
+    LogWasmResidentStringStats();
     WasmQueryCompartment_.reset();
     TBase::PassAway();
+}
+
+//! The only per-query evidence that resident string columns engaged: how many
+//! column values the read wrote into linear memory and how many UDF args reused
+//! those bytes instead of copying them again.
+void TKqpComputeActor::LogWasmResidentStringStats() {
+    if (!WasmQueryCompartment_ || !WasmQueryCompartment_->HasHandle()) {
+        return;
+    }
+
+    const auto stats = WasmQueryCompartment_->GetPreferWasmSnapshot();
+    TStringBuilder columns;
+    for (const auto& name : GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns()) {
+        if (!columns.empty()) {
+            columns << ",";
+        }
+        columns << name;
+    }
+
+    YDB_LOG_INFO_COMP(NKikimrServices::KQP_COMPUTE, "Wasm resident string columns",
+        {"txId", GetTxId()},
+        {"task", GetTask().GetId()},
+        {"columns", columns},
+        {"materializedInWasm", stats.MaterializedInWasm},
+        {"residentReused", stats.ResidentReused},
+        {"copiedIntoCompartment", stats.CopiedIntoCompartment},
+        {"residentConstArgs", stats.ResidentConstArgs});
 }
 
 void TKqpComputeActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& ev) {

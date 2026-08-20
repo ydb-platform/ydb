@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kqp_opt_peephole_wasm_resident.cpp
     kqp_opt_peephole_wide_read.cpp
     kqp_opt_peephole_write_constraint.cpp
     kqp_opt_peephole.cpp
@@ -16,3 +17,7 @@ PEERDIR(
 YQL_LAST_ABI_VERSION()
 
 END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

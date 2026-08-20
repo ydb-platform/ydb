@@ -572,5 +572,12 @@ message TTableServiceConfig {
     // Materialize string columns feeding wasm UDF args straight into the query
     // compartment's linear memory (one copy instead of host string + copy per call).
     // Turn off to measure or to fall back to the plain host string path.
-    optional bool EnableWasmUdfResidentStringColumns = 146 [default = true, (InvalidateCompileCache) = true];
+    optional bool EnableWasmUdfResidentStringColumns = 146 [default = false, (InvalidateCompileCache) = true];
+
+    // Materialize loop-invariant String args of wasm UDF calls (e.g. a dictionary
+    // passed via a scalar subquery) into the query compartment's linear memory once
+    // per task, so every per-row call reuses those bytes instead of copying them.
+    // Opt-in: the compiler cannot tell a wasm UDF from a native one, and the blob
+    // may be only partially read.
+    optional bool EnableWasmUdfResidentConstArgs = 147 [default = false, (InvalidateCompileCache) = true];
 };

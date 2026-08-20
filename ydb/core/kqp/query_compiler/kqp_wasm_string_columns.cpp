@@ -136,6 +136,41 @@ bool IsUdf(const TExprNode* node) {
     return node && node->IsCallable({"Udf", "ScriptUdf"});
 }
 
+//! One handler lambda of a fold over a stream: where the lambda sits among the
+//! callable's children, and which of its arguments is the stream item.
+struct TItemHandler {
+    ui32 LambdaIndex;
+    ui32 ItemArgIndex;
+};
+
+//! Folds keep the row intact and pass it to their handlers, so a Member of a
+//! handler item is still the buffer the read produced. A full aggregate without
+//! GROUP BY lands here: `SUM(Udf(column))` becomes Condense1 over the source
+//! rows with the UDF call inside the init and update handlers.
+TVector<TItemHandler> GetFoldItemHandlers(const TExprNode& node) {
+    // Condense1(input, λ(item), λ(item, state), λ(item, state))
+    if (node.IsCallable({"Condense1", "Squeeze1"})) {
+        return {{1, 0}, {2, 0}, {3, 0}};
+    }
+    // Condense(input, state, λ(item, state), λ(item, state))
+    if (node.IsCallable({"Condense", "Squeeze"})) {
+        return {{2, 0}, {3, 0}};
+    }
+    // Fold1(input, λ(item), λ(item, state))
+    if (node.IsCallable("Fold1")) {
+        return {{1, 0}, {2, 0}};
+    }
+    // Fold(input, state, λ(item, state))
+    if (node.IsCallable("Fold")) {
+        return {{2, 0}};
+    }
+    // CombineCore(input, λ(item), λ(key, item), λ(key, item, state), λ(key, state), memLimit)
+    if (node.IsCallable("CombineCore")) {
+        return {{1, 0}, {2, 1}, {3, 1}};
+    }
+    return {};
+}
+
 class TCollector {
 public:
     explicit TCollector(const TDqPhyStage& stage)
@@ -210,6 +245,10 @@ private:
             BindSingleLambdaArg(node, 0, 1);
             return;
         }
+        if (const auto handlers = GetFoldItemHandlers(node); !handlers.empty()) {
+            BindFoldItemArgs(node, handlers);
+            return;
+        }
         if (node.IsCallable({"Apply", "NamedApply"})) {
             CollectApply(node);
         }
@@ -249,6 +288,26 @@ private:
         }
         if (auto column = ResolveColumn(input)) {
             ColumnValues_[arg] = *column;
+        }
+    }
+
+    void BindFoldItemArgs(const TExprNode& node, const TVector<TItemHandler>& handlers) {
+        if (node.ChildrenSize() == 0 || !IsPhysicalRowStream(node.Child(0))) {
+            return;
+        }
+        for (const auto& handler : handlers) {
+            if (node.ChildrenSize() <= handler.LambdaIndex) {
+                continue;
+            }
+            const TExprNode& lambda = *node.Child(handler.LambdaIndex);
+            if (!lambda.IsLambda()) {
+                continue;
+            }
+            const TExprNode& args = *lambda.Child(0);
+            if (args.ChildrenSize() <= handler.ItemArgIndex) {
+                continue;
+            }
+            RowArgs_.insert(args.Child(handler.ItemArgIndex));
         }
     }
 

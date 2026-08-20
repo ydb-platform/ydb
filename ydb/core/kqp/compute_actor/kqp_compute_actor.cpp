@@ -15,6 +15,7 @@
 #include <ydb/core/kqp/runtime/kqp_write_actor.h>
 #include <ydb/core/kqp/runtime/kqp_full_text_source.h>
 #include <ydb/core/kqp/runtime/kqp_sys_view_source.h>
+#include <ydb/core/kqp/runtime/kqp_wasm_resident_string.h>
 #include <ydb/library/formats/arrow/protos/ssa.pb.h>
 #include <ydb/library/yql/dq/actors/input_transforms/dq_input_transform_lookup_factory.h>
 #include <ydb/library/yql/dq/comp_nodes/dq_block_hash_join.h>
@@ -86,6 +87,10 @@ TComputationNodeFactory GetKqpActorComputeFactory(TKqpScanComputeContext* comput
 
             if (name == "FulltextAnalyze"sv) {
                 return WrapFulltextAnalyze(callable, ctx);
+            }
+
+            if (name == "KqpWasmResidentString"sv) {
+                return WrapKqpWasmResidentString(callable, ctx);
             }
 
             if (name == "KqpStreamEnumerate"sv) {

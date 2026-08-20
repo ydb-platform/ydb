@@ -7,6 +7,15 @@ namespace NKikimr::NUdfStore::NWasm {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TPreferWasmCounters::TSnapshot TPreferWasmCounters::GetSnapshot() const {
+    TSnapshot snapshot;
+    snapshot.MaterializedInWasm = MaterializedInWasm_.load(std::memory_order_relaxed);
+    snapshot.ResidentReused = ResidentReused_.load(std::memory_order_relaxed);
+    snapshot.CopiedIntoCompartment = CopiedIntoCompartment_.load(std::memory_order_relaxed);
+    snapshot.ResidentConstArgs = ResidentConstArgs_.load(std::memory_order_relaxed);
+    return snapshot;
+}
+
 TPreferWasmStats& TPreferWasmStats::Instance() {
     return *Singleton<TPreferWasmStats>();
 }

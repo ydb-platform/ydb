@@ -1,6 +1,7 @@
 #pragma once
 
 #include "module_catalog.h"
+#include "prefer_wasm_stats.h"
 
 #include <ydb/library/wasm/api/compartment.h>
 
@@ -25,6 +26,8 @@ struct TQueryCompartmentHandle
     THashMap<TString, void*> Exports;
     // Monotonic id for this acquire; TypeConfig callables recreate objects on change.
     ui64 Generation = 0;
+    // Resident string path of this query alone; a compute actor logs it on teardown.
+    TPreferWasmCounters PreferWasm;
 
     ~TQueryCompartmentHandle();
 };

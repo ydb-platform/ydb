@@ -46,6 +46,32 @@ TKqpScanComputeActor::~TKqpScanComputeActor() {
     FreeComputeCtxData();
 }
 
+//! The only per-query evidence that resident string columns engaged: how many
+//! column values the scan wrote into linear memory and how many UDF args reused
+//! those bytes instead of copying them again.
+void TKqpScanComputeActor::LogWasmResidentStringStats() {
+    if (!WasmQueryCompartment_ || !WasmQueryCompartment_->HasHandle()) {
+        return;
+    }
+
+    const auto stats = WasmQueryCompartment_->GetPreferWasmSnapshot();
+    TStringBuilder columns;
+    for (const auto& name : GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns()) {
+        if (!columns.empty()) {
+            columns << ",";
+        }
+        columns << name;
+    }
+
+    YDB_LOG_INFO("Wasm resident string columns",
+        {"logPrefix", LogPrefix},
+        {"columns", columns},
+        {"materializedInWasm", stats.MaterializedInWasm},
+        {"residentReused", stats.ResidentReused},
+        {"copiedIntoCompartment", stats.CopiedIntoCompartment},
+        {"residentConstArgs", stats.ResidentConstArgs});
+}
+
 void TKqpScanComputeActor::ProcessRlNoResourceAndDie() {
     const NYql::TIssue issue = MakeIssue(NKikimrIssues::TIssuesIds::YDB_RESOURCE_USAGE_LIMITED,
         "Throughput limit exceeded for query");

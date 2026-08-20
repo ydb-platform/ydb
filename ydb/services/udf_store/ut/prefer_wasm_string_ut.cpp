@@ -128,6 +128,38 @@ Y_UNIT_TEST(ResidentColumnIsReusedByUdfArg) {
     UNIT_ASSERT_VALUES_EQUAL(TWasmAllocationRegistry::Instance().CountGeneration(1), 0);
 }
 
+//! What KqpWasmResidentString achieves for a loop-invariant argument (e.g. a
+//! dictionary from a scalar subquery): materialize once, then every per-row UDF
+//! call reuses the resident bytes. The query-scoped counters must reflect it so
+//! the compute actor log shows the technology engaged even with columns=[].
+Y_UNIT_TEST(ResidentConstArgIsMaterializedOnceAndReused) {
+    NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    auto handle = MakeQueryCompartment(/*generation*/ 1);
+    TCurrentQueryCompartmentGuard queryGuard(handle.get());
+    TPreferWasmStats::Instance().Reset();
+
+    const TString dict = MakeBlob(BlobSize);
+    // The computation node materializes the invariant arg exactly once...
+    TUnboxedValue value(TWasmStringValue::MakePreferWasm(TStringRef(dict.data(), dict.size())));
+    handle->PreferWasm.OnResidentConstArg();
+
+    constexpr int Rows = 5;
+    for (int row = 0; row < Rows; ++row) {
+        const auto filled = FillArg(handle->Compartment.get(), value);
+        UNIT_ASSERT_VALUES_EQUAL(filled.Value.Length, BlobSize);
+        UNIT_ASSERT_VALUES_EQUAL(ReadGuestBytes(handle->Compartment.get(), filled.Value), TStringBuf(dict));
+    }
+
+    const auto queryStats = handle->PreferWasm.GetSnapshot();
+    UNIT_ASSERT_VALUES_EQUAL(queryStats.ResidentConstArgs, 1);
+    UNIT_ASSERT_VALUES_EQUAL(queryStats.MaterializedInWasm, 1);
+    UNIT_ASSERT_VALUES_EQUAL(queryStats.ResidentReused, Rows);
+    UNIT_ASSERT_VALUES_EQUAL(queryStats.CopiedIntoCompartment, 0);
+
+    value.Clear();
+    UNIT_ASSERT_VALUES_EQUAL(TWasmAllocationRegistry::Instance().CountGeneration(1), 0);
+}
+
 //! Baseline (EnableWasmUdfResidentStringColumns off, or a value that never came
 //! from a marked column): a host string is copied into the compartment per call.
 Y_UNIT_TEST(HostStringIsCopiedPerUdfCall) {

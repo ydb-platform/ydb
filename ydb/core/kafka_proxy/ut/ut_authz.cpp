@@ -196,6 +196,11 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
                 static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
         }
         {
+            UNIT_ASSERT_VALUES_EQUAL(
+                client.ListGroups()->ErrorCode,
+                static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        }
+        {
             auto describe = client.DescribeConfigs({topicName});
             UNIT_ASSERT_VALUES_EQUAL(describe->Results.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(describe->Results[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));

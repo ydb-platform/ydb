@@ -165,6 +165,11 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
             UNIT_ASSERT_VALUES_EQUAL(createTopics->Topics.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(createTopics->Topics[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
         }
+        {
+            auto createPartitions = client.CreatePartitions({TTopicConfig(topicName, 2)});
+            UNIT_ASSERT_VALUES_EQUAL(createPartitions->Results.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(createPartitions->Results[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        }
 
         auto apiVersions = client.ApiVersions();
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));

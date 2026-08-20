@@ -21,7 +21,7 @@
 * [распределённая конфигурация](../../../concepts/glossary.md#distributed-configuration) V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
 * общий механизм SelfHeal, который [включён по умолчанию](../../../maintenance/manual/selfheal.md#on-off).
 
-Параметр `self_management_config.enabled` включает саму распределённую конфигурацию. Одного наличия секции `self_management_config` в файле недостаточно: пока `enabled` не равен `true`, DistConf и SelfHeal статической группы не работают. Параметр `automatic_static_group_management` отдельно разрешает автоматический перенос VDisk статической группы.
+Параметр `self_management_config.enabled` включает саму распределённую конфигурацию. Параметр `automatic_static_group_management` отдельно разрешает автоматический перенос VDisk статической группы.
 
 Чтобы включить или выключить автоматическое управление статической группой:
 

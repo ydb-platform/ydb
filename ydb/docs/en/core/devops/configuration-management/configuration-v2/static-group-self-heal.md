@@ -21,7 +21,7 @@ Static group SelfHeal requires the following to be enabled:
 * [distributed configuration](../../../concepts/glossary.md#distributed-configuration) in configuration V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
 * the general SelfHeal mechanism, which is [enabled by default](../../../maintenance/manual/selfheal.md#on-off).
 
-The `self_management_config.enabled` parameter turns on distributed configuration itself. Having a `self_management_config` section in the file is not enough: until `enabled` is `true`, DistConf and static group SelfHeal do not work. The `automatic_static_group_management` parameter separately allows automatic relocation of static group VDisks.
+The `self_management_config.enabled` parameter turns on distributed configuration itself. The `automatic_static_group_management` parameter separately allows automatic relocation of static group VDisks.
 
 To enable or disable automatic static group management:
 

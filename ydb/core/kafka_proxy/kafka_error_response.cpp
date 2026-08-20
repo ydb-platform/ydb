@@ -4,6 +4,14 @@
 namespace NKafka {
 namespace {
 
+template <class TResponse>
+TApiMessage::TPtr TopLevelError(EKafkaErrors error) {
+    auto response = std::make_shared<TResponse>();
+    response->ErrorCode = error;
+    return response;
+}
+
+
 TApiMessage::TPtr ProduceError(const TProduceRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TProduceResponseData>();
     response->Responses.resize(request.TopicData.size());
@@ -165,6 +173,8 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return OffsetFetchError(static_cast<const TOffsetFetchRequestData&>(request), error);
         case CREATE_TOPICS:
             return CreateTopicsError(static_cast<const TCreateTopicsRequestData&>(request), error);
+        case INIT_PRODUCER_ID:
+            return TopLevelError<TInitProducerIdResponseData>(error);
         case CREATE_PARTITIONS:
             return CreatePartitionsError(static_cast<const TCreatePartitionsRequestData&>(request), error);
         default:

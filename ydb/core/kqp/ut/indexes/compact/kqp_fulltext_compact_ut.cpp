@@ -43,6 +43,40 @@ TResultSet ReadIndex(NQuery::TQueryClient& db, const char* table = "indexImplTab
     return result.GetResultSet(0);
 }
 
+void RestartTableShards(TKikimrRunner& kikimr, const TString& path) {
+    auto& server = kikimr.GetTestServer();
+    auto& runtime = *server.GetRuntime();
+    const auto sender = runtime.AllocateEdgeActor();
+    const auto shards = GetTableShards(&server, sender, path);
+    UNIT_ASSERT_C(!shards.empty(), "No shards found for " << path);
+    for (const ui64 shard : shards) {
+        runtime.Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
+            new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), shard, false));
+    }
+}
+
+void RestartFulltextShards(TKikimrRunner& kikimr, NQuery::TQueryClient& db, bool withRelevance) {
+    RestartTableShards(kikimr, "/Root/Texts");
+    RestartTableShards(kikimr, "/Root/Texts/fulltext_idx/indexImplTable");
+    if (withRelevance) {
+        RestartTableShards(kikimr, "/Root/Texts/fulltext_idx/indexImplDocsTable");
+        RestartTableShards(kikimr, "/Root/Texts/fulltext_idx/indexImplDictTable");
+        RestartTableShards(kikimr, "/Root/Texts/fulltext_idx/indexImplStatsTable");
+    }
+
+    // A successful index query is the recovery barrier. RetryQuery waits for all
+    // poisoned tablets used by the plan to boot, without relying on a fixed delay.
+    auto result = db.RetryQuery([](NQuery::TSession session) {
+        return session.ExecuteQuery(R"sql(
+            SELECT `Key`
+            FROM `/Root/Texts` VIEW `fulltext_idx`
+            WHERE FulltextMatch(`Text`, "love")
+            ORDER BY `Key`;
+        )sql", NQuery::TTxControl::NoTx());
+    }).GetValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpFulltextCompact) {
@@ -880,6 +914,86 @@ Y_UNIT_TEST_TWIN(LsmCompactionWithConcurrentWrites, WithRelevance) {
     CompareYson(R"([
         [[300u];["Bears love honey."];["bears data"]]
     ])", FulltextSearch(db, "honey"));
+}
+
+Y_UNIT_TEST_TWIN(RecoveryBeforeAndAfterCompaction, WithRelevance) {
+    auto kikimr = KikimrWithZeroSnapshotTimeout();
+    auto db = kikimr.GetQueryClient();
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+    AddIndex(db, indexType);
+
+    // Produce several durable posting generations with all supported mutation kinds.
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (150, "Foxes love cats.", "foxes data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        UPDATE `/Root/Texts`
+        SET Text = "Birds love rabbits.", Data = "birds data"
+        WHERE Key = 100
+    )sql");
+    ExecuteQuery(db, R"sql(
+        DELETE FROM `/Root/Texts` WHERE Key = 200
+    )sql");
+
+    RestartFulltextShards(kikimr, db, WithRelevance);
+
+    // Recovery must preserve both additions and tombstones from pre-restart generations.
+    CompareYson(R"([])", FulltextSearch(db, "dogs"));
+    CompareYson(R"([
+        [[100u];["Birds love rabbits."];["birds data"]]
+    ])", FulltextSearch(db, "birds"));
+    CompareYson(R"([
+        [[150u];["Foxes love cats."];["foxes data"]]
+    ])", FulltextSearch(db, "cats"));
+
+    // Force small logical segments, then force an LSM compaction. WaitForCompaction
+    // synchronizes on tablet completion, so this test does not depend on a timer or Sleep.
+    NDataShard::gFulltextMaxDelta = 2;
+    NDataShard::gFulltextMaxSegment = 2;
+    Y_DEFER {
+        NDataShard::gFulltextMaxDelta = 10000;
+        NDataShard::gFulltextMaxSegment = 10000;
+    };
+
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (151, "Wolves love foxes.", "wolves data")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        UPDATE `/Root/Texts`
+        SET Text = "Otters chase mice.", Data = "otters data"
+        WHERE Key = 150
+    )sql");
+    ExecuteQuery(db, R"sql(
+        DELETE FROM `/Root/Texts` WHERE Key = 100
+    )sql");
+
+    WaitForCompaction(&kikimr.GetTestServer(), "/Root/Texts/fulltext_idx/indexImplTable");
+    RestartFulltextShards(kikimr, db, WithRelevance);
+
+    // Verify recovery of the compacted generations and continued handling of
+    // post-restart writes. Old terms must not leak through compacted tombstones.
+    CompareYson(R"([])", FulltextSearch(db, "birds"));
+    CompareYson(R"([])", FulltextSearch(db, "cats"));
+    CompareYson(R"([
+        [[150u];["Otters chase mice."];["otters data"]]
+    ])", FulltextSearch(db, "otters"));
+    CompareYson(R"([
+        [[151u];["Wolves love foxes."];["wolves data"]]
+    ])", FulltextSearch(db, "foxes"));
+
+    ExecuteQuery(db, R"sql(
+        INSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (152, "Badgers chase otters.", "badgers data")
+    )sql");
+    CompareYson(R"([
+        [[150u];["Otters chase mice."];["otters data"]];
+        [[152u];["Badgers chase otters."];["badgers data"]]
+    ])", FulltextSearch(db, "otters"));
 }
 
 Y_UNIT_TEST(UpsertTwoIndexes) {

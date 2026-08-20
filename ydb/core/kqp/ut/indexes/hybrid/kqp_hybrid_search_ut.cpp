@@ -108,6 +108,16 @@ void AddVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs", const
     )sql", table.c_str(), name.c_str()));
 }
 
+void AddManhattanVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs",
+        const TString& name = "manhattan_idx") {
+    ExecOk(db, Sprintf(R"sql(
+        ALTER TABLE `%s` ADD INDEX %s
+            GLOBAL USING vector_kmeans_tree
+            ON (Embedding)
+            WITH (distance=manhattan, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+    )sql", table.c_str(), name.c_str()));
+}
+
 // A prefixed vector index (a prefix column before the vector column). HybridRank does not support these
 // yet (the kmeans-tree lowering needs an OptionalIf prefix predicate the rewrite doesn't build).
 void AddPrefixedVectorIndex(TQueryClient& db, const TString& table = "/Root/Docs", const TString& name = "vp_idx") {
@@ -570,6 +580,134 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             UNIT_ASSERT_C((std::set<ui64>{1u, 2u, 3u, 4u}.contains(k)),
                 TStringBuilder() << "returned key " << k << " must be one of the four candidate docs");
         }
+    }
+
+    // A branch may legitimately have no candidates. The fusion result must then be exactly the other
+    // branch rather than becoming empty or producing invalid normalization values. Both built-in modes
+    // recover the pure vector order: doc2 exact, then doc1, doc4 and the opposite-direction doc3.
+    Y_UNIT_TEST(EmptyBranchFallsBackToCandidateBranch) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        for (const TString& mode : {TString("rrf"), TString("linear")}) {
+            auto keys = RunKeys(db, TargetDecl + Sprintf(R"sql(
+                SELECT Key FROM `/Root/Docs`
+                ORDER BY HybridRank(
+                    FullTextScore(Text, "term-that-is-not-present"),
+                    Knn::CosineDistance(Embedding, $target),
+                    "%s" AS Mode,
+                    (4, 4) AS Limits)
+                LIMIT 4;
+            )sql", mode.c_str()));
+            UNIT_ASSERT_VALUES_EQUAL_C((std::vector<ui64>{2u, 1u, 4u, 3u}), keys,
+                TStringBuilder() << "an empty fulltext branch must leave the pure vector order in " << mode);
+        }
+    }
+
+    // Explicit per-branch Limits control the candidate union independently of the final LIMIT. With a
+    // one-row fulltext pool (doc3 for "sleep") and a two-row vector pool ({2,1}) the branches are disjoint;
+    // changing the term to "cats" makes doc1 overlap and therefore deduplicates the union to two rows.
+    Y_UNIT_TEST(ExplicitLimitsCoverDisjointAndOverlappingBranches) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto disjoint = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "sleep"),
+                Knn::CosineDistance(Embedding, $target),
+                (1, 2) AS Limits)
+            LIMIT 10;
+        )sql");
+        UNIT_ASSERT_C((std::set<ui64>(disjoint.begin(), disjoint.end()) == std::set<ui64>{1u, 2u, 3u}),
+            "disjoint one- and two-candidate branches must produce their complete three-row union");
+
+        auto overlapping = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),
+                Knn::CosineDistance(Embedding, $target),
+                (1, 2) AS Limits)
+            LIMIT 10;
+        )sql");
+        UNIT_ASSERT_C((std::set<ui64>(overlapping.begin(), overlapping.end()) == std::set<ui64>{1u, 2u}),
+            "the document present in both truncated branches must occur only once in the fused union");
+    }
+
+    // Boundary final limits are independent from branch Limits: zero emits no rows, one emits exactly one
+    // valid candidate, and a limit larger than the corpus emits the complete deduplicated candidate union.
+    Y_UNIT_TEST(FinalLimitBoundaries) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto zero = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                (4, 4) AS Limits)
+            LIMIT 0;
+        )sql");
+        UNIT_ASSERT_C(zero.empty(), "LIMIT 0 must return no fused rows");
+
+        auto one = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                (4, 4) AS Limits)
+            LIMIT 1;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(one.size(), 1u, "LIMIT 1 must return exactly one fused row");
+        UNIT_ASSERT_C((std::set<ui64>{1u, 2u, 3u, 4u}.contains(one.front())),
+            "LIMIT 1 must return a member of the candidate union");
+
+        auto aboveCorpus = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                (10, 10) AS Limits)
+            LIMIT 100;
+        )sql");
+        UNIT_ASSERT_C((std::set<ui64>(aboveCorpus.begin(), aboveCorpus.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
+            "a final limit above the corpus must return the complete candidate union");
+        UNIT_ASSERT_VALUES_EQUAL_C(aboveCorpus.size(), 4u, "the candidate union must stay deduplicated");
+    }
+
+    // Manhattan distance exercises metric-aware vector-index resolution beyond the cosine distance and
+    // similarity paths. For this fixture it has the same strict nearest-neighbour order as cosine.
+    Y_UNIT_TEST(ManhattanDistanceFuses) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        CreateDocs(db);
+        UpsertDocs(db);
+        AddFulltextIndex(db);
+        AddManhattanVectorIndex(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "term-that-is-not-present"),
+                Knn::ManhattanDistance(Embedding, $target),
+                (4, 4) AS Limits)
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{2u, 1u, 4u, 3u}), keys);
+    }
+
+    // HybridRank must remain the complete ORDER BY key. A secondary key would otherwise be misleading:
+    // the hybrid rewrite ranks its own candidate stream and cannot promise a stable tie-break contract.
+    Y_UNIT_TEST(RejectsSecondaryOrderByKey) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto issues = RunFailIssues(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                (0, 0) AS Weights), Key
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_STRING_CONTAINS(issues, "must be the entire ORDER BY key");
     }
 
     // WHERE on a main-table column is re-applied after the fused lookup.

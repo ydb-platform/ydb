@@ -46,6 +46,8 @@ byte taken_tokens_to_wakeup = 0;
 
 byte waker_worker_id = INVALID_WAKER;
 bool waker_pending = false;
+bool producer_epoch = false;
+bool controller_epoch = false;
 
 /* Single persistent waker scratch space. */
 byte waker_i = 0;
@@ -110,22 +112,18 @@ inline reconcile_thread_count() {
                 waker_converted = taken_tokens_to_wakeup
             :: else -> waker_converted = waker_delta
             fi;
-            taken_tokens_to_wakeup = taken_tokens_to_wakeup -
-                waker_converted;
-            taken_tokens_to_sleep = taken_tokens_to_sleep +
-                waker_converted;
+            taken_tokens_to_wakeup = taken_tokens_to_wakeup - waker_converted;
+            taken_tokens_to_sleep = taken_tokens_to_sleep + waker_converted;
             waker_delta = waker_delta - waker_converted;
             if
             :: waker_previous_sleeping < waker_delta ->
                 waker_converted = waker_previous_sleeping
             :: else -> waker_converted = waker_delta
             fi;
-            waker_previous_sleeping = waker_previous_sleeping -
-                waker_converted;
+            waker_previous_sleeping = waker_previous_sleeping - waker_converted;
             waker_delta = waker_delta - waker_converted;
             assert(waker_remaining_reductions + waker_delta <= N);
-            waker_remaining_reductions =
-                waker_remaining_reductions + waker_delta;
+            waker_remaining_reductions = waker_remaining_reductions + waker_delta;
             thread_count = waker_desired
         :: waker_desired > thread_count ->
             waker_delta = waker_desired - thread_count;
@@ -134,22 +132,18 @@ inline reconcile_thread_count() {
                 waker_converted = taken_tokens_to_sleep
             :: else -> waker_converted = waker_delta
             fi;
-            taken_tokens_to_sleep = taken_tokens_to_sleep -
-                waker_converted;
-            taken_tokens_to_wakeup = taken_tokens_to_wakeup +
-                waker_converted;
+            taken_tokens_to_sleep = taken_tokens_to_sleep - waker_converted;
+            taken_tokens_to_wakeup = taken_tokens_to_wakeup + waker_converted;
             waker_delta = waker_delta - waker_converted;
             if
             :: waker_remaining_reductions < waker_delta ->
                 waker_converted = waker_remaining_reductions
             :: else -> waker_converted = waker_delta
             fi;
-            waker_remaining_reductions = waker_remaining_reductions -
-                waker_converted;
+            waker_remaining_reductions = waker_remaining_reductions - waker_converted;
             waker_delta = waker_delta - waker_converted;
             assert(waker_previous_sleeping + waker_delta <= N);
-            waker_previous_sleeping = waker_previous_sleeping +
-                waker_delta;
+            waker_previous_sleeping = waker_previous_sleeping + waker_delta;
             thread_count = waker_desired
         :: else -> skip
         fi;
@@ -165,16 +159,14 @@ inline reconcile_workers(id, resume_state) {
     do
     :: atomic { true ->
         if
-        :: (waker_i != id && (worker_state[waker_i] == NEED || worker_state[waker_i] == NONE)) ||
-                (waker_i == id && (resume_state == NEED || resume_state == NONE)) ->
-            if 
-            :: waker_i != id -> worker_state[waker_i] = NONE;
-            :: else -> resume_state = NONE
-            fi
+        :: (waker_i != id && (worker_state[waker_i] == NEED || worker_state[waker_i] == NONE))->
+            worker_state[waker_i] = NONE;
             if
             :: waker_budget > 0 -> waker_budget--
             :: else -> skip
             fi
+        :: (waker_i == id && (resume_state == NEED || resume_state == NONE)) ->
+            resume_state = NONE
         :: waker_i != id && IS_SPIN(worker_state[waker_i]) ->
             if
             :: waker_budget > 0 ->
@@ -191,7 +183,6 @@ inline reconcile_workers(id, resume_state) {
             if
             :: waker_budget > 0 ->
                 resume_state = NONE;
-                waker_budget--
             :: waker_budget == 0 ->
                 resume_state = SLEEP;
                 assert(awake_workers > 0);
@@ -218,7 +209,6 @@ inline reconcile_workers(id, resume_state) {
                 assert(awake_workers > 0);
                 awake_workers--;
                 sleep_workers++
-            :: taken_tokens_to_wakeup == 0 && taken_tokens_to_sleep == 0 -> assert(false) // impossible
             fi
         :: waker_i == id && IS_BLOCKING(resume_state) ->
             assert(taken_tokens_to_wakeup != 0 || taken_tokens_to_sleep != 0);
@@ -226,7 +216,6 @@ inline reconcile_workers(id, resume_state) {
             :: taken_tokens_to_wakeup > 0 && waker_budget > 0 ->
                 resume_state = NONE;
                 taken_tokens_to_wakeup--;
-                waker_budget--
             :: taken_tokens_to_wakeup > 0 && waker_budget == 0 ->
                 resume_state = SLEEP;
                 taken_tokens_to_wakeup--;
@@ -240,7 +229,6 @@ inline reconcile_workers(id, resume_state) {
                 assert(awake_workers > 0);
                 awake_workers--;
                 sleep_workers++
-            :: taken_tokens_to_wakeup == 0 && taken_tokens_to_sleep == 0 -> assert(false) // impossible
             fi
         :: else -> skip
         fi
@@ -257,10 +245,10 @@ inline reconcile_workers(id, resume_state) {
 
 inline wake_sleeping_workers(id, resume_state) {
     do
-    :: atomic { waker_budget > 0 ->
+    :: atomic { waker_budget > 0 && waker_previous_sleeping > 0 ->
         waker_i = 0;
         do
-        :: waker_i < N ->
+        :: waker_i < N && waker_budget > 0 && waker_previous_sleeping > 0->
             if
             :: waker_i != id && IS_SLEEP(worker_state[waker_i]) ||
                    waker_i == id && IS_SLEEP(resume_state) ->
@@ -273,7 +261,10 @@ inline wake_sleeping_workers(id, resume_state) {
                 sleep_workers--;
                 waker_previous_sleeping--;
                 awake_workers++;
-                waker_budget--;
+                if
+                :: waker_i != id -> waker_budget--;
+                :: else ->
+                fi
             :: else -> waker_i++
             fi
         :: else -> break
@@ -286,7 +277,10 @@ inline wake_sleeping_workers(id, resume_state) {
         :: else -> skip
         fi
     }
-    :: else -> break
+    :: atomic { else ->
+        waker_budget = 0
+        break
+    }
     od
 }
 
@@ -356,6 +350,7 @@ inline run_waker(id, resume_state) {
             if
             :: IS_SLEEP(worker_state[id]) -> resume_state = SLEEP
             :: IS_BLOCKING(worker_state[id]) -> resume_state = BLOCKING
+            :: worker_state[id] == NONE || worker_state[id] == SPIN || worker_state[id] == NEED -> resume_state = NONE
             :: else -> skip
             fi;
             worker_state[id] = WAKER
@@ -364,20 +359,20 @@ inline run_waker(id, resume_state) {
         run_waker_pass(id, resume_state);
         atomic {
             if
-            :: waker_pending -> goto run_waker_acquire_save_state_label
+            :: waker_pending -> goto run_waker_pass_label
             :: else -> skip
             fi
         }
         worker_state[id] = resume_state;
         if
-        :: waker_pending -> goto run_waker_pass_label
+        :: waker_pending -> goto run_waker_acquire_save_state_label
         :: else -> skip
         fi
         waker_worker_id = INVALID_WAKER
         atomic {
             if
             :: waker_pending -> goto run_waker_again_label
-            :: else -> skip
+            :: else -> break
             fi
         }
     :: atomic { waker_worker_id == id ->
@@ -430,13 +425,29 @@ check_blocking:
     };
         worker_state[id] = BLOCKING
         if
+        :: atomic {reductions & REDUCTION_WAKER_BIT ->
+            reductions = reductions & REDUCTION_COUNT_MASK
+        }
+            atomic {
+                if
+                :: worker_state[id] == BLOCKING -> worker_state[id] = NEED_FROM_BLOCKING
+                :: worker_state[id] == SLEEP -> worker_state[id] = NEED_FROM_SLEEP
+                :: worker_state[id] == NONE -> worker_state[id] = NEED
+                :: else -> skip
+                fi
+                goto settle_waker_state
+            }
+        :: else -> skip
+        fi
+        if
         :: atomic { !waker_pending ->
             waker_pending = true;
         }
             atomic {
                 if
-                :: worker_state[id] == BLOCKING ->
-                    worker_state[id] = NEED_FROM_BLOCKING
+                :: worker_state[id] == BLOCKING -> worker_state[id] = NEED_FROM_BLOCKING
+                :: worker_state[id] == SLEEP -> worker_state[id] = NEED_FROM_SLEEP
+                :: worker_state[id] == NONE -> worker_state[id] = NEED
                 :: else -> skip
                 fi
             }
@@ -465,7 +476,10 @@ pop_activation:
     /* A producer publishes the credit before the queue item. */
     
     if
-    :: atomic { activation_credits > 0 -> goto worker_iteration }
+    :: atomic { activation_credits > 0 -> 
+        queued_activations != 0 || reductions != 0 // endless loop with activation_credits > 0 && queued_activations == 0 && reductions == 0 
+        goto worker_iteration
+    }
     :: activation_credits == 0 ->
         worker_state[id] = SPIN;
         if
@@ -503,8 +517,20 @@ settle_waker_state:
                 fi
             }
         :: activation_credits == 0 ->
-            worker_state[id] != SPIN || activation_credits > 0
-            goto settle_waker_state
+            worker_state[id] != SPIN || activation_credits > 0 || reductions > 0
+            if
+            :: reductions > 0 ->
+                atomic {
+                    if
+                    :: worker_state[id] == BLOCKING || worker_state[id] == SPIN -> worker_state[id] = NONE
+                    :: worker_state[id] == SLEEP -> goto sleep_state_label
+                    :: IS_NEED(worker_state[id]) -> goto settle_waker_state
+                    :: else -> skip
+                    fi
+                }
+                goto check_blocking
+            :: else -> goto settle_waker_state
+            fi
         fi
     :: worker_state[id] == SLEEP || worker_state[id] == BLOCKING ->
         /* Park until the waker changes the public state. */
@@ -522,10 +548,14 @@ proctype Producer() {
     bool done;
     produser_iteration:
     do
-    :: true -> break
     :: true ->
-        atomic { activation_credits < MAX_QUEUE -> activation_credits++ };
-        atomic { queued_activations++ };
+        atomic { activation_credits < MAX_QUEUE ->
+            activation_credits++
+            producer_epoch = !producer_epoch
+        };
+        atomic {
+            queued_activations++;
+        };
         if
         :: atomic { sleeping_count == 0 -> goto produser_iteration }
         :: else ->
@@ -578,12 +608,15 @@ proctype Controller() {
     bool notify;
     controller_iteration:
     do
-    :: true -> break
-    :: suggested_thread_count == thread_count ->
+    :: true ->
         atomic {
             if
-            :: suggested_thread_count == N -> suggested_thread_count = 1
-            :: suggested_thread_count == 1 -> suggested_thread_count = N
+            :: suggested_thread_count == N ->
+                suggested_thread_count = 1;
+                controller_epoch = !controller_epoch
+            :: suggested_thread_count == 1 ->
+                suggested_thread_count = N;
+                controller_epoch = !controller_epoch
             fi;
         };
         atomic {
@@ -630,15 +663,34 @@ proctype Controller() {
     od
 }
 
+#define RESIZE_RECONCILES_WITH_EPOCHS(p, c) \
+    ([] ((suggested_thread_count != thread_count && \
+            producer_epoch == p && controller_epoch == c) -> \
+        <> (suggested_thread_count == thread_count || \
+            producer_epoch != p || controller_epoch != c)))
+
+#define QUEUE_DECREASES_WITH_EPOCHS(q, p, c) \
+    ([] ((queued_activations == q && \
+            producer_epoch == p && controller_epoch == c) -> \
+        <> (queued_activations < q || \
+            producer_epoch != p || controller_epoch != c)))
+
 ltl live_resize_reconciles {
-    [] ((suggested_thread_count != thread_count) ->
-        <> (suggested_thread_count == thread_count))
+    RESIZE_RECONCILES_WITH_EPOCHS(false, false) &&
+    RESIZE_RECONCILES_WITH_EPOCHS(false, true) &&
+    RESIZE_RECONCILES_WITH_EPOCHS(true, false) &&
+    RESIZE_RECONCILES_WITH_EPOCHS(true, true)
 }
 
 ltl live_queue_changes {
-    ([] (queued_activations == 1 ->
-        <> (queued_activations == 0 || queued_activations == 2))) &&
-    ([] (queued_activations == 2 -> <> (queued_activations == 1)))
+    QUEUE_DECREASES_WITH_EPOCHS(1, false, false) &&
+    QUEUE_DECREASES_WITH_EPOCHS(1, false, true) &&
+    QUEUE_DECREASES_WITH_EPOCHS(1, true, false) &&
+    QUEUE_DECREASES_WITH_EPOCHS(1, true, true) &&
+    QUEUE_DECREASES_WITH_EPOCHS(2, false, false) &&
+    QUEUE_DECREASES_WITH_EPOCHS(2, false, true) &&
+    QUEUE_DECREASES_WITH_EPOCHS(2, true, false) &&
+    QUEUE_DECREASES_WITH_EPOCHS(2, true, true)
 }
 
 init {

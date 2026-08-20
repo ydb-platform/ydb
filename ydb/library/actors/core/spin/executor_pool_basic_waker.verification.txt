@@ -1,43 +1,90 @@
 Model: executor_pool_basic_waker.pml
-Commit: d20fb5b5fbc97ebe4a938e371822ffeff34f365b
-Model SHA-256: f55b5b00f00e118218de0278c87baa30bce74bb44c252c5ab4534c3771bd1a61
-Host: build-host-004
-Started: 2026-08-19T01:13:49+03:00
-Finished: 2026-08-19T01:31:24+03:00
+Model SHA-256: 49df29e5e9e5fdfb431fa106dc2e40136fc65aa62a3aa7a7939f151556b509ee
+
+The model uses producer_epoch and controller_epoch to scope liveness
+obligations to intervals without new producer or controller events.
+Fairness was disabled for all runs.
+
+Safety verification
+
 Spin: Spin Version 6.5.2 -- 6 December 2019
-
-Equivalent reproduction commands for the recorded claim:
+Commands:
   spin -a executor_pool_basic_waker.pml
-  cc -O3 -o pan pan.c
-  ./pan -a -N live_resize_reconciles -m1000000 -w31
-
-The recorded result covers live_resize_reconciles. The live_queue_changes
-claim was added later and requires a separate run with:
-  ./pan -a -N live_queue_changes -m1000000 -w31
+  cc -O3 -DSAFETY -DNOCLAIM -o pan pan.c
+  ./pan -m1000000000 -w30
 
 Result: HOLDS (full state-space search completed with errors: 0)
 
-Full statespace search for:
-  never claim             + (live_resize_reconciles)
-  assertion violations    + (if within scope of claim)
-  acceptance cycles       + (fairness disabled)
-  invalid end states      - (disabled by never claim)
+State-vector 68 byte, depth reached 36617377, errors: 0
+2.3948236e+08 states, stored
+3.92915e+08 states, matched
+6.3239735e+08 transitions (= stored+matched)
+2.4393238e+08 atomic steps
+78283.113 MB total actual memory usage
+pan: elapsed time 229 seconds
+wall clock time 4:16.73
+maximum resident set size 80166384 kbytes
 
-State-vector 80 byte, depth reached 1110, errors: 0
-1.0814687e+09 states, stored (1.24102e+09 visited)
-1.2619889e+09 states, matched
-2.5030137e+09 transitions (= visited+matched)
-7.1116546e+08 atomic steps
-hash conflicts: 9.3187647e+08 (resolved)
+Run directory:
+  build-host-002:/tmp/waker-hour-safety-49df29.4tyFN5
 
-Stats on memory usage (in Megabytes):
-111387.842  equivalent memory usage for states (stored*(State-vector + overhead))
- 86860.349  actual memory usage for states (compression: 77.98%)
-            state-vector as stored = 56 byte + 28 byte overhead
- 16384.000  memory used for hash table (-w31)
-    53.406  memory used for DFS stack (-m1000000)
-     3.142  memory lost to fragmentation
-103294.613  total actual memory usage
+-------------------------------------------------------------------------------
 
-pan: elapsed time 1.05e+03 seconds
-pan: rate 1180163.8 states/second
+Claim: live_resize_reconciles
+
+Spin: Spin Version 6.4.9 -- 17 December 2018
+
+Spin 6.4.9 aborted while expanding both embedded LTL claims. The verified
+temporary resize_model.pml differs only by removal of the unused
+live_queue_changes block. The transition system and live_resize_reconciles
+claim are unchanged.
+
+Derived model SHA-256:
+  20bbe205f97bd249cfe9f2400778c40276a2d77cf59d811bab2cc501dd2c2a67
+
+Commands:
+  sed '/^ltl live_queue_changes {$/,/^}$/d' \
+      executor_pool_basic_waker.pml > resize_model.pml
+  spin -a resize_model.pml
+  cc -O3 -o pan pan.c
+  ./pan -a -m1000000000 -w31
+
+Result: HOLDS (full state-space search completed with errors: 0)
+
+State-vector 76 byte, depth reached 63745162, errors: 0
+3.4296727e+08 states, stored (4.44681e+08 visited)
+9.1690385e+08 states, matched
+1.3615853e+09 transitions (= visited+matched)
+4.8041475e+08 atomic steps
+93586.246 MB total actual memory usage
+pan: elapsed time 442 seconds
+wall clock time 7:53.36
+maximum resident set size 95837940 kbytes
+
+Run directory:
+  build-host-003:/tmp/waker-hour-resize-49df29-only.k3DhsR
+
+-------------------------------------------------------------------------------
+
+Claim: live_queue_changes
+
+Spin: Spin Version 6.5.2 -- 6 December 2019
+Commands:
+  spin -a executor_pool_basic_waker.pml
+  cc -O3 -o pan pan.c
+  ./pan -a -N live_queue_changes -m1000000000 -w31
+
+Result: HOLDS (full state-space search completed with errors: 0)
+
+State-vector 76 byte, depth reached 63745162, errors: 0
+4.4512455e+08 states, stored (6.48952e+08 visited)
+1.3541268e+09 states, matched
+2.0030785e+09 transitions (= visited+matched)
+7.1283045e+08 atomic steps
+103997.184 MB total actual memory usage
+pan: elapsed time 636 seconds
+wall clock time 11:08.63
+maximum resident set size 106500436 kbytes
+
+Run directory:
+  build-host-004:/tmp/waker-hour-queue-49df29.nDfslj

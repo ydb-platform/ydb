@@ -252,18 +252,6 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
                         return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
                             TStringBuilder() << "Cannot truncate read-only table " << schemeShardLocalPathId);
                     }
-                    // Check 2: Source tables that have read-only copies cannot be truncated.
-                    // After CopyTable, the source TTableInfo has multiple SchemeShardLocalPathIds
-                    // mapping to the same InternalPathId. Truncating would allocate a new
-                    // InternalPathId for the source, but the RO copy would still point to the old
-                    // (now dropped) generation, corrupting MVCC history and breaking time-travel reads.
-                    // Once all copies are dropped (GetPathIds().size() == 1), the source becomes
-                    // truncatable again.
-                    if (table.GetPathIds().size() > 1) {
-                        return TProposeResult(NKikimrTxColumnShard::EResultStatus::SCHEMA_ERROR,
-                            TStringBuilder() << "Cannot truncate table that shares storage with a copy "
-                                             << schemeShardLocalPathId);
-                    }
                     // Check 3: Tables with tiering cannot be truncated (tiering migration state
                     // would be lost on the new InternalPathId). Pure TTL (delete action) is fine.
                     if (const auto ttl = owner.TablesManager.GetTableTtl(*internalPathId)) {
@@ -428,7 +416,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
                 if (owner.TablesManager.HasTable(*internalPathId)) {
                     const auto& table = owner.TablesManager.GetTable(*internalPathId);
                     // Propose rejects these; on restart skip re-fence / wait setup.
-                    if (table.IsReadOnly(schemeShardLocalPathId) || table.GetPathIds().size() > 1) {
+                    if (table.IsReadOnly(schemeShardLocalPathId)) {
                         break;
                     }
                     if (const auto ttl = owner.TablesManager.GetTableTtl(*internalPathId); ttl && !ttl->GetUsedTiers().empty()) {

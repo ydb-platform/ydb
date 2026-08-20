@@ -560,9 +560,28 @@ void TTablesManager::DropTable(
 
 TInternalPathId TTablesManager::TruncateTable(const TSchemeShardLocalPathId schemeShardLocalPathId, const TInternalPathId oldPathId,
     const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
-    DropTable(schemeShardLocalPathId, oldPathId, version, db);
+    auto* oldTable = Tables.FindPtr(oldPathId);
+    AFL_VERIFY(oldTable);
+    const bool hasCopies = oldTable->GetPathIds().size() > 1;
 
-    // NOTE: Between DropTable() and RegisterTable() below, GenerationIndex.Live is empty
+    if (hasCopies) {
+        // Retention mode: keep the old generation alive for copies.
+        // Only drop the source SS-path from the old generation, preserving the TTableInfo
+        // for the read-only copies. The old generation will be cleaned up when all copies
+        // are dropped (via the existing partial-drop → TryFinalizeDropPathOnComplete path).
+        oldTable->SetDropVersion(schemeShardLocalPathId, version);
+        Schema::EraseTableInfoV1(db, oldPathId, schemeShardLocalPathId);
+        oldTable->Remove(schemeShardLocalPathId);
+        GenerationIndex.ForgetLive(schemeShardLocalPathId);
+        // Do NOT forget the generation from All — copies still reference it.
+        NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(
+            TabletId, TUnifiedPathId::BuildValid(oldPathId, schemeShardLocalPathId));
+    } else {
+        // No copies — full drop (existing behavior).
+        DropTable(schemeShardLocalPathId, oldPathId, version, db);
+    }
+
+    // NOTE: Between the drop above and RegisterTable() below, GenerationIndex.Live is empty
     // for this path. A write that resolves the path in this window will fail with "unknown table"
     // and must retry. This is acceptable — the fence from TruncateTablePropose blocks new writes,
     // and any write that resolved the InternalPathId before the fence will be retried by the client.

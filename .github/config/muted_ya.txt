@@ -23,6 +23,7 @@ ydb/library/actors/interconnect/ut InterconnectSessionV2.PeerStopTriggersDisconn
 ydb/library/yql/providers/generic/connector/tests/datasource/oracle py3test.sole chunk
 ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/tests/compatibility/indexes py3test.[test_vector_index.py */*] chunk
+ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_prestable-26-4]
 ydb/tests/compatibility/s3_backups test_export_import_s3.py.TestExportImportS3.test_column_tables[mixed_prestable-26-4_and_stable-26-3-1]

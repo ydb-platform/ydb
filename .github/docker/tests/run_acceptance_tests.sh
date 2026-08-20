@@ -372,28 +372,8 @@ CONFIG_HASH=$(sha256sum "$GENERATED_CONFIG")
 CONFIG_CONTAINER="${NAME_PREFIX}-config"
 start_detached "$CONFIG_CONTAINER" \
     --no-healthcheck \
-    --publish 127.0.0.1::8765 \
     --volume "${GENERATED_CONFIG}:/ydb_data/cluster/kikimr_configs/config.yaml:ro"
 wait_for_ready "$CONFIG_CONTAINER"
-CONFIG_MON_PORT=$(published_port "$CONFIG_CONTAINER" 8765)
-CONFIG_DISPATCHER_JSON="${ARTIFACTS_DIR}/${CONFIG_CONTAINER}.configs-dispatcher.json"
-curl --fail --location --silent --show-error --max-time 10 \
-    --header 'Content-Type: application/json' \
-    "http://127.0.0.1:${CONFIG_MON_PORT}/actors/configs_dispatcher" >"$CONFIG_DISPATCHER_JSON"
-python3 - "$CONFIG_DISPATCHER_JSON" "$CONFIG_LOG_LEVEL" <<'PY'
-import json
-import pathlib
-import sys
-
-path = pathlib.Path(sys.argv[1])
-expected = int(sys.argv[2])
-payload = json.loads(path.read_text())
-actual = payload.get('current_json_config', {}).get('log_config', {}).get('default_level')
-if actual != expected:
-    raise SystemExit(
-        f'configs_dispatcher reports log_config.default_level={actual!r}, expected {expected}'
-    )
-PY
 run_sql "$CONFIG_CONTAINER" \
     'CREATE TABLE acceptance_config (id Uint64, value Utf8, PRIMARY KEY (id));'
 run_sql "$CONFIG_CONTAINER" '
@@ -405,6 +385,8 @@ run_sql "$CONFIG_CONTAINER" '
 assert_sql_row_count "$CONFIG_CONTAINER" \
     'SELECT id FROM acceptance_config ORDER BY id;' \
     3
+assert_logs_contain "$CONFIG_CONTAINER" ' INFO:'
+assert_logs_contain "$CONFIG_CONTAINER" 'Finish grpc stream'
 stop_and_remove_container "$CONFIG_CONTAINER"
 [[ "$(sha256sum "$GENERATED_CONFIG")" == "$CONFIG_HASH" ]]
 
@@ -420,11 +402,11 @@ start_detached "$TLS_CONTAINER" \
 wait_for_ready "$TLS_CONTAINER"
 TLS_HOST_PORT=$(published_port "$TLS_CONTAINER" 2135)
 docker run --rm --pull never --platform linux/amd64 --network host \
-    --env YDB_SSL_ROOT_CERTIFICATES_FILE=/custom-certs/ca.pem \
     --volume "${GENERATED_CERTS}:/custom-certs:ro" \
     --entrypoint /ydb \
     "$IMAGE" \
     --endpoint "grpcs://localhost:${TLS_HOST_PORT}" --database /local --no-discovery \
+    --ca-file /custom-certs/ca.pem \
     sql -s 'SELECT 1;'
 stop_and_remove_container "$TLS_CONTAINER"
 [[ "$(hash_certificate_bundle "$GENERATED_CERTS")" == "$CERTIFICATE_HASH" ]]

@@ -1,9 +1,13 @@
 // Unit tests for the CutHistory (KIKIMR-26208) two-tier nomination engine.
 #include <ydb/core/base/blobstorage.h>
+#include <ydb/core/base/tablet.h>
 #include <ydb/core/testlib/actor_helpers.h>
+#include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/history_cutter.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
+#include <ydb/core/tx/columnshard/columnshard_private_events.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -102,10 +106,40 @@ static const NColumnShard::THistoryCutterCounters& TestSignals() {
 // Exposes the protected sweep test hooks to this suite only.
 class TTestableHistoryCutter: public THistoryCutterWrapper {
 public:
+    using THistoryCutterWrapper::DecrementCounter;
+    using THistoryCutterWrapper::GetCounterForTest;
     using THistoryCutterWrapper::GetCutStateForTest;
+    using THistoryCutterWrapper::GetDisprovalAttemptsForTest;
+    using THistoryCutterWrapper::IsChannelPoisonedForTest;
     using THistoryCutterWrapper::IsDrained;
     using THistoryCutterWrapper::StartSweepForTest;
     using THistoryCutterWrapper::THistoryCutterWrapper;
+};
+
+// Runs callbacks under a real actor context inside TTestBasicRuntime, so cutter
+// methods that Send/Register (TryNominate, OnBatchComplete) exercise their
+// production paths against edge actors instead of being stubbed out.
+struct TEvRunInActor: public NActors::TEventLocal<TEvRunInActor, EventSpaceBegin(NActors::TEvents::ES_PRIVATE)> {
+    std::function<void(const NActors::TActorContext&)> Fn;
+
+    explicit TEvRunInActor(std::function<void(const NActors::TActorContext&)> fn)
+        : Fn(std::move(fn))
+    {
+    }
+};
+
+class TRunnerActor: public NActors::TActor<TRunnerActor> {
+public:
+    TRunnerActor()
+        : NActors::TActor<TRunnerActor>(&TRunnerActor::StateWork)
+    {
+    }
+
+    STFUNC(StateWork) {
+        if (auto* run = ev->CastAsLocal<TEvRunInActor>()) {
+            run->Fn(ActorContext());
+        }
+    }
 };
 
 // ---- tests ------------------------------------------------------------------
@@ -393,6 +427,270 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         auto cutterOtherChannel = makeCutter(bmOtherChannel, sharedOtherChannel);
         bmOtherChannel->DeleteBlobOnComplete(NOlap::TTabletId(TabletId), MakeUnifiedBlob(MakeBlob(TabletId, OtherChannel, GenInOldRange)));
         UNIT_ASSERT_C(cutterOtherChannel.IsDrained(key), "a blob on another channel must not pin the entry");
+    }
+
+    // Item 5 of the test plan: a counter underflow marks the whole channel poisoned,
+    // and a poisoned channel is excluded from nomination even when its entry passes
+    // every other gate.
+    Y_UNIT_TEST(UnderflowPoisonsChannelAndBlocksNomination) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 1010;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OldFromGen = 0;
+        auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { OldFromGen, 100 }, { 5, 200 } });
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, /*gen=*/5, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, /*currentGen=*/5, bm, shared, TActorId(), TestSignals());
+        const TEntryKey key{ DataChannel, OldFromGen };
+
+        // Positive control: without the poison every nomination gate is open.
+        UNIT_ASSERT(cutter.IsDrained(key));
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 0);
+        UNIT_ASSERT(!cutter.IsChannelPoisonedForTest(DataChannel));
+
+        // Decrement with no matching counter — the underflow branch.
+        cutter.DecrementCounter(key);
+        UNIT_ASSERT(cutter.IsChannelPoisonedForTest(DataChannel));
+
+        // The poisoned channel yields no candidates (the stub context is safe here:
+        // an empty batch means TryNominate returns before any actor-system send).
+        const auto ctx = NActors::TActivationContext::AsActorContext();
+        UNIT_ASSERT(!cutter.TryNominate(ctx));
+        UNIT_ASSERT(guard->GetNominated().empty());
+        UNIT_ASSERT(!cutter.IsSweepInFlight());
+    }
+
+    // Item 9 of the test plan: OnBootComplete must clear every piece of ephemeral
+    // state. Each dirtied field is asserted through its own observer; a leak of any
+    // of them (stale CutState hides an entry, stale DisprovedAt means eternal
+    // backoff, stale poison mutes a channel) would keep this test red.
+    Y_UNIT_TEST(BootCompleteResetsEphemeralState) {
+        TActorSystemStub actorSystemStub;
+        actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        static constexpr ui64 TabletId = 2020;
+        static constexpr ui32 CurrentGen = 10;
+        auto info = MakeTabletInfo(TabletId, /*nChannels=*/4, { { 0, 100 }, { 5, 200 }, { CurrentGen, 300 } });
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, TActorId(), TestSignals());
+        const auto ctx = NActors::TActivationContext::AsActorContext();
+
+        const TEntryKey keyOld{ /*channel=*/2, /*fromGeneration=*/0 };
+        const TEntryKey keyMid{ /*channel=*/2, /*fromGeneration=*/5 };
+        static constexpr ui32 PoisonChannel = 3;
+
+        // Dirty everything reachable: counters, disproval backoff, poison, and an
+        // in-flight sweep with Verifying state and a portion cursor.
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> oldPortions;
+        oldPortions[1].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 1)));
+        cutter.OnBootComplete(oldPortions);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(keyOld), 1);
+
+        cutter.StartSweepForTest({ keyOld });
+        cutter.OnBatchComplete({ keyOld }, /*exhausted=*/true, ctx);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetDisprovalAttemptsForTest(keyOld), 1);
+
+        cutter.DecrementCounter(TEntryKey{ PoisonChannel, 0 });
+        UNIT_ASSERT(cutter.IsChannelPoisonedForTest(PoisonChannel));
+
+        cutter.StartSweepForTest({ keyMid });
+        cutter.SetPortionSnapshot({ { NOlap::TInternalPathId::FromRawValue(1), 7 } });
+        UNIT_ASSERT(cutter.IsSweepInFlight());
+        UNIT_ASSERT(cutter.HasPortionSnapshot());
+        UNIT_ASSERT(cutter.GetCutStateForTest(keyMid) == ECutState::Verifying);
+
+        // Reboot with a different portion map: nothing from above may survive.
+        THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> newPortions;
+        newPortions[2].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 7, /*step=*/1, /*cookie=*/2)));
+        cutter.OnBootComplete(newPortions);
+
+        UNIT_ASSERT(!cutter.IsSweepInFlight());
+        UNIT_ASSERT(cutter.GetSweepCandidates()->empty());
+        UNIT_ASSERT(cutter.GetActiveSweepCandidates()->empty());
+        UNIT_ASSERT(!cutter.HasPortionSnapshot());
+        UNIT_ASSERT(cutter.GetCutStateForTest(keyMid) == ECutState::None);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetDisprovalAttemptsForTest(keyOld), 0);
+        UNIT_ASSERT(!cutter.IsChannelPoisonedForTest(PoisonChannel));
+        // Counters reflect only the new map: gen=7 falls in entry {2,5}, not {2,0}.
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(keyOld), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(keyMid), 1);
+    }
+
+    // Item 8 of the test plan, formula part: base 5m doubling per attempt, shift
+    // clamped at 12, capped at 6h — no overflow for absurd attempt counts.
+    Y_UNIT_TEST(DisprovedCooldownFormula) {
+        UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(0), TDuration::Minutes(5));
+        UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(1), TDuration::Minutes(10));
+        UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(2), TDuration::Minutes(20));
+        UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(6), TDuration::Minutes(320));
+        UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(7), THistoryCutterWrapper::DisprovedRetryMaxCooldown);
+        UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(12), THistoryCutterWrapper::DisprovedRetryMaxCooldown);
+        UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(Max<ui32>()), THistoryCutterWrapper::DisprovedRetryMaxCooldown);
+    }
+
+    // Item 6 of the test plan: the full happy path against real actors — nomination
+    // sends the sweep event, a clean exhausted sweep registers the barrier actor,
+    // the barrier is a HARD collect at nextFromGen-1 for the entry's own group, and
+    // an OK result produces TEvCutTabletHistory + TEvCutHistoryBarrierDone(ok).
+    Y_UNIT_TEST(SweepHappyPathSendsHardBarrier) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 3030;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 ActiveFromGen = 5;
+        static constexpr ui32 ActiveGroup = 200;
+        static constexpr ui32 CurrentGen = ActiveFromGen;
+
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto edgeLauncher = runtime.AllocateEdgeActor();
+        const auto edgeBs = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageProxyID(OldGroup), edgeBs);
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { OldFromGen, OldGroup }, { ActiveFromGen, ActiveGroup } });
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
+        cutter.SetLauncherActorId(edgeLauncher);
+        const TEntryKey key{ DataChannel, OldFromGen };
+
+        // Empty queues: the old entry is drained and must be nominated.
+        bool nominated = false;
+        runInActor([&](const NActors::TActorContext& ctx) {
+            nominated = cutter.TryNominate(ctx);
+        });
+        UNIT_ASSERT(nominated);
+        UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetNominated().size(), 1);
+        UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Verifying);
+
+        // Clean exhausted sweep (empty snapshot, nothing disproved) → barrier send.
+        cutter.SetPortionSnapshot({});
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
+        });
+        UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::SentBarrier);
+
+        auto collect = runtime.GrabEdgeEvent<TEvBlobStorage::TEvCollectGarbage>(edgeBs);
+        UNIT_ASSERT(collect);
+        UNIT_ASSERT(collect->Get()->Hard);
+        UNIT_ASSERT(collect->Get()->Collect);
+        UNIT_ASSERT_VALUES_EQUAL(collect->Get()->TabletId, TabletId);
+        UNIT_ASSERT_VALUES_EQUAL(collect->Get()->Channel, DataChannel);
+        UNIT_ASSERT_VALUES_EQUAL(collect->Get()->CollectGeneration, ActiveFromGen - 1);
+
+        runtime.Send(new IEventHandle(collect->Sender, edgeBs, new TEvBlobStorage::TEvCollectGarbageResult(NKikimrProto::OK, TabletId,
+                                                                   CurrentGen, collect->Get()->PerGenerationCounter, DataChannel)));
+
+        auto cutReq = runtime.GrabEdgeEvent<TEvTablet::TEvCutTabletHistory>(edgeLauncher);
+        UNIT_ASSERT(cutReq);
+        UNIT_ASSERT_VALUES_EQUAL(cutReq->Get()->Record.GetTabletID(), TabletId);
+        UNIT_ASSERT_VALUES_EQUAL(cutReq->Get()->Record.GetChannel(), DataChannel);
+        UNIT_ASSERT_VALUES_EQUAL(cutReq->Get()->Record.GetFromGeneration(), OldFromGen);
+        UNIT_ASSERT_VALUES_EQUAL(cutReq->Get()->Record.GetGroupID(), OldGroup);
+
+        auto done = runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvCutHistoryBarrierDone>(edgeTablet);
+        UNIT_ASSERT(done);
+        UNIT_ASSERT(done->Get()->Ok);
+
+        cutter.OnBarrierResult(key, done->Get()->Ok);
+        UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::Cut);
+        UNIT_ASSERT_VALUES_EQUAL(guard->GetCut().size(), 1);
+    }
+
+    // Item 8 of the test plan, behavior part: each disproving sweep increments
+    // Attempts exactly once, the cooldown blocks renomination for exactly
+    // 5m * 2^attempts of mock time, and a sweep that finally survives to the
+    // barrier erases the backoff record entirely.
+    Y_UNIT_TEST(DisprovalBackoffGatesRenomination) {
+        TTestBasicRuntime runtime;
+        TAppPrepare app;
+        runtime.Initialize(app.Unwrap());
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+
+        static constexpr ui64 TabletId = 4040;
+        static constexpr ui32 DataChannel = 2;
+        static constexpr ui32 OldFromGen = 0;
+        static constexpr ui32 OldGroup = 100;
+        static constexpr ui32 CurrentGen = 5;
+
+        const auto edgeTablet = runtime.AllocateEdgeActor();
+        const auto edgeBs = runtime.AllocateEdgeActor();
+        runtime.RegisterService(MakeBlobStorageProxyID(OldGroup), edgeBs);
+        const auto runner = runtime.Register(new TRunnerActor());
+        auto runInActor = [&](std::function<void(const NActors::TActorContext&)> fn) {
+            runtime.Send(new IEventHandle(runner, edgeTablet, new TEvRunInActor(std::move(fn))));
+            runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        };
+
+        auto info = MakeTabletInfo(TabletId, /*nChannels=*/3, { { OldFromGen, OldGroup }, { CurrentGen, 200 } });
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, edgeTablet, TestSignals());
+        const TEntryKey key{ DataChannel, OldFromGen };
+
+        auto tryNominate = [&](bool expected) {
+            bool result = !expected;
+            runInActor([&](const NActors::TActorContext& ctx) {
+                result = cutter.TryNominate(ctx);
+            });
+            UNIT_ASSERT_VALUES_EQUAL(result, expected);
+        };
+        auto disproveSweep = [&]() {
+            UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
+            cutter.SetPortionSnapshot({});
+            runInActor([&](const NActors::TActorContext& ctx) {
+                cutter.OnBatchComplete({ key }, /*exhausted=*/true, ctx);
+            });
+        };
+
+        tryNominate(true);
+        disproveSweep();
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetDisprovalAttemptsForTest(key), 1);
+
+        // After one disproval Attempts=1, so renomination waits cooldown(1)=10m
+        // measured from that disproval: 2m and 6m stay blocked, 11m passes.
+        runtime.AdvanceCurrentTime(TDuration::Minutes(2));
+        tryNominate(false);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(4));
+        tryNominate(false);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(5));
+        tryNominate(true);
+        disproveSweep();
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetDisprovalAttemptsForTest(key), 2);
+
+        // attempts=2 → 20m window: 12m blocked, 21m clears.
+        runtime.AdvanceCurrentTime(TDuration::Minutes(12));
+        tryNominate(false);
+        runtime.AdvanceCurrentTime(TDuration::Minutes(9));
+        tryNominate(true);
+
+        // This time nothing disproves the entry: the sweep survives to the barrier
+        // and the backoff record is erased before SentBarrier.
+        UNIT_ASSERT(runtime.GrabEdgeEvent<NColumnShard::TEvPrivate::TEvStartCutHistorySweep>(edgeTablet));
+        cutter.SetPortionSnapshot({});
+        runInActor([&](const NActors::TActorContext& ctx) {
+            cutter.OnBatchComplete({}, /*exhausted=*/true, ctx);
+        });
+        UNIT_ASSERT(runtime.GrabEdgeEvent<TEvBlobStorage::TEvCollectGarbage>(edgeBs));
+        UNIT_ASSERT(cutter.GetCutStateForTest(key) == ECutState::SentBarrier);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetDisprovalAttemptsForTest(key), 0);
     }
 
 }   // TCutHistoryCutterCounters

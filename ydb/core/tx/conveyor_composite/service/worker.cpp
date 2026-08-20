@@ -26,26 +26,22 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
             {"count", workerTasks.size()});
         ExecutionDuration = TMonotonic::Now() - startGlobal;
         Results = std::move(results);
-        Schedule(GetWakeupDuration(), new NActors::TEvents::TEvWakeup(CPULimitGeneration));
+        Schedule(GetWakeupDuration(), new NActors::TEvents::TEvWakeup());
         WaitWakeUp = true;
     } else {
         AFL_VERIFY(!!ForwardDuration);
         YDB_LOG_DEBUG("",
             {"action", "to_result"},
             {"id", SelfId()},
-            {"count", Results.size()},
+            {"count", results.size()},
             {"d", TMonotonic::Now() - startGlobal});
         TBase::Sender<TEvInternal::TEvTaskProcessedResult>(std::move(results), *ForwardDuration, WorkerIdx, WorkersPoolId).SendTo(DistributorId);
         ForwardDuration.reset();
     }
 }
 
-void TWorker::HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev) {
-    const auto evGeneration = ev->Get()->Tag;
-    AFL_VERIFY(evGeneration <= CPULimitGeneration);
-    if (evGeneration == CPULimitGeneration) {
-        OnWakeup();
-    }
+void TWorker::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
+    OnWakeup();
 }
 
 void TWorker::OnWakeup() {

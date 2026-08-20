@@ -79,20 +79,6 @@ private:
     void Run() final {
         StartCycleCount = GetCycleCountFast();
 
-        auto startUnit = [this]() {
-            while (Work && !Work->StartExecution(TMonotonic::Now())) {
-                (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
-                    [this](TAutoPtr<::NActors::IEventHandle> ev) { StateFunc(ev); },
-                    TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
-            }
-        };
-        auto stopUnit = [this]() {
-            if (Work) {
-                bool forced = false;
-                Work->StopExecution(forced);
-            }
-        };
-
         try {
             std::unique_ptr<NDB::ReadBuffer> coroBuffer = std::make_unique<TCoroReadBuffer>(this);
             NDB::ReadBuffer* buffer = coroBuffer.get();
@@ -100,8 +86,8 @@ private:
             YQL_ENSURE(decompressorBuffer, "Unsupported " << Compression << " compression.");
             while (!decompressorBuffer->eof()) {
                 decompressorBuffer->nextIfAtEnd();
-                startUnit();
-                Y_DEFER { stopUnit(); };
+                SchedulableStart(this, Work, [this](TAutoPtr<::NActors::IEventHandle> ev) { StateFunc(ev); });
+                Y_DEFER { SchedulableStop(Work); };
                 TString data{decompressorBuffer->available(), ' '};
                 decompressorBuffer->read(&data.front(), decompressorBuffer->available());
                 Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::move(data), TakeCpuTimeDelta()));

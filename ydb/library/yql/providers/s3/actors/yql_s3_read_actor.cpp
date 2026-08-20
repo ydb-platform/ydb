@@ -418,7 +418,6 @@ public:
     };
 
     void RunClickHouseParserOverHttp() {
-        // TODO: wrap per-block Work->Start/Stop like RunCoroBlockArrowParserOverHttp
         LOG_CORO_D("RunClickHouseParserOverHttp");
 
         std::unique_ptr<NDB::ReadBuffer> coroBuffer = AsyncDecompressing ? std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroDecompressorBuffer>(this)) : std::unique_ptr<NDB::ReadBuffer>(std::make_unique<TCoroReadBuffer>(this));
@@ -446,10 +445,17 @@ public:
             )
         );
 
-        while (NDB::Block batch = stream->read()) {
+        while (true) {
+            SchedulableStart(this, Work, &TS3ReadCoroImpl::ProcessUnexpectedEvent);
+            NDB::Block batch = stream->read();
+            if (!batch) {
+                SchedulableStop(Work);
+                break;
+            }
             Paused = SourceContext->Add(batch.bytes(), SelfActorId);
             const bool isCancelled = StopIfConsumedEnough(batch.rows());
             Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
+            SchedulableStop(Work);
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
@@ -665,18 +671,6 @@ public:
     void RunCoroBlockArrowParserOverHttp() {
         LOG_CORO_D("RunCoroBlockArrowParserOverHttp");
 
-        auto startUnit = [this]() {
-            while (Work && !Work->StartExecution(TMonotonic::Now())) {
-                (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessUnexpectedEvent, TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
-            }
-        };
-        auto stopUnit = [this]() {
-            if (Work) {
-                bool forced = false;
-                Work->StopExecution(forced);
-            }
-        };
-
         ui64 readerCount = 1;
 
         std::vector<std::unique_ptr<parquet::arrow::FileReader>> readers;
@@ -791,8 +785,8 @@ public:
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
                 // TODO: split DecodeRowGroups into smaller units (arrow async / column streaming)
                 {
-                    startUnit();
-                    Y_DEFER { stopUnit(); };
+                    SchedulableStart(this, Work, &TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                    Y_DEFER { SchedulableStop(Work); };
                     ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
                 }
                 readyGroupCount++;
@@ -808,8 +802,8 @@ public:
                 bool isCancelled = false;
                 ui64 numRows = 0;
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                    startUnit();
-                    Y_DEFER { stopUnit(); };
+                    SchedulableStart(this, Work, &TS3ReadCoroImpl::ProcessUnexpectedEvent);
+                    Y_DEFER { SchedulableStop(Work); };
                     auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;
@@ -850,7 +844,7 @@ public:
     }
 
     void RunCoroBlockArrowParserOverFile() {
-        // TODO: wrap Zone 1 (DecodeRowGroups) + Zone 2 (per-batch) like OverHttp
+        // TODO: wrap per-block Work->Start/Stop like RunCoroBlockArrowParserOver
         LOG_CORO_D("RunCoroBlockArrowParserOverFile");
 
         std::shared_ptr<arrow::io::RandomAccessFile> arrowFile =

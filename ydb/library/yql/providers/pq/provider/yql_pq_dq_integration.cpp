@@ -795,10 +795,12 @@ public:
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected WATERMARK_GRANULARITY = value"));
                     return {};
                 }
+
                 const auto settingValue = setting->Child(1);
                 if (!EnsureAtom(*settingValue, ctx)) {
                     return {};
                 }
+
                 const auto out = NKikimr::NMiniKQL::ValueFromString(NUdf::EDataSlot::Interval, settingValue->Content());
                 if (!out) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
@@ -806,16 +808,25 @@ public:
                     return {};
                 }
 
-                watermarksGranularityUs = out.Get<ui64>();
+                const i64 signedGranularity = out.Get<i64>();
+                if (signedGranularity < 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        TStringBuilder() << "Invalid value " << settingValue->Content() << " for WATERMARK_GRANULARITY, expected non-negative value"));
+                    return {};
+                }
+
+                watermarksGranularityUs = signedGranularity;
             } else if ("watermarkidletimeout" == settingName) {
                 if (setting->ChildrenSize() != 2) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()), "Expected WATERMARK_IDLE_TIMEOUT = value"));
                     return {};
                 }
+
                 const auto settingValue = setting->Child(1);
                 if (!EnsureAtom(*settingValue, ctx)) {
                     return {};
                 }
+
                 const auto out = NKikimr::NMiniKQL::ValueFromString(NUdf::EDataSlot::Interval, settingValue->Content());
                 if (!out) {
                     ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
@@ -823,7 +834,14 @@ public:
                     return {};
                 }
 
-                watermarksIdleTimeoutUs = out.Get<ui64>();
+                const i64 signedIdleTimeout = out.Get<i64>();
+                if (signedIdleTimeout < 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(pqReadTopic.Pos()),
+                        TStringBuilder() << "Invalid value " << settingValue->Content() << " for WATERMARK_IDLE_TIMEOUT, expected non-negative value"));
+                    return {};
+                }
+
+                watermarksIdleTimeoutUs = signedIdleTimeout;
             } else if ("streaming" == settingName) {
                 if (const auto parseResult = TTopicKeyParser::ParseStreamingTopicRead(*setting, ctx)) {
                     bool withStreamingValue = *parseResult;

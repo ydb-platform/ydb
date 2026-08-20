@@ -33,7 +33,11 @@ TStreamingQuerySettings& TStreamingQuerySettings::FromProto(const NKikimrSchemeO
             if (CheckpointIntervalString = value) {
                 const auto duration = NMiniKQL::ValueFromString(NYql::NUdf::EDataSlot::Interval, value);
                 Y_VALIDATE(duration, "Failed to parse CheckpointInterval");
-                CheckpointInterval = TDuration::MicroSeconds(duration.Get<ui64>());
+
+                const i64 signedDuration = duration.Get<i64>();
+                Y_VALIDATE(signedDuration >= 0, "CheckpointInterval must be non-negative");
+
+                CheckpointInterval = TDuration::MicroSeconds(signedDuration);
             }
         }
     }

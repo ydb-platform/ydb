@@ -60,6 +60,8 @@ items:
       href: load-actors-memory.md
     - name: Stop
       href: load-actors-stop.md
+  - name: Структурированное логирование
+    href: structured-log.md
 - name: Тестирование
   items:
   - name: Хаос-тестирование

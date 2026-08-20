@@ -97,6 +97,32 @@ struct TTestTx {
     }
 };
 
+// Registers 5 tests for a scenario that works with both ROW and COLUMN tables:
+//   Name_Serializable+IsOlap, Name_Snapshot+IsOlap, Name_ReadCommitted (row only)
+#define RYW_TEST_ALL_TABLES(Name) \
+    Y_UNIT_TEST_TWIN(Name##_Serializable, IsOlap) { \
+        T##Name(TTxSettings::SerializableRW()).SetIsOlap(IsOlap).Execute(); \
+    } \
+    Y_UNIT_TEST_TWIN(Name##_Snapshot, IsOlap) { \
+        T##Name(TTxSettings::SnapshotRW()).SetIsOlap(IsOlap).Execute(); \
+    } \
+    Y_UNIT_TEST(Name##_ReadCommitted) { \
+        T##Name(TTxSettings::ReadCommittedRW()).Execute(); \
+    }
+
+// Registers 3 tests for a scenario that only works with ROW tables (e.g. secondary indexes):
+//   Name_Serializable, Name_Snapshot, Name_ReadCommitted
+#define RYW_TEST_ROW_ONLY(Name) \
+    Y_UNIT_TEST(Name##_Serializable) { \
+        T##Name(TTxSettings::SerializableRW()).Execute(); \
+    } \
+    Y_UNIT_TEST(Name##_Snapshot) { \
+        T##Name(TTxSettings::SnapshotRW()).Execute(); \
+    } \
+    Y_UNIT_TEST(Name##_ReadCommitted) { \
+        T##Name(TTxSettings::ReadCommittedRW()).Execute(); \
+    }
+
 Y_UNIT_TEST_SUITE(KqpReadYourWrites) {
 
 // ============================================================================
@@ -117,22 +143,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(InsertThenSelectPointRead_Serializable, IsOlap) {
-    TInsertThenSelectPointRead tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(InsertThenSelectPointRead_Snapshot, IsOlap) {
-    TInsertThenSelectPointRead tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenSelectPointRead_ReadCommitted) {
-    TInsertThenSelectPointRead tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(InsertThenSelectPointRead)
 
 // After updating a row, a point lookup in the same transaction must see the new value.
 class TUpdateThenSelect : public TTableDataModificationTester {
@@ -149,22 +160,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(UpdateThenSelect_Serializable, IsOlap) {
-    TUpdateThenSelect tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(UpdateThenSelect_Snapshot, IsOlap) {
-    TUpdateThenSelect tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(UpdateThenSelect_ReadCommitted) {
-    TUpdateThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(UpdateThenSelect)
 
 // After deleting a row, a point lookup in the same transaction must return nothing.
 class TDeleteThenSelect : public TTableDataModificationTester {
@@ -181,22 +177,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(DeleteThenSelect_Serializable, IsOlap) {
-    TDeleteThenSelect tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(DeleteThenSelect_Snapshot, IsOlap) {
-    TDeleteThenSelect tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(DeleteThenSelect_ReadCommitted) {
-    TDeleteThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(DeleteThenSelect)
 
 // ============================================================================
 // Write → range scan
@@ -218,22 +199,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(InsertThenRangeScan_Serializable, IsOlap) {
-    TInsertThenRangeScan tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(InsertThenRangeScan_Snapshot, IsOlap) {
-    TInsertThenRangeScan tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenRangeScan_ReadCommitted) {
-    TInsertThenRangeScan tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(InsertThenRangeScan)
 
 // After updating a row, a scan filtered on the updated column must reflect the new value.
 class TUpdateThenRangeScanByUpdatedColumn : public TTableDataModificationTester {
@@ -250,22 +216,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(UpdateThenRangeScanByUpdatedColumn_Serializable, IsOlap) {
-    TUpdateThenRangeScanByUpdatedColumn tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(UpdateThenRangeScanByUpdatedColumn_Snapshot, IsOlap) {
-    TUpdateThenRangeScanByUpdatedColumn tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(UpdateThenRangeScanByUpdatedColumn_ReadCommitted) {
-    TUpdateThenRangeScanByUpdatedColumn tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(UpdateThenRangeScanByUpdatedColumn)
 
 // After deleting a row, a full table scan in the same transaction must not include it.
 class TDeleteThenRangeScan : public TTableDataModificationTester {
@@ -282,22 +233,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(DeleteThenRangeScan_Serializable, IsOlap) {
-    TDeleteThenRangeScan tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(DeleteThenRangeScan_Snapshot, IsOlap) {
-    TDeleteThenRangeScan tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(DeleteThenRangeScan_ReadCommitted) {
-    TDeleteThenRangeScan tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(DeleteThenRangeScan)
 
 // ============================================================================
 // Multi-write chains
@@ -319,22 +255,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(InsertThenUpdateThenSelect_Serializable, IsOlap) {
-    TInsertThenUpdateThenSelect tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(InsertThenUpdateThenSelect_Snapshot, IsOlap) {
-    TInsertThenUpdateThenSelect tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenUpdateThenSelect_ReadCommitted) {
-    TInsertThenUpdateThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(InsertThenUpdateThenSelect)
 
 // INSERT → UPDATE (no inter-write SELECT) → commit → result is the updated value.
 class TInsertThenUpdateAfterCommit : public TTableDataModificationTester {
@@ -351,22 +272,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(InsertThenUpdateAfterCommit_Serializable, IsOlap) {
-    TInsertThenUpdateAfterCommit tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(InsertThenUpdateAfterCommit_Snapshot, IsOlap) {
-    TInsertThenUpdateAfterCommit tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenUpdateAfterCommit_ReadCommitted) {
-    TInsertThenUpdateAfterCommit tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(InsertThenUpdateAfterCommit)
 
 // INSERT → (SELECT sees "inserted") → DELETE → SELECT sees nothing.
 class TInsertThenDeleteThenSelect : public TTableDataModificationTester {
@@ -384,22 +290,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(InsertThenDeleteThenSelect_Serializable, IsOlap) {
-    TInsertThenDeleteThenSelect tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(InsertThenDeleteThenSelect_Snapshot, IsOlap) {
-    TInsertThenDeleteThenSelect tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenDeleteThenSelect_ReadCommitted) {
-    TInsertThenDeleteThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(InsertThenDeleteThenSelect)
 
 // INSERT → DELETE (no inter-write SELECT) → commit → row is absent.
 class TInsertThenDeleteAfterCommit : public TTableDataModificationTester {
@@ -454,22 +345,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(UpdateThenUpdateBasedOnNewValueThenSelect_Serializable, IsOlap) {
-    TUpdateThenUpdateBasedOnNewValueThenSelect tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(UpdateThenUpdateBasedOnNewValueThenSelect_Snapshot, IsOlap) {
-    TUpdateThenUpdateBasedOnNewValueThenSelect tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(UpdateThenUpdateBasedOnNewValueThenSelect_ReadCommitted) {
-    TUpdateThenUpdateBasedOnNewValueThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(UpdateThenUpdateBasedOnNewValueThenSelect)
 
 // UPDATE → UPDATE using new value (no inter-write SELECT) → commit → final value is correct.
 class TUpdateThenUpdateBasedOnNewValueAfterCommit : public TTableDataModificationTester {
@@ -528,22 +404,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(UpdateThenPredicateDeleteThenSelect_Serializable, IsOlap) {
-    TUpdateThenPredicateDeleteThenSelect tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(UpdateThenPredicateDeleteThenSelect_Snapshot, IsOlap) {
-    TUpdateThenPredicateDeleteThenSelect tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(UpdateThenPredicateDeleteThenSelect_ReadCommitted) {
-    TUpdateThenPredicateDeleteThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(UpdateThenPredicateDeleteThenSelect)
 
 // UPDATE → DELETE WHERE updated value (no inter-write SELECT) → commit → row is gone.
 class TUpdateThenPredicateDeleteAfterCommit : public TTableDataModificationTester {
@@ -601,22 +462,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(DeleteThenInsertSameKeyThenSelect_Serializable, IsOlap) {
-    TDeleteThenInsertSameKeyThenSelect tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(DeleteThenInsertSameKeyThenSelect_Snapshot, IsOlap) {
-    TDeleteThenInsertSameKeyThenSelect tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(DeleteThenInsertSameKeyThenSelect_ReadCommitted) {
-    TDeleteThenInsertSameKeyThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(DeleteThenInsertSameKeyThenSelect)
 
 // DELETE → INSERT same key (no inter-write SELECT) → commit → new value is visible.
 class TDeleteThenInsertSameKeyAfterCommit : public TTableDataModificationTester {
@@ -673,22 +519,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(InsertThenUpdateThenDeleteThenSelect_Serializable, IsOlap) {
-    TInsertThenUpdateThenDeleteThenSelect tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(InsertThenUpdateThenDeleteThenSelect_Snapshot, IsOlap) {
-    TInsertThenUpdateThenDeleteThenSelect tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenUpdateThenDeleteThenSelect_ReadCommitted) {
-    TInsertThenUpdateThenDeleteThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(InsertThenUpdateThenDeleteThenSelect)
 
 // INSERT → UPDATE → DELETE (no inter-write SELECTs) → commit → row is absent.
 class TInsertThenUpdateThenDeleteAfterCommit : public TTableDataModificationTester {
@@ -748,22 +579,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(UpdateBasedOnEarlierUpdatedRowThenSelect_Serializable, IsOlap) {
-    TUpdateBasedOnEarlierUpdatedRowThenSelect tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(UpdateBasedOnEarlierUpdatedRowThenSelect_Snapshot, IsOlap) {
-    TUpdateBasedOnEarlierUpdatedRowThenSelect tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(UpdateBasedOnEarlierUpdatedRowThenSelect_ReadCommitted) {
-    TUpdateBasedOnEarlierUpdatedRowThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(UpdateBasedOnEarlierUpdatedRowThenSelect)
 
 // UPDATE row B → copy B's new value into A in a single combined statement (no explicit mid-tx SELECT).
 class TUpdateBasedOnEarlierUpdatedRowAfterCommit : public TTableDataModificationTester {
@@ -785,22 +601,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(UpdateBasedOnEarlierUpdatedRowAfterCommit_Serializable, IsOlap) {
-    TUpdateBasedOnEarlierUpdatedRowAfterCommit tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(UpdateBasedOnEarlierUpdatedRowAfterCommit_Snapshot, IsOlap) {
-    TUpdateBasedOnEarlierUpdatedRowAfterCommit tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(UpdateBasedOnEarlierUpdatedRowAfterCommit_ReadCommitted) {
-    TUpdateBasedOnEarlierUpdatedRowAfterCommit tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(UpdateBasedOnEarlierUpdatedRowAfterCommit)
 
 // ============================================================================
 // Index scenarios (row tables only — OLAP does not support secondary indexes)
@@ -821,20 +622,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST(InsertThenSelectByIndex_Serializable) {
-    TInsertThenSelectByIndex tester(TTxSettings::SerializableRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenSelectByIndex_Snapshot) {
-    TInsertThenSelectByIndex tester(TTxSettings::SnapshotRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenSelectByIndex_ReadCommitted) {
-    TInsertThenSelectByIndex tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ROW_ONLY(InsertThenSelectByIndex)
 
 // After updating an indexed column, the old index value must be gone and the new one visible.
 class TUpdateIndexedColumnThenSelectByIndex : public TTableDataModificationTester {
@@ -854,20 +642,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST(UpdateIndexedColumnThenSelectByIndex_Serializable) {
-    TUpdateIndexedColumnThenSelectByIndex tester(TTxSettings::SerializableRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(UpdateIndexedColumnThenSelectByIndex_Snapshot) {
-    TUpdateIndexedColumnThenSelectByIndex tester(TTxSettings::SnapshotRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(UpdateIndexedColumnThenSelectByIndex_ReadCommitted) {
-    TUpdateIndexedColumnThenSelectByIndex tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ROW_ONLY(UpdateIndexedColumnThenSelectByIndex)
 
 // After deleting a row, a lookup by secondary index in the same transaction must return nothing.
 class TDeleteThenSelectByIndex : public TTableDataModificationTester {
@@ -885,20 +660,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST(DeleteThenSelectByIndex_Serializable) {
-    TDeleteThenSelectByIndex tester(TTxSettings::SerializableRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(DeleteThenSelectByIndex_Snapshot) {
-    TDeleteThenSelectByIndex tester(TTxSettings::SnapshotRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(DeleteThenSelectByIndex_ReadCommitted) {
-    TDeleteThenSelectByIndex tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ROW_ONLY(DeleteThenSelectByIndex)
 
 // ============================================================================
 // Conflict / unique constraint scenarios
@@ -923,22 +685,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(InsertThenInsertSamePkConflictThenSelect_Serializable, IsOlap) {
-    TInsertThenInsertSamePkConflictThenSelect tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(InsertThenInsertSamePkConflictThenSelect_Snapshot, IsOlap) {
-    TInsertThenInsertSamePkConflictThenSelect tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenInsertSamePkConflictThenSelect_ReadCommitted) {
-    TInsertThenInsertSamePkConflictThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(InsertThenInsertSamePkConflictThenSelect)
 
 // INSERT → INSERT same PK (no mid-tx read) → tx aborts → DB is clean.
 class TInsertThenInsertSamePkConflictAfterAbort : public TTableDataModificationTester {
@@ -957,22 +704,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST_TWIN(InsertThenInsertSamePkConflictAfterAbort_Serializable, IsOlap) {
-    TInsertThenInsertSamePkConflictAfterAbort tester(TTxSettings::SerializableRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST_TWIN(InsertThenInsertSamePkConflictAfterAbort_Snapshot, IsOlap) {
-    TInsertThenInsertSamePkConflictAfterAbort tester(TTxSettings::SnapshotRW());
-    tester.SetIsOlap(IsOlap);
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenInsertSamePkConflictAfterAbort_ReadCommitted) {
-    TInsertThenInsertSamePkConflictAfterAbort tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ALL_TABLES(InsertThenInsertSamePkConflictAfterAbort)
 
 // INSERT → (SELECT by index sees first row) → INSERT same unique index value → tx aborts → DB is clean.
 class TInsertThenInsertSameUniqueIndexConflictThenSelect : public TTableDataModificationTester {
@@ -993,20 +725,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictThenSelect_Serializable) {
-    TInsertThenInsertSameUniqueIndexConflictThenSelect tester(TTxSettings::SerializableRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictThenSelect_Snapshot) {
-    TInsertThenInsertSameUniqueIndexConflictThenSelect tester(TTxSettings::SnapshotRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictThenSelect_ReadCommitted) {
-    TInsertThenInsertSameUniqueIndexConflictThenSelect tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ROW_ONLY(InsertThenInsertSameUniqueIndexConflictThenSelect)
 
 // INSERT → INSERT same unique index value (no mid-tx read) → tx aborts → DB is clean.
 class TInsertThenInsertSameUniqueIndexConflictAfterAbort : public TTableDataModificationTester {
@@ -1025,20 +744,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictAfterAbort_Serializable) {
-    TInsertThenInsertSameUniqueIndexConflictAfterAbort tester(TTxSettings::SerializableRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictAfterAbort_Snapshot) {
-    TInsertThenInsertSameUniqueIndexConflictAfterAbort tester(TTxSettings::SnapshotRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictAfterAbort_ReadCommitted) {
-    TInsertThenInsertSameUniqueIndexConflictAfterAbort tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ROW_ONLY(InsertThenInsertSameUniqueIndexConflictAfterAbort)
 
 // DELETE row → INSERT different row with same unique index value → must succeed.
 // The unique constraint is satisfied because the holder of the index value was deleted first.
@@ -1059,20 +765,7 @@ protected:
     }
 };
 
-Y_UNIT_TEST(DeleteThenInsertSameUniqueIndexValue_Serializable) {
-    TDeleteThenInsertSameUniqueIndexValue tester(TTxSettings::SerializableRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(DeleteThenInsertSameUniqueIndexValue_Snapshot) {
-    TDeleteThenInsertSameUniqueIndexValue tester(TTxSettings::SnapshotRW());
-    tester.Execute();
-}
-
-Y_UNIT_TEST(DeleteThenInsertSameUniqueIndexValue_ReadCommitted) {
-    TDeleteThenInsertSameUniqueIndexValue tester(TTxSettings::ReadCommittedRW());
-    tester.Execute();
-}
+RYW_TEST_ROW_ONLY(DeleteThenInsertSameUniqueIndexValue)
 
 } // Y_UNIT_TEST_SUITE
 

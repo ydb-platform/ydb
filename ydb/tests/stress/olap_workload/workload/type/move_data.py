@@ -130,6 +130,26 @@ class WorkloadMoveData(WorkloadBase):
                 self.errors += 1
                 logger.warning("move_data: cycle failed: %s", e)
                 time.sleep(5)
+        self._settle_on_stop()
+
+    def _settle_on_stop(self):
+        # A stop can land mid-cycle, leaving a decommission in flight; the runner's
+        # cleanup then races the tablet restarts that decommission causes and dies on
+        # transient Unavailable. Restore the pool and give it a bounded window to
+        # converge — best-effort: the cleanup retry is the backstop, this just makes
+        # the common case quiet.
+        try:
+            units = self._storage_units()
+            if units is not None and units.count < 2:
+                self._alter_units(2 - units.count)
+            deadline = time.time() + 30
+            while time.time() < deadline:
+                current = self._storage_units()
+                if current is not None and current.count >= 2:
+                    break
+                time.sleep(1)
+        except Exception as e:
+            logger.warning("move_data: settle on stop failed: %s", e)
 
     def get_workload_thread_funcs(self):
         return [self._loop]

@@ -1,15 +1,25 @@
 #include "node_database_metrics_aggregator.h"
 
+#include "detailed_metrics_counter_set.h"
+
 #include <ydb/core/tablet/private/aggregated_tablet_counters.h>
 
-#include <util/generic/algorithm.h>
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
 #include <util/string/cast.h>
+#include <util/system/mutex.h>
 
 namespace NKikimr {
 
 namespace {
+
+/**
+ * Process-wide as there's only two TCA per node: leader and follower. Finer granularity will not buy anything.
+ */
+TMutex& Lock() {
+    static TMutex lock;
+    return lock;
+}
 
 // Labels of the detailed metrics counter tree
 const TString DATABASE_LABEL = "database";
@@ -74,11 +84,17 @@ TStringBuf MakeRelativeTablePath(const TStringBuf databasePrefix, const TString&
  */
 class TCountersBucket {
 public:
-    TCountersBucket(NMonitoring::TDynamicCounterPtr bucketGroup, TTabletTypes::EType tabletType)
+    TCountersBucket(
+        NMonitoring::TDynamicCounterPtr bucketGroup,
+        TTabletTypes::EType tabletType,
+        const TDetailedMetricsCounterNames& counterNames,
+        NMonitoring::TCountableBase::EVisibility visibility
+    )
         : TabletType(tabletType)
-        , TypeGroup(bucketGroup->GetSubgroup(TYPE_LABEL, TString(TTabletTypes::TypeToStr(tabletType))))
-        , ExecutorCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY))
-        , AppCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY))
+        , TypeGroup(bucketGroup->GetSubgroup(TYPE_LABEL, TTabletTypes::TypeToStr(tabletType)))
+        , ExecutorCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, EXECUTOR_CATEGORY), visibility)
+        , AppCounters(TypeGroup->GetSubgroup(CATEGORY_LABEL, APP_CATEGORY), visibility)
+        , CounterNames(&counterNames)
     {}
 
     void Apply(
@@ -94,13 +110,11 @@ public:
             ++NextSourceId;
         }
 
-        // TODO(djant) restrict the counter set
-        // do NOT enable the Partition level in production.
         if (!ExecutorCounters.IsInitialized) {
-            ExecutorCounters.Initialize(&executorCounters);
+            ExecutorCounters.Initialize(&executorCounters, &CounterNames->ExecutorNames);
         }
         if (!AppCounters.IsInitialized) {
-            AppCounters.Initialize(&appCounters);
+            AppCounters.Initialize(&appCounters, &CounterNames->AppNames);
         }
 
         ExecutorCounters.Apply(it->second, &executorCounters, TabletType, now);
@@ -143,6 +157,8 @@ private:
 
     NPrivate::TAggregatedTabletCounters ExecutorCounters;
     NPrivate::TAggregatedTabletCounters AppCounters;
+
+    const TDetailedMetricsCounterNames* CounterNames;
 
     THashMap<TTabletKey, ui64> SourceIds;
     ui64 NextSourceId = 0;
@@ -188,6 +204,7 @@ public:
         bool isFollowerRole
     )
         : TargetCounterGroup(targetCounterGroup)
+        , CounterVisibility(targetCounterGroup->Visibility())
         , DatabasePath(databasePath)
         , DatabasePrefix(ChopTrailingSlash(databasePath))
         , IsFollowerRole(isFollowerRole)
@@ -202,7 +219,15 @@ public:
         const TTabletCountersBase& appCounters,
         TInstant now
     ) override {
+        TGuard<TMutex> guard(Lock());
+
         CheckSingleRole(followerId);
+
+        // The published set is a property of the tablet type: a type without one publishes nothing
+        const TDetailedMetricsCounterNames* counterNames = GetDetailedMetricsCounterNames(tabletType);
+        if (!counterNames) {
+            return;
+        }
 
         const TTabletKey tablet(tabletId, followerId);
         const TStringBuf relativePath = MakeRelativeTablePath(DatabasePrefix, table.TablePath);
@@ -216,6 +241,10 @@ public:
             RemoveTabletFromTable(mapIt->second, tablet);
             TabletToTableMap.erase(mapIt);
             mapIt = TabletToTableMap.end();
+        }
+
+        if (IsFollowerRole && IsTableLevel(table)) {
+            return;
         }
 
         auto* entry = GetOrCreateTable(table, relativePath);
@@ -252,7 +281,12 @@ public:
         if (IsTableLevel(entry->Info)) {
             auto& bucket = entry->TableBucket;
             if (!bucket) {
-                bucket = MakeHolder<TCountersBucket>(entry->TableGroup, tabletType);
+                bucket = MakeHolder<TCountersBucket>(
+                    entry->TableGroup,
+                    tabletType,
+                    *counterNames,
+                    CounterVisibility
+                );
             }
             bucket->Apply(tablet, executorCounters, appCounters, now);
         } else {
@@ -262,7 +296,9 @@ public:
                     GetOrCreatePerPartitionGroup(*entry)
                         ->GetSubgroup(TABLET_ID_LABEL, ToString(tabletId))
                         ->GetSubgroup(FOLLOWER_ID_LABEL, ToString(followerId)),
-                    tabletType
+                    tabletType,
+                    *counterNames,
+                    CounterVisibility
                 );
             }
             leaf->Apply(tablet, executorCounters, appCounters, now);
@@ -270,6 +306,8 @@ public:
     }
 
     void ForgetTablet(ui64 tabletId, ui32 followerId) override {
+        TGuard<TMutex> guard(Lock());
+
         const TTabletKey tablet(tabletId, followerId);
 
         auto mapIt = TabletToTableMap.find(tablet);
@@ -286,6 +324,13 @@ public:
         TabletToTableMap.erase(mapIt);
     }
 
+    /**
+     * Deliberately takes no lock: it only recomputes counter VALUES over state private
+     * to this instance
+     *
+     * This stops being safe once something reads these values concurrently with this
+     * recalculation
+     */
     void RecalculateAllCounters() override {
         for (auto& [_, entry] : Tables) {
             if (entry.TableBucket) {
@@ -333,19 +378,6 @@ private:
         return DatabaseGroup;
     }
 
-    /**
-     * Remove the database node from the target group. The next table recreates it.
-     */
-    void RemoveDatabaseGroup() {
-        if (!DatabaseGroup) {
-            return;
-        }
-
-        TargetCounterGroup->RemoveSubgroup(DATABASE_LABEL, DatabasePath);
-
-        DatabaseGroup = nullptr;
-    }
-
     NMonitoring::TDynamicCounterPtr GetOrCreatePerPartitionGroup(TTableEntry& entry) {
         if (!entry.PerPartitionGroup) {
             entry.PerPartitionGroup = entry.TableGroup->GetSubgroup(
@@ -373,6 +405,8 @@ private:
         // needs no temporary TString
         auto it = Tables.find(relativePath);
         if (it != Tables.end()) {
+            Y_DEBUG_ABORT_UNLESS(!it->second.IsEmpty());
+
             return &it->second;
         }
 
@@ -392,12 +426,6 @@ private:
         return &entry;
     }
 
-    /**
-     * Drop the contribution of a single tablet to the given table, removing the groups,
-     * which are left empty.
-     *
-     * @note The caller owns the reverse map entry: this function does not touch it.
-     */
     void RemoveTabletFromTable(const TStringBuf relativePath, const TTabletKey& tablet) {
         auto it = Tables.find(relativePath);
         if (it == Tables.end()) {
@@ -408,26 +436,23 @@ private:
         auto& entry = it->second;
 
         if (IsTableLevel(entry.Info)) {
-            ForgetTableBucketTablet(entry, tablet);
+            ForgetTableBucketTablet(it->first, entry, tablet);
         } else {
-            ForgetLeaf(entry, tablet);
+            ForgetLeaf(it->first, entry, tablet);
         }
 
         if (entry.IsEmpty()) {
-            // it->first is the real TString key, so removal builds nothing from the
-            // (possibly borrowed) relativePath parameter
-            DatabaseGroup->RemoveSubgroup(TABLE_LABEL, it->first);
             Tables.erase(it);
-        }
 
-        // The database node is not kept around after its last table is gone: a node
-        // stops hosting a database far more often than the process is restarted
-        if (Tables.empty()) {
-            RemoveDatabaseGroup();
+            if (Tables.empty()) {
+                DatabaseGroup.Reset();
+            }
         }
     }
 
-    void ForgetTableBucketTablet(TTableEntry& entry, const TTabletKey& tablet) {
+    void ForgetTableBucketTablet(
+        const TString& relativePath, TTableEntry& entry, const TTabletKey& tablet)
+    {
         auto& bucket = entry.TableBucket;
         if (!bucket) {
             return;
@@ -435,15 +460,21 @@ private:
 
         bucket->Forget(tablet);
 
-        // The bucket lives directly in the table group, so its own counter groups are
-        // dropped together with the table group by the caller, for which the emptied
-        // entry is now IsEmpty()
-        if (bucket->IsEmpty()) {
-            bucket.Reset();
+        if (!bucket->IsEmpty()) {
+            return;
         }
+
+        const TTabletTypes::EType tabletType = entry.RegisteredTabletType;
+        bucket.Reset();
+
+        TargetCounterGroup->RemoveSubgroupChain({
+            {DATABASE_LABEL, DatabasePath},
+            {TABLE_LABEL, relativePath},
+            {TYPE_LABEL, TTabletTypes::TypeToStr(tabletType)},
+        });
     }
 
-    void ForgetLeaf(TTableEntry& entry, const TTabletKey& tablet) {
+    void ForgetLeaf(const TString& relativePath, TTableEntry& entry, const TTabletKey& tablet) {
         auto it = entry.Leaves.find(tablet);
         if (it == entry.Leaves.end()) {
             return;
@@ -459,30 +490,19 @@ private:
 
         const auto& [tabletId, followerId] = tablet;
 
-        const TString tabletIdValue = ToString(tabletId);
-
-        auto tabletGroup = entry.PerPartitionGroup->FindSubgroup(TABLET_ID_LABEL, tabletIdValue);
-        if (tabletGroup) {
-            tabletGroup->RemoveSubgroup(FOLLOWER_ID_LABEL, ToString(followerId));
-        }
-
-        // The tablet group is removed as soon as its last follower is gone
-        const bool hasOtherFollowers = AnyOf(entry.Leaves, [tabletId = tabletId](const auto& leaf) {
-            return leaf.first.first == tabletId;
+        TargetCounterGroup->RemoveSubgroupChain({
+            {DATABASE_LABEL, DatabasePath},
+            {TABLE_LABEL, relativePath},
+            {DETAILED_METRICS_LABEL, PER_PARTITION_VALUE},
+            {TABLET_ID_LABEL, ToString(tabletId)},
+            {FOLLOWER_ID_LABEL, ToString(followerId)},
         });
-
-        if (!hasOtherFollowers) {
-            entry.PerPartitionGroup->RemoveSubgroup(TABLET_ID_LABEL, tabletIdValue);
-        }
-
-        if (entry.Leaves.empty()) {
-            entry.PerPartitionGroup = nullptr;
-            entry.TableGroup->RemoveSubgroup(DETAILED_METRICS_LABEL, PER_PARTITION_VALUE);
-        }
     }
 
 private:
     NMonitoring::TDynamicCounterPtr TargetCounterGroup;
+
+    const NMonitoring::TCountableBase::EVisibility CounterVisibility;
 
     const TString DatabasePath;
 

@@ -2,7 +2,6 @@
 
 #include "auth_factory.h"
 #include "controller_base.h"
-#include "custom_metrics.h"
 #include "exceptions_mapping.h"
 #include "http_req.h"
 #include "sqs_serialization.h"
@@ -310,11 +309,6 @@ namespace NKikimr::NHttpProxy {
             void HandleGrpcResponse(TEvServerlessProxy::TEvGrpcRequestResult::TPtr ev,
                                     const TActorContext& ctx) {
                 if (ev->Get()->Status->IsSuccess()) {
-                    FillOutputCustomMetrics<TProtoResult>(
-                        *(dynamic_cast<TProtoResult*>(ev->Get()->Message.Get())),
-                        HttpContext,
-                        ctx
-                    );
                     ctx.Send(MakeMetricsServiceID(),
                              new TEvServerlessProxy::TEvCounter{
                                  1, true, true,

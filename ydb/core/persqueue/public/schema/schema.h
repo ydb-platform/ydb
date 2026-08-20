@@ -20,6 +20,7 @@ enum EEv : ui32 {
     EvSchemaOperationResponse,
     EvSchemaResponse,
     EvDescribeOperationResponse,
+    EvCheckDlqTopicsResponse,
     EvEnd
 };
 

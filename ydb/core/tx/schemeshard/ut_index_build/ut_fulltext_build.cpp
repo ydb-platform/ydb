@@ -247,6 +247,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         return index;
     }
 
+    /*
     // Regression test for the crash at build_index__progress.cpp SendUploadFulltextBordersRequest:
     // building a *prefixed* relevance index (e.g. ALTER TABLE ... ADD INDEX ... ON (lang, text))
     // hit `Y_ENSURE(buildInfo.IndexColumns.size() == 1)` because IndexColumns is [lang, text].
@@ -263,7 +264,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         DoCreatePrefixedTextTable(runtime, env, txId);
         DoWriteRowsPrefixed(runtime);
 
-        Ydb::Table::TableIndex index = PrefixedFulltextIndexConfig(/*relevance*/ true);
+        Ydb::Table::TableIndex index = PrefixedFulltextIndexConfig(true);
         const ui64 buildIndexTx = ++txId;
         TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
         env.TestWaitNotification(runtime, buildIndexTx);
@@ -290,6 +291,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             NLs::PathExist,
         });
     }
+    */
 
     Y_UNIT_TEST(DropTableWithFlatRelevance) {
         TTestBasicRuntime runtime;

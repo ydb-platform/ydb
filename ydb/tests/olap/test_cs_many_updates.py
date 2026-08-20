@@ -73,7 +73,7 @@ class Timer:
 
 
 class TestCSManyUpdates(object):
-    test_name = "cs_simple_reader_many_modifications"
+    test_name = "cs_simple_reader_many_modifications"  # 123
 
     @classmethod
     def setup_class(cls):

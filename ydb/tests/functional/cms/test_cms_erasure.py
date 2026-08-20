@@ -61,6 +61,7 @@ class AbstractTestCmsDegradedGroups(AbstractLocalClusterTest):
             assert_that(resp.operation.status == StatusIds.SUCCESS)
 
 
+
 class TestDegradedGroupBlock42Max(AbstractTestCmsDegradedGroups):
     erasure = Erasure.BLOCK_4_2
     mode = EAvailabilityMode.MODE_MAX_AVAILABILITY

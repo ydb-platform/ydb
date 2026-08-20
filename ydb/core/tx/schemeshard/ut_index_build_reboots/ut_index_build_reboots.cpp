@@ -88,6 +88,7 @@ static void WriteNullKey(TTestActorRuntime& runtime, ui64 tabletId, ui32 index) 
     UNIT_ASSERT_VALUES_EQUAL(status, NKikimrProto::EReplyStatus::OK);;
 }
 
+
 Y_UNIT_TEST_SUITE(IndexBuildTestReboots) {
 
     void DoBaseCase(TTestWithReboots& t, NKikimrSchemeOp::EIndexType indexType) {

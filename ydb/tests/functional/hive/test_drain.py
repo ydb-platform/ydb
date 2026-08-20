@@ -76,6 +76,7 @@ class TestHive(object):
 
             node.start()
 
+
     def test_drain_on_stop(self):
         path = '/Root/mydb'
         table_path = '/Root/mydb/mytable'

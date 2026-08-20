@@ -231,6 +231,7 @@ namespace {
 
 }
 
+
 Y_UNIT_TEST_SUITE(HugeBlobOnlineSizeChange) {
 
     Y_UNIT_TEST(Compaction) {

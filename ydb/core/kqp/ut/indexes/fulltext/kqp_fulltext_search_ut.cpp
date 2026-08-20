@@ -4285,7 +4285,8 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedMultiColumnTyped, Compact) {
             (1, "acme",   100, "cats love to play"),
             (2, "acme",   100, "dogs love to run"),
             (3, "acme",   200, "cats love milk"),
-            (4, "globex", 100, "cats can fly");
+            (4, "globex", 100, "cats can fly"),
+            (5, NULL,      100, "cats with no tenant");
     )sql");
     exec(R"sql(
         ALTER TABLE `/Root/Docs` ADD INDEX fulltext_idx
@@ -4315,6 +4316,29 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedMultiColumnTyped, Compact) {
             WHERE Tenant = "acme" AND FulltextMatch(Text, "cats") ORDER BY Key;
         )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::BAD_REQUEST, r.GetIssues().ToString());
+    }
+
+    // NULL is a valid stored prefix value, but IS NULL is not an equality binding supported by
+    // explicit fulltext index access yet. Building the index must still tolerate the row and the
+    // query must fail clearly instead of scanning an incorrectly bounded posting range.
+    {
+        auto r = db.ExecuteQuery(R"sql(
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE Tenant IS NULL AND UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::BAD_REQUEST, r.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(r.GetIssues().ToString(), "requires an equality predicate");
+    }
+
+    // Range predicates do not identify one prefix group and therefore cannot be used for a
+    // prefixed fulltext lookup, even when all other prefix columns are fixed by equality.
+    {
+        auto r = db.ExecuteQuery(R"sql(
+            SELECT Key FROM `/Root/Docs` VIEW `fulltext_idx`
+            WHERE Tenant = "acme" AND UserId >= 100 AND FulltextMatch(Text, "cats") ORDER BY Key;
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::BAD_REQUEST, r.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(r.GetIssues().ToString(), "requires an equality predicate");
     }
 
     // Compact indexes have no online write maintenance; the incremental-write part is plain-only.
@@ -4578,20 +4602,27 @@ void DoTestPrefixedUpsert(bool Compact, bool Covered) {
         return NYdb::FormatResultSetYson(r.GetResultSet(0));
     };
 
-    // Insert a new row (3) and overwrite an existing one (1), changing its tokens.
+    // Insert a new row (3) and move existing row 1 from prefix 100 to prefix 300 while changing
+    // its tokens. Maintenance must delete postings under the old prefix and add them under the new.
     exec(R"sql(
         UPSERT INTO `/Root/Docs` (Key, UserId, Text, Data) VALUES
             (3, 100, "cats sleep all day", "sleep data"),
-            (1, 100, "birds sing softly", "sing data");
+            (1, 300, "birds sing softly", "sing data");
     )sql");
 
-    // Row 1's old "cats" token is gone, replaced by "birds"; row 3 is added; user 200 untouched.
+    // Row 1's old prefix/token posting is gone; row 3 is added under 100; user 200 is untouched.
     CompareYson("[[[3u];[\"sleep data\"]]]", selectKeys(R"sql(
         SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-    CompareYson("[[[1u];[\"sing data\"]]]", selectKeys(R"sql(
+    CompareYson("[]", selectKeys(R"sql(
         SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "birds") ORDER BY Key;)sql"));
+    CompareYson("[[[1u];[\"sing data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
+        WHERE UserId = 300 AND FulltextMatch(Text, "birds") ORDER BY Key;)sql"));
+    CompareYson("[]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
+        WHERE UserId = 300 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
     CompareYson("[[[2u];[\"milk data\"]]]", selectKeys(R"sql(
         SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
@@ -4629,8 +4660,9 @@ void DoTestPrefixedUpdate(bool Compact, bool Covered) {
         return NYdb::FormatResultSetYson(r.GetResultSet(0));
     };
 
-    // Change the indexed text of an existing row; the index must drop old tokens and add new ones.
-    exec(R"sql(UPDATE `/Root/Docs` SET Text = "birds sing softly" WHERE Key = 1;)sql");
+    // Move an existing row between prefix groups and change its text in the same UPDATE. The index
+    // must use the old prefix for deletes and the new prefix for inserted postings.
+    exec(R"sql(UPDATE `/Root/Docs` SET UserId = 300, Text = "birds sing softly" WHERE Key = 1;)sql");
 
     // Change only the covered column of another row
     exec(R"sql(UPDATE `/Root/Docs` SET Data = "love data" WHERE Key = 2;)sql");
@@ -4638,9 +4670,12 @@ void DoTestPrefixedUpdate(bool Compact, bool Covered) {
     CompareYson("[]", selectKeys(R"sql(
         SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
-    CompareYson("[[[1u];[\"play data\"]]]", selectKeys(R"sql(
+    CompareYson("[]", selectKeys(R"sql(
         SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 100 AND FulltextMatch(Text, "birds") ORDER BY Key;)sql"));
+    CompareYson("[[[1u];[\"play data\"]]]", selectKeys(R"sql(
+        SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
+        WHERE UserId = 300 AND FulltextMatch(Text, "birds") ORDER BY Key;)sql"));
     CompareYson("[[[2u];[\"love data\"]]]", selectKeys(R"sql(
         SELECT Key, Data FROM `/Root/Docs` VIEW `fulltext_idx`
         WHERE UserId = 200 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));

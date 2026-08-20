@@ -20,6 +20,7 @@ SRCS(
     proc_ut.cpp
     sort_ut.cpp
     type_cache_ut.cpp
+    unicode_norm_ut.cpp
     yql/essentials/minikql/comp_nodes/ut/mkql_test_factory.cpp
 )
 

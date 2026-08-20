@@ -12,7 +12,7 @@ using namespace NYdb::NQuery;
 
 namespace {
 
-TKikimrRunner MakeRunner(bool enableHybridSearch = true) {
+TKikimrRunner MakeRunner(bool enableHybridSearch = true, bool enableCompactFulltextIndex = false) {
     // Fix the kmeans-tree build sampling seed so the index tree is reproducible run-to-run (otherwise it
     // seeds from the tablet id). Combined with the exhaustive search probe in TargetDecl below, this makes
     // the vector branch fully deterministic. See gVectorIndexSeed in schemeshard_impl.h (tests only).
@@ -20,6 +20,7 @@ TKikimrRunner MakeRunner(bool enableHybridSearch = true) {
 
     NKikimrConfig::TFeatureFlags featureFlags;
     featureFlags.SetEnableFulltextIndex(true);
+    featureFlags.SetEnableCompactFulltextIndex(enableCompactFulltextIndex);
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
     settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
     // EnableHybridSearch is on by default; the explicit set both documents the dependency and lets
@@ -624,6 +625,60 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
             "explicit indexes produce the same fused union");
         UNIT_ASSERT_C(keys[0] == 1u || keys[0] == 3u, "a text-relevant doc must rank first");
+    }
+
+    // EnableCompactFulltextIndex changes fulltext_relevance into the compact relevance layout. Hybrid
+    // auto-detection must treat that index as a relevance index just like the legacy layout and lower the
+    // fulltext branch through its compact implementation tables. Exercise both built-in fusion paths: RRF
+    // and normalized linear fusion.
+    Y_UNIT_TEST(CompactRelevanceAutoDetection) {
+        auto kikimr = MakeRunner(/*enableHybridSearch=*/true, /*enableCompactFulltextIndex=*/true);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        for (const TString& mode : {TString("rrf"), TString("linear")}) {
+            auto keys = RunKeys(db, TargetDecl + Sprintf(R"sql(
+                SELECT Key FROM `/Root/Docs`
+                ORDER BY HybridRank(
+                    FullTextScore(Text, "cats"),
+                    Knn::CosineDistance(Embedding, $target),
+                    "%s" AS Mode)
+                LIMIT 4;
+            )sql", mode.c_str()));
+            UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
+                TStringBuilder() << "compact relevance auto-detection (" << mode
+                    << ") must fuse the full candidate union");
+            UNIT_ASSERT_C(keys[0] == 1u || keys[0] == 3u,
+                TStringBuilder() << "a text-relevant doc must lead with compact relevance auto-detection ("
+                    << mode << ")");
+        }
+    }
+
+    // Explicit AS Indexes is also required to accept a compact relevance index. Besides covering the
+    // explicit resolution path, this guards disambiguation in deployments that have more than one index
+    // over the text column.
+    Y_UNIT_TEST(CompactRelevanceNamedIndex) {
+        auto kikimr = MakeRunner(/*enableHybridSearch=*/true, /*enableCompactFulltextIndex=*/true);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        for (const TString& mode : {TString("rrf"), TString("linear")}) {
+            auto keys = RunKeys(db, TargetDecl + Sprintf(R"sql(
+                SELECT Key FROM `/Root/Docs`
+                ORDER BY HybridRank(
+                    FullTextScore(Text, "cats"),
+                    Knn::CosineDistance(Embedding, $target),
+                    "%s" AS Mode,
+                    ("ft_idx", "vec_idx") AS Indexes)
+                LIMIT 4;
+            )sql", mode.c_str()));
+            UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
+                TStringBuilder() << "explicit compact relevance index (" << mode
+                    << ") must fuse the full candidate union");
+            UNIT_ASSERT_C(keys[0] == 1u || keys[0] == 3u,
+                TStringBuilder() << "a text-relevant doc must lead with an explicit compact relevance index ("
+                    << mode << ")");
+        }
     }
 
     Y_UNIT_TEST_TWIN(NamedIndexesDisambiguate, Compact) {

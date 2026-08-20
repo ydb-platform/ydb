@@ -7,6 +7,50 @@ using namespace NYdb;
 
 namespace {
 
+TKikimrRunner KikimrCompactJsonAutoSelect() {
+    NKikimrConfig::TFeatureFlags featureFlags;
+    featureFlags.SetEnableJsonIndex(true);
+    featureFlags.SetEnableJsonIndexAutoSelect(true);
+    featureFlags.SetEnableCompactFulltextIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(true);
+    featureFlags.SetEnableFulltextIndexRowId(true);
+    featureFlags.SetEnableAddUniqueIndex(true);
+
+    auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+    settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(
+        NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(true);
+    return TKikimrRunner(settings);
+}
+
+void ExecuteSuccess(TQueryClient& db, const std::string& query) {
+    auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void ValidateCompactAutoSelectResults(TQueryClient& db, const std::string& predicate,
+    const TString& expected, const std::string& tableName = "TestTable")
+{
+    ValidateAutoSelect(db, predicate, "json_idx", tableName);
+
+    const auto execute = [&](const std::string& view) {
+        const auto query = std::format(
+            "SELECT Key FROM {}{} WHERE {} ORDER BY Key;",
+            tableName, view, predicate);
+        auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        return FormatResultSetYson(result.GetResultSet(0));
+    };
+
+    const auto autoSelected = execute("");
+    const auto explicitIndex = execute(" VIEW json_idx");
+    const auto fullScan = execute(" VIEW PRIMARY KEY");
+
+    CompareYson(expected, autoSelected);
+    CompareYson(fullScan, explicitIndex);
+    CompareYson(fullScan, autoSelected);
+}
+
 void ValidateOneOfTwoIndexesSelected(TQueryClient& db, const std::string& predicate,
     const TString& idxA, const TString& idxB, const std::string& tableName = "TestTable")
 {
@@ -886,6 +930,85 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         ValidateNoAutoSelect(db,
             R"(Tenant = "acme"u AND UserId > 0 AND JSON_EXISTS(Text, '$.kind'))",
             "json_idx", "TestTable");
+    }
+
+    Y_UNIT_TEST(CompactJsonDocument) {
+        auto kikimr = KikimrCompactJsonAutoSelect();
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1, JsonDocument('{"tag": "red", "size": 10}')),
+                (2, JsonDocument('{"tag": "blue", "size": 20}')),
+                (3, JsonDocument('{"tag": "red"}')),
+                (4, JsonDocument('{}'));
+        )");
+
+        ValidateCompactAutoSelectResults(db,
+            R"(JSON_VALUE(Text, '$.tag' RETURNING Utf8) == "red"u)",
+            R"([[[1u]];[[3u]]])");
+        ValidateCompactAutoSelectResults(db,
+            R"(JSON_EXISTS(Text, '$.size'))",
+            R"([[[1u]];[[2u]]])");
+    }
+
+    Y_UNIT_TEST(CompactPrefixedJsonDocument) {
+        auto kikimr = KikimrCompactJsonAutoSelect();
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Tenant Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Tenant, Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Tenant, Text) VALUES
+                (1, 10, JsonDocument('{"tag": "red"}')),
+                (2, 10, JsonDocument('{"tag": "blue"}')),
+                (3, 20, JsonDocument('{"tag": "red"}')),
+                (4, 20, JsonDocument('{}'));
+        )");
+
+        ValidateCompactAutoSelectResults(db,
+            R"(Tenant = 10 AND JSON_VALUE(Text, '$.tag' RETURNING Utf8) == "red"u)",
+            R"([[[1u]]])");
+        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))");
+    }
+
+    Y_UNIT_TEST(CompactJsonDocumentWithStringPkRowId) {
+        auto kikimr = KikimrCompactJsonAutoSelect();
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Utf8 NOT NULL,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                ("alpha"u, JsonDocument('{"enabled": true}')),
+                ("beta"u, JsonDocument('{"enabled": false}')),
+                ("gamma"u, JsonDocument('{"enabled": true}'));
+        )");
+
+        ValidateCompactAutoSelectResults(db,
+            R"(JSON_VALUE(Text, '$.enabled' RETURNING Bool))",
+            R"([["alpha"];["gamma"]])");
     }
 }
 

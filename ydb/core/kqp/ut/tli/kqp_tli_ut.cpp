@@ -15,7 +15,6 @@
 #include <util/string/cast.h>
 #include <util/string/split.h>
 
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -80,13 +79,16 @@ namespace {
         if (messagePattern.empty()) {
             return true;
         }
-        const size_t messagePos = record.find("Message: ");
+        const size_t messagePos = record.find("message=");
         if (messagePos == TString::npos) {
             return false;
         }
-        const size_t messageStart = messagePos + 9;
-        const size_t messageEnd = record.find(',', messageStart);
-        const TString message = record.substr(messageStart, messageEnd == TString::npos ? record.size() : messageEnd - messageStart);
+        size_t messageStart = messagePos + 8 /* skip message= */;
+        auto messageText = NStructuredLog::TTextWriter::UnescapeFieldValue(record, messageStart);
+        if (messageText.Empty()) {
+            return false;
+        }
+        const TString message = messageText.GetRef();
         std::regex messageRegex(messagePattern.c_str());
         std::smatch match;
         return std::regex_search(message.cbegin(), message.cend(), match, messageRegex);
@@ -94,23 +96,25 @@ namespace {
 
     // Extract BreakerQueryText from a single TLI record
     std::optional<TString> ExtractBreakerQueryTextFromRecord(const TString& record) {
-        const size_t allPos = record.find("BreakerQueryText: ");
+        size_t allPos = record.find("breakerQueryText=");
         if (allPos == TString::npos) {
             return std::nullopt;
         }
-        TString result = record.substr(allPos + 18);
-        size_t nextFieldPos = result.find(", BreakerQueryTexts:");
-        if (nextFieldPos != TString::npos) {
-            result = result.substr(0, nextFieldPos);
+        allPos +=17;
+        auto resultOpt = NStructuredLog::TTextWriter::UnescapeFieldValue(record, allPos);
+        if (resultOpt.Empty()) {
+            return std::nullopt;
         }
-        return UnescapeC(result);
+        TString result = resultOpt.GetRef();
+        auto unescapedResult = UnescapeC(result);
+        return unescapedResult;
     }
 
     std::optional<TString> ExtractQueryText(const TString& logs, const TString& messagePattern,
         const std::optional<TString>& expectedText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             auto text = ExtractBreakerQueryTextFromRecord(record);
@@ -127,23 +131,25 @@ namespace {
 
     // Extract VictimQueryText from a single TLI record
     std::optional<TString> ExtractVictimQueryTextFromRecord(const TString& record) {
-        const size_t victimPos = record.find("VictimQueryText: ");
-        if (victimPos == TString::npos) {
+        size_t allPos = record.find("victimQueryText=");
+        if (allPos == TString::npos) {
             return std::nullopt;
         }
-        TString result = record.substr(victimPos + 17);
-        const size_t nextFieldPos = result.find(", VictimQueryTexts:");
-        if (nextFieldPos != TString::npos) {
-            result = result.substr(0, nextFieldPos);
+        allPos +=16;
+        auto resultOpt = NStructuredLog::TTextWriter::UnescapeFieldValue(record, allPos);
+        if (resultOpt.Empty()) {
+            return std::nullopt;
         }
-        return UnescapeC(result);
+        TString result = resultOpt.GetRef();
+        auto unescapedResult = UnescapeC(result);
+        return unescapedResult;
     }
 
     std::optional<TString> ExtractVictimQueryText(const TString& logs, const TString& messagePattern,
         const std::optional<TString>& expectedText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             auto text = ExtractVictimQueryTextFromRecord(record);
@@ -164,18 +170,28 @@ namespace {
         const TString& fieldName, const std::optional<TString>& expectedContainedText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: SessionActor") || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=SessionActor") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            const TString prefix = fieldName + ": ";
+            const TString prefix = fieldName + "=";
             const size_t allPos = record.find(prefix);
             if (allPos == TString::npos) {
                 continue;
             }
             TString result = record.substr(allPos + prefix.size());
-            if (result.EndsWith(",")) {
-                result.pop_back();
+
+            TStringStream unescapedResult;
+            for(unsigned pos = 1;pos < result.size() && result[pos] != '"';) {
+                if (result[pos]!='\\' || pos==result.size()-1) {
+                    unescapedResult << result[pos];
+                    pos++;
+                } else {
+                    unescapedResult << result[pos+1];
+                    pos+=2;
+                }
             }
+            result = unescapedResult.Str();
+
             TString unescaped = UnescapeC(result);
             if (expectedContainedText && !unescaped.Contains(*expectedContainedText)) {
                 continue;
@@ -188,17 +204,17 @@ namespace {
     std::optional<TString> ExtractBreakerQueryTexts(const TString& logs, const TString& messagePattern,
         const std::optional<TString>& expectedContainedText = std::nullopt)
     {
-        return ExtractQueryTextsField(logs, messagePattern, "BreakerQueryTexts", expectedContainedText);
+        return ExtractQueryTextsField(logs, messagePattern, "breakerQueryTexts", expectedContainedText);
     }
 
     std::optional<TString> ExtractVictimQueryTexts(const TString& logs, const TString& messagePattern,
         const std::optional<TString>& expectedContainedText = std::nullopt)
     {
-        return ExtractQueryTextsField(logs, messagePattern, "VictimQueryTexts", expectedContainedText);
+        return ExtractQueryTextsField(logs, messagePattern, "victimQueryTexts", expectedContainedText);
     }
 
     std::optional<ui64> ExtractNumericField(const TString& record, const TString& fieldName) {
-        const TString prefix = fieldName + ": ";
+        const TString prefix = fieldName + "=";
         const size_t pos = record.find(prefix);
         if (pos == TString::npos) {
             return std::nullopt;
@@ -214,10 +230,10 @@ namespace {
 
     std::optional<ui64> ExtractCurrentQuerySpanId(const TString& logs, const TString& component, const TString& messagePattern) {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            return ExtractNumericField(record, "CurrentQuerySpanId");
+            return ExtractNumericField(record, "currentQuerySpanId");
         }
         return std::nullopt;
     }
@@ -226,7 +242,7 @@ namespace {
         const std::optional<TString>& expectedBreakerQueryText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             if (expectedBreakerQueryText && component == "SessionActor") {
@@ -235,7 +251,9 @@ namespace {
                     continue;
                 }
             }
-            return ExtractNumericField(record, "BreakerQuerySpanId");
+
+            auto result = ExtractNumericField(record, "breakerQuerySpanId");
+            return result;
         }
         return std::nullopt;
     }
@@ -244,7 +262,7 @@ namespace {
         const std::optional<TString>& expectedVictimQueryText = std::nullopt)
     {
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             if (expectedVictimQueryText && component == "SessionActor") {
@@ -253,7 +271,7 @@ namespace {
                     continue;
                 }
             }
-            return ExtractNumericField(record, "VictimQuerySpanId");
+            return ExtractNumericField(record, "victimQuerySpanId");
         }
         return std::nullopt;
     }
@@ -262,7 +280,7 @@ namespace {
         std::vector<ui64> result;
         bool foundField = false;
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
             static constexpr TStringBuf victimIdsPrefix = "VictimQuerySpanIds: [";
@@ -290,10 +308,10 @@ namespace {
     {
         std::vector<ui64> result;
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: " + component) || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=" + component) || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            auto value = ExtractNumericField(record, "VictimQuerySpanId");
+            auto value = ExtractNumericField(record, "victimQuerySpanId");
             if (value) {
                 result.push_back(*value);
             }
@@ -360,20 +378,20 @@ namespace {
         }
 
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: DataShard") || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=DataShard") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            auto breakerQuerySpanId = ExtractNumericField(record, "BreakerQuerySpanId");
+            auto breakerQuerySpanId = ExtractNumericField(record, "breakerQuerySpanId");
             if (breakerQuerySpanId && *breakerQuerySpanId == *breakerQuerySpanIdFromKQP) {
                 std::optional<std::vector<ui64>> matchingVictimIds;
-                static constexpr TStringBuf victimIdsPrefix = "VictimQuerySpanIds: [";
+                static constexpr TStringBuf victimIdsPrefix = "victimQuerySpanIds=";
                 const size_t idsPos = record.find(victimIdsPrefix);
                 if (idsPos != TString::npos) {
-                    const size_t listStart = idsPos + victimIdsPrefix.size();
-                    const size_t listEnd = record.find(']', listStart);
-                    if (listEnd != TString::npos) {
+                    size_t listStart = idsPos + victimIdsPrefix.size();
+                    auto victimStr = NStructuredLog::TTextWriter::UnescapeFieldValue(record, listStart);
+                    if (victimStr.Defined()) {
                         matchingVictimIds.emplace();
-                        for (const auto& part : StringSplitter(record.substr(listStart, listEnd - listStart)).Split(' ').SkipEmpty()) {
+                        for (const auto& part : StringSplitter(victimStr.GetRef()).Split(' ').SkipEmpty()) {
                             matchingVictimIds->emplace_back(FromString<ui64>(part));
                         }
                     }
@@ -393,10 +411,10 @@ namespace {
             return false;
         }
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: DataShard") || !MatchesMessage(record, messagePattern)) {
+            if (!record.Contains("component=DataShard") || !MatchesMessage(record, messagePattern)) {
                 continue;
             }
-            auto victimQuerySpanId = ExtractNumericField(record, "VictimQuerySpanId");
+            auto victimQuerySpanId = ExtractNumericField(record, "victimQuerySpanId");
             if (victimQuerySpanId && *victimQuerySpanId == *victimQuerySpanIdFromKQP) {
                 return true;
             }
@@ -763,7 +781,7 @@ namespace {
     size_t CountTliRecords(const TString& logs, const TString& component, const TString& messagePattern) {
         size_t count = 0;
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (record.Contains("Component: " + component) && MatchesMessage(record, messagePattern)) {
+            if (record.Contains("component=" + component) && MatchesMessage(record, messagePattern)) {
                 ++count;
             }
         }
@@ -1571,13 +1589,13 @@ Y_UNIT_TEST_SUITE(KqpTli) {
         bool foundTraceIdInBreaker = false;
         bool foundTraceIdInVictim = false;
         for (const auto& record : ExtractTliRecords(logs)) {
-            if (!record.Contains("Component: SessionActor")) {
+            if (!record.Contains("component=SessionActor")) {
                 continue;
             }
-            if (MatchesMessage(record, patterns.BreakerSessionActorMessagePattern) && record.Contains("TraceId: ")) {
+            if (MatchesMessage(record, patterns.BreakerSessionActorMessagePattern) && record.Contains("traceId=")) {
                 foundTraceIdInBreaker = true;
             }
-            if (MatchesMessage(record, patterns.VictimSessionActorMessagePattern) && record.Contains("TraceId: ")) {
+            if (MatchesMessage(record, patterns.VictimSessionActorMessagePattern) && record.Contains("traceId=")) {
                 foundTraceIdInVictim = true;
             }
         }

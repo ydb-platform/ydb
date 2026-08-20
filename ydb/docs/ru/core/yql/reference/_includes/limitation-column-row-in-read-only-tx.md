@@ -3,6 +3,5 @@
 Если попытаться выполнить операцию записи в транзакции, в которой задействованы и колоночные, и строковые таблицы, транзакция завершится с ошибкой:
 
 ```text
-Write transactions that use both row-oriented and column-oriented
-tables are disabled at current time
+Write transactions that use both row-oriented and column-oriented tables are disabled at current time
 ```

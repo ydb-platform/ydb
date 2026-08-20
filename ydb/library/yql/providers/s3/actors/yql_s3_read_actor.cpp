@@ -365,9 +365,6 @@ public:
     private:
         bool nextImpl() final {
             while (!Coro->InputFinished || !Coro->DeferredDataParts.empty()) {
-                Coro->CpuTime += Coro->GetCpuTimeDelta();
-                Coro->ProcessOneEvent();
-                Coro->StartCycleCount = GetCycleCountFast();
                 if (Coro->InputBuffer) {
                     RawDataBuffer.swap(Coro->InputBuffer);
                     Coro->InputBuffer.clear();
@@ -375,6 +372,9 @@ public:
                     working_buffer = NDB::BufferBase::Buffer(rawData, rawData + RawDataBuffer.size());
                     return true;
                 }
+                Coro->CpuTime += Coro->GetCpuTimeDelta();
+                Coro->ProcessOneEvent();
+                Coro->StartCycleCount = GetCycleCountFast();
             }
             return false;
         }
@@ -393,9 +393,6 @@ public:
     private:
         bool nextImpl() final {
             while (!Coro->DecompressedInputFinished || !Coro->DeferredDecompressedDataParts.empty()) {
-                Coro->CpuTime += Coro->GetCpuTimeDelta();
-                Coro->ProcessOneEvent();
-                Coro->StartCycleCount = GetCycleCountFast();
                 auto decompressed = Coro->ExtractDecompressedDataPart();
                 if (decompressed) {
                     RawDataBuffer.swap(decompressed);
@@ -409,6 +406,9 @@ public:
                         Coro->FinishDecompressor();
                     }
                 }
+                Coro->CpuTime += Coro->GetCpuTimeDelta();
+                Coro->ProcessOneEvent();
+                Coro->StartCycleCount = GetCycleCountFast();
             }
             return false;
         }
@@ -997,7 +997,7 @@ public:
             HttpDataRps->Inc();
         }
         if (200L == HttpResponseCode || 206L == HttpResponseCode) {
-            if (Paused || !DeferredDataParts.empty()) {
+            if (Paused || !DeferredDataParts.empty() || !InputBuffer.empty()) {
                 DeferredDataParts.push(std::move(ev->Release()));
                 if (DeferredQueueSize) {
                     DeferredQueueSize->Inc();
@@ -1075,6 +1075,10 @@ public:
                 retryContext = MakeIntrusive<TDefaultHttpRequestContext>(Work->GetPoolKey());
             }
             GetActorSystem()->Schedule(*RetryStuff->NextRetryDelay, new IEventHandle(ParentActorId, SelfActorId, new TEvS3Provider::TEvRetryEventFunc(std::bind(&DownloadStart, RetryStuff, GetActorSystem(), SelfActorId, ParentActorId, PathIndex, HttpInflightSize, std::move(retryContext)))));
+            if (!InputBuffer.empty()) {
+                RetryStuff->Offset -= InputBuffer.size();
+                RetryStuff->SizeLimit += InputBuffer.size();
+            }
             InputBuffer.clear();
             if (DeferredDataParts.size()) {
                 if (DeferredQueueSize) {

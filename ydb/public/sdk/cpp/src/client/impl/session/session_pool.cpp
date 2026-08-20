@@ -4,7 +4,6 @@
 #include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
 #include <util/random/random.h>
@@ -39,24 +38,6 @@ TDuration RandomizeThreshold(TDuration duration) {
         value += static_cast<std::int64_t>(RandomNumber<std::uint64_t>(randomLimit));
     }
     return TDuration::FromValue(value);
-}
-
-namespace {
-
-static const std::string ServerHintsKey{NYdb::YDB_SERVER_HINTS};
-
-} // namespace
-
-bool IsSessionCloseRequested(const TStatus& status) {
-    const auto& meta = status.GetResponseMetadata();
-    auto hints = meta.equal_range(ServerHintsKey);
-    for (auto it = hints.first; it != hints.second; ++it) {
-        if (it->second == NYdb::YDB_SESSION_CLOSE) {
-            return true;
-        }
-    }
-
-    return false;
 }
 
 TSessionPool::TWaitersQueue::TWaitersQueue(std::uint32_t maxQueueSize)
@@ -108,13 +89,12 @@ TSessionPool::TSessionPool(std::uint32_t maxActiveSessions, std::uint32_t minPoo
     , MinPoolSize_(minPoolSize)
 {}
 
-static bool CloseAndDeleteSession(std::unique_ptr<TKqpSessionCommon>&& impl,
+static void CloseAndDeleteSession(std::unique_ptr<TKqpSessionCommon>&& impl,
                                   std::shared_ptr<ISessionClient> client) {
     auto deleter = TKqpSessionCommon::GetSmartDeleter(client);
     TKqpSessionCommon* p = impl.release();
-    const bool becameTerminal = p->MarkBroken();
+    p->MarkBroken();
     deleter(p);
-    return becameTerminal;
 }
 
 void TSessionPool::ReplySessionToUser(
@@ -357,9 +337,8 @@ TPeriodicCb TSessionPool::CreatePeriodicTask(std::weak_ptr<ISessionClient> weakC
             for (auto& sessionImpl : sessionsToDelete) {
                 if (sessionImpl) {
                     Y_ABORT_UNLESS(sessionImpl->GetState() == TKqpSessionCommon::S_IDLE);
-                    if (CloseAndDeleteSession(std::move(sessionImpl), strongClient)) {
-                        strongClient->RecordSessionClosed("pool_idle_timeout");
-                    }
+                    NSessionCloseCommands::PoolIdleTimeout.Execute(*sessionImpl, strongClient.get());
+                    CloseAndDeleteSession(std::move(sessionImpl), strongClient);
                 }
             }
 
@@ -389,7 +368,9 @@ std::int64_t TSessionPool::GetCurrentPoolSize() const {
     return Sessions_.size();
 }
 
-void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<ISessionClient> client) {
+void TSessionPool::OnCloseSession(TKqpSessionCommon* s, std::shared_ptr<ISessionClient> client,
+    const TSessionCloseCommand& command)
+{
     std::unique_ptr<TKqpSessionCommon> session;
     {
         std::lock_guard guard(Mtx_);
@@ -410,10 +391,8 @@ void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<IS
     }
 
     if (session) {
-        const auto state = session->GetState();
-        Y_ABORT_UNLESS(state == TKqpSessionCommon::S_IDLE ||
-            state == TKqpSessionCommon::S_BROKEN ||
-            state == TKqpSessionCommon::S_CLOSING);
+        Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
+        command.Execute(*session, client.get());
         CloseAndDeleteSession(std::move(session), client);
     }
 }

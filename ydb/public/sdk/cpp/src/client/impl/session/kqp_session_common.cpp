@@ -142,7 +142,9 @@ void TKqpSessionCommon::UpdateServerCloseHandler(IServerCloseHandler* handler) {
     CloseHandler_.store(handler);
 }
 
-void TKqpSessionCommon::CloseFromServer(std::weak_ptr<ISessionClient> client) noexcept {
+void TKqpSessionCommon::CloseFromServer(std::weak_ptr<ISessionClient> client,
+    const NSessionPool::TSessionCloseCommand& command) noexcept
+{
     auto strong = client.lock();
     if (!strong) {
         // Session closed on the server after stopping client - do nothing
@@ -152,7 +154,7 @@ void TKqpSessionCommon::CloseFromServer(std::weak_ptr<ISessionClient> client) no
 
     IServerCloseHandler* h = CloseHandler_.load();
     if (h) {
-        h->OnCloseSession(this, strong);
+        h->OnCloseSession(this, strong, command);
     }
 }
 

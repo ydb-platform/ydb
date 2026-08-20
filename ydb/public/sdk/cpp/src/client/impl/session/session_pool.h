@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_session_common.h"
+#include "session_close_command.h"
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/core_facility/core_facility.h>
 
@@ -30,7 +31,6 @@ TStatus GetStatus(const TOperation& operation);
 TStatus GetStatus(const TStatus& status);
 
 TDuration RandomizeThreshold(TDuration duration);
-bool IsSessionCloseRequested(const TStatus& status);
 
 template<typename TResponse>
 NThreading::TFuture<TResponse> InjectSessionStatusInterception(
@@ -51,33 +51,8 @@ NThreading::TFuture<TResponse> InjectSessionStatusInterception(
         TResponse value = std::move(future.ExtractValue());
 
         const TStatus& status = GetStatus(value);
-        // Exclude CLIENT_RESOURCE_EXHAUSTED from transport errors which can cause to session disconnect
-        // since we have guarantee this request wasn't been started to execute.
-
-        if (status.IsTransportError()
-            && status.GetStatus() != EStatus::CLIENT_RESOURCE_EXHAUSTED && status.GetStatus() != EStatus::CLIENT_OUT_OF_RANGE)
-        {
-            if (impl->MarkBroken() && sessionClient) {
-                if (status.GetStatus() == EStatus::CLIENT_DEADLINE_EXCEEDED) {
-                    sessionClient->RecordSessionClosed("client_timeout");
-                } else if (status.GetStatus() == EStatus::CLIENT_CANCELLED) {
-                    sessionClient->RecordSessionClosed("client_cancelled");
-                } else {
-                    sessionClient->RecordSessionClosed("transport_error");
-                }
-            }
-        } else if (status.GetStatus() == EStatus::SESSION_BUSY) {
-            if (impl->MarkBroken() && sessionClient) {
-                sessionClient->RecordSessionClosed("session_busy");
-            }
-        } else if (status.GetStatus() == EStatus::BAD_SESSION || status.GetStatus() == EStatus::SESSION_EXPIRED) {
-            if (impl->MarkBroken() && sessionClient) {
-                sessionClient->RecordSessionClosed("bad_session");
-            }
-        } else if (IsSessionCloseRequested(status)) {
-            if (impl->MarkAsClosing() && sessionClient) {
-                sessionClient->RecordSessionClosed("session_shutdown");
-            }
+        if (const auto* command = NSessionCloseCommands::FromStatus(status)) {
+            command->Execute(*impl, sessionClient.get());
         } else {
             // NOTE: About GetState and lock
             // Simultanious call multiple requests on the same session make no sence, due to server limitation.
@@ -145,7 +120,8 @@ public:
 
     void RecordConnectionCreateTime(double seconds);
 
-    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient> client) override;
+    void OnCloseSession(TKqpSessionCommon*, std::shared_ptr<ISessionClient> client,
+        const TSessionCloseCommand& command) override;
 
 private:
     void UpdateStats();

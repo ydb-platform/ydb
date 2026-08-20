@@ -100,9 +100,7 @@ public:
             return true;
         }, true);
         for (auto& session : sessions) {
-            if (session->MarkBroken()) {
-                SessionPoolStatCollector_.IncSessionClosed("pool_graceful_shutdown");
-            }
+            NSessionPool::NSessionCloseCommands::PoolGracefulShutdown.Execute(*session, this);
         }
     }
 

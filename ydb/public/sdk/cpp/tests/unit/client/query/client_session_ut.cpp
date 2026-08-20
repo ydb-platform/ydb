@@ -5,11 +5,14 @@
 #include <ydb/public/sdk/cpp/src/client/impl/session/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/string/cast.h>
 
+#include <map>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -43,18 +46,26 @@ public:
 
 class TDeletingMockSessionClient : public TMockSessionClient {
 public:
+    explicit TDeletingMockSessionClient(NSessionPool::TSessionPool* pool = nullptr)
+        : Pool_(pool)
+    {
+    }
+
     void DeleteSession(TKqpSessionCommon* session) override {
         delete session;
     }
-};
 
-class TMockServerCloseHandler : public IServerCloseHandler {
-public:
-    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>) override {
-        ++CloseCalls;
+    void RecordSessionClosed(std::string_view reason) override {
+        if (Pool_) {
+            PoolSizeWhenRecorded = Pool_->GetCurrentPoolSize();
+        }
+        TMockSessionClient::RecordSessionClosed(reason);
     }
 
-    int CloseCalls = 0;
+    std::optional<std::int64_t> PoolSizeWhenRecorded;
+
+private:
+    NSessionPool::TSessionPool* Pool_;
 };
 
 std::string MakeSessionIdWithNodeId(std::uint64_t nodeId) {
@@ -115,16 +126,18 @@ Y_UNIT_TEST(SessionShutdownActiveSessionMarksClosing) {
     UNIT_ASSERT_VALUES_EQUAL(client->CloseReasons.front(), "session_shutdown");
 }
 
-Y_UNIT_TEST(SessionShutdownIdleInPoolDelegatesToCloseHandler) {
-    TTestKqpSession session(MakeSessionIdWithNodeId(42), "host:2136");
-    auto client = std::make_shared<TMockSessionClient>();
-    TMockServerCloseHandler closeHandler;
-    session.MarkIdle();
-    session.UpdateServerCloseHandler(&closeHandler);
+Y_UNIT_TEST(SessionShutdownIdleInPoolRemovesBeforeRecording) {
+    NSessionPool::TSessionPool pool(1);
+    auto client = std::make_shared<TDeletingMockSessionClient>(&pool);
+    auto* session = new TTestKqpSession(MakeSessionIdWithNodeId(42), "host:2136");
+    session->MarkIdle();
+    UNIT_ASSERT(pool.ReturnSession(session, false));
 
-    UNIT_ASSERT(HandleAttachSessionState(MakeSessionShutdownState(), &session, client)
+    UNIT_ASSERT(HandleAttachSessionState(MakeSessionShutdownState(), session, client)
         == EAttachStreamReadAction::Stop);
-    UNIT_ASSERT_VALUES_EQUAL(closeHandler.CloseCalls, 1);
+    UNIT_ASSERT(client->PoolSizeWhenRecorded.has_value());
+    UNIT_ASSERT_VALUES_EQUAL(*client->PoolSizeWhenRecorded, 0);
+    UNIT_ASSERT_VALUES_EQUAL(pool.GetCurrentPoolSize(), 0);
     UNIT_ASSERT_VALUES_EQUAL(client->PessimizeCalls, 0);
     UNIT_ASSERT_VALUES_EQUAL(client->CloseReasons.size(), 1);
     UNIT_ASSERT_VALUES_EQUAL(client->CloseReasons.front(), "session_shutdown");
@@ -193,6 +206,31 @@ Y_UNIT_TEST(SessionStatusReasonsMatchContract) {
 
         UNIT_ASSERT_VALUES_EQUAL(client->CloseReasons.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(client->CloseReasons.front(), expectedReason);
+    }
+}
+
+Y_UNIT_TEST(SessionCloseHintUsesShutdownReason) {
+    std::multimap<std::string, std::string> metadata;
+    metadata.emplace(NYdb::YDB_SERVER_HINTS, NYdb::YDB_SESSION_CLOSE);
+    TTestKqpSession session(MakeSessionIdWithNodeId(42), "host:2136");
+    auto client = std::make_shared<TMockSessionClient>();
+
+    ApplySessionStatus(session, client,
+        TStatus(TPlainStatus(EStatus::SUCCESS, {}, {}, std::move(metadata))));
+
+    UNIT_ASSERT(session.GetState() == TKqpSessionCommon::S_CLOSING);
+    UNIT_ASSERT_VALUES_EQUAL(client->CloseReasons.front(), "session_shutdown");
+}
+
+Y_UNIT_TEST(ExcludedTransportStatusesKeepSessionActive) {
+    for (const auto status : {EStatus::CLIENT_RESOURCE_EXHAUSTED, EStatus::CLIENT_OUT_OF_RANGE}) {
+        TTestKqpSession session(MakeSessionIdWithNodeId(42), "host:2136");
+        auto client = std::make_shared<TMockSessionClient>();
+
+        ApplySessionStatus(session, client, TStatus(status, {}));
+
+        UNIT_ASSERT(session.GetState() == TKqpSessionCommon::S_ACTIVE);
+        UNIT_ASSERT(client->CloseReasons.empty());
     }
 }
 

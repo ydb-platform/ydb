@@ -67,9 +67,8 @@ public:
     ~TReaderImpl() {
         if (!Finished_ && Session_) {
             auto sessionClient = Session_->SessionImpl_->GetSessionClient();
-            if (Session_->SessionImpl_->MarkBroken() && sessionClient) {
-                sessionClient->RecordSessionClosed("client_cancelled");
-            }
+            NSessionPool::NSessionCloseCommands::ClientCancelled.Execute(
+                *Session_->SessionImpl_, sessionClient.get());
         }
         StreamProcessor_->Cancel();
     }

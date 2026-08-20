@@ -3,6 +3,7 @@
 
 #define INCLUDE_YDB_INTERNAL_H
 #include <ydb/public/sdk/cpp/src/client/impl/internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_close_command.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
@@ -92,14 +93,14 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
                 auto impl = holder->TrySharedOwning();
                 if (impl) {
                     auto strongClient = client.lock();
-                    if (impl->MarkBroken() && strongClient) {
-                        if (grpcStatus.GRpcStatusCode == grpc::StatusCode::OUT_OF_RANGE) {
-                            strongClient->RecordSessionClosed("attach_closed");
-                        } else {
-                            strongClient->RecordSessionClosed("transport_error");
-                        }
+                    const auto& closeCommand = grpcStatus.GRpcStatusCode == grpc::StatusCode::OUT_OF_RANGE
+                        ? NSessionPool::NSessionCloseCommands::AttachClosed
+                        : NSessionPool::NSessionCloseCommands::TransportError;
+                    if (impl->GetState() == TKqpSessionCommon::S_IDLE) {
+                        impl->CloseFromServer(client, closeCommand);
+                    } else {
+                        closeCommand.Execute(*impl, strongClient.get());
                     }
-                    impl->CloseFromServer(client);
                     holder->Release();
                 }
             }

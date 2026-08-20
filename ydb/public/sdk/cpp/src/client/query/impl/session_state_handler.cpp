@@ -1,5 +1,7 @@
 #include "session_state_handler.h"
 
+#include <ydb/public/sdk/cpp/src/client/impl/session/session_close_command.h>
+
 namespace NYdb::inline Dev::NQuery {
 
 EAttachStreamReadAction HandleAttachSessionState(
@@ -11,21 +13,19 @@ EAttachStreamReadAction HandleAttachSessionState(
         if (!session) {
             return EAttachStreamReadAction::Stop;
         }
-        const bool isIdle = session->GetState() == TKqpSessionCommon::S_IDLE;
+        const auto& closeCommand = state.has_node_shutdown()
+            ? NSessionPool::NSessionCloseCommands::NodeShutdown
+            : NSessionPool::NSessionCloseCommands::SessionShutdown;
         if (state.has_node_shutdown()) {
             const auto nodeId = session->GetEndpointKey().GetNodeId();
             if (nodeId != 0 && client) {
                 client->PessimizeNode(nodeId);
             }
         }
-        if (session->MarkAsClosing() && client) {
-            client->RecordSessionClosed(
-                state.has_node_shutdown() ? "node_shutdown" : "session_shutdown");
-        }
-        if (isIdle) {
-            if (client) {
-                session->CloseFromServer(client);
-            }
+        if (session->GetState() == TKqpSessionCommon::S_IDLE) {
+            session->CloseFromServer(client, closeCommand);
+        } else {
+            closeCommand.Execute(*session, client.get());
         }
         return EAttachStreamReadAction::Stop;
     }

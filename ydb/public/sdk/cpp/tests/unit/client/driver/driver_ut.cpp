@@ -423,7 +423,7 @@ not-base64
             discoveryService.BuildInfo,
             baseBuildInfo
                 + " ydb-sdk-tracing/" + std::string(NObservability::kTracingChainVersion)
-                + " ydb-sdk-metrics/0.2.0"
+                + " ydb-sdk-metrics/" + std::string(NObservability::kMetricsChainVersion)
                 + ";test-client/1.2.3");
         UNIT_ASSERT_VALUES_EQUAL(tableService.BuildInfo, baseBuildInfo + ";test-client/1.2.3");
     }

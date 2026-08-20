@@ -15,12 +15,17 @@ namespace NYdb::inline Dev {
 std::uint64_t GetNodeIdFromSession(const std::string& sessionId);
 
 class TKqpSessionCommon;
+namespace NSessionPool {
+class TSessionCloseCommand;
+}
 
 class IServerCloseHandler {
 public:
     virtual ~IServerCloseHandler() = default;
     // called when session should be closed by server signal
-    virtual void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>) = 0;
+    virtual void OnCloseSession(
+        TKqpSessionCommon*, std::shared_ptr<ISessionClient>,
+        const NSessionPool::TSessionCloseCommand&) = 0;
 };
 
 class TKqpSessionCommon : public TEndpointObj {
@@ -64,7 +69,8 @@ public:
     void UpdateServerCloseHandler(IServerCloseHandler*);
 
     // Called asynchronously from grpc thread.
-    void CloseFromServer(std::weak_ptr<ISessionClient> client) noexcept;
+    void CloseFromServer(std::weak_ptr<ISessionClient> client,
+        const NSessionPool::TSessionCloseCommand& command) noexcept;
 
 public:
     std::optional<TDeadline> PropagatedDeadline_;

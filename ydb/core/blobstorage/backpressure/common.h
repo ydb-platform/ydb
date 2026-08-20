@@ -6,36 +6,34 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
 namespace NKikimr::NBsQueue {
 
-// Special timer for debug purposes, which works with virtual time of TTestActorSystem
-struct TActivationContextTimer {
-    TActivationContextTimer()
-        : CreationTimestamp(NActors::TActivationContext::Monotonic())
-    {}
-
-    double Passed() const {
-        return (NActors::TActivationContext::Monotonic() - CreationTimestamp).SecondsFloat();
-    }
-
-    TMonotonic CreationTimestamp;
-};
-
+// Measures elapsed time either with the HP timer or, for debug purposes, with the virtual time of
+// TTestActorSystem. The choice is a per-queue constant, so instead of a std::variant of two timers
+// (which makes every Passed() call an indirect dispatch) keep the flag next to the raw timestamp --
+// both alternatives are a single 8-byte value anyway, so this costs no extra space.
 struct TBSQueueTimer {
     TBSQueueTimer(bool useActorSystemTime)
+        : UseActorSystemTime(useActorSystemTime)
     {
-        if (useActorSystemTime) {
-            Timer.emplace<TActivationContextTimer>();
+        if (Y_UNLIKELY(useActorSystemTime)) {
+            Timestamp = NActors::TActivationContext::Monotonic().GetValue();
         } else {
-            Timer.emplace<THPTimer>();
+            NHPTimer::STime start;
+            NHPTimer::GetTime(&start);
+            Timestamp = static_cast<ui64>(start);
         }
     }
 
-    std::variant<THPTimer, TActivationContextTimer> Timer;
-
     double Passed() const {
-        return std::visit([](const auto& timer) -> double {
-            return timer.Passed();
-        }, Timer);
+        if (Y_UNLIKELY(UseActorSystemTime)) {
+            return (NActors::TActivationContext::Monotonic() - TMonotonic::FromValue(Timestamp)).SecondsFloat();
+        }
+        // GetTimePassed() mutates its argument, so feed it a copy
+        NHPTimer::STime start = static_cast<NHPTimer::STime>(Timestamp);
+        return NHPTimer::GetTimePassed(&start);
     }
+
+    bool UseActorSystemTime;
+    ui64 Timestamp;
 };
 
 } // namespace NKikimr::NBsQueue

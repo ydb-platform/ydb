@@ -11,6 +11,8 @@
 #include <library/cpp/time_provider/time_provider.h>
 #include <util/generic/array_ref.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 Y_DECLARE_OUT_SPEC(inline, TArrayRef<const NKikimrHive::TDataCentersGroup*>, out, vec) {
     out << '[';
     for (auto it = vec.begin(); it != vec.end(); ++it) {
@@ -4117,15 +4119,10 @@ bool THive::MoveDataInactiveGroups(TStoragePoolInfo& pool) {
     if (tabletsToMoveData.empty()) {
         return false;
     } else {
-<<<<<<< HEAD
-        BLOG_I("ShrinkPool - starting compact for " << tabletsToCompact.size() << " tablets");
-        StartCompactActor(std::move(tabletsToCompact), pool.InactiveGroups, pool.Name);
-=======
         YDB_LOG_INFO("ShrinkPool: starting move data for tablets",
             {"logPrefix", GetLogPrefix()},
             {"tabletsToMoveDataCount", tabletsToMoveData.size()});
         StartMoveDataActor(std::move(tabletsToMoveData), pool.InactiveGroups, pool.Name);
->>>>>>> 21ba0d623a2 (some decommission fixes (#47770))
         return true;
     }
 }

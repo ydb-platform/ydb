@@ -133,12 +133,12 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
     table += "| Branch | Run |\n"
     table += "|--------|-----|\n"
     table += "\n".join(rows)
-    table += "\n\n"
-    table += f"[![▶  Backport manual](https://img.shields.io/badge/{badge_text_manual}-2196F3)]({url_manual_ui})"
     table += "\n\n<h3>NBS Backport</h3>\n\n"
     table += "| Branch | Run |\n"
     table += "|--------|-----|\n"
     table += "\n".join(nbs_rows)
+    table += "\n\n"
+    table += f"[![▶  Backport manual](https://img.shields.io/badge/{badge_text_manual}-2196F3)]({url_manual_ui})"
     return table
 
 

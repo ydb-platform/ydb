@@ -192,12 +192,15 @@ The checked-in policy currently requires formula construction for
 TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14,
 q15, q16, q18, q19, q21, and q22 plus TPC-DS q2, q3, q4, q5, q6, q7, q8,
 q9, q10, q11,
-q13, q15, q16, q18, q19, q21, q22, q24, q25, q26, q28, q29, q31, q33, q34,
+q12, q13, q15, q16, q18, q19, q20, q21, q22, q24, q25, q26, q28, q29, q31, q33, q34,
 q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58,
 q59, q60, q61, q62, q64, q65, q66, q68, q69, q71, q72, q73, q74, q75, q76,
 q77, q78, q79,
-q80, q82, q83, q84, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, and
-q99: 93/121 workload queries (76.9%).
+q80, q82, q83, q84, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, q98,
+and q99: 96/121 workload queries (79.3%). Schema-v5 also carries the
+supplemental exact-pair-only list q49, q51, q53, q63, and q89. Unioning that
+list with every formula and explicit verifier-entry row gives effective exact
+Initial/Final pair floors of 20 TPCH plus 81 TPC-DS, 101 overall.
 TPC-DS q8 is pinned at successful preparation, verifier entry, formula
 construction, and bounded proof. TPC-DS q72 is pinned at successful
 preparation plus formula construction; it is not in the proof floor. TPC-DS q9
@@ -214,17 +217,19 @@ repairing its independent workload fixture; it is not in the proof floor.
 TPC-DS q28 is pinned at successful preparation, formula construction, and
 bounded proof through the closed staged Decimal-AVG carrier.
 TPC-DS q84 is pinned at successful preparation and formula construction
-through the checked-Concat demand contract; it is not in the proof floor.
+through the checked-Concat demand contract; it is not separately pinned at
+verifier entry and is not in the proof floor.
 TPCH q13/q16 are pinned
 at successful preparation, verifier entry, formula construction, and bounded
 proof. Together with TPC-DS q8/q28, the checked-in proof floor is thirty-two
-obligations. The complete post-M75 formula-only dashboards leave TPCH at
+obligations. The complete post-M75 formula-only dashboards left TPCH at
 twenty formulas, no unsupported semantic outcomes, and two no-pair optimizer
 failures; TPC-DS has seventy-three formulas, eight unsupported semantic
 outcomes, and eighteen no-pair optimizer failures. Across both suites the
 measured semantic partition is 93 formulas, 8 `UNSUPPORTED`, and 20
 `OPTIMIZER_FAILURE`. Both embedded policy evaluations are valid with no
-violations.
+violations. These are the closed post-M75 results; the authoritative M76
+results are recorded below.
 Preparation is a separate partition: twenty TPCH and seventy-three TPC-DS
 queries succeed, while two TPCH and twenty-six TPC-DS queries fail. Eight
 TPC-DS rows belong to both the preparation-failure and semantic-unsupported
@@ -266,6 +271,17 @@ seventy-three TPC-DS pairs enter the verifier. The 8 unsupported outcomes
 consequently all terminate at initial export; final export and verifier
 construction have no primary unsupported outcome. Secondary boundary
 diagnostics remain recorded independently.
+
+Milestone 76 is implemented in `dbdae0a107f`, `70ab3d3631c`, and
+`a7095c6a797`; schema-v5 policy commit `1da14eb637b` checks in the new pair and
+formula floors. The complete dashboards establish 96/121 workload formulas
+(79.3%), 96/101 exact-pair formulas (95.0%), and formulas for all 96 verifier
+entrants and all 93 preparation successes. TPCH is 20 formulas / 0 unsupported
+/ 2 no-pair optimizer failures; TPC-DS is 76 / 5 / 18. All 101 effective exact
+pairs and all 96 formula-floor rows are present with no policy violation. The
+fresh proof reports verify all 32/32 obligations, or 32/121 workload queries
+(26.4%) and 32/96 formulas (33.3%). None of the three window queries joins that
+proof floor.
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
 binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
@@ -800,6 +816,113 @@ and TPC-DS passes 19/19 after 15,499/124,840 ms (report SHA-256
 Bounded proof coverage is therefore 32/121 workload queries (26.4%), 32/93
 formula-covered queries (34.4%), and 32/32 curated obligations.
 
+Milestone 76 semantic commit `dbdae0a107f` admits only the observed unordered
+whole-partition percentage window. One private main-plan Project must directly
+consume one grouped Aggregate and contain exactly one expression rooted at
+`DecimalDiv(DecimalMul(member(input), Int32("100")),
+YqlAggWin(sum, ..., member(input)))`. Input, SUM, and result are exact
+`Optional<Decimal(35,2)>`; the numerator reuses the SUM input. The raw
+five-child `YqlWindow` and five-child `YqlAggWin` have a matching nonempty
+name, exact option-free `YqlWinFactory("sum")`, no inherited window, one
+direct `Optional<String>` `YqlGroup`/unary-lambda/four-child `YqlGroupRef` at
+canonical index 3, no ordering, and the ordered whole-partition ROWS frame
+`type=rows, from=up, to=uf`. Every node carries valid safety metadata and the
+source tree is limited to 64 nodes and depth 16.
+
+The grouped input is either phase `Undefined` or a phase-`Final` Aggregate
+directly over one matching phase-`Intermediate` Aggregate. Partition is a
+direct group key, window input is one plain SUM output, intermediate state and
+final use match exactly, and the Aggregate/Project chain has unique consumers,
+no fanout, and no subplans. Python independently checks this topology and
+models the whole-partition SUM over the Project's current relation. Partition
+membership is SQL `IS NOT DISTINCT FROM`, including NULL with NULL; NULL
+Decimal inputs are ignored, an all-NULL partition returns NULL, and bag
+multiplicity plus exact Decimal addition are retained. A staged Project sees
+only its consumer task's relation, making routing part of the semantics.
+
+Before the routing repair, q12's final Aggregate shuffled on all five grouping
+keys and the window Project shared that stage. Equal `i_class` partitions could
+be split by `i_item_id`, `i_item_desc`, `i_category`, or `i_current_price`.
+The q12 obligation returned `COUNTEREXAMPLE` after 27,588 ms. Coverage report,
+raw verdict, and SMT SHA-256 values are
+`cc6576c46b6603a355b81651fde20056aa0fb3842a74b8133351e3aa307adf28`,
+`923e3e56d4a09fd04dc4fb552a764676b55a4e98247720aeeb05c42c9dfccaff`,
+and
+`c849d007958deac4851d8b91bfbf1616cbc78a4ac9f38091c1af78bf51f95709`.
+The Initial snapshot is
+`751ac06fb3658a4e6c45cde2e9f3e3b50402353a411b1ffbad9e12e68b01249c`;
+the pre-fix Final snapshot is
+`ce0261fad4adafb790145b022c086e20bacf0b37c7465e69c5b7abed66a69462`.
+
+Routing commit `70ab3d3631c` always creates a new stage for a window-bearing
+Map. Structurally tracked windows use HashShuffle on their ordered nonempty
+common partition-key subset; a global, untracked, malformed, inherited,
+stale, unavailable, or disjoint case uses a one-task `UnionAll` gather. A
+common subset is sufficient because every equal partition agrees on every
+selected key, and deterministic runtime HashV2 co-locates equal nullable keys,
+including NULL. q12/q20/q98 therefore keep the Aggregate's full-key shuffle
+and gain a second HashV2 on `i_class`. Metadata plus rename history follow the
+expression, and rule guards keep Filter, correlated Filter, Limit/TopSort,
+stage-limit, predicate-factor, and scalar-pruning rewrites from undoing the
+boundary.
+
+The first complete post-routing pass also exposed a metadata-transport
+regression. q51's broader source `YqlWindow` definition was carried into a
+final `KqpOpMapElementLambda` even though its partition and ordering lambdas
+still referenced source-row members `x.item_sk` and `x.d_date`; final-plan type
+annotation then failed before the Final capture. Commit `a7095c6a797` permits
+transport only for the exact self-contained M76 definition. Every other raw
+`YqlAggWin` still triggers conservative window routing and fail-closed export,
+but its context-dependent definition is not embedded in the final KQP AST.
+The focused real-host q51 regression passes 1/1 in 3.99 seconds and observes
+exactly Initial then Final, both unsupported, without either missing-member
+diagnostic. Its focused benchmark records `capture_count=2`, a later unrelated
+414 ms range-seam preparation failure, and report SHA-256
+`b328b80f54a90a0ae3e01e38dc559944fe807e2a7c13e9643efed4d634af5c23`.
+Test-lifetime commit `78e255b5e1f` gives the resolver an owned context before
+the runner is created. The post-cleanup full real-host integration gate is
+GOOD: one suite / 44 tests in 19.713023 seconds, including q51 in 3.916390
+seconds, with approximately 32.190 seconds of `ya` wall time.
+
+Post-fix q12 returns `UNKNOWN` after 61,153 ms: the deadline expires before
+branch 3/5 (`left_outcome_0_unmatched`). Its coverage report, raw verdict, and
+SMT SHA-256 values are
+`26d7b4b1fe539508720a93b636f409c93c922830e0a200d0c8df4ebaa4067263`,
+`846a4688309d7595a0bc648627e7c54b9d87e770c3f515a8aabaa7a43958b7d8`,
+and
+`2226888e0242bd0bd2f5163bc3d6e7c2d88668f4e3f96f5141dcacbbc3eab743`;
+the post-fix Final snapshot is
+`1cba9b0f71c48c11e084aec24056781d91b942d3df64de55647bf5045ee49271`.
+This is neither a proof nor a new counterexample. Physical replay remains
+unavailable because later preparation rejects `YqlAggWin` with `Missed
+callable: YqlAggWin`; the defect is localized from exact source and task
+semantics plus the symbolic candidate and focused C++ routing regressions, not
+from a compiled runtime divergence.
+
+All three focused q12/q20/q98 pairs construct formulas after 209/934, 137/926,
+and 167/933 ms of preparation/verifier work respectively. Their focused report
+SHA-256 is
+`9c79494b48140df09addf88af4e76150ffd87807e80f83ed2a35c75a5f3cb3d9`.
+Policy commit `1da14eb637b` adds those queries to the formula floor and adds
+q49/q51/q53/q63/q89 as supplemental exact-pair requirements. The effective
+pair floor is therefore 20 TPCH plus 81 TPC-DS, and the formula floor is 96.
+The complete post-policy TPCH dashboard is 20/0/2 after 3,403/108,336 ms of
+row-summed preparation/verifier work; all 20 pair and formula requirements pass
+with no violation (report SHA-256
+`c5ad2d811bfdb4933d3b538a932f01d621726afc468aa2aa38c57ea303eae9a7`).
+The complete TPC-DS dashboard is 76/5/18 after 76,740/896,728 ms, observes all
+81/81 effective exact pairs and 76/76 formulas plus 73 preparation successes
+and 76 verifier entrants, and has no policy violation (report SHA-256
+`5015b3fe8e47e1aad88295cc0f4b59088ef5f9087b99c4792ab7b0c999f796c1`).
+Thus the authoritative totals are 96/121 formulas, 96/101 exact-pair formulas,
+96/96 entrant formulas, and 93/93 preparation-success formulas. Fresh proof
+reports verify TPCH 13/13 after 1,843/81,211 ms (SHA-256
+`33534f30a78bd392b7abd6206cfdd0ba94e8ef7bfb393966d4e88555fdd040b4`)
+and TPC-DS 19/19 after 15,865/125,293 ms (SHA-256
+`9b7ee8d66acec051d8f20b53e8e100c9d672d718fc07e830b3894477e0839dac`).
+Both proof policies are valid with no violation; proof mode does not enforce
+the formula dashboard's exact-pair floor.
+
 The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
 `97c0048b4bc31c8c02785bc3dea18c676b9ba6e2452411912c8984f06b376205`.
@@ -1016,8 +1139,12 @@ scale-changing cast/window combination, and q51's secondary range-read
 boundary; the remaining twenty workload entries need frontend or optimizer
 progress before verifier feature work can reach them. M75's focused and full
 formula evidence is complete and its preparation/formula policy gates are
-green. These planning estimates are not coverage promises and assume
-deliberately workload-targeted gates.
+green. M76 subsequently removes q12/q20/q98 and raises the starting point to
+96 formulas, leaving five exact-pair exporter gaps: q49, q51, q53, q63, and
+q89. Schema-v5 now pins all five at exact-pair depth
+and both complete formula gates are green. Fresh proof gates also verify all
+32/32 obligations. These planning estimates are not coverage promises and
+assume deliberately workload-targeted gates.
 
 The new correlated form has exactly two ordered, distinct outer dependencies.
 Each dependency occurs in its own predicate conjunct: exactly one conjunct is a
@@ -1305,17 +1432,19 @@ constructed; it is not a solver proof. The checked-in solver policy now
 requires `VERIFIED_BOUNDED` for TPCH q3, q4, q6, q11, q12, q13, q14, q15,
 q16, q18, q19, q21, and q22 plus TPC-DS q3, q8, q9, q16, q28, q34, q38, q42,
 q48, q52, q55, q69, q73, q87, q90, q93, q94, q95, and q96: thirty-two
-obligations (26.4% of the workload and 34.4% of the 93 formula-covered
-queries).
+obligations (26.4% of the workload and, at post-M75, 34.4% of the 93
+formula-covered queries). At M76 the latter is 33.3% of 96 formulas; no window
+row is added to this policy.
 
 The checked-in proof policy still contains 13 TPCH and 19 TPC-DS obligations,
-or 32/121 (26.4%) of the workload and 32/93 (34.4%) of formula-covered queries
-at the declared bounds. Fresh post-M75 reports verify all 32/32 as
-`VERIFIED_BOUNDED`: TPCH passes 13/13 after 1,744/81,538 ms (SHA-256
-`8fe212d2536b7561e630dbd3e1b3bac9b8dfa7510c55b1f2a91114e4b791c5f8`),
-and TPC-DS passes 19/19 after 15,499/124,840 ms (SHA-256
-`6fe57d9e56cd4ed23755494831a2cd1450ad5a103652583fa234c5292cc4b023`).
-Both policies are valid with no violations. TPC-DS q8 independently
+or 32/121 (26.4%) of the workload and 32/96 (33.3%) of M76's formula-covered
+queries. Fresh post-policy reports verify all 32/32 as `VERIFIED_BOUNDED`:
+TPCH passes 13/13 after 1,843/81,211 ms (SHA-256
+`33534f30a78bd392b7abd6206cfdd0ba94e8ef7bfb393966d4e88555fdd040b4`),
+and TPC-DS passes 19/19 after 15,865/125,293 ms (SHA-256
+`9b7ee8d66acec051d8f20b53e8e100c9d672d718fc07e830b3894477e0839dac`).
+Both policies are valid with no violations; proof mode does not enforce the
+dashboard-only exact-pair floor. TPC-DS q8 independently
 prepares in 695 ms and proves after 2,041 ms with the 60-second budget. The
 immediately preceding 30-obligation complete gate spent 1,633/56,327 ms for
 TPCH and produced report SHA-256
@@ -2442,7 +2571,8 @@ raise it to 13 TPCH plus 17 TPC-DS obligations. TPC-DS q8 raises that
 floor to 13 TPCH plus 18 TPC-DS obligations; q28 now raises the current floor
 to 13 TPCH plus 19 TPC-DS obligations, 32 total.
 
-The audit has found eleven production optimizer defects. A stale negation flag
+The audit has found eleven runtime-confirmed production optimizer defects plus
+one bounded pre-physical StageGraph-routing finding. A stale negation flag
 could turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression
 and fix are committed in `95a2afad1d3`. The missing scalar-cardinality enforcement made
 a two-row scalar subquery select its first row instead of raising
@@ -2572,6 +2702,19 @@ both snapshots still rejected only by the exact checked-Concat result bound;
 formula and proof coverage are unchanged at this checkpoint. The regenerated
 final trace places Concat in stage 11 after the final Limit and the stage-10
 TopSort, on at most 100 selected rows.
+
+The qualified twelfth finding is the StageGraph routing mismatch exposed by
+the first exact window model. q12's window Project ran task-locally inside a final
+Aggregate stage shuffled by the full grouping key, so one `i_class` partition
+could be split across tasks. The pre-fix solver result is a 27,588-ms
+`COUNTEREXAMPLE`. Commit `70ab3d3631c` creates a stage boundary and hashes
+fully audited windows on a nonempty common subset of their partition keys,
+falling back to a serial gather whenever that cannot be established. Physical
+replay is currently blocked by the compiler's `YqlAggWin` rejection, so this
+is a bounded pre-physical finding based on exact StageGraph/task semantics,
+not a runtime-confirmed production defect.
+The repaired q12 pair is `UNKNOWN` after 61,153 ms and is not claimed as
+proved; the M76 section above preserves all artifact digests.
 
 An additional legacy probe placed
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer; it

@@ -8,7 +8,8 @@ using namespace NYdb::NQuery;
 
 // Helper that wraps a query session and tracks the current transaction.
 //
-//   Exec(query)            — execute in current tx (begin if first call), assert SUCCESS
+//   Begin()                - verify that we are not currently in a tx, begin a new one.
+//   Exec(query)            — execute in current tx, assert SUCCESS
 //   Check(query, yson)     — execute in current tx, assert SUCCESS, compare YSON result set 0
 //   ExecCommit(query)      — execute in current tx and commit, assert SUCCESS
 //   CheckCommit(query, y)  — execute in current tx, commit, assert SUCCESS, compare YSON
@@ -19,6 +20,7 @@ struct TTestTx {
     NYdb::NQuery::TQueryClient Client;
     NYdb::NQuery::TSession Session;
     TTxSettings TxSettings;
+    bool BeginWithNext = false;
     std::optional<NYdb::NQuery::TTransaction> Tx;
 
     TTestTx(NYdb::NQuery::TQueryClient client, TTxSettings txSettings)
@@ -27,15 +29,32 @@ struct TTestTx {
         , TxSettings(txSettings)
     {}
 
+    bool InTransaction() const { return Tx || BeginWithNext; }
+
+    TTxControl GetTxControl() {
+        UNIT_ASSERT(InTransaction());
+        if (BeginWithNext) {
+            BeginWithNext = false;
+            return TTxControl::BeginTx(TxSettings);
+        } else {
+            return TTxControl::Tx(Tx.value());
+        }
+    }
+
+    void Begin() {
+        UNIT_ASSERT(!InTransaction());
+        BeginWithNext = true;
+    }
+
     void Exec(const TString& query) {
-        auto ctrl = Tx ? TTxControl::Tx(*Tx) : TTxControl::BeginTx(TxSettings);
+        auto ctrl = GetTxControl();
         auto result = Session.ExecuteQuery(query, ctrl).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         Tx = result.GetTransaction();
     }
 
     void Check(const TString& query, const TString& yson) {
-        auto ctrl = Tx ? TTxControl::Tx(*Tx) : TTxControl::BeginTx(TxSettings);
+        auto ctrl = GetTxControl();
         auto result = Session.ExecuteQuery(query, ctrl).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         Tx = result.GetTransaction();
@@ -43,14 +62,14 @@ struct TTestTx {
     }
 
     void ExecCommit(const TString& query) {
-        auto ctrl = Tx ? TTxControl::Tx(*Tx).CommitTx() : TTxControl::BeginTx(TxSettings).CommitTx();
+        auto ctrl = GetTxControl().CommitTx();
         auto result = Session.ExecuteQuery(query, ctrl).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         Tx.reset();
     }
 
     void CheckCommit(const TString& query, const TString& yson) {
-        auto ctrl = Tx ? TTxControl::Tx(*Tx).CommitTx() : TTxControl::BeginTx(TxSettings).CommitTx();
+        auto ctrl = GetTxControl().CommitTx();
         auto result = Session.ExecuteQuery(query, ctrl).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         Tx.reset();
@@ -58,18 +77,20 @@ struct TTestTx {
     }
 
     void ExecAuto(const TString& query) {
+        UNIT_ASSERT(!InTransaction());
         auto result = Session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
     void CheckAuto(const TString& query, const TString& yson) {
+        UNIT_ASSERT(!InTransaction());
         auto result = Session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(yson, FormatResultSetYson(result.GetResultSet(0)));
     }
 
     EStatus ExecExpectError(const TString& query) {
-        auto ctrl = Tx ? TTxControl::Tx(*Tx) : TTxControl::BeginTx(TxSettings);
+        auto ctrl = GetTxControl();
         auto result = Session.ExecuteQuery(query, ctrl).ExtractValueSync();
         Tx.reset();
         return result.GetStatus();
@@ -90,6 +111,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
         tx.CheckCommit(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["inserted"]]])");
     }
@@ -121,6 +143,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "original");)");
+        tx.Begin();
         tx.Exec(R"(UPDATE KV2 SET Value = "updated" WHERE Key = 1u;)");
         tx.CheckCommit(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["updated"]]])");
     }
@@ -152,6 +175,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "original");)");
+        tx.Begin();
         tx.Exec(R"(DELETE FROM KV2 WHERE Key = 1u;)");
         tx.CheckCommit(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
     }
@@ -187,6 +211,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (3u, "C");)");
+        tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (2u, "B");)");
         tx.CheckCommit(R"(SELECT Key, Value FROM KV2 ORDER BY Key;)",
             R"([[1u;["A"]];[2u;["B"]];[3u;["C"]]])");
@@ -219,6 +244,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "A");)");
+        tx.Begin();
         tx.Exec(R"(UPDATE KV2 SET Value = "B" WHERE Key = 2u;)");
         tx.CheckCommit(R"(SELECT Key, Value FROM KV2 WHERE Value = "B";)", R"([[2u;["B"]]])");
     }
@@ -250,6 +276,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "B"), (3u, "C");)");
+        tx.Begin();
         tx.Exec(R"(DELETE FROM KV2 WHERE Key = 2u;)");
         tx.CheckCommit(R"(SELECT Key, Value FROM KV2 ORDER BY Key;)", R"([[1u;["A"]];[3u;["C"]]])");
     }
@@ -284,6 +311,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
         tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["inserted"]]])");
         tx.Exec(R"(UPDATE KV2 SET Value = "updated" WHERE Key = 1u;)");
@@ -316,6 +344,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
         tx.ExecCommit(R"(UPDATE KV2 SET Value = "updated" WHERE Key = 1u;)");
         tx.CheckAuto(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["updated"]]])");
@@ -347,6 +376,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
         tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["inserted"]]])");
         tx.Exec(R"(DELETE FROM KV2 WHERE Key = 1u;)");
@@ -379,6 +409,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
         tx.ExecCommit(R"(DELETE FROM KV2 WHERE Key = 1u;)");
         tx.CheckAuto(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
@@ -415,6 +446,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul);)");
+        tx.Begin();
         tx.Exec(R"(UPDATE Test SET Amount = 200ul WHERE Group = 1u AND Name = "A";)");
         tx.Check(R"(SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";)", R"([[[200u]]])");
         tx.Exec(R"(UPDATE Test SET Amount = Amount + 50ul WHERE Group = 1u AND Name = "A";)");
@@ -448,6 +480,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul);)");
+        tx.Begin();
         tx.Exec(R"(UPDATE Test SET Amount = 200ul WHERE Group = 1u AND Name = "A";)");
         // Amount + 50 must read 200 (written above), not 100 (original).
         tx.ExecCommit(R"(UPDATE Test SET Amount = Amount + 50ul WHERE Group = 1u AND Name = "A";)");
@@ -487,6 +520,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "B");)");
+        tx.Begin();
         tx.Exec(R"(UPDATE KV2 SET Value = "X" WHERE Key = 2u;)");
         tx.Check(R"(SELECT Key FROM KV2 WHERE Value = "X";)", R"([[2u]])");
         tx.Exec(R"(DELETE FROM KV2 WHERE Value = "X";)");
@@ -520,6 +554,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "B");)");
+        tx.Begin();
         tx.Exec(R"(UPDATE KV2 SET Value = "X" WHERE Key = 2u;)");
         tx.ExecCommit(R"(DELETE FROM KV2 WHERE Value = "X";)");
         tx.CheckAuto(R"(SELECT Key, Value FROM KV2 ORDER BY Key;)", R"([[1u;["A"]];[3u;["B"]]])");
@@ -558,6 +593,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "original");)");
+        tx.Begin();
         tx.Exec(R"(DELETE FROM KV2 WHERE Key = 1u;)");
         tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "new");)");
@@ -591,6 +627,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "original");)");
+        tx.Begin();
         tx.Exec(R"(DELETE FROM KV2 WHERE Key = 1u;)");
         tx.ExecCommit(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "new");)");
         tx.CheckAuto(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["new"]]])");
@@ -626,6 +663,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
         tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["inserted"]]])");
         tx.Exec(R"(UPDATE KV2 SET Value = "updated" WHERE Key = 1u;)");
@@ -660,6 +698,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
         tx.Exec(R"(UPDATE KV2 SET Value = "updated" WHERE Key = 1u;)");
         tx.ExecCommit(R"(DELETE FROM KV2 WHERE Key = 1u;)");
@@ -696,6 +735,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul), (2u, "B", 200ul);)");
+        tx.Begin();
         tx.Exec(R"(UPDATE Test SET Amount = Amount * 2ul WHERE Group = 2u AND Name = "B";)");
         // Read B's new value within the same transaction.
         tx.Check(R"(SELECT Amount FROM Test WHERE Group = 2u AND Name = "B";)", R"([[[400u]]])");
@@ -734,6 +774,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul), (2u, "B", 200ul);)");
+        tx.Begin();
         tx.Exec(R"(UPDATE Test SET Amount = Amount * 2ul WHERE Group = 2u AND Name = "B";)");
         // Read B's current (updated) value and write it into A in a single statement.
         tx.ExecCommit(R"(
@@ -773,6 +814,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");)");
         tx.CheckCommit(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)",
             R"([[1u;"A"]])");
@@ -803,6 +845,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "old_val");)");
+        tx.Begin();
         tx.Exec(R"(UPDATE Test2 SET Comment = "new_val" WHERE Group = 1u AND Name = "A";)");
         tx.Check(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "new_val";)",
             R"([[1u;"A"]])");
@@ -835,6 +878,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");)");
+        tx.Begin();
         tx.Exec(R"(DELETE FROM Test2 WHERE Group = 1u AND Name = "A";)");
         tx.CheckCommit(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)",
             R"([])");
@@ -868,6 +912,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "first");)");
         tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["first"]]])");
         UNIT_ASSERT_VALUES_EQUAL(
@@ -903,6 +948,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "first");)");
         UNIT_ASSERT_VALUES_EQUAL(
             tx.ExecExpectError(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "second");)"),
@@ -936,6 +982,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");)");
         tx.Check(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)",
             R"([[1u;"A"]])");
@@ -969,6 +1016,7 @@ public:
 protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Begin();
         tx.Exec(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");)");
         UNIT_ASSERT_VALUES_EQUAL(
             tx.ExecExpectError(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");)"),
@@ -1002,6 +1050,7 @@ protected:
     void DoExecute() override {
         TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
         tx.ExecAuto(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");)");
+        tx.Begin();
         tx.Exec(R"(DELETE FROM Test2 WHERE Group = 1u AND Name = "A";)");
         tx.Check(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)", R"([])");
         tx.Exec(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");)");

@@ -79,11 +79,11 @@ message TActorSystemConfig {
 
         optional EType Type = 1;
         optional uint32 Threads = 2;
+        optional uint64 SpinThreshold = 3;
+        optional TAffinity Affinity = 4;
         // Index into runtime CPU topology placement groups. Supported for BASIC executors and mutually exclusive with Affinity.
         // Placement only resolves this executor's affinity; multiple executors may use the same placement group.
         optional uint32 Placement = 27;
-        optional uint64 SpinThreshold = 3;
-        optional TAffinity Affinity = 4;
         optional uint32 InjectMadSquirrels = 5; // Obsolete, no more mad squirrels anymore
         optional string Name = 6;
         optional uint32 TimePerMailboxMicroSecs = 7;

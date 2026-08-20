@@ -194,6 +194,21 @@ TMapBuilder ActorSystemConfigBuilder() {
           .Optional()
           .Min(0);
         })
+        .Map("affinity", [](auto& affinity){
+          affinity
+          .Optional()
+          .Array("x", [](auto& cpus){
+            cpus
+            .Optional()
+            .Int64Item(nonNegative());
+          })
+          .String("cpu_list", [](auto& cpuList){
+            cpuList.Optional();
+          })
+          .String("exclude_cpu_list", [](auto& excludeCpuList){
+            excludeCpuList.Optional();
+          });
+        })
         .Int64("max_threads", [](auto& maxThreads){
           maxThreads
           .Optional()

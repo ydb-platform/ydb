@@ -1,390 +1,428 @@
-# MVP-1/MVP-2: нагрузочный hot path через NBS cells
+# MVP-1/MVP-2: нагрузочный hot path NBS1 → NBS2
 
-> Навигация: [обзор и решения](README.md), [RFC](rfc.md),
-> [архитектура](architecture.md),
-> [функциональный MVP](mvp_functional.md), [production](production.md).
+## 1. Метаданные и назначение
 
-## MVP-1: нагрузочный hot path через gRPC
+| Поле | Значение |
+|---|---|
+| Статус | Актуальный план разработки |
+| Создан | 2026-08-20 |
+| Архитектурная основа | [RFC интеграции NBS1 с NBS2](rfc3.md) |
+| Историческая версия | [Архивный план MVP-1/MVP-2](archive/mvp_benchmark.md), неактуален |
 
-### Цель MVP-1
+Этот документ превращает архитектуру `rfc3` в проверяемый план двух ранних
+этапов разработки:
 
-Максимально быстро получить корректный read/write путь из NBS1 endpoint через
-cells и classic NBS gRPC в настоящий nbs2 partition, чтобы подтвердить работоспособность и измерить gRPC hot path без ожидания полной control-plane реализации.
+1. MVP-1 строит и проверяет промежуточный end-to-end путь через штатный NBS1
+   cells gRPC transport.
+2. MVP-2 заменяет data transport на штатный cells RDMA и проверяет целевой
+   RDMA path.
 
-### Что получим
+`rfc3.md` является источником архитектурных решений. Этот план может сужать
+scope раннего прототипа, но не заменяет и не переопределяет RFC. Временные
+допущения MVP перечислены отдельно и не считаются изменением целевой
+архитектуры.
 
-- минимальный classic NBS facade внутри `ydbd`;
-- один вручную настроенный nbs2 disk с фиксированными `DiskId`, `CellId`,
-  `BlockSize`, `BlocksCount` и `PartitionTabletId`;
-- обязательные для cells gRPC методы `DescribeVolume`, `MountVolume`,
-  `UnmountVolume`, `ReadBlocks` и `WriteBlocks`;
-- синтетическую process-local session, достаточную для одного нагрузочного
-  стенда;
-- настоящий data path через nbs2 `IStorage`, tablet pipe и partition;
-- NBD/vhost endpoint, создаваемый существующим `StartEndpoint` в NBS1 cell;
-- baseline latency, IOPS, bandwidth, CPU и размер допустимого in-flight.
+## 2. Результат этапа и границы
 
-### Что останется за пределами MVP-1
+### 2.1. Целевой путь
 
-- RDMA data transport;
-- разрешение произвольного `DiskId` через SSProxy/SchemeShard;
-- несколько дисков и полноценный process-local mount registry;
-- гарантированное восстановление после restart/migration;
-- authoritative session state, writer generation и writer fencing;
-- `ZeroBlocks`/discard;
-- multi-host режим: несколько gateway hosts в одной nbs2 cell, любой из
-  которых cells может выбрать для обслуживания диска; MVP-1 использует один
-  host, а единые session state и writer generation, writer fencing и обработка
-  отказов нескольких hosts проверяются в production;
-- расширенная диагностика, security и production rollout.
+Оба MVP используют один пользовательский workflow и один NBS2 backend:
 
-Хардкодить разрешено control-plane данные и выполнять настройку вручную. Нельзя
-заменять настоящий cells wire contract или backend синтетическим benchmark
-protocol: результат должен измерять тот путь, который будет сохранён далее.
+```text
+StartEndpoint в NBS1
+    -> DescribeVolume и получение DataRoute на стороне NBS1
+    -> MountVolume по gRPC на выбранный NBS2 host
+    -> benchmark session adapter для одного клиента
+    -> vhost endpoint в NBS1
+    -> ReadBlocks/WriteBlocks через cells gRPC (MVP-1) или RDMA (MVP-2)
+    -> проверка фиксированных DiskId/SessionId
+    -> request pre-processing
+    -> FastPathService -> PBuffer/DDisk
+```
 
-### MVP-1-шаг 1. Зафиксировать контракты и встроить каркас gateway
+### 2.2. Архитектурные ограничения из RFC
 
-Цель:
+- пользовательский vhost endpoint всегда создаёт NBS1;
+- `DescribeVolume` выполняет NBS1; NBS2 frontend его не реализует;
+- `MountVolume` и `UnmountVolume` идут по gRPC;
+- gRPC и RDMA I/O направляются на тот же host, где локально работает нужная
+  NBS2 partition;
+- NBS2 frontend не пересылает I/O между hosts;
+- gRPC и RDMA используют общий backend, validation и error model;
+- write с неопределённым результатом не повторяется автоматически;
+- local auto-vhost NBS2 для управляемого NBS1 `fast_disk` выключен;
+- multi-partition `fast_disk` не поддерживается.
 
-Доказать, что classic NBS gRPC service можно собрать внутри `ydbd`, и заранее
-проверить dependency graph полного существующего RDMA target. RDMA server на
-этом шаге ещё не запускается, но compile/dependency spike выполняется до
-gRPC-замеров, чтобы риск MVP-2 обнаружился как можно раньше.
+RFC также задаёт целевую модель, в которой authoritative session, access mode
+и writer state хранит PartitionTablet, а каждый I/O проходит
+session/access/generation guard. MVP-1/2 не заменяет эту модель; временное
+упрощение session path описано в разделе 3.
 
-Логика:
+### 2.3. Границы MVP-1/2
+
+Scope этапов ограничивается:
+
+- одним заранее созданным `fast_disk` с одной partition и block size 4096;
+- одним NBS2 host, клиентом и writer;
+- операциями `ReadBlocks` и `WriteBlocks`;
+- закреплённой конфигурацией на время каждого прогона.
+
+Отдельный benchmark storage stub и упрощённый benchmark-only RDMA protocol не
+допускаются: они изменили бы исследуемый data path и не позволили бы проверить
+целевой workflow.
+
+## 3. Временные допущения MVP-1/2
+
+Следующие решения используются только для быстрого построения benchmark path.
+Они упрощают реализацию MVP, но не предлагают альтернатив целевой архитектуре
+из `rfc3`.
+
+| Временное допущение | Реализация в MVP | Почему не противоречит RFC |
+|---|---|---|
+| Статические disk metadata и `DataRoute` | Один диск и связанная пара gRPC/RDMA endpoints одного host задаются benchmark-конфигурацией на стороне NBS1 | `DescribeVolume` и выбор route остаются ответственностью NBS1; hardcode временно заменяет resolver, а не меняет его архитектуру |
+| Frontend внутри `ydbd` | Classic-compatible gRPC facade и RDMA target встраиваются в `ydbd` и выключены по умолчанию | Сохраняется логическая граница NBS2 frontend и strict host affinity; deployment choice ограничен MVP |
+| Process-local session | `MountVolume` возвращает один synthetic `SessionId`, который проверяется вместе с `DiskId` | Целевая authoritative session model остаётся в PartitionTablet; adapter не объявляется её заменой |
+| Закреплённый placement | Route не обновляется во время прогона, восстановление после migration/restart выполняется вручную | RFC прямо допускает закреплённый placement и ручное восстановление для раннего нагрузочного прототипа |
+| Один client/writer | Multi-client, access modes и writer handoff не входят в E2E-сценарий | MVP не меняет соответствующие гарантии RFC, а не реализует и не проверяет их |
+| `ZeroBlocks` выключен | Capability не рекламируется, запрос завершается контролируемой ошибкой без обращения к backend | RFC разрешает операцию после готовности внутреннего NBS2 path; MVP проверяет только read/write |
+
+## 4. MVP-1: gRPC hot path
+
+### 4.1. Цель и результат
+
+MVP-1 должен максимально быстро получить корректный read/write путь из
+созданного NBS1 endpoint через штатный cells gRPC transport в настоящий NBS2
+partition и подтвердить его end-to-end работоспособность.
+
+Результат MVP-1:
+
+- classic NBS-compatible NBS2 frontend;
+- NBS1-side metadata/route для одного заранее подготовленного `fast_disk`;
+- process-local session для одного заранее настроенного клиента и writer;
+- общий для gRPC/RDMA transport backend;
+- настоящий path до `FastPathService`, PBuffer и DDisk;
+- минимальный E2E correctness-набор для cells gRPC path.
+
+### 4.2. Шаг 0. Зафиксировать контракты MVP
+
+Цель: не начинать реализацию на неоднозначных wire и benchmark contracts.
+
+Действия:
+
+- записать точную classic NBS source revision для protobuf, RDMA wire protocol
+  и error codes;
+- определить регистрацию frontend внутри `ydbd`, gRPC/RDMA ports и
+  конфигурацию безопасного включения;
+- зафиксировать benchmark config для одного disk, partition и статического
+  `DataRoute`;
+- зафиксировать временный benchmark session contract: один `DiskId`, один
+  `SessionId`, один writer, без persistence и restart recovery;
+- определить минимальный error mapping и запрет автоматического retry write
+  после передачи запроса backend;
+- зафиксировать проверки range, alignment и payload size;
+- определить способ выключения local auto-vhost для benchmark `fast_disk`.
+
+Проверка:
+
+- все перечисленные контракты однозначно записаны и проверяемы;
+- список classic messages, fields и error codes проверяется compatibility
+  tests относительно одной source revision;
+- benchmark session явно помечена как временное допущение из раздела 3;
+- минимальный session contract покрывает mount, unmount и unknown/revoked
+  `SessionId` в рамках жизни frontend process.
+
+### 4.3. Шаг 1. Встроить каркас NBS2 frontend
+
+Цель: доказать build/runtime совместимость classic gRPC facade с выбранным
+NBS2 process и заранее снять dependency-риск RDMA.
 
 ```text
 classic NBS client/test
-    -> существующий YDB gRPC port
-    -> TBlockStoreService facade внутри ydbd
-    -> direct classic response
+    -> NBS2 gRPC endpoint
+    -> classic-compatible frontend
+    -> direct Ping/error response
 ```
 
 Действия:
 
-- зафиксировать source commit classic NBS gRPC proto, RDMA protocol и error
-  codes;
-- перенести минимальный protobuf/service API и определить таблицу ошибок;
-  - BlockStoreService
-  - ├── Ping
-  - ├── DescribeVolume
-  - ├── MountVolume
-  - ├── UnmountVolume
-  - ├── ReadBlocks
-  - ├── WriteBlocks
-- попробовать собрать внутри YDB tree существующий classic NBS RDMA target
-  целиком; если dependency graph окажется неприемлемым, зафиксировать причины
-  и использовать резервный вариант — минимальный wire-compatible adapter к
-  nbs2 `IStorage`;
-- добавить `GatewayConfig` с `Enabled`, `CellId` и benchmark-параметрами диска;
-- зарегистрировать direct-response
-  `NCloud.NBlockStore.NProto.TBlockStoreService` на существующем YDB gRPC
-  server;
-- реализовать `Ping` и каркас обязательных методов;
-- для `DescribeVolume` проверять
-  `Headers.CellId == GatewayConfig.CellId`;
-- не создавать отдельный gateway binary.
+- добавить выключенную по умолчанию конфигурацию frontend и ports;
+- зарегистрировать совместимое подмножество
+  `NCloud.NBlockStore.NProto.TBlockStoreService`;
+- реализовать `Ping` и каркас `MountVolume`, `UnmountVolume`, `ReadBlocks`,
+  `WriteBlocks`, а для `ZeroBlocks` — временную семантику из раздела 3;
+- не реализовывать `DescribeVolume` как runtime API NBS2 frontend; если общий
+  classic service требует handler, он возвращает контролируемую ошибку, а NBS1
+  не направляет в него этот RPC;
+- выполнить compile/dependency spike существующего classic RDMA target;
+- не добавлять отдельный backend path или отдельный benchmark protocol.
 
 Проверка:
 
-- `ydbd` собирается с выключенным gateway;
-- выключенный gateway не меняет обычный запуск YDB/nbs2;
-- classic `blockstore-client ping` получает direct classic response;
-- неправильный `Headers.CellId` даёт `E_REJECTED`;
-- wire/error compatibility подтверждена зафиксированной ревизией NBS;
-- полный existing RDMA target компилируется внутри YDB tree либо документирован
-  конкретный dependency blocker для перехода к минимальному adapter.
+- сборка и обычный запуск NBS2 не меняются при выключенном frontend;
+- classic client получает совместимый `Ping` response;
+- неподдерживаемые RPC завершаются контролируемой classic error;
+- `DescribeVolume` не обслуживается NBS2 frontend как runtime API;
+- зафиксирован перенос existing target либо конкретный dependency blocker и
+  граница минимального wire-compatible adapter.
 
-### MVP-1-шаг 2. Реализовать захардкоженный benchmark control plane
+### 4.4. Шаг 2. Подготовить один диск и закреплённый `DataRoute`
 
-Цель:
+Цель: дать NBS1 достаточно metadata для штатного `StartEndpoint`, не выдавая
+статическую benchmark route за production resolver.
 
-Дать NBS1 cells минимальные корректные ответы для одного заранее созданного
-диска, не реализуя пока resolver и полноценный session lifecycle.
+Действия:
 
-Логика:
+- создать один `fast_disk` с одной NBS2 partition и block size 4096;
+- подготовить на стороне NBS1 полный результат `DescribeVolume` для этого
+  диска и явный признак `fast_disk`;
+- задать связанную пару gRPC `Service` и gRPC `Storage` одного NBS2 host;
+- проверить соответствие route локальной `PartitionTabletId` и выбранному
+  NBS2 host;
+- для другого `DiskId` возвращать `E_NOT_FOUND`;
+- отсутствие/непонимание route завершать ошибкой без fallback в NBS1 storage;
+- включить параметры fixture в benchmark config.
+
+Проверка:
+
+- `DescribeVolume` выполняется NBS1, а не NBS2 frontend;
+- настроенный диск получает ожидаемую route, другой disk не маршрутизируется;
+- `Service` и `Storage` указывают на один NBS2 host;
+- route не включает меж-host forwarding и legacy fallback.
+
+### 4.5. Шаг 3. Реализовать временный benchmark session adapter
+
+Цель: дать cells минимальные согласованные mount/unmount ответы для одного
+заранее настроенного диска, не реализуя persistent session lifecycle и writer
+fencing.
 
 ```text
-DescribeVolume(configured DiskId)
-    -> TVolume из GatewayConfig
-
 MountVolume(configured DiskId)
-    -> синтетический SessionId в памяти gateway
+    -> process-local benchmark session
+    -> classic Volume + fixed/non-empty SessionId
+
+ReadBlocks/WriteBlocks
+    -> проверка configured DiskId и active SessionId
+    -> common NBS2 backend
 ```
 
 Действия:
 
-- задать в benchmark config `DiskId`, `BlockSize = 4096`, `BlocksCount`, media
-  kind и стабильный `PartitionTabletId`;
-- возвращать `E_NOT_FOUND` для другого `DiskId`;
-- реализовать `DescribeVolume`, `MountVolume` и `UnmountVolume` для
-  настроенного диска;
-- возвращать и проверять синтетический process-local `SessionId`;
-- после потери session возвращать `E_BS_INVALID_SESSION`;
-- отключить local auto-vhost endpoint nbs2; Данные в nbs2 пойдут через механизм cells.
-- не рекламировать discard/write-zeroes и возвращать `E_NOT_IMPLEMENTED` на
-  `ZeroBlocks`.
+- реализовать `MountVolume` и `UnmountVolume` для одного настроенного диска;
+- возвращать полный classic `Volume` и синтетический непустой `SessionId`;
+- хранить одну active session в памяти frontend;
+- проверять `DiskId` и `SessionId` до вызова common backend;
+- после unmount или потери process-local state возвращать
+  `E_BS_INVALID_SESSION`;
+- исключить multi-client, read-only и multi-writer session-сценарии;
+- не реализовывать persistence, writer generation/fencing и восстановление
+  session после restart;
+- сохранить transport-neutral backend boundary, чтобы на следующем этапе
+  заменить adapter целевым PartitionTablet guard без второго data path.
 
 Проверка:
 
-- настроенный disk успешно проходит describe/mount/unmount;
+- настроенный disk успешно проходит mount/unmount;
 - другой `DiskId` получает `E_NOT_FOUND`;
-- I/O с неизвестной или завершённой session получает
-  `E_BS_INVALID_SESSION`;
-- direct `ZeroBlocks` возвращает `E_NOT_IMPLEMENTED` без вызова
-  `ZeroBlocksLocal`;
-- local auto-vhost socket не создаётся.
+- unknown или завершённая session получает `E_BS_INVALID_SESSION` и не
+  достигает FastPath;
+- restart frontend теряет session, что явно является ожидаемым ограничением
+  MVP, а не проверкой recovery;
+- gRPC и RDMA adapter используют одну benchmark session check и один
+  common backend.
 
-### MVP-1-шаг 3. Провести gRPC в настоящий nbs2 data path
+### 4.6. Шаг 4. Провести gRPC I/O в настоящий NBS2 backend
 
-Цель:
-
-Реализовать измеряемый hot path от classic gRPC request до nbs2 partition,
-который затем без изменений backend будет использован RDMA target.
-
-Логика:
+Цель: реализовать общий path, который MVP-2 повторно использует без
+изменений.
 
 ```text
 ReadBlocks/WriteBlocks по gRPC
-    -> проверка DiskId/SessionId
-    -> общий gateway IStorage/backend adapter
-    -> tablet pipe по настроенному PartitionTabletId
-    -> partition/FastPathService
-    -> DDisk
+    -> common request adapter
+    -> benchmark DiskId/SessionId check
+    -> range/alignment/payload validation
+    -> FastPathService
+    -> PBuffer/DDisk
 ```
 
 Действия:
 
-- ввести общий для gRPC и будущего RDMA backend поверх nbs2 `IStorage`;
-- направлять serialized read/write по настроенному `PartitionTabletId` через стабильный tablet pipe в существующий `FastPathService` NBS2;
-- валидировать range, overflow, block alignment и точный размер payload до
-  fast path;
-- удерживать protobuf buffers и sglist до завершения запроса;
-- ограничить число и объём in-flight запросов, чтобы benchmark не измерял
-  unbounded queue;
-- при разрыве pipe возвращать `E_REJECTED` и не повторять неопределённый write;
-- до появления отдельной защиты исключить из workload конкурентные записи в
-  один и тот же блок.
+- ввести один transport-neutral backend contract для gRPC и RDMA;
+- реализовать зафиксированные validation и error mapping до вызова FastPath;
+- удерживать request buffers и sglist до terminal completion;
+- не повторять write после pipe/transport error с неопределённым результатом;
+- исключить из E2E-сценария конкурентные writes в пересекающиеся диапазоны;
+- не использовать storage stub, draft `Ydb.Nbs` I/O API или прямые partition
+  I/O команды как часть проверяемого path.
 
 Проверка:
 
-- pattern write/read через прямой classic gRPC client даёт одинаковый
-  checksum;
-- malformed request возвращает `E_ARGUMENT` без `Y_ABORT`;
-- write неправильного размера не меняет данные;
-- лимит in-flight является наблюдаемым и не допускает неограниченного роста
-  памяти;
-- data path использует настоящий nbs2 partition, а не benchmark storage stub.
+- direct classic gRPC pattern write/read даёт одинаковый checksum;
+- malformed range, overflow, alignment и payload size возвращают
+  контролируемую ошибку до FastPath;
+- неправильный write не изменяет данные;
+- unknown/revoked session не достигает backend;
+- трассировка/счётчики доказывают прохождение настоящего NBS2 partition path.
 
-### MVP-1-шаг 4. Выполнить E2E и нагрузочный baseline через NBS1 cells
+### 4.7. Шаг 5. Выполнить cells gRPC E2E
 
-Цель:
-
-Проверить hot path в требуемой пользовательской конфигурации: endpoint
-создаётся NBS1, disk находится через cells, data transport — gRPC.
-
-Логика:
-
-```text
-StartEndpoint в NBS1 cell-a
-    -> cells Describe/Mount по gRPC
-    -> NBD/vhost endpoint в NBS1
-    -> Read/Write по gRPC
-    -> общий nbs2 backend
-```
+Цель: проверить пользовательский workflow с endpoint в NBS1.
 
 Действия:
 
-- вручную настроить peer cell `nbs2` с
-  `Transport: CELL_DATA_TRANSPORT_GRPC`;
-- направить host/`GrpcPort` на gateway внутри `ydbd`;
-- выполнить `StartEndpoint` в legacy NBS cell-a;
-- провести correctness workload, затем latency/IOPS/bandwidth тесты;
-- сохранить размер I/O, queue depth, CPU allocation и конфигурацию стенда для
-  сравнения с RDMA.
+- настроить peer cell и закреплённый gRPC `DataRoute`;
+- выполнить `StartEndpoint` в NBS1;
+- подтвердить `DescribeVolume` на NBS1 и `MountVolume` на NBS2 host;
+- через созданный NBS1 endpoint выполнить pattern write/read и сравнить
+  checksum для нескольких offsets и I/O sizes;
+- проверить границы диска и неверный payload;
+- подтвердить по трассировке/счётчикам, что запросы прошли через cells gRPC в
+  настоящий NBS2 partition.
 
 Проверка:
 
-- `disk1` находится через peer cell и `StartEndpoint` завершается успешно;
-- NBD/vhost socket создаётся в NBS1, а не в nbs2 gateway;
-- checksum read/write совпадает;
-- в workflow не используются draft `Ydb.Nbs` I/O API и прямые `ydb-dstool nbs partition io` команды;
-- baseline воспроизводится с зафиксированными параметрами workload.
+- `StartEndpoint` завершается и создаёт vhost socket только в NBS1;
+- control и data проходят по штатному cells gRPC path;
+- checksum записанных и прочитанных данных совпадает;
+- local auto-vhost NBS2 не создаётся.
 
-## MVP-2: нагрузочный hot path через RDMA
+## 5. MVP-2: RDMA hot path
 
-### Цель MVP-2
+### 5.1. Цель и результат
 
-На том же диске, с тем же NBS1 endpoint workflow и тем же nbs2 backend заменить
-gRPC data transport на существующий cells RDMA transport и получить сравнимые
-нагрузочные результаты.
+MVP-2 на том же диске, временной benchmark session model, endpoint workflow и
+NBS2 backend меняет только data transport с gRPC на штатный cells RDMA.
+Control plane остаётся на gRPC.
 
-### Что получим
+### 5.2. Шаг 1. Добавить classic-compatible RDMA target
 
-- classic NBS RDMA target внутри того же `ydbd`;
-- точную совместимость с существующим NBS1 cells RDMA protocol;
-- gRPC control plane и RDMA `ReadBlocks`/`WriteBlocks`;
-- один общий nbs2 backend для gRPC и RDMA;
-- сопоставимые gRPC/RDMA latency, IOPS, bandwidth и CPU measurements.
-
-### Что останется за пределами MVP-2
-
-- resolver произвольных дисков;
-- полноценный process-local session registry для нескольких disks/clients;
-- гарантированное восстановление после рестартов и миграций;
-- authoritative session state, writer fencing, multi-host и production
-  failure semantics;
-- `ZeroBlocks`/discard, TLS/authentication и rollout.
-
-MVP-2 не вводит упрощённый benchmark-only RDMA protocol. NBS1 cells использует
-свой штатный `CELL_DATA_TRANSPORT_RDMA`; control plane остаётся на classic NBS
-gRPC, как предусмотрено существующей реализацией cells.
-
-### MVP-2-шаг 1. Добавить совместимый classic NBS RDMA target
-
-Цель:
-
-Принять RDMA-запросы существующего cells client внутри `ydbd` и передать их в
-тот же backend, который уже измерен через gRPC.
-
-Логика:
+Цель: принять штатный NBS1 cells RDMA protocol и передать запрос в backend,
+проверенный в MVP-1 через gRPC.
 
 ```text
 NBS1 cells RDMA client
     -> classic NBS RDMA wire protocol
-    -> RDMA target внутри ydbd
-    -> общий gateway IStorage/backend adapter
-    -> tablet pipe -> nbs2 partition
+    -> NBS2 RDMA adapter
+    -> та же benchmark session check и common backend
+    -> FastPathService
 ```
 
 Действия:
 
-- использовать зафиксированные classic NBS message IDs, request/response
-  layout и error semantics;
-- перенести существующий classic NBS RDMA target целиком, адаптировав его
-  storage boundary к общему nbs2 backend; минимальный wire-compatible adapter
-  использовать только при подтверждённом dependency blocker;
-- запустить RDMA target на configurable `RdmaPort` внутри `ydbd`;
-- адаптировать RDMA `ReadBlocksLocal`/`WriteBlocksLocal` к общему nbs2 backend;
-- применять те же проверки disk/session/range/payload и те же in-flight limits,
-  что в gRPC path;
-- возвращать контролируемую ошибку для `ZeroBlocks`, пока capability выключена;
-- не добавлять отдельный процесс или второй backend path.
+- использовать message IDs, wire layout и errors зафиксированной classic NBS
+  revision;
+- запустить RDMA endpoint в том же deployment boundary и на том же host, что
+  gRPC `Service`;
+- адаптировать RDMA read/write к общему backend без второго storage path;
+- повторно использовать проверку `DiskId`/`SessionId`, validation и error
+  mapping MVP-1;
+- применить временную семантику неподдерживаемого `ZeroBlocks` из раздела 3;
+- добавить protocol compatibility и malformed-message tests.
 
 Проверка:
 
-- штатный NBS1 RDMA client устанавливает соединение с target;
-- protocol/message compatibility подтверждена тестами с зафиксированной
-  ревизией NBS;
-- pattern write/read через RDMA даёт тот же checksum, что gRPC;
-- malformed и stale-session requests не достигают небезопасного fast path;
-- gRPC и RDMA используют один и тот же backend implementation.
+- штатный NBS1 RDMA client устанавливает соединение;
+- protocol tests подтверждают выбранную classic NBS revision;
+- RDMA pattern write/read даёт одинаковый checksum;
+- unknown/revoked session и malformed request не достигают FastPath;
+- gRPC и RDMA вызывают один и тот же backend и benchmark session check.
 
-### MVP-2-шаг 2. Переключить NBS1 cells на штатный RDMA transport
+### 5.3. Шаг 2. Переключить cells data transport на RDMA
 
-Цель:
-
-Собрать полный cells workflow, в котором control plane остаётся на gRPC, а
-data plane автоматически выбирается существующим cells как RDMA.
-
-Логика:
-
-```text
-StartEndpoint в NBS1 cell-a
-    -> Describe/Mount/Unmount: gRPC
-    -> Read/Write: RDMA
-    -> тот же nbs2 partition
-```
+Цель: собрать полный workflow с gRPC control plane и RDMA data plane.
 
 Действия:
 
-- указать gateway `GrpcPort` и валидный `RdmaPort` в host peer cell;
-- установить `Transport: CELL_DATA_TRANSPORT_RDMA`;
-- включить RDMA client origin NBS и задать `RdmaTransportWorkers > 0`;
-- повторно выполнить тот же `StartEndpoint`, не меняя gateway hardcodes и
+- добавить RDMA `Storage` в ту же закреплённую `DataRoute`;
+- проверить, что gRPC `Service` и RDMA `Storage` принадлежат одному host;
+- включить штатный `CELL_DATA_TRANSPORT_RDMA` и требуемые RDMA workers NBS1;
+- повторить `StartEndpoint` без изменения disk, benchmark session model и
   backend;
-- подтвердить по метрикам/логам, что control идёт по gRPC, data — по RDMA.
+- доказать по метрикам/логам transport split: mount/unmount по gRPC,
+  read/write по RDMA;
+- не добавлять молчаливый benchmark fallback на gRPC.
 
 Проверка:
 
-- `DescribeVolume`, `MountVolume` и `UnmountVolume` видны на gRPC facade;
-- `ReadBlocks`/`WriteBlocks` проходят через RDMA target;
-- NBD/vhost workload не требует изменений относительно MVP-1;
-- отключение RDMA target приводит к контролируемой транспортной ошибке, а не к
-  молчаливому переходу на другой benchmark path.
+- `MountVolume`/`UnmountVolume` видны на gRPC frontend;
+- `ReadBlocks`/`WriteBlocks` проходят через RDMA adapter;
+- тот же vhost E2E-сценарий работает без изменений;
+- недоступный RDMA target даёт контролируемую transport error и не вызывает
+  replay write или скрытый переход на другой path.
 
-### MVP-2-шаг 3. Сравнить gRPC и RDMA hot path
+### 5.4. Шаг 3. Выполнить cells RDMA E2E
 
-Цель:
-
-Получить данные, по которым можно оценить пределы nbs2 I/O и эффект замены
-транспорта, не смешивая его с изменением backend или workload.
-
-Логика:
-
-Сравниваются два cells-прогона с одинаковыми disk, data, I/O size, queue depth,
-CPU pinning и duration. Единственная целевая переменная — gRPC или RDMA data
-transport.
+Цель: подтвердить целевой workflow с gRPC control plane и RDMA data plane.
 
 Действия:
 
-- повторить correctness и нагрузочную матрицу MVP-1;
-- измерить latency percentiles, IOPS, bandwidth, CPU и ошибки/backpressure;
-- проверить несколько размеров I/O и queue depth в пределах заданных лимитов;
-- отдельно зафиксировать actor/interconnect/backend latency, чтобы не приписать
-  её RDMA transport;
-- сохранить конфигурацию и результаты обоих прогонов.
+- повторить через RDMA минимальный E2E correctness-набор MVP-1;
+- использовать тот же disk, benchmark session adapter и common backend;
+- подтвердить по трассировке/счётчикам, что mount/unmount идут по gRPC, а
+  read/write — по RDMA;
+- проверить controlled error при недоступном RDMA target без fallback на gRPC
+  и без автоматического replay write.
 
 Проверка:
 
-- оба транспорта проходят одинаковый checksum workload;
-- результаты воспроизводимы на одной конфигурации стенда;
-- нет unbounded in-flight state, memory growth или скрытых write retries;
-- различие gRPC/RDMA измерено на одном backend и допускает содержательное
-  сравнение.
+- RDMA pattern write/read даёт одинаковый checksum;
+- запросы проходят в настоящий NBS2 partition через RDMA adapter;
+- используется тот же common backend и benchmark session adapter, что в
+  промежуточном gRPC path;
+- нет скрытого fallback или автоматического replay write.
 
-### Условные оптимизации MVP-2
+## 6. E2E-проверки корректности
 
-Эти оптимизации не являются обязательными для первого прогона. Они выполняются
-только при подтверждённом измерениями bottleneck, после чего одинаковая
-нагрузочная матрица повторяется для gRPC и RDMA.
+Под correctness suite здесь понимается минимальный E2E-набор, доказывающий,
+что запросы проходят по нужному transport в настоящий NBS2 partition и
+сохраняют данные. Набор ограничен перечисленными ниже проверками.
 
-1. **Multi-queue vhost в NBS1.** Если один vhost executor NBS1 ограничивает
-   IOPS при наличии свободных CPU, перенести из nbs2 поддержку обслуживания
-   очередей одного endpoint несколькими executor threads. Направление
-   детализации: negotiation virtqueues, соотношение `VhostQueuesCount` и
-   `VhostThreadsCount`, affinity и потокобезопасность общего device handler.
-2. **Несколько I/O actors.** Если один gateway/partition adapter actor или его
-   mailbox ограничивает IOPS, реализовать несколько принимающих/отправляющих
-   I/O lanes над общим backend. Направление детализации: выбор шардирования,
-   несколько tablet-pipe/data adapters, bounded in-flight и сохранение порядка
-   пересекающихся writes.
+Минимальный набор:
 
-## Бинарные критерии успеха этапов
+- pattern write/read и checksum для нескольких диапазонов;
+- начало/конец диска и запрос за границей;
+- misaligned/overflow range и неверный payload size;
+- unknown и revoked benchmark session;
+- pipe/transport disconnect без автоматического replay write;
+- mount, I/O, unmount и последующее отклонение завершённой session;
+- подтверждение transport path: gRPC в MVP-1, gRPC control plane и RDMA data
+  plane в MVP-2.
 
-### MVP-1: cells + gRPC benchmark
+## 7. Бинарные критерии успеха
 
-MVP-1 считается достигнутым, если одновременно выполняются условия:
+### 7.1. MVP-1 завершён, если
 
-1. `StartEndpoint` выполняется в NBS1 cell и создаёт NBD/vhost endpoint.
-2. Control и read/write идут через штатный NBS1 cells gRPC transport.
-3. I/O достигает настоящего nbs2 partition через общий gateway backend.
-4. Pattern write/read даёт одинаковый checksum.
-5. В workflow не используются draft `Ydb.Nbs` I/O API, прямые `ydb-dstool nbs partition io` команды и benchmark storage stub.
-6. Зафиксирован воспроизводимый gRPC baseline с параметрами workload и стенда.
-7. Malformed requests и превышение in-flight limit дают контролируемые ошибки
-   без `Y_ABORT` и неограниченного роста памяти.
+1. NBS1 выполняет `StartEndpoint` и создаёт пользовательский vhost endpoint.
+2. NBS1 выполняет `DescribeVolume` и получает закреплённый `DataRoute` для
+   одного `fast_disk`; NBS2 frontend не реализует `DescribeVolume`.
+3. `MountVolume` возвращает synthetic `SessionId` для одного настроенного
+   клиента, а I/O с unknown/revoked session не достигает backend.
+4. Control и data идут через штатный cells gRPC transport на один NBS2 host.
+5. I/O достигает настоящего `FastPathService`/partition backend и проходит
+   pattern write/read с совпадающим checksum.
+6. Malformed и stale-session requests дают контролируемые ошибки без crash и
+   изменения данных.
+7. Synthetic session явно ограничена benchmark scope и не заявлена как
+   реализация целевой PartitionTablet session model.
+8. Нет storage stub, скрытого write replay, draft I/O API и прямых partition
+   I/O команд в проверяемом workflow.
 
-### MVP-2: cells + RDMA benchmark
+### 7.2. MVP-2 завершён, если
 
-MVP-2 считается достигнутым, если одновременно выполняются условия:
+1. Тот же `StartEndpoint`, disk, benchmark session adapter и E2E-сценарий
+   работают со штатным `CELL_DATA_TRANSPORT_RDMA`.
+2. Mount/unmount идут по gRPC, read/write — по RDMA на том же NBS2 host.
+3. RDMA adapter wire-compatible с выбранной classic NBS revision.
+4. gRPC и RDMA используют одну проверку `DiskId`/`SessionId`, validation и
+   common backend.
+5. RDMA проходит E2E correctness-набор с совпадающим checksum записанных и
+   прочитанных данных.
+6. Нет benchmark-only RDMA protocol, скрытого fallback или
+   автоматического replay write.
 
-1. Тот же `StartEndpoint` и workload работают с
-   `CELL_DATA_TRANSPORT_RDMA`.
-2. Describe/mount/unmount идут по gRPC, read/write — по штатному cells RDMA.
-3. RDMA target совместим с зафиксированной ревизией classic NBS protocol.
-4. gRPC и RDMA вызывают один и тот же nbs2 backend и работают с тем же disk.
-5. RDMA pattern write/read даёт правильный checksum.
-6. Получены сопоставимые gRPC/RDMA latency, IOPS, bandwidth и CPU measurements.
-7. Нет скрытых write retries, unbounded in-flight state или отдельного
-   benchmark-only RDMA protocol.
+## 8. За пределами MVP-1/2
+
+- динамический resolver, обновление `DataRoute`, recovery и multi-host;
+- persistent session/access/writer state в PartitionTablet и writer fencing;
+- `ZeroBlocks`;
+- TLS/authentication, observability, QoS и rollout;
+- multi-partition disks и произвольный block size.

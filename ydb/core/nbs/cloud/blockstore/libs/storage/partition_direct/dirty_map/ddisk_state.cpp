@@ -67,6 +67,8 @@ void TDDiskState::Save(PartitionDirect::NProto::TDDiskState* proto) const
 
 void TDDiskState::Load(const PartitionDirect::NProto::TDDiskState& proto)
 {
+    AheadField.Clear();
+    BehindField.Clear();
     LoadField(proto.GetAhead(), &AheadField);
     LoadField(proto.GetBehind(), &BehindField);
 }

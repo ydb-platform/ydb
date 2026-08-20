@@ -67,6 +67,13 @@ CFLAGS(
 
 END()
 
+
 RECURSE_FOR_TESTS(
     ut
+)
+
+RECURSE(
+    ascii_contains
+    benchmark
+    string_fast
 )

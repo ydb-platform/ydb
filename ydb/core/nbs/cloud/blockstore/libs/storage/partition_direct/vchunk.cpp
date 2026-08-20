@@ -844,13 +844,18 @@ void TVChunk::DoPersistDirtyMap()
         std::move(state));
     future.Subscribe(
         [weakSelf = weak_from_this(),
+         executor = Executor,
          stateGeneration]   //
         (const TFuture<void>& f)
         {
             Y_UNUSED(f);
-            if (auto self = weakSelf.lock()) {
-                self->OnDirtyMapPersisted(stateGeneration);
-            }
+            executor->ExecuteSimple(
+                [weakSelf = std::move(weakSelf), stateGeneration]()
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnDirtyMapPersisted(stateGeneration);
+                    }
+                });
         });
 }
 

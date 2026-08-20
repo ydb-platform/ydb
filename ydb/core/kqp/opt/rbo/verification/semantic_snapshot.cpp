@@ -568,7 +568,8 @@ void AuditExactScalarExpression(const NJson::TJsonValue& root) {
         };
 
         if (kind == "column" || kind == "bound" || kind == "void" ||
-            kind == "literal" || kind == "null")
+            kind == "literal" || kind == "null" ||
+            kind == "window_sum")
         {
             continue;
         }
@@ -6993,6 +6994,409 @@ NJson::TJsonValue ExportExpr(
     return result;
 }
 
+struct TWholePartitionWindowSum {
+    NJson::TJsonValue Expression;
+    TString Input;
+    TString PartitionBy;
+};
+
+void CheckExactWindowSafetyTree(const TExprNode& root) {
+    TVector<std::pair<const TExprNode*, size_t>> pending{{&root, 1}};
+    size_t nodes = 0;
+    while (!pending.empty()) {
+        const auto [node, depth] = pending.back();
+        pending.pop_back();
+        if (++nodes > 64 || depth > 16) {
+            Unsupported("Window sum source tree exceeds its audit limit");
+        }
+        CheckScalarSafetyMetadata(*node);
+        for (const auto& child : node->Children()) {
+            pending.emplace_back(child.Get(), depth + 1);
+        }
+    }
+}
+
+void CheckExactWindowAtom(
+    const TExprNode& node,
+    TStringBuf expected,
+    TStringBuf label)
+{
+    CheckScalarSafetyMetadata(node);
+    if (!node.IsAtom(expected)) {
+        Unsupported(TStringBuilder()
+            << label << " must be the exact atom " << expected);
+    }
+}
+
+TString AuditWholePartitionWindowDefinition(
+    const TExpression::TWindowMetadata& metadata,
+    TStringBuf windowName)
+{
+    if (!metadata.Definition) {
+        Unsupported("Window sum metadata has no source definition");
+    }
+    const auto& definition = *metadata.Definition;
+    CheckExactWindowSafetyTree(definition);
+    if (!definition.IsCallable("YqlWindow") ||
+        definition.ChildrenSize() != 5)
+    {
+        Unsupported("Window sum requires an exact five-child YqlWindow");
+    }
+
+    const auto& name = *definition.Child(0);
+    CheckScalarSafetyMetadata(name);
+    if (!name.IsAtom() || name.Content().empty() ||
+        name.Content() != windowName)
+    {
+        Unsupported("Window sum definition name does not match YqlAggWin");
+    }
+    CheckExactWindowAtom(
+        *definition.Child(1), "", "Window sum inherited window");
+
+    const auto& partitions = *definition.Child(2);
+    CheckScalarSafetyMetadata(partitions);
+    if (!partitions.IsList() || partitions.ChildrenSize() != 1) {
+        Unsupported("Window sum requires exactly one partition expression");
+    }
+    const auto& group = *partitions.Child(0);
+    CheckScalarSafetyMetadata(group);
+    if (!group.IsCallable("YqlGroup") || group.ChildrenSize() != 2) {
+        Unsupported("Window sum partition must be one exact YqlGroup");
+    }
+
+    const auto& rowDescriptor = *group.Child(0);
+    CheckScalarSafetyMetadata(rowDescriptor);
+    if (!rowDescriptor.IsCallable("StructType") ||
+        rowDescriptor.ChildrenSize() != 1)
+    {
+        Unsupported(
+            "Window sum partition row descriptor must contain one field");
+    }
+    const auto& field = *rowDescriptor.Child(0);
+    CheckScalarSafetyMetadata(field);
+    if (!field.IsList() || field.ChildrenSize() != 2 ||
+        !field.Child(0)->IsAtom() || field.Child(0)->Content().empty())
+    {
+        Unsupported(
+            "Window sum partition row field descriptor is not canonical");
+    }
+    CheckScalarSafetyMetadata(*field.Child(0));
+    bool fieldNullable = false;
+    if (DataTypeDescriptorName(*field.Child(1), &fieldNullable) != "String" ||
+        !fieldNullable)
+    {
+        Unsupported(
+            "Window sum partition row field must be Optional<String>");
+    }
+    const auto& describedRow =
+        DescribedType(rowDescriptor, "Window sum partition row descriptor");
+    if (describedRow.GetKind() != ETypeAnnotationKind::Struct) {
+        Unsupported("Window sum partition row descriptor must describe Struct");
+    }
+    const auto& rowItems =
+        describedRow.Cast<TStructExprType>()->GetItems();
+    if (rowItems.size() != 1 ||
+        rowItems.front()->GetName() != field.Child(0)->Content() ||
+        !IsExactDataAnnotation(
+            rowItems.front()->GetItemType(),
+            NUdf::EDataSlot::String,
+            true) ||
+        !IsSameAnnotation(
+            DescribedType(*field.Child(1), "Window sum partition row field"),
+            *rowItems.front()->GetItemType()))
+    {
+        Unsupported(
+            "Window sum partition row descriptor annotation disagrees");
+    }
+
+    const auto& lambda = *group.Child(1);
+    CheckScalarSafetyMetadata(lambda);
+    if (!lambda.IsLambda() || lambda.ChildrenSize() != 2 ||
+        !lambda.Child(0)->IsArguments() ||
+        lambda.Child(0)->ChildrenSize() != 1 ||
+        !lambda.Child(0)->Child(0)->IsArgument())
+    {
+        Unsupported("Window sum partition must be one unary lambda");
+    }
+    const auto& arguments = *lambda.Child(0);
+    const auto& argument = *arguments.Child(0);
+    CheckScalarSafetyMetadata(arguments);
+    CheckScalarSafetyMetadata(argument);
+    if (!argument.GetTypeAnn() ||
+        !IsSameAnnotation(*argument.GetTypeAnn(), describedRow))
+    {
+        Unsupported(
+            "Window sum partition lambda argument disagrees with its row "
+            "descriptor");
+    }
+
+    const auto& groupRef = *lambda.Child(1);
+    CheckScalarSafetyMetadata(groupRef);
+    if (!groupRef.IsCallable("YqlGroupRef") ||
+        groupRef.ChildrenSize() != 4 ||
+        groupRef.Child(0) != &argument ||
+        !groupRef.Child(2)->IsAtom() ||
+        !groupRef.Child(3)->IsAtom() ||
+        groupRef.Child(3)->Content().empty() ||
+        groupRef.Child(3)->Content() != field.Child(0)->Content())
+    {
+        Unsupported(
+            "Window sum partition must be one direct named YqlGroupRef");
+    }
+    CheckScalarSafetyMetadata(*groupRef.Child(2));
+    CheckScalarSafetyMetadata(*groupRef.Child(3));
+    const ui32 partitionIndex = ParseInteger<ui32>(
+        groupRef.Child(2)->Content(), "window partition index");
+    if (groupRef.Child(2)->Content() != ToString(partitionIndex) ||
+        partitionIndex != 3)
+    {
+        Unsupported(
+            "Window sum requires the audited canonical partition index 3");
+    }
+    bool descriptorNullable = false;
+    if (DataTypeDescriptorName(
+            *groupRef.Child(1), &descriptorNullable) != "String" ||
+        !descriptorNullable)
+    {
+        Unsupported(
+            "Window sum partition descriptor must be Optional<String>");
+    }
+    bool partitionNullable = false;
+    if (ScalarTypeName(groupRef, &partitionNullable) != "String" ||
+        !partitionNullable ||
+        !IsSameAnnotation(
+            DescribedType(
+                *groupRef.Child(1),
+                "Window sum partition descriptor"),
+            *groupRef.GetTypeAnn()))
+    {
+        Unsupported(
+            "Window sum partition reference must be Optional<String>");
+    }
+
+    const auto& order = *definition.Child(3);
+    CheckScalarSafetyMetadata(order);
+    if (!order.IsList() || order.ChildrenSize() != 0) {
+        Unsupported("Window sum does not admit window ordering");
+    }
+
+    const auto& frame = *definition.Child(4);
+    CheckScalarSafetyMetadata(frame);
+    if (!frame.IsList() || frame.ChildrenSize() != 3) {
+        Unsupported(
+            "Window sum requires one exact whole-partition ROWS frame");
+    }
+    const std::array<std::pair<TStringBuf, TStringBuf>, 3> expectedFrame = {{
+        {"type", "rows"},
+        {"from", "up"},
+        {"to", "uf"},
+    }};
+    for (size_t index = 0; index < expectedFrame.size(); ++index) {
+        const auto& setting = *frame.Child(index);
+        CheckScalarSafetyMetadata(setting);
+        if (!setting.IsList() || setting.ChildrenSize() != 2) {
+            Unsupported("Window sum has a malformed frame setting");
+        }
+        CheckExactWindowAtom(
+            *setting.Child(0),
+            expectedFrame[index].first,
+            "Window sum frame setting name");
+        CheckExactWindowAtom(
+            *setting.Child(1),
+            expectedFrame[index].second,
+            "Window sum frame setting value");
+    }
+
+    TInfoUnit partition(TString(groupRef.Child(3)->Content()));
+    for (const auto& renameMap : metadata.RenameHistory) {
+        if (const auto it = renameMap.find(partition);
+            it != renameMap.end())
+        {
+            partition = it->second;
+        }
+    }
+    const TString result = partition.GetFullName();
+    if (result.empty()) {
+        Unsupported("Window sum resolved partition name is empty");
+    }
+    return result;
+}
+
+TString AuditWindowMember(
+    const TExprNode& member,
+    const TExprNode* rowArgument,
+    const THashSet<TString>& visibleColumns,
+    TStringBuf label)
+{
+    CheckScalarSafetyMetadata(member);
+    bool nullable = false;
+    if (!member.IsCallable("Member") || member.ChildrenSize() != 2 ||
+        member.Child(0) != rowArgument || !member.Child(1)->IsAtom() ||
+        ScalarTypeName(member, &nullable) != "Decimal(35,2)" || !nullable)
+    {
+        Unsupported(TStringBuilder()
+            << label
+            << " must be one direct Optional<Decimal(35,2)> member");
+    }
+    CheckScalarSafetyMetadata(*member.Child(1));
+    const TString result(member.Child(1)->Content());
+    if (!visibleColumns.contains(result)) {
+        Unsupported(TStringBuilder()
+            << label << " references unavailable column " << result);
+    }
+    return result;
+}
+
+TWholePartitionWindowSum ExportWholePartitionWindowSum(
+    const TExpression& expression,
+    const THashSet<TString>& visibleColumns)
+{
+    const auto& metadata = expression.GetWindowMetadata();
+    if (!metadata) {
+        Unsupported("Window sum expression has no source metadata");
+    }
+    if (!expression.Node || !expression.Node->IsLambda() ||
+        expression.Node->ChildrenSize() != 2 ||
+        !expression.Node->Child(0)->IsArguments() ||
+        expression.Node->Child(0)->ChildrenSize() != 1 ||
+        !expression.Node->Child(0)->Child(0)->IsArgument())
+    {
+        Unsupported("Window sum is not a one-body row lambda");
+    }
+    const auto* rowArgument = expression.Node->Child(0)->Child(0);
+    CheckScalarSafetyMetadata(*expression.Node);
+    CheckScalarSafetyMetadata(*expression.Node->Child(0));
+    CheckScalarSafetyMetadata(*rowArgument);
+
+    const auto& root = *expression.GetExpressionBody();
+    CheckExactWindowSafetyTree(root);
+    if (!root.IsCallable("DecimalDiv") || root.ChildrenSize() != 2 ||
+        !root.Child(1)->IsCallable("YqlAggWin"))
+    {
+        Unsupported(
+            "Window sum ratio must divide directly by one YqlAggWin result");
+    }
+    const auto& window = *root.Child(1);
+    CheckScalarSafetyMetadata(window);
+    bool windowNullable = false;
+    if (!window.IsCallable("YqlAggWin") || window.ChildrenSize() != 5 ||
+        ScalarTypeName(window, &windowNullable) != "Decimal(35,2)" ||
+        !windowNullable)
+    {
+        Unsupported(
+            "Window sum requires an Optional<Decimal(35,2)> YqlAggWin");
+    }
+
+    const auto& factory = *window.Child(0);
+    CheckScalarSafetyMetadata(factory);
+    if (!factory.IsCallable("YqlWinFactory") ||
+        factory.ChildrenSize() != 1 ||
+        !factory.Child(0)->IsAtom("sum") ||
+        !factory.GetTypeAnn() ||
+        factory.GetTypeAnn()->GetKind() != ETypeAnnotationKind::Unit)
+    {
+        Unsupported("Window sum requires the exact sum YqlWinFactory");
+    }
+    CheckScalarSafetyMetadata(*factory.Child(0));
+
+    const auto& name = *window.Child(1);
+    CheckScalarSafetyMetadata(name);
+    if (!name.IsAtom() || name.Content().empty()) {
+        Unsupported("Window sum has an invalid window name");
+    }
+
+    const auto& options = *window.Child(2);
+    CheckScalarSafetyMetadata(options);
+    if (!options.IsList() || options.ChildrenSize() != 0) {
+        Unsupported("Window sum does not admit aggregation options");
+    }
+
+    bool descriptorNullable = false;
+    if (DataTypeDescriptorName(
+            *window.Child(3), &descriptorNullable) != "Decimal(35,2)" ||
+        !descriptorNullable ||
+        !IsSameAnnotation(
+            DescribedType(*window.Child(3), "Window sum result descriptor"),
+            *window.GetTypeAnn()))
+    {
+        Unsupported(
+            "Window sum descriptor must exactly match Optional<Decimal(35,2)>");
+    }
+
+    const TString input = AuditWindowMember(
+        *window.Child(4), rowArgument, visibleColumns, "Window sum input");
+    const TString partition = AuditWholePartitionWindowDefinition(
+        *metadata, name.Content());
+
+    const auto rootSignature = CheckDecimalArithmeticCallable(root);
+    if (rootSignature.ResultType != "Decimal(35,2)" ||
+        !rootSignature.ResultNullable)
+    {
+        Unsupported(
+            "Window sum ratio must return Optional<Decimal(35,2)>");
+    }
+
+    const auto& numerator = *root.Child(0);
+    CheckScalarSafetyMetadata(numerator);
+    if (!numerator.IsCallable("DecimalMul") ||
+        numerator.ChildrenSize() != 2)
+    {
+        Unsupported(
+            "Window sum ratio numerator must be one DecimalMul");
+    }
+    const auto numeratorSignature =
+        CheckDecimalArithmeticCallable(numerator);
+    if (numeratorSignature.ResultType != "Decimal(35,2)" ||
+        !numeratorSignature.ResultNullable ||
+        AuditWindowMember(
+            *numerator.Child(0),
+            rowArgument,
+            visibleColumns,
+            "Window sum ratio numerator") != input)
+    {
+        Unsupported(
+            "Window sum ratio numerator must reuse its aggregate input");
+    }
+    if (!numerator.Child(1)->IsCallable("Int32") ||
+        numerator.Child(1)->ChildrenSize() != 1 ||
+        !numerator.Child(1)->Child(0)->IsAtom("100") ||
+        !IsExactDataAnnotation(
+            numerator.Child(1)->GetTypeAnn(),
+            NUdf::EDataSlot::Int32,
+            false))
+    {
+        Unsupported(
+            "Window sum ratio multiplier must be exact non-null Int32(100)");
+    }
+    LiteralExpr(*numerator.Child(1));
+
+    TExactScalarBudget budget;
+    budget.Charge(1);
+    auto windowExpr = JsonMap();
+    windowExpr["kind"] = "window_sum";
+    windowExpr["input"] = input;
+    windowExpr["partition_by"] = partition;
+    windowExpr["type"] = "Decimal(35,2)";
+    windowExpr["nullable"] = true;
+    budget.Charge(2);
+
+    auto result = BinaryExpr(
+        "div",
+        ExportExprNode(
+            numerator,
+            rowArgument,
+            visibleColumns,
+            {},
+            budget,
+            2,
+            2),
+        std::move(windowExpr));
+    result["type"] = rootSignature.ResultType;
+    result["nullable"] = rootSignature.ResultNullable;
+    AuditExactScalarExpression(result);
+    return {std::move(result), input, partition};
+}
+
 std::optional<TString> TryExtractErrorOnNullStringUnwrap(
     const TExpression& expression,
     const THashSet<TString>& physicalInputColumns)
@@ -8131,6 +8535,7 @@ public:
         }
         RootId = ExportNode(Root.GetInput());
         ValidateCheckedConcatProjectionTopology();
+        ValidateWindowSumProjectionTopology();
         ValidateErrorOnNullProjectionTopology();
         const auto rootNames = OutputNames(*Root.GetInput());
         auto output = JsonArray();
@@ -9412,6 +9817,177 @@ private:
             }
         }
         return false;
+    }
+
+    void CertifyWindowSumProjection(
+        TOpMap& map,
+        const TWholePartitionWindowSum& window)
+    {
+        if (map.GetInput()->GetKind() != EOperator::Aggregate) {
+            Unsupported(
+                "Window sum Project must directly consume an Aggregate");
+        }
+        auto& aggregate =
+            static_cast<TOpAggregate&>(*map.GetInput());
+        if ((aggregate.GetAggregationPhase() != EOpPhase::Undefined &&
+             aggregate.GetAggregationPhase() != EOpPhase::Final) ||
+            aggregate.IsDistinctAll() ||
+            aggregate.GetKeyColumns().empty())
+        {
+            Unsupported(
+                "Window sum requires one grouped logical or final Aggregate");
+        }
+
+        const auto partitionCount = std::count_if(
+            aggregate.GetKeyColumns().begin(),
+            aggregate.GetKeyColumns().end(),
+            [&](const TInfoUnit& key) {
+                return key.GetFullName() == window.PartitionBy;
+            });
+        if (partitionCount != 1) {
+            Unsupported(
+                "Window sum partition must be one direct Aggregate key");
+        }
+
+        const auto traits = aggregate.GetAggregationTraits();
+        const auto inputCount = std::count_if(
+            traits.begin(),
+            traits.end(),
+            [&](const TOpAggregationTraits& trait) {
+                return trait.ResultColName.GetFullName() == window.Input;
+            });
+        if (inputCount != 1) {
+            Unsupported(
+                "Window sum input must be one direct Aggregate output");
+        }
+        const auto& trait = *std::find_if(
+            traits.begin(),
+            traits.end(),
+            [&](const TOpAggregationTraits& candidate) {
+                return candidate.ResultColName.GetFullName() == window.Input;
+            });
+        if (trait.AggFunction != "sum" || trait.Distinct || trait.Unwrap) {
+            Unsupported(
+                "Window sum input must be one plain Aggregate sum output");
+        }
+
+        if (aggregate.GetAggregationPhase() == EOpPhase::Final) {
+            if (aggregate.GetInput()->GetKind() != EOperator::Aggregate) {
+                Unsupported(
+                    "Final window sum Aggregate must directly consume its "
+                    "intermediate Aggregate");
+            }
+            auto& intermediate =
+                static_cast<TOpAggregate&>(*aggregate.GetInput());
+            if (intermediate.GetAggregationPhase() != EOpPhase::Intermediate ||
+                intermediate.IsDistinctAll() ||
+                intermediate.GetKeyColumns() != aggregate.GetKeyColumns())
+            {
+                Unsupported(
+                    "Final window sum Aggregate must preserve one matching "
+                    "intermediate grouped SUM");
+            }
+            const TString state = trait.OriginalColName.GetFullName();
+            const auto intermediateTraits =
+                intermediate.GetAggregationTraits();
+            const auto sourceCount = std::count_if(
+                intermediateTraits.begin(),
+                intermediateTraits.end(),
+                [&](const TOpAggregationTraits& candidate) {
+                    return candidate.ResultColName.GetFullName() == state &&
+                        candidate.AggFunction == "sum" &&
+                        !candidate.Distinct && !candidate.Unwrap;
+                });
+            const auto finalUseCount = std::count_if(
+                traits.begin(),
+                traits.end(),
+                [&](const TOpAggregationTraits& candidate) {
+                    return candidate.OriginalColName.GetFullName() == state;
+                });
+            const auto stateType = ExactType(OutputType(intermediate, state));
+            if (sourceCount != 1 || finalUseCount != 1 ||
+                stateType.Name != "Decimal(35,2)" || !stateType.Nullable)
+            {
+                Unsupported(
+                    "Final window sum must consume exactly one matching "
+                    "Optional<Decimal(35,2)> intermediate SUM state");
+            }
+        }
+
+        const auto partitionType =
+            ExactType(OutputType(aggregate, window.PartitionBy));
+        const auto inputType =
+            ExactType(OutputType(aggregate, window.Input));
+        if (partitionType.Name != "String" || !partitionType.Nullable ||
+            inputType.Name != "Decimal(35,2)" || !inputType.Nullable)
+        {
+            Unsupported(
+                "Window sum Aggregate key/input types disagree with the "
+                "audited expression");
+        }
+    }
+
+    void ValidateWindowSumProjectionTopology() {
+        size_t markedCount = 0;
+        for (const auto& [_, outputs] : WindowSumProjectionOutputs) {
+            markedCount += outputs.size();
+        }
+        if (markedCount == 0) {
+            return;
+        }
+        if (markedCount != 1 || !Subplans.empty()) {
+            Unsupported(
+                "Window sum requires exactly one main projection and no "
+                "subplans");
+        }
+
+        THashSet<const IOperator*> mainNodes;
+        THashMap<const IOperator*, TVector<IOperator*>> parents;
+        VisitOperators(
+            Root.GetInput(),
+            mainNodes,
+            [&](IOperator& op) {
+                for (const auto& child : op.GetChildren()) {
+                    parents[child.Get()].push_back(&op);
+                }
+            });
+
+        const auto& [producer, outputs] =
+            *WindowSumProjectionOutputs.begin();
+        if (!mainNodes.contains(producer) || outputs.size() != 1 ||
+            producer->GetInput()->GetKind() != EOperator::Aggregate)
+        {
+            Unsupported(
+                "Window sum must be a private main-plan Project");
+        }
+        auto* aggregate = producer->GetInput().Get();
+        const auto* aggregateConsumers = parents.FindPtr(aggregate);
+        if (!aggregateConsumers || aggregateConsumers->size() != 1 ||
+            aggregateConsumers->front() != producer)
+        {
+            Unsupported(
+                "Window sum Aggregate must have exactly one direct Project "
+                "consumer");
+        }
+        auto* aggregateOp = static_cast<TOpAggregate*>(aggregate);
+        if (aggregateOp->GetAggregationPhase() == EOpPhase::Final)
+        {
+            const auto* intermediate = aggregateOp->GetInput().Get();
+            const auto* intermediateConsumers = parents.FindPtr(intermediate);
+            if (!intermediateConsumers ||
+                intermediateConsumers->size() != 1 ||
+                intermediateConsumers->front() != aggregate)
+            {
+                Unsupported(
+                    "Window sum intermediate Aggregate must have exactly "
+                    "one direct final Aggregate consumer");
+            }
+        }
+        if (const auto* consumers = parents.FindPtr(producer);
+            consumers && consumers->size() > 1)
+        {
+            Unsupported("Window sum Project may not fan out");
+        }
     }
 
     void ValidateCheckedConcatProjectionTopology() {
@@ -11234,6 +11810,14 @@ private:
                     } else if (element.IsRename()) {
                         column["expression"] =
                             ColumnExpr(element.GetRename().GetFullName());
+                    } else if (element.GetExpression().GetWindowMetadata()) {
+                        auto window = ExportWholePartitionWindowSum(
+                            element.GetExpression(),
+                            inputNames);
+                        CertifyWindowSumProjection(map, window);
+                        WindowSumProjectionOutputs[&map].insert(output);
+                        column["expression"] =
+                            std::move(window.Expression);
                     } else if (auto exactUnwrap =
                             TryExportErrorOnNullStringProjection(
                                 map,
@@ -11846,6 +12430,8 @@ private:
         CertifiedDecimalAveragePads;
     THashMap<const TOpMap*, THashSet<TString>>
         CheckedConcatProjectionOutputs;
+    THashMap<TOpMap*, THashSet<TString>>
+        WindowSumProjectionOutputs;
     THashMap<const IOperator*, TVector<IOperator*>>
         MainConsumers;
     THashMap<const IOperator*, TString> Ids;

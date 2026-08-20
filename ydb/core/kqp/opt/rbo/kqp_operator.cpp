@@ -422,7 +422,7 @@ TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
 
     for (const auto& mapElement : MapElements) {
         auto expression = mapElement.GetExpression();
-        auto vars = TExpression(expression.Node, expression.Ctx, &props).GetInputIUs(true, false);
+        auto vars = expression.WithNode(expression.Node, &props).GetInputIUs(true, false);
         for (const auto& iu : vars) {
             if (iu.IsSubplanContext()) {
                 subplanIUs.push_back(iu);
@@ -619,6 +619,9 @@ void TOpFilter::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ct
 }
 
 TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {
+    Y_ENSURE(
+        !FilterExpr.HasWindowSemantics(),
+        "A relational window expression cannot be used as a Filter predicate");
     return TExpression(FilterExpr.Node, FilterExpr.Ctx, &props).GetInputIUs(true, true);
 }
 

@@ -21,7 +21,19 @@ bool CanPushLimitToRead(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePt
 
 bool CanPushLimitOverInput(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {
     const auto kind = input->GetKind();
-    return (kind == EOperator::Map && input->IsSingleConsumer() && limit->Props.StageId == input->Props.StageId);
+    if (kind != EOperator::Map || !input->IsSingleConsumer() ||
+        limit->Props.StageId != input->Props.StageId)
+    {
+        return false;
+    }
+
+    const auto map = CastOperator<TOpMap>(input);
+    return std::none_of(
+        map->GetMapElements().begin(),
+        map->GetMapElements().end(),
+        [](const TMapElement& element) {
+            return element.GetExpression().HasWindowSemantics();
+        });
 }
 
 bool CanPushLimitToStage(const TIntrusivePtr<TOpLimit>& limit, const TIntrusivePtr<IOperator>& input) {

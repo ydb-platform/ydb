@@ -71,6 +71,15 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
 
     if (input->Kind == EOperator::Map) {
         auto map = CastOperator<TOpMap>(input);
+        if (std::any_of(
+                map->MapElements.begin(),
+                map->MapElements.end(),
+                [](const TMapElement& mapElement) {
+                    return mapElement.GetExpression().HasWindowSemantics();
+                })) {
+            return false;
+        }
+
         const auto newMapInputIUs = remainingFilter->GetOutputIUs();
 
         for (const auto& mapEl : map->MapElements) {

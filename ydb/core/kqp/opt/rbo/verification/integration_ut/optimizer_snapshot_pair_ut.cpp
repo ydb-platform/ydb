@@ -185,6 +185,27 @@ void CollectConjuncts(
     }
 }
 
+const NJson::TJsonValue& UnwrapFilterTruth(
+    const NJson::TJsonValue& expression)
+{
+    UNIT_ASSERT(expression["kind"].IsString());
+    if (expression["kind"].GetStringSafe() != "if_present") {
+        return expression;
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(expression["type"].GetStringSafe(), "Bool");
+    UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+    const auto& present = expression["present"];
+    UNIT_ASSERT_VALUES_EQUAL(present["kind"].GetStringSafe(), "bound");
+    UNIT_ASSERT_VALUES_EQUAL(present["depth"].GetUIntegerSafe(), 0);
+    const auto& missing = expression["missing"];
+    UNIT_ASSERT_VALUES_EQUAL(missing["kind"].GetStringSafe(), "literal");
+    UNIT_ASSERT_VALUES_EQUAL(missing["type"].GetStringSafe(), "Bool");
+    UNIT_ASSERT(!missing["value"].GetBooleanSafe());
+    UNIT_ASSERT(expression["optional"]["kind"].IsString());
+    return expression["optional"];
+}
+
 void CollectExpressions(
     const NJson::TJsonValue& value,
     TStringBuf kind,
@@ -2795,7 +2816,8 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(conjuncts.size(), 3);
         THashSet<TString> kinds;
         THashSet<TString> columns;
-        for (const auto& conjunct : conjuncts) {
+        for (const auto& wrappedConjunct : conjuncts) {
+            const auto& conjunct = UnwrapFilterTruth(wrappedConjunct);
             const TString kind = conjunct["kind"].GetStringSafe();
             if (kind == "not") {
                 const auto& exists = conjunct["arg"];
@@ -3428,13 +3450,14 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(scansWithPredicate, 3);
         UNIT_ASSERT_VALUES_EQUAL(pushedConjuncts.size(), 4);
         THashSet<TString> pushedColumns;
-        for (const auto* predicate : pushedConjuncts) {
-            UNIT_ASSERT_VALUES_EQUAL((*predicate)["left"]["kind"].GetStringSafe(), "column");
-            UNIT_ASSERT_VALUES_EQUAL((*predicate)["right"]["kind"].GetStringSafe(), "literal");
-            const TString column = (*predicate)["left"]["column"].GetStringSafe();
+        for (const auto* wrappedPredicate : pushedConjuncts) {
+            const auto& predicate = UnwrapFilterTruth(*wrappedPredicate);
+            UNIT_ASSERT_VALUES_EQUAL(predicate["left"]["kind"].GetStringSafe(), "column");
+            UNIT_ASSERT_VALUES_EQUAL(predicate["right"]["kind"].GetStringSafe(), "literal");
+            const TString column = predicate["left"]["column"].GetStringSafe();
             UNIT_ASSERT(pushedColumns.insert(column).second);
-            const TString kind = (*predicate)["kind"].GetStringSafe();
-            const auto& literal = (*predicate)["right"];
+            const TString kind = predicate["kind"].GetStringSafe();
+            const auto& literal = predicate["right"];
             if (column == "time_dim.t_hour") {
                 UNIT_ASSERT_VALUES_EQUAL(kind, "eq");
                 UNIT_ASSERT_VALUES_EQUAL(literal["type"].GetStringSafe(), "Int32");

@@ -5801,6 +5801,430 @@ TSemanticSnapshotExportResult ExportDecimalAverageCarrier(
     return ExportSemanticSnapshotV1(root, ctx.RboCtx);
 }
 
+enum class EWholePartitionWindowSumMutation {
+    None,
+    MissingMetadata,
+    DefinitionName,
+    Factory,
+    Options,
+    Frame,
+    Order,
+    Partition,
+    ResultType,
+    StaleRename,
+    NonAggregateInput,
+    AggregateFanout,
+    Split,
+    SplitIntermediatePhase,
+    SplitKeyMismatch,
+    SplitStateProducer,
+    SplitStateUse,
+};
+
+TExprNode::TPtr WholePartitionWindowDefinition(
+    TExportTestContext& ctx,
+    EWholePartitionWindowSumMutation mutation,
+    TStringBuf partition)
+{
+    const auto pos = TPositionHandle();
+    const auto* stringType = ScalarType(ctx, NUdf::EDataSlot::String);
+    const auto* optionalStringType =
+        ScalarType(ctx, NUdf::EDataSlot::String, true);
+    const TString sourcePartition =
+        mutation == EWholePartitionWindowSumMutation::Partition
+            ? "a.missing"
+            : TString(partition);
+    const auto* rowType = ctx.ExprCtx.MakeType<TStructExprType>(
+        TVector<const TItemExprType*>{
+            ctx.ExprCtx.MakeType<TItemExprType>(
+                sourcePartition,
+                optionalStringType),
+        });
+
+    auto row = ctx.ExprCtx.NewArgument(pos, "window_row");
+    row->SetTypeAnn(rowType);
+    auto groupRef = TypedCallable(
+        ctx,
+        "YqlGroupRef",
+        {
+            row,
+            OptionalDataTypeDescriptor(
+                ctx,
+                "String",
+                stringType,
+                optionalStringType),
+            ctx.ExprCtx.NewAtom(pos, "3"),
+            ctx.ExprCtx.NewAtom(pos, sourcePartition),
+        },
+        optionalStringType);
+    auto rowDescriptor = TypedCallable(
+        ctx,
+        "StructType",
+        {
+            ctx.ExprCtx.NewList(
+                pos,
+                {
+                    ctx.ExprCtx.NewAtom(pos, sourcePartition),
+                    OptionalDataTypeDescriptor(
+                        ctx,
+                        "String",
+                        stringType,
+                        optionalStringType),
+                }),
+        },
+        ctx.ExprCtx.MakeType<TTypeExprType>(rowType));
+    auto group = TypedCallable(
+        ctx,
+        "YqlGroup",
+        {
+            std::move(rowDescriptor),
+            ctx.ExprCtx.NewLambda(
+                pos,
+                ctx.ExprCtx.NewArguments(pos, {row}),
+                std::move(groupRef)),
+        },
+        nullptr);
+
+    TExprNode::TListType order;
+    if (mutation == EWholePartitionWindowSumMutation::Order) {
+        order.push_back(ctx.ExprCtx.NewAtom(pos, "unsupported"));
+    }
+
+    const auto frameSetting = [&](TStringBuf name, TStringBuf value) {
+        return ctx.ExprCtx.NewList(
+            pos,
+            {
+                ctx.ExprCtx.NewAtom(pos, name),
+                ctx.ExprCtx.NewAtom(pos, value),
+            });
+    };
+    auto frame = ctx.ExprCtx.NewList(
+        pos,
+        {
+            frameSetting("type", "rows"),
+            frameSetting("from", "up"),
+            frameSetting(
+                "to",
+                mutation == EWholePartitionWindowSumMutation::Frame
+                    ? TStringBuf("cf")
+                    : TStringBuf("uf")),
+        });
+
+    return TypedCallable(
+        ctx,
+        "YqlWindow",
+        {
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutation == EWholePartitionWindowSumMutation::DefinitionName
+                    ? "_other_window"
+                    : "_window"),
+            ctx.ExprCtx.NewAtom(pos, ""),
+            ctx.ExprCtx.NewList(pos, {std::move(group)}),
+            ctx.ExprCtx.NewList(pos, std::move(order)),
+            std::move(frame),
+        },
+        nullptr);
+}
+
+TExpression WholePartitionWindowSumRatio(
+    TExportTestContext& ctx,
+    EWholePartitionWindowSumMutation mutation,
+    TStringBuf input,
+    TStringBuf partition = "a.k")
+{
+    const auto pos = TPositionHandle();
+    const auto* int32Type = ScalarType(ctx, NUdf::EDataSlot::Int32);
+    const auto* decimalType = DecimalType(ctx, "35", "2");
+    const auto* optionalDecimalType = DecimalType(ctx, "35", "2", true);
+    const bool wrongResultType =
+        mutation == EWholePartitionWindowSumMutation::ResultType;
+    const auto* windowDecimalType = wrongResultType
+        ? DecimalType(ctx, "34", "2")
+        : decimalType;
+    const auto* optionalWindowDecimalType = wrongResultType
+        ? DecimalType(ctx, "34", "2", true)
+        : optionalDecimalType;
+
+    auto row = ctx.ExprCtx.NewArgument(pos, "row");
+    const auto member = [&]() {
+        return TypedCallable(
+            ctx,
+            "Member",
+            {
+                row,
+                ctx.ExprCtx.NewAtom(pos, input),
+            },
+            optionalDecimalType);
+    };
+
+    auto factory = TypedCallable(
+        ctx,
+        "YqlWinFactory",
+        {
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutation == EWholePartitionWindowSumMutation::Factory
+                    ? "avg"
+                    : "sum"),
+        },
+        ctx.ExprCtx.MakeType<TUnitExprType>());
+    TExprNode::TListType options;
+    if (mutation == EWholePartitionWindowSumMutation::Options) {
+        options.push_back(ctx.ExprCtx.NewAtom(pos, "distinct"));
+    }
+    auto window = TypedCallable(
+        ctx,
+        "YqlAggWin",
+        {
+            std::move(factory),
+            ctx.ExprCtx.NewAtom(pos, "_window"),
+            ctx.ExprCtx.NewList(pos, std::move(options)),
+            OptionalDecimalDataTypeDescriptor(
+                ctx,
+                wrongResultType ? TStringBuf("34") : TStringBuf("35"),
+                "2",
+                windowDecimalType,
+                optionalWindowDecimalType),
+            member(),
+        },
+        optionalWindowDecimalType);
+    auto numerator = TypedCallable(
+        ctx,
+        "DecimalMul",
+        {
+            member(),
+            TypedLiteral(ctx, "Int32", "100", int32Type),
+        },
+        optionalDecimalType);
+    auto ratio = TypedCallable(
+        ctx,
+        "DecimalDiv",
+        {std::move(numerator), std::move(window)},
+        optionalDecimalType);
+    auto lambda = ctx.ExprCtx.NewLambda(
+        pos,
+        ctx.ExprCtx.NewArguments(pos, {row}),
+        std::move(ratio));
+    auto windowDefinition =
+        mutation == EWholePartitionWindowSumMutation::MissingMetadata
+            ? TExprNode::TPtr{}
+            : WholePartitionWindowDefinition(ctx, mutation, partition);
+    TExpression expression(
+        std::move(lambda),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps,
+        std::move(windowDefinition));
+    if (mutation == EWholePartitionWindowSumMutation::StaleRename) {
+        TExpression::TRenameMap rename;
+        rename.emplace(
+            TInfoUnit(TString(partition)),
+            TInfoUnit("renamed.k"));
+        expression = expression.ApplyRenames(rename);
+
+        // ApplyRenames rebuilds the scalar tree. Production re-annotation
+        // restores these types before capture; keep this fixture focused on
+        // the deliberately stale partition lineage.
+        auto root = expression.GetExpressionBody();
+        auto numerator = root->ChildPtr(0);
+        auto window = root->ChildPtr(1);
+        root->SetTypeAnn(optionalDecimalType);
+        numerator->SetTypeAnn(optionalDecimalType);
+        numerator->Child(0)->SetTypeAnn(optionalDecimalType);
+        numerator->Child(1)->SetTypeAnn(int32Type);
+        window->SetTypeAnn(optionalDecimalType);
+        window->Child(0)->SetTypeAnn(
+            ctx.ExprCtx.MakeType<TUnitExprType>());
+        window->Child(3)->SetTypeAnn(
+            ctx.ExprCtx.MakeType<TTypeExprType>(optionalDecimalType));
+        window->Child(3)->Child(0)->SetTypeAnn(
+            ctx.ExprCtx.MakeType<TTypeExprType>(decimalType));
+        window->Child(4)->SetTypeAnn(optionalDecimalType);
+    }
+    return expression;
+}
+
+TSemanticSnapshotExportResult ExportWholePartitionWindowSum(
+    EWholePartitionWindowSumMutation mutation =
+        EWholePartitionWindowSumMutation::None)
+{
+    TExportTestContext ctx;
+    const auto& table = AddTable(ctx, "/Root/Window", {
+        {"k", "String", false},
+        {"g", "String", false},
+        {"x", "Decimal(35,2)", false},
+    });
+    const auto pos = TPositionHandle();
+    const auto* keyType =
+        ScalarType(ctx, NUdf::EDataSlot::String, true);
+    const auto* valueType = DecimalType(ctx, "35", "2", true);
+    auto read = MakeRead(ctx, table, "a", {"k", "g", "x"});
+    SetExactOutputType(ctx, *read, {
+        {"a.k", keyType},
+        {"a.g", keyType},
+        {"a.x", valueType},
+    });
+
+    const bool split =
+        mutation == EWholePartitionWindowSumMutation::Split ||
+        mutation ==
+            EWholePartitionWindowSumMutation::SplitIntermediatePhase ||
+        mutation == EWholePartitionWindowSumMutation::SplitKeyMismatch ||
+        mutation == EWholePartitionWindowSumMutation::SplitStateProducer ||
+        mutation == EWholePartitionWindowSumMutation::SplitStateUse;
+    TIntrusivePtr<TOpAggregate> aggregate;
+    if (split) {
+        TVector<TInfoUnit> intermediateKeys{TInfoUnit("a.k")};
+        if (mutation ==
+            EWholePartitionWindowSumMutation::SplitKeyMismatch)
+        {
+            intermediateKeys.emplace_back("a.g");
+        }
+        auto intermediate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"),
+                mutation ==
+                        EWholePartitionWindowSumMutation::SplitStateProducer
+                    ? "max"
+                    : "sum",
+                TInfoUnit("_sum_state"))},
+            intermediateKeys,
+            mutation ==
+                    EWholePartitionWindowSumMutation::SplitIntermediatePhase
+                ? EOpPhase::Undefined
+                : EOpPhase::Intermediate,
+            false,
+            pos);
+        TVector<std::pair<TString, const TTypeAnnotationNode*>>
+            intermediateOutput{{"a.k", keyType}};
+        if (mutation ==
+            EWholePartitionWindowSumMutation::SplitKeyMismatch)
+        {
+            intermediateOutput.emplace_back("a.g", keyType);
+        }
+        intermediateOutput.emplace_back("_sum_state", valueType);
+        SetExactOutputType(ctx, *intermediate, intermediateOutput);
+
+        TVector<TOpAggregationTraits> finalTraits{TOpAggregationTraits(
+            TInfoUnit("_sum_state"),
+            "sum",
+            TInfoUnit("sum_value"))};
+        if (mutation == EWholePartitionWindowSumMutation::SplitStateUse) {
+            finalTraits.emplace_back(
+                TInfoUnit("_sum_state"),
+                "sum",
+                TInfoUnit("other_sum"));
+        }
+        aggregate = MakeIntrusive<TOpAggregate>(
+            intermediate,
+            std::move(finalTraits),
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            EOpPhase::Final,
+            false,
+            pos);
+        TVector<std::pair<TString, const TTypeAnnotationNode*>> finalOutput{
+            {"a.k", keyType},
+            {"sum_value", valueType},
+        };
+        if (mutation == EWholePartitionWindowSumMutation::SplitStateUse) {
+            finalOutput.emplace_back("other_sum", valueType);
+        }
+        SetExactOutputType(ctx, *aggregate, finalOutput);
+    } else {
+        aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{TOpAggregationTraits(
+                TInfoUnit("a.x"),
+                "sum",
+                TInfoUnit("sum_value"))},
+            TVector<TInfoUnit>{TInfoUnit("a.k")},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetExactOutputType(ctx, *aggregate, {
+            {"a.k", keyType},
+            {"sum_value", valueType},
+        });
+    }
+
+    const bool nonAggregate =
+        mutation == EWholePartitionWindowSumMutation::NonAggregateInput;
+    TIntrusivePtr<IOperator> projectInput = nonAggregate
+        ? TIntrusivePtr<IOperator>(read)
+        : TIntrusivePtr<IOperator>(aggregate);
+    auto project = MakeIntrusive<TOpMap>(
+        projectInput,
+        pos,
+        TVector<TMapElement>{TMapElement(
+            TInfoUnit("ratio"),
+            WholePartitionWindowSumRatio(
+                ctx,
+                mutation,
+                nonAggregate ? TStringBuf("a.x") : TStringBuf("sum_value")))});
+    if (nonAggregate) {
+        SetExactOutputType(ctx, *project, {
+            {"a.k", keyType},
+            {"a.g", keyType},
+            {"a.x", valueType},
+            {"ratio", valueType},
+        });
+    } else {
+        TVector<std::pair<TString, const TTypeAnnotationNode*>> output{
+            {"a.k", keyType},
+            {"sum_value", valueType},
+            {"ratio", valueType},
+        };
+        if (mutation == EWholePartitionWindowSumMutation::SplitStateUse) {
+            output.emplace_back("other_sum", valueType);
+        }
+        SetExactOutputType(ctx, *project, output);
+    }
+
+    TIntrusivePtr<IOperator> rootInput = project;
+    if (mutation == EWholePartitionWindowSumMutation::AggregateFanout) {
+        auto branch = MakeIntrusive<TOpMap>(
+            aggregate,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(
+                    TInfoUnit("b.k"),
+                    TInfoUnit("a.k"),
+                    pos,
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps),
+                TMapElement(
+                    TInfoUnit("b.sum_value"),
+                    TInfoUnit("sum_value"),
+                    pos,
+                    &ctx.ExprCtx,
+                    &ctx.ExpressionProps),
+            });
+        SetExactOutputType(ctx, *branch, {
+            {"b.k", keyType},
+            {"b.sum_value", valueType},
+        });
+        auto join = MakeIntrusive<TOpJoin>(
+            project,
+            branch,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{},
+            TVector<TExpression>{});
+        SetExactOutputType(ctx, *join, {
+            {"a.k", keyType},
+            {"sum_value", valueType},
+            {"ratio", valueType},
+            {"b.k", keyType},
+            {"b.sum_value", valueType},
+        });
+        rootInput = join;
+    }
+
+    TOpRoot root(rootInput, pos, {"ratio"});
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
         UNIT_ASSERT_VALUES_EQUAL(ExportDeterministicPlan(), ExportDeterministicPlan());
@@ -18022,6 +18446,255 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
                 result.UnsupportedReason,
                 "Join filters cannot disambiguate shared input IUs");
         }
+    }
+
+    Y_UNIT_TEST(ExportsExactWholePartitionDecimalWindowSumRatio) {
+        const auto snapshot = ParseSupported(
+            ExportWholePartitionWindowSum());
+
+        const auto& aggregate = FindNode(snapshot, "aggregate");
+        UNIT_ASSERT_VALUES_EQUAL(
+            aggregate["phase"].GetStringSafe(),
+            "undefined");
+        UNIT_ASSERT_VALUES_EQUAL(
+            Strings(aggregate["keys"]),
+            TVector<TString>{"a.k"});
+        const auto& trait = aggregate["aggregates"][0];
+        UNIT_ASSERT_VALUES_EQUAL(
+            trait["input"].GetStringSafe(),
+            "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            trait["function"].GetStringSafe(),
+            "sum");
+        UNIT_ASSERT_VALUES_EQUAL(
+            trait["output"].GetStringSafe(),
+            "sum_value");
+        UNIT_ASSERT_VALUES_EQUAL(
+            trait["type"].GetStringSafe(),
+            "Decimal(35,2)");
+        UNIT_ASSERT(trait["nullable"].GetBooleanSafe());
+
+        const NJson::TJsonValue* ratio = nullptr;
+        for (const auto& column :
+             FindNode(snapshot, "project")["columns"].GetArraySafe())
+        {
+            if (column["output"].GetStringSafe() == "ratio") {
+                ratio = &column["expression"];
+                break;
+            }
+        }
+        UNIT_ASSERT(ratio);
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*ratio)["kind"].GetStringSafe(),
+            "div");
+        UNIT_ASSERT_VALUES_EQUAL(
+            (*ratio)["type"].GetStringSafe(),
+            "Decimal(35,2)");
+        UNIT_ASSERT((*ratio)["nullable"].GetBooleanSafe());
+
+        const auto& numerator = (*ratio)["left"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            numerator["kind"].GetStringSafe(),
+            "mul");
+        UNIT_ASSERT_VALUES_EQUAL(
+            numerator["left"]["kind"].GetStringSafe(),
+            "column");
+        UNIT_ASSERT_VALUES_EQUAL(
+            numerator["left"]["column"].GetStringSafe(),
+            "sum_value");
+        UNIT_ASSERT_VALUES_EQUAL(
+            numerator["right"]["kind"].GetStringSafe(),
+            "literal");
+        UNIT_ASSERT_VALUES_EQUAL(
+            numerator["right"]["type"].GetStringSafe(),
+            "Int32");
+        UNIT_ASSERT_VALUES_EQUAL(
+            numerator["right"]["value"].GetIntegerSafe(),
+            100);
+
+        const auto& window = (*ratio)["right"];
+        UNIT_ASSERT_VALUES_EQUAL(
+            window.GetMapSafe().size(),
+            5);
+        UNIT_ASSERT_VALUES_EQUAL(
+            window["kind"].GetStringSafe(),
+            "window_sum");
+        UNIT_ASSERT_VALUES_EQUAL(
+            window["input"].GetStringSafe(),
+            "sum_value");
+        UNIT_ASSERT_VALUES_EQUAL(
+            window["partition_by"].GetStringSafe(),
+            "a.k");
+        UNIT_ASSERT_VALUES_EQUAL(
+            window["type"].GetStringSafe(),
+            "Decimal(35,2)");
+        UNIT_ASSERT(window["nullable"].GetBooleanSafe());
+    }
+
+    Y_UNIT_TEST(ExportsSplitWholePartitionDecimalWindowSumRatio) {
+        const auto snapshot = ParseSupported(ExportWholePartitionWindowSum(
+            EWholePartitionWindowSumMutation::Split));
+
+        TVector<const NJson::TJsonValue*> aggregates;
+        for (const auto& node : snapshot["plan"]["nodes"].GetArraySafe()) {
+            if (node["op"].GetStringSafe() == "aggregate") {
+                aggregates.push_back(&node);
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(aggregates.size(), 2);
+        const auto& intermediate = *aggregates[0];
+        const auto& final = *aggregates[1];
+        UNIT_ASSERT_VALUES_EQUAL(
+            intermediate["phase"].GetStringSafe(),
+            "intermediate");
+        UNIT_ASSERT_VALUES_EQUAL(
+            final["phase"].GetStringSafe(),
+            "final");
+        UNIT_ASSERT_VALUES_EQUAL(
+            final["input"].GetStringSafe(),
+            intermediate["id"].GetStringSafe());
+        UNIT_ASSERT_VALUES_EQUAL(
+            intermediate["aggregates"][0]["input"].GetStringSafe(),
+            "a.x");
+        UNIT_ASSERT_VALUES_EQUAL(
+            intermediate["aggregates"][0]["output"].GetStringSafe(),
+            "_sum_state");
+        UNIT_ASSERT_VALUES_EQUAL(
+            final["aggregates"][0]["input"].GetStringSafe(),
+            "_sum_state");
+        UNIT_ASSERT_VALUES_EQUAL(
+            final["aggregates"][0]["output"].GetStringSafe(),
+            "sum_value");
+    }
+
+    Y_UNIT_TEST(WholePartitionDecimalWindowMutationsFailClosed) {
+        struct TCase {
+            EWholePartitionWindowSumMutation Mutation;
+            TStringBuf Reason;
+        };
+        const TCase cases[] = {
+            {
+                EWholePartitionWindowSumMutation::MissingMetadata,
+                "Unsupported scalar callable YqlAggWin",
+            },
+            {
+                EWholePartitionWindowSumMutation::DefinitionName,
+                "definition name does not match",
+            },
+            {
+                EWholePartitionWindowSumMutation::Factory,
+                "exact sum YqlWinFactory",
+            },
+            {
+                EWholePartitionWindowSumMutation::Options,
+                "does not admit aggregation options",
+            },
+            {
+                EWholePartitionWindowSumMutation::Frame,
+                "frame setting value",
+            },
+            {
+                EWholePartitionWindowSumMutation::Order,
+                "does not admit window ordering",
+            },
+            {
+                EWholePartitionWindowSumMutation::Partition,
+                "direct Aggregate key",
+            },
+            {
+                EWholePartitionWindowSumMutation::ResultType,
+                "Optional<Decimal(35,2)> YqlAggWin",
+            },
+            {
+                EWholePartitionWindowSumMutation::StaleRename,
+                "direct Aggregate key",
+            },
+            {
+                EWholePartitionWindowSumMutation::NonAggregateInput,
+                "directly consume an Aggregate",
+            },
+            {
+                EWholePartitionWindowSumMutation::AggregateFanout,
+                "exactly one direct Project consumer",
+            },
+            {
+                EWholePartitionWindowSumMutation::SplitIntermediatePhase,
+                "preserve one matching intermediate grouped SUM",
+            },
+            {
+                EWholePartitionWindowSumMutation::SplitKeyMismatch,
+                "preserve one matching intermediate grouped SUM",
+            },
+            {
+                EWholePartitionWindowSumMutation::SplitStateProducer,
+                "exactly one matching Optional<Decimal(35,2)> intermediate "
+                "SUM state",
+            },
+            {
+                EWholePartitionWindowSumMutation::SplitStateUse,
+                "exactly one matching Optional<Decimal(35,2)> intermediate "
+                "SUM state",
+            },
+        };
+
+        for (const auto& test : cases) {
+            const auto result =
+                ExportWholePartitionWindowSum(test.Mutation);
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder()
+                    << "accepted mutation "
+                    << static_cast<ui32>(test.Mutation));
+            UNIT_ASSERT_STRING_CONTAINS(
+                result.UnsupportedReason,
+                test.Reason);
+        }
+    }
+
+    Y_UNIT_TEST(WindowPartitionRenameHistoryUsesOneLookupPerBatch) {
+        TExportTestContext ctx;
+        const auto expression = WholePartitionWindowSumRatio(
+            ctx,
+            EWholePartitionWindowSumMutation::None,
+            "sum_value");
+
+        TExpression::TRenameMap sameBatch;
+        sameBatch.emplace(TInfoUnit("a.k"), TInfoUnit("b.k"));
+        sameBatch.emplace(TInfoUnit("b.k"), TInfoUnit("c.k"));
+        const auto once = expression.ApplyRenames(sameBatch);
+        UNIT_ASSERT_VALUES_EQUAL(
+            once.GetWindowMetadata()->RenameHistory.size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            once.GetWindowPartitionBy().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            once.GetWindowPartitionBy().front().GetFullName(),
+            "b.k");
+
+        TExpression::TRenameMap secondBatch;
+        secondBatch.emplace(TInfoUnit("b.k"), TInfoUnit("c.k"));
+        const auto twice = once.ApplyRenames(secondBatch);
+        UNIT_ASSERT_VALUES_EQUAL(
+            twice.GetWindowMetadata()->RenameHistory.size(),
+            2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            twice.GetWindowPartitionBy().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            twice.GetWindowPartitionBy().front().GetFullName(),
+            "c.k");
+
+        TExpression::TRenameMap swap;
+        swap.emplace(TInfoUnit("a.k"), TInfoUnit("b.k"));
+        swap.emplace(TInfoUnit("b.k"), TInfoUnit("a.k"));
+        const auto swapped = expression.ApplyRenames(swap);
+        UNIT_ASSERT_VALUES_EQUAL(
+            swapped.GetWindowPartitionBy().size(),
+            1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            swapped.GetWindowPartitionBy().front().GetFullName(),
+            "b.k");
     }
 
     Y_UNIT_TEST(ExportsAggregateTraitsTypesAndSplitPhases) {

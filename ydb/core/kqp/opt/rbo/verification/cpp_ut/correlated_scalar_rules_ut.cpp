@@ -99,6 +99,24 @@ void ComputeParents(const TIntrusivePtr<IOperator>& input, TPositionHandle pos) 
     root.ComputeParents();
 }
 
+TExpression MakeWindowColumnAccess(
+    const TInfoUnit& column,
+    TPositionHandle pos,
+    TExprContext& exprCtx,
+    TPlanProps& planProps)
+{
+    const auto access = MakeColumnAccess(
+        column,
+        pos,
+        &exprCtx,
+        &planProps);
+    return TExpression(
+        access.GetLambda(),
+        &exprCtx,
+        &planProps,
+        exprCtx.NewAtom(pos, "window_definition"));
+}
+
 struct TCorrelatedCountFixture {
     explicit TCorrelatedCountFixture(
         bool grouped = false,
@@ -328,6 +346,66 @@ const TExprNode* AssertOptionalCountRepair(const TMapElement& element) {
 }
 
 Y_UNIT_TEST_SUITE(KqpRboCorrelatedScalarRules) {
+    Y_UNIT_TEST(DoesNotPullCorrelatedFilterAcrossWindowProjection) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit outerKey("outer.k");
+        const TInfoUnit innerKey("inner.k");
+        const TInfoUnit innerValue("inner.value");
+        const TInfoUnit windowValue("window.value");
+        const auto* int32 = DataType(ctx, NUdf::EDataSlot::Int32);
+
+        auto read = MakeRead({innerKey, innerValue}, pos);
+        auto dependencies = MakeIntrusive<TOpAddDependencies>(
+            read,
+            pos,
+            TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>{{
+                outerKey,
+                int32,
+            }});
+        auto equality = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(
+                innerKey,
+                pos,
+                &ctx.ExprCtx,
+                &ctx.PlanProps),
+            MakeColumnAccess(
+                outerKey,
+                pos,
+                &ctx.ExprCtx,
+                &ctx.PlanProps));
+        auto filter = MakeIntrusive<TOpFilter>(
+            dependencies,
+            pos,
+            equality);
+        auto map = MakeIntrusive<TOpMap>(
+            filter,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                windowValue,
+                MakeWindowColumnAccess(
+                    innerValue,
+                    pos,
+                    ctx.ExprCtx,
+                    ctx.PlanProps))});
+        TIntrusivePtr<IOperator> input = map;
+        ComputeParents(input, pos);
+
+        TPullUpCorrelatedFilterRule rule;
+        UNIT_ASSERT(!rule.MatchAndApply(
+            input,
+            ctx.RboCtx,
+            ctx.PlanProps));
+
+        UNIT_ASSERT_VALUES_EQUAL(input.Get(), map.Get());
+        UNIT_ASSERT_VALUES_EQUAL(map->GetInput().Get(), filter.Get());
+        UNIT_ASSERT_VALUES_EQUAL(
+            filter->GetInput().Get(),
+            dependencies.Get());
+        UNIT_ASSERT_VALUES_EQUAL(dependencies->GetInput().Get(), read.Get());
+    }
+
     Y_UNIT_TEST(PullupMarksOriginallyKeylessAggregate) {
         TCorrelatedCountFixture fixture;
         fixture.PullUpCorrelation();

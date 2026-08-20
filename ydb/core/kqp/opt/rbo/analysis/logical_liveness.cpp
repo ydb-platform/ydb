@@ -69,7 +69,7 @@ public:
     }
 
     void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) override {
-        const auto expression = TExpression(expr.Node, expr.Ctx, &Props);
+        const auto expression = expr.WithNode(expr.Node, &Props);
         AddInfoUnits(target, expression.GetInputIUs(false, true));
 
         for (const auto& iu : expression.GetInputIUs(true, false)) {

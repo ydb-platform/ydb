@@ -245,6 +245,38 @@ TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, T
     }
 }
 
+TVector<TInfoUnit> ExtractWindowPartitionColumns(const TExprNode& definition) {
+    TVector<TInfoUnit> result;
+    if (!definition.IsCallable("YqlWindow") || definition.ChildrenSize() != 5) {
+        return result;
+    }
+
+    const auto* partitions = definition.Child(2);
+    if (!partitions->IsList()) {
+        return result;
+    }
+    for (const auto& partition : partitions->Children()) {
+        if (!partition->IsCallable("YqlGroup") || partition->ChildrenSize() != 2) {
+            continue;
+        }
+        const auto* lambda = partition->Child(1);
+        if (!lambda->IsLambda() || lambda->ChildrenSize() != 2) {
+            continue;
+        }
+        const auto* groupRef = lambda->Child(1);
+        if (!groupRef->IsCallable("YqlGroupRef") ||
+            groupRef->ChildrenSize() != 4 ||
+            !groupRef->Child(3)->IsAtom())
+        {
+            continue;
+        }
+        AddUniqueInfoUnit(
+            result,
+            TInfoUnit(TString(groupRef->Child(3)->Content())));
+    }
+    return result;
+}
+
 TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     if (input->IsCallable("Member")) {
         auto member = TCoMember(input);
@@ -482,7 +514,14 @@ TString FormatExpressionDependencies(const TExpression& expr) {
 
 } // anonymous namespace
 
-TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props) : Ctx(ctx), PlanProps(props) {
+TExpression::TExpression(
+    TExprNode::TPtr node,
+    TExprContext* ctx,
+    TPlanProps* props,
+    TExprNode::TPtr windowDefinition)
+    : Ctx(ctx)
+    , PlanProps(props)
+{
     Y_ENSURE(ctx, "Creating an expression with null context");
 
     if (node->IsLambda()) {
@@ -494,11 +533,19 @@ TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* pr
             .Body(ReplaceArg(node, arg, *ctx))
             .Done().Ptr();
     }
+
+    if (windowDefinition) {
+        WindowMetadata = TWindowMetadata{
+            .Definition = std::move(windowDefinition),
+            .RenameHistory = {},
+        };
+    }
 }
 
 TVector<TExpression> TExpression::SplitConjunct() const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
     Y_ENSURE(Ctx, "Expression context is null");
+    Y_ENSURE(!HasWindowSemantics(), "A relational window expression cannot be split as a predicate");
 
     TExprNode::TListType terms;
     GetAndTerms(GetExpressionBody(), terms);
@@ -515,6 +562,7 @@ TVector<TExpression> TExpression::SplitConjunct() const {
 TVector<TExpression> TExpression::SplitDisjunct() const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
     Y_ENSURE(Ctx, "Expression context is null");
+    Y_ENSURE(!HasWindowSemantics(), "A relational window expression cannot be split as a predicate");
 
     TExprNode::TListType terms;
     GetOrTerms(GetExpressionBody(), terms);
@@ -530,6 +578,9 @@ TVector<TExpression> TExpression::SplitDisjunct() const {
 
 bool TExpression::IsColumnAccess() const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
+    if (HasWindowSemantics()) {
+        return false;
+    }
     auto body = Node->ChildPtr(1);
     if (body->IsCallable("FromPg")) {
         body = body->ChildPtr(0);
@@ -540,6 +591,9 @@ bool TExpression::IsColumnAccess() const {
 
  bool TExpression::IsSingleCallable(const THashSet<TString>& allowedCallables) const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
+    if (HasWindowSemantics()) {
+        return false;
+    }
      auto body = Node->ChildPtr(1);
     if (body->IsCallable(allowedCallables) && body->ChildrenSize() == 1 && body->Child(0)->IsCallable("Member")) {
         return true;
@@ -550,6 +604,9 @@ bool TExpression::IsColumnAccess() const {
 
  bool TExpression::IsCast() const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
+    if (HasWindowSemantics()) {
+        return false;
+    }
     auto body = Node->ChildPtr(1);
     return (body->IsCallable("ToPg") || body->IsCallable("PgCast"));
  }
@@ -563,6 +620,9 @@ bool TExpression::MaybeExprEquiJoinCondition() const {
 }
 
 bool TExpression::MaybeEquiJoinConditionInternal(bool includeExpressions) const {
+    if (HasWindowSemantics()) {
+        return false;
+    }
     auto body = Node->ChildPtr(1);
 
     if (body->IsCallable("FromPg")) {
@@ -598,6 +658,9 @@ bool TExpression::MaybeEquiJoinConditionInternal(bool includeExpressions) const 
 }
 
 bool TExpression::MaybeConstantCondition() const {
+    if (HasWindowSemantics()) {
+        return false;
+    }
     auto body = Node->ChildPtr(1);
     if (TCoCompare::Match(body.Get())) {
         auto left = body->Child(0);
@@ -643,13 +706,59 @@ const TVector<TInfoUnit>& TExpression::GetInputIUs(bool includeSubplanVars, bool
         Y_ENSURE(PlanProps, "Plan properties null for an expression with members");
         GetAllMembers(Node, IUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
     }
+    if (WindowMetadata) {
+        for (const auto& partition : GetWindowPartitionBy()) {
+            AddUniqueInfoUnit(IUs, partition);
+        }
+    }
     InputIUs[index] = std::move(IUs);
     return InputIUs[index].value();
 }
 
+const std::optional<TExpression::TWindowMetadata>&
+TExpression::GetWindowMetadata() const {
+    return WindowMetadata;
+}
+
+bool TExpression::HasWindowSemantics() const {
+    return WindowMetadata || (Node && FindNode(
+        Node,
+        [](const TExprNode::TPtr& node) {
+            return node->IsCallable("YqlAggWin");
+        }));
+}
+
+TVector<TInfoUnit> TExpression::GetWindowPartitionBy() const {
+    if (!WindowMetadata) {
+        return {};
+    }
+    auto result =
+        ExtractWindowPartitionColumns(*WindowMetadata->Definition);
+    for (const auto& renameMap : WindowMetadata->RenameHistory) {
+        for (auto& partition : result) {
+            if (const auto it = renameMap.find(partition);
+                it != renameMap.end())
+            {
+                partition = it->second;
+            }
+        }
+    }
+    return result;
+}
+
+TExpression TExpression::WithNode(TExprNode::TPtr node, TPlanProps* props) const {
+    auto result = TExpression(std::move(node), Ctx, props);
+    result.WindowMetadata = WindowMetadata;
+    return result;
+}
+
 TExpression TExpression::ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
-    return TExpression(RenameMembers(Node, renameMap, *Ctx), Ctx, PlanProps);
+    auto result = WithNode(RenameMembers(Node, renameMap, *Ctx), PlanProps);
+    if (result.WindowMetadata) {
+        result.WindowMetadata->RenameHistory.push_back(renameMap);
+    }
+    return result;
 }
 
 TExpression TExpression::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) const {
@@ -659,12 +768,13 @@ TExpression TExpression::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOCon
     RemapExpr(Node, output, map, ctx.ExprCtx, settings);
     YQL_CLOG(TRACE, CoreDq) << "After replace " << PrintRBOExpression(output, *Ctx);
 
-    return TExpression(output, Ctx, PlanProps);
+    return WithNode(output, PlanProps);
 }
 
 std::optional<TExpression> TExpression::TryExtractCommonConjuncts() const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
     Y_ENSURE(Ctx, "Expression context is null");
+    Y_ENSURE(!HasWindowSemantics(), "A relational window expression cannot be factored as a predicate");
 
     auto newPredicate = FactorCommonExpressions(GetExpressionBody(), *Ctx);
     if (!newPredicate) {
@@ -676,6 +786,7 @@ std::optional<TExpression> TExpression::TryExtractCommonConjuncts() const {
 
 TExpression TExpression::PruneCast() const {
     Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
+    Y_ENSURE(!HasWindowSemantics(), "A relational window expression cannot be pruned as a scalar cast");
     auto body = Node->ChildPtr(1);
     Y_ENSURE(body->IsCallable("ToPg") || body->IsCallable("PgCast"), "Not a cast in prune cast call");
     return TExpression(body->ChildPtr(0), Ctx, PlanProps);
@@ -835,6 +946,11 @@ TExpression MakeNothing(TPositionHandle pos, const TTypeAnnotationNode* type, TE
 
 TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
     Y_ENSURE(vec.size());
+    for (const auto& expr : vec) {
+        Y_ENSURE(
+            !expr.HasWindowSemantics(),
+            "A relational window expression cannot become a predicate");
+    }
 
     // Fetch context and plan properties from one of the conjuncts
     TExprContext* ctx = nullptr;
@@ -886,6 +1002,9 @@ TExpression MakeConjunction(const TVector<TExpression>& vec, bool pgSyntax) {
 TExpression MakeNegation(const TExpression& expr) {
     Y_ENSURE(expr.Ctx);
     Y_ENSURE(expr.PlanProps);
+    Y_ENSURE(
+        !expr.HasWindowSemantics(),
+        "A relational window expression cannot be negated as a predicate");
 
     // clang-format off
     auto negation = Build<TCoNot>(*expr.Ctx, expr.Node->Pos())
@@ -897,6 +1016,9 @@ TExpression MakeNegation(const TExpression& expr) {
 }
 
 TExpression MakeBinaryPredicate(const TString& callable, const TExpression& left, const TExpression& right) {
+    Y_ENSURE(
+        !left.HasWindowSemantics() && !right.HasWindowSemantics(),
+        "A relational window expression cannot become a binary predicate");
     // Fetch context and plan properties from one of the arguments
     TExprContext* ctx = nullptr;
     TPlanProps* props = nullptr;

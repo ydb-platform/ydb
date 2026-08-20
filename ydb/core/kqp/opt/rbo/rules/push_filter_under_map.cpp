@@ -24,7 +24,13 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
 
     auto map = CastOperator<TOpMap>(filter->GetInput());
 
-    if (map->HasRenames()) {
+    if (map->HasRenames() || std::any_of(
+            map->GetMapElements().begin(),
+            map->GetMapElements().end(),
+            [](const TMapElement& element) {
+                return element.GetExpression().HasWindowSemantics();
+            }))
+    {
         return input;
     }
 

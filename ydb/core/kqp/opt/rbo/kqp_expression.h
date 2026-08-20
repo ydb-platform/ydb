@@ -21,12 +21,24 @@ using namespace NYql;
 class TExpression {
   public:
 
+    using TRenameMap =
+        THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
+
+    struct TWindowMetadata {
+        TExprNode::TPtr Definition;
+        TVector<TRenameMap> RenameHistory;
+    };
+
     // Constructs an expression from ExprNode, also save expression context and plan
     // properties. Plan properties are needed to access subplan IUs
     // The expression can be constructed from a full lambda as well as any yql expression.
     // In the former case a new lambda is built automatically
 
-    TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props = nullptr); 
+    TExpression(
+        TExprNode::TPtr node,
+        TExprContext* ctx,
+        TPlanProps* props = nullptr,
+        TExprNode::TPtr windowDefinition = nullptr);
 
     TExpression() = default;
     ~TExpression() = default;
@@ -69,6 +81,27 @@ class TExpression {
     // an exception will be thrown
     const TVector<TInfoUnit>& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
 
+    // Optional source window metadata is carried beside the scalar lambda.
+    // The optimizer treats every YqlAggWin call as relation-dependent; the
+    // semantic snapshot exporter additionally audits this exact source
+    // definition before assigning a modeled relational meaning.
+    const std::optional<TWindowMetadata>& GetWindowMetadata() const;
+
+    // True for both exactly tracked windows and untracked/unsupported window
+    // calls. Optimizer rules use this fail-closed semantic barrier, while the
+    // verifier admits only expressions with exact source metadata.
+    bool HasWindowSemantics() const;
+
+    // Resolve source partition names through exactly one lookup in each
+    // optimizer rename batch.  This mirrors RenameMembers: chains within one
+    // batch are not followed transitively, while successive batches compose.
+    TVector<TInfoUnit> GetWindowPartitionBy() const;
+
+    // Rebuild this expression around a replacement lambda while retaining
+    // relational window metadata.  Consumers must still validate that the
+    // replacement contains the one matching window call.
+    TExpression WithNode(TExprNode::TPtr node, TPlanProps* props) const;
+
     // Rename column references in the expression
     TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const;
 
@@ -95,6 +128,7 @@ class TExpression {
     bool MaybeEquiJoinConditionInternal(bool includeExpressions) const;
 
     mutable std::optional<TVector<TInfoUnit>> InputIUs[4] = {std::nullopt, std::nullopt, std::nullopt, std::nullopt};
+    std::optional<TWindowMetadata> WindowMetadata;
 
 };
 

@@ -52,6 +52,48 @@ TExprNode::TPtr GetCallable(TExprNode::TPtr input, const TString& callableName) 
     return FindNode(input, isCallable);
 }
 
+TExprNode::TPtr FindWindowDefinition(
+    const TExprNode::TPtr& expression,
+    const TExprNode::TPtr& windowSetting)
+{
+    if (!windowSetting || windowSetting->ChildrenSize() != 2 ||
+        !windowSetting->Child(1)->IsList())
+    {
+        return nullptr;
+    }
+
+    TVector<const TExprNode*> calls;
+    VisitExpr(
+        *expression,
+        [&](const TExprNode& node) {
+            if (node.IsCallable("YqlAggWin")) {
+                calls.push_back(&node);
+            }
+            return true;
+        });
+    if (calls.size() != 1 || calls.front()->ChildrenSize() != 5 ||
+        !calls.front()->Child(1)->IsAtom())
+    {
+        return nullptr;
+    }
+
+    const TStringBuf name = calls.front()->Child(1)->Content();
+    TExprNode::TPtr result;
+    for (const auto& definition : windowSetting->Child(1)->ChildrenList()) {
+        if (!definition->IsCallable("YqlWindow") ||
+            definition->ChildrenSize() != 5 ||
+            !definition->Child(0)->IsAtom(name))
+        {
+            continue;
+        }
+        if (result) {
+            return nullptr;
+        }
+        result = definition;
+    }
+    return result;
+}
+
 bool IsAggregation(TExprNode::TPtr node) { return node->IsCallable("YqlAgg"); }
 
 TString GetAggregationFunction(TExprNode::TPtr node) {
@@ -205,12 +247,13 @@ TVector<std::pair<TInfoUnit, TExprNode::TPtr>> BuildExpressionsFromColumns(const
 TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
                                             const TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>& aggFieldsExpressionsMap,
                                             const TVector<std::pair<TInfoUnit, TExprNode::TPtr>>& groupByKeysExpressionsMap,
+                                            const TExprNode::TPtr& windowSetting,
                                             TExprContext& ctx, TPositionHandle pos) {
     // Add expressions
     TVector<TExprNode::TPtr> mapElements;
     for (const auto& [colName, expr, forceOptional] : aggFieldsExpressionsMap) {
         // clang-format off
-        mapElements.push_back(Build<TKqpOpMapElementLambda>(ctx, pos)
+        auto elementBuilder = Build<TKqpOpMapElementLambda>(ctx, pos)
             .Input(resultExpr)
             .Variable()
                 .Value(colName.GetFullName())
@@ -219,8 +262,15 @@ TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
             .ForceOptional()
                 .Value(forceOptional ? "True" : "False")
             .Build()
-        .Done().Ptr());
+        ;
         // clang-format on
+
+        if (auto windowDefinition =
+                FindWindowDefinition(expr, windowSetting))
+        {
+            elementBuilder.WindowDefinition(TExprBase(windowDefinition));
+        }
+        mapElements.push_back(elementBuilder.Done().Ptr());
     }
 
     // Add expressions for group by keys.
@@ -684,7 +734,7 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
                                          TVector<std::pair<TInfoUnit, TExprNode::TPtr>>&& groupByKeysExpressionsMap, TAggregationTraits&& aggTraits,
                                          TAggregationTraits&& distinctAggregationTraitsPostAggregate, TExprNode::TPtr& havingFilterLambda,
                                          TVector<std::tuple<TInfoUnit, TExprNode::TPtr, bool>>&& expressionsMapPostAgg, TExprContext& ctx,
-                                         TPositionHandle pos) {
+                                         TPositionHandle pos, const TExprNode::TPtr& windowSetting) {
     // While processing aggregations and having we could have the same aggregations functions on the same column, here we want to eliminate them.
     // TODO: Make a special rule in optimizer for that and support more cases, currently we support only simple one aka:
     // select f(a) ... having f(a) > val ...;
@@ -693,7 +743,13 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
     }
     // In case we have an expression for aggregation - f(a + b ...) or group by.
     if (!expressionsMapPreAgg.empty() || !groupByKeysExpressionsMap.empty()) {
-        resultExpr = BuildAggregateExpressionMap(resultExpr, expressionsMapPreAgg, groupByKeysExpressionsMap, ctx, pos);
+        resultExpr = BuildAggregateExpressionMap(
+            resultExpr,
+            expressionsMapPreAgg,
+            groupByKeysExpressionsMap,
+            windowSetting,
+            ctx,
+            pos);
     }
     // Build Aggreegate.
     if (!aggTraits.AggTraitsList.empty()) {
@@ -710,7 +766,13 @@ TExprNode::TPtr BuildAggregationPipeline(TExprNode::TPtr resultExpr, TVector<std
     }
     // In case we have an expression on aggregation - f(...) x b.
     if (!expressionsMapPostAgg.empty()) {
-        resultExpr = BuildAggregateExpressionMap(resultExpr, expressionsMapPostAgg, BuildExpressionsFromColumns(aggTraits.KeyColumns, ctx, pos), ctx, pos);
+        resultExpr = BuildAggregateExpressionMap(
+            resultExpr,
+            expressionsMapPostAgg,
+            BuildExpressionsFromColumns(aggTraits.KeyColumns, ctx, pos),
+            windowSetting,
+            ctx,
+            pos);
     }
     // Build distinct aggregate post aggregate.
     if (!distinctAggregationTraitsPostAggregate.AggTraitsList.empty()) {
@@ -1407,6 +1469,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
         }
 
         auto result = GetSetting(setItem->Tail(), "result");
+        const auto windowSetting = GetSetting(setItem->Tail(), "window");
         // Process all aggregations in result item.
         ProcessAggregationsInResultItems(result, aggregationUniqueColNames, expressionsMapPreAgg, groupByKeysExpressionsMap, aggregationTraits,
                                          distinctAggregationTraitsPostAggregate, expressionsMapPostAgg, uniqueAggColumnId, distinctAll, ctx, node->Pos());
@@ -1468,7 +1531,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                 auto aggregationForGroupSetResultExpr = BuildAggregationPipeline(
                     resultExpr, std::move(expressionsMapPreAggForSet), std::move(groupByKeysExpressionsMapForSet),
                     std::move(aggregationTraitsForSet),
-                    std::move(distinctAggregationTraitsPostAggregateForSet), havingFilterLambda, std::move(expressionsMapPostAggForSet), ctx, node->Pos());
+                    std::move(distinctAggregationTraitsPostAggregateForSet), havingFilterLambda, std::move(expressionsMapPostAggForSet), ctx, node->Pos(),
+                    windowSetting);
 
                 if (rollupResultExpr) {
                     // clang-format off
@@ -1489,7 +1553,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             // Build an aggregation pipeline.
             resultExpr = BuildAggregationPipeline(resultExpr, std::move(expressionsMapPreAgg), std::move(groupByKeysExpressionsMap),
                                                   std::move(aggregationTraits), std::move(distinctAggregationTraitsPostAggregate), havingFilterLambda,
-                                                  std::move(expressionsMapPostAgg), ctx, node->Pos());
+                                                  std::move(expressionsMapPostAgg), ctx, node->Pos(), windowSetting);
         }
 
         finalColumnOrder.clear();
@@ -1531,7 +1595,7 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             auto variable = Build<TCoAtom>(ctx, node->Pos()).Value(columnName).Done();
 
             // clang-format off
-            resultElements.push_back(Build<TKqpOpMapElementLambda>(ctx, node->Pos())
+            auto elementBuilder = Build<TKqpOpMapElementLambda>(ctx, node->Pos())
                 .Input(resultExpr)
                 .Variable(variable)
                 .Lambda<TCoLambda>()
@@ -1542,8 +1606,15 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
                     .Build()
                 .Build()
                 .ForceOptional().Value("False").Build()
-            .Done().Ptr());
+            ;
             // clang-format on
+
+            if (auto windowDefinition =
+                    FindWindowDefinition(lambda.Body().Ptr(), windowSetting))
+            {
+                elementBuilder.WindowDefinition(TExprBase(windowDefinition));
+            }
+            resultElements.push_back(elementBuilder.Done().Ptr());
             
             finalProjection.push_back(columnName);
         };

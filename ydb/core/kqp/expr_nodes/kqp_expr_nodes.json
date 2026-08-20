@@ -877,7 +877,8 @@
             "Match": {"Type": "Callable", "Name": "KqpOpMapElementLambda"},
             "Children": [
                 {"Index": 2, "Name": "Lambda", "Type": "TCoLambda"},
-                {"Index": 3, "Name": "ForceOptional", "Type": "TCoAtom"}
+                {"Index": 3, "Name": "ForceOptional", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "WindowDefinition", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

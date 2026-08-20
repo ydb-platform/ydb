@@ -368,9 +368,11 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
         } else {
             auto element = mapElement.Cast<TKqpOpMapElementLambda>();
             const auto forceOptional = GetForceOptional(element);
+            const auto maybeWindowDefinition = element.WindowDefinition();
             // case lambda ($arg) { member $arg `name }
             if (auto maybeMember = element.Lambda().Body().Maybe<TCoMember>();
-                !forceOptional && maybeMember && maybeMember.Cast().Struct().Ptr() == element.Lambda().Args().Arg(0).Ptr()) {
+                !maybeWindowDefinition && !forceOptional && maybeMember &&
+                maybeMember.Cast().Struct().Ptr() == element.Lambda().Args().Arg(0).Ptr()) {
                 auto member = maybeMember.Cast();
                 auto name = member.Name().Cast<TCoAtom>();
                 auto fromIU = TInfoUnit(name.StringValue());
@@ -390,7 +392,13 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
                     // no Map rule can consume.
                     exprLambdaNode = RemoveSubplans(exprLambdaNode);
                 }
-                TExpression exprLambda(exprLambdaNode, &Ctx);
+                TExpression exprLambda(
+                    exprLambdaNode,
+                    &Ctx,
+                    nullptr,
+                    maybeWindowDefinition
+                        ? maybeWindowDefinition.Cast().Ptr()
+                        : nullptr);
                 mapElements.emplace_back(iu, exprLambda);
             }
         }

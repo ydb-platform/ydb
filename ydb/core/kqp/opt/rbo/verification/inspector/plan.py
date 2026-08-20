@@ -72,6 +72,18 @@ def render_expression(expression: ir.Expr) -> str:
     if kind == "null":
         scalar_type = str(_required(expression.result_type, "type"))
         return f"null(type={_quote(scalar_type)})"
+    if kind == "window_sum":
+        window_input = str(_required(expression.window_input, "input"))
+        partition_by = str(_required(expression.partition_by, "partition_by"))
+        scalar_type = str(_required(expression.result_type, "type"))
+        nullable = _required(expression.nullable, "nullable")
+        if not isinstance(nullable, bool):
+            raise InspectionError("expression field 'nullable' is not Boolean")
+        return (
+            f"window_sum(input={_quote(window_input)}, "
+            f"partition_by={_quote(partition_by)}, type={_quote(scalar_type)}, "
+            f"nullable={_boolean(nullable)})"
+        )
     if kind in {"and", "or"}:
         return f"{kind}(args={_list(expression.args, render_expression)})"
     if kind == "not":

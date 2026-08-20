@@ -5,7 +5,7 @@
 1. **Storage SelfHeal** (this article) — for disks and [storage groups](../../concepts/glossary.md#storage-group) that hold data.
 2. **State Storage SelfHeal** — for [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas. See [{#T}](selfheal_statestorage.md).
 
-Both restore cluster fault tolerance after prolonged failures. If a faulty node or disk is restored before the timeout expires (about one hour by default for disks), SelfHeal does not start relocation.
+Both mechanisms restore cluster fault tolerance after prolonged failures. If a faulty node or disk is restored before the timeout expires (about one hour by default for disks), SelfHeal does not start relocation.
 
 {% note info %}
 
@@ -15,13 +15,13 @@ State Storage SelfHeal is available only with [configuration V2](../../devops/co
 
 ## How storage SelfHeal works {#how-it-works}
 
-The Sentinel component of [CMS](../../concepts/glossary.md#cms) continuously monitors [PDisk](../../concepts/glossary.md#pdisk) and node health. If a fault lasts long enough (about one hour by default), Sentinel starts moving the affected [VDisks](../../concepts/glossary.md#vdisk) to healthy hardware so the [failure model](../../concepts/topology.md#cluster-config) is restored.
+Sentinel, a component of [CMS](../../concepts/glossary.md#cms), continuously monitors the state of [PDisks](../../concepts/glossary.md#pdisk) and nodes. If a fault persists long enough (about one hour by default), Sentinel initiates relocation of the affected [VDisks](../../concepts/glossary.md#vdisk) to healthy hardware so that the [failure model](../../concepts/topology.md#cluster-config) is satisfied again.
 
-The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The move itself can take from minutes to a day, depending on data volume and hardware. Once the command is accepted, CMS treats the task as issued; distributed storage is responsible for finishing replication.
+The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The relocation itself can take from minutes to a day, depending on the data volume and the hardware. Once the command has been accepted, CMS treats the task as issued; distributed storage is responsible for completing replication.
 
 Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../../devops/configuration-management/configuration-v2/static-group-self-heal.md). With configuration V1, static group SelfHeal cannot be enabled.
 
-Below: how to enable, disable, and configure storage SelfHeal.
+The sections below describe how to enable, disable, and configure storage SelfHeal.
 
 ## Enabling and disabling SelfHeal {#on-off}
 
@@ -43,24 +43,24 @@ ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 
 ### When to disable SelfHeal {#when-to-disable}
 
-Leave SelfHeal enabled in normal operation. Temporarily disable it only when automatic relocation is riskier than waiting, for example if:
+SelfHeal is normally left enabled. Temporarily disable it only when automatic relocation is riskier than waiting, for example if:
 
-* a SelfHeal bug makes relocation create a risk of data loss;
-* many nodes failed at once, the cluster is overloaded, and extra background replication would add load and interfere with restoring cluster availability.
+* an error in SelfHeal has been found that makes relocation create a risk of data loss;
+* many nodes have failed at once, the cluster is overloaded, and additional background replication would increase the load and interfere with restoring cluster availability.
 
 {% note warning %}
 
-While SelfHeal is disabled, VDisks are not moved automatically from faulty PDisks. Monitor storage health and re-enable SelfHeal as soon as the cluster stabilizes.
+While SelfHeal is disabled, VDisks from faulty PDisks are not relocated automatically. Monitor the storage state and re-enable SelfHeal as soon as the cluster stabilizes.
 
 {% endnote %}
 
 ## SelfHeal settings {#settings}
 
-The parameters below control different stages of Sentinel: polling PDisk state, confirming a persistent state, and retries when sending a new status to the [Blob Storage Controller](../../concepts/glossary.md#ds-controller). For each state, the time to confirm it is the product of **State update interval** and the cycle limit for that state. For example, for most failure states the defaults are 60 seconds and 60 cycles, so the transition to `FAULTY` starts after about one hour. Configuration update intervals and status-change retries are not part of that product.
+The parameters below control different stages of Sentinel operation: polling PDisk state, confirming a persistent state, and retries when sending a new status to the [Blob Storage Controller](../../concepts/glossary.md#ds-controller). For each state, the time until confirmation is the product of **State update interval** and the cycle limit for that state. For example, for most failure states the defaults are 60 seconds and 60 cycles, so the transition to `FAULTY` starts after about one hour. Configuration update intervals and status-change retries are not part of that product.
 
 {% note warning %}
 
-Do not change these parameters in normal operation. The defaults are chosen for typical clusters. Change them only if you understand how shifting the delay affects SelfHeal reaction time, for example on advice from {{ ydb-short-name }} developers.
+Do not change these parameters in normal operation. The defaults are chosen for typical clusters. Change them only if you understand how shifting the delay affects SelfHeal reaction time, for example on the advice of {{ ydb-short-name }} developers.
 
 {% endnote %}
 
@@ -79,7 +79,7 @@ The following settings are available:
 | **State update interval (sec.)** | Period of PDisk state updates. |
 | **Timeout (sec.)** | Timeout for PDisk state updates. |
 | **Change status retries** | Number of retries to change the PDisk status in BSC (`ACTIVE`, `FAULTY`, `BROKEN`, etc.). |
-| **Change status retry interval (sec.)** | Delay between retries when sending a new PDisk status to BSC. |
+| **Change status retry interval (sec.)** | Delay between retries when submitting a new PDisk status to BSC. |
 | **Default state limit** | For states for which no setting is specified, this "default" value can be used. For unknown PDisk states for which there is no setting, this value is also used. This value is used if the value is not set for states `Initial`, `InitialFormatRead`, `InitialSysLogRead`, `InitialCommonLogRead`, `Normal`. |
 | **Initial** | PDisk starts initialization. Transitions to `FAULTY`. |
 | **InitialFormatRead** | PDisk reads its format record. Transitions to `FAULTY`. |

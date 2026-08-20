@@ -2,7 +2,7 @@
 
 {% include [_](../_includes/experimental_v2.md) %}
 
-When using [configuration V2](index.md), [SelfHeal](../../../maintenance/manual/selfheal.md) can automatically move a static group VDisk from a faulty PDisk and restore the group's fault tolerance.
+When using [configuration V2](index.md), [SelfHeal](../../../maintenance/manual/selfheal.md) can automatically move a static group VDisk from faulty PDisks and restore the group's fault tolerance.
 
 {% note warning %}
 
@@ -10,18 +10,18 @@ On clusters with [configuration V1](../configuration-v1/config-overview.md), sta
 
 {% endnote %}
 
-The general SelfHeal mechanism detects a faulty PDisk and initiates VDisk relocation. For dynamic groups, the [Blob Storage Controller](../../../concepts/glossary.md#ds-controller) changes the configuration, while [distributed configuration](../../../concepts/glossary.md#distributed-configuration) changes the static group configuration.
+The general SelfHeal mechanism detects a faulty PDisk and initiates VDisk relocation. For dynamic groups, the [Blob Storage Controller](../../../concepts/glossary.md#ds-controller) changes the configuration; for the static group, [distributed configuration](../../../concepts/glossary.md#distributed-configuration) changes it.
 
 To allow distributed configuration to change the static group automatically, enable the [`self_management_config.automatic_static_group_management`](../../../reference/configuration/self_management_config.md#parameters) parameter. This parameter is disabled by default.
 
 ## Enabling and disabling static group SelfHeal {#on-off}
 
-Static group SelfHeal requires the following to be enabled:
+For static group SelfHeal to work, the following must be enabled:
 
-* [distributed configuration](../../../concepts/glossary.md#distributed-configuration) in configuration V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
+* [distributed configuration](../../../concepts/glossary.md#distributed-configuration) V2 — [`self_management_config.enabled: true`](../../../reference/configuration/self_management_config.md#parameters);
 * the general SelfHeal mechanism, which is [enabled by default](../../../maintenance/manual/selfheal.md#on-off).
 
-The `self_management_config.enabled` parameter turns on distributed configuration itself. The `self_management_config.automatic_static_group_management` parameter separately allows automatic relocation of static group VDisks.
+The `self_management_config.enabled` parameter enables distributed configuration itself. The `self_management_config.automatic_static_group_management` parameter separately allows automatic relocation of static group VDisks.
 
 To enable or disable automatic static group management:
 
@@ -31,7 +31,7 @@ To enable or disable automatic static group management:
    ydb [global options...] admin cluster config fetch > config.yaml
    ```
 
-1. In `config.yaml`, set `self_management_config.enabled` and `self_management_config.automatic_static_group_management`:
+1. In the `config.yaml` configuration file, set `self_management_config.enabled` and `self_management_config.automatic_static_group_management`:
 
    ```yaml
    config:
@@ -40,7 +40,7 @@ To enable or disable automatic static group management:
        automatic_static_group_management: true
    ```
 
-   `self_management_config.automatic_static_group_management: true` enables automatic static group management; `false` disables it.
+   The value `self_management_config.automatic_static_group_management: true` enables automatic static group management; `false` disables it.
 
 1. Apply the updated configuration using the [ydb admin cluster config replace](../../../reference/ydb-cli/commands/configuration/cluster/replace.md) command:
 
@@ -63,4 +63,4 @@ config:
     - 3
 ```
 
-An empty list means that no restrictions apply. For each allowed node, choose a suitable PDisk and check that its free capacity is at least the space occupied by the VDisk on the source PDisk, plus operational headroom up to the capacity warning threshold. There is no single numeric headroom value: use the warning threshold configured in your cluster monitoring. Placement after the move must satisfy the [failure model](../../../concepts/topology.md#cluster-config).
+An empty list means there are no restrictions. For each allowed node, choose a suitable PDisk and verify that its free capacity is at least the space occupied by the VDisk on the source PDisk, plus operational headroom up to the capacity warning threshold. There is no single numeric headroom value: use the warning threshold configured in your cluster monitoring. Placement after relocation must satisfy the [failure model](../../../concepts/topology.md#cluster-config).

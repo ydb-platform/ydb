@@ -5166,6 +5166,42 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         CheckNoCheckpointUpdate(checkpointId);
     }
+
+    Y_UNIT_TEST_F(ZeroCheckpointIntervalSetting, TStreamingTestFixture) {
+        CheckpointPeriod = TDuration::Days(1);
+
+        const auto pqGateway = SetupMockPqGateway();
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char queryName[] = "fastIntervalStreamingQuery";
+        const auto info = SetupCheckpointIntervalTest(*this, queryName);
+        CreatePqSource(info.PqSourceName);
+
+        // Query with zero checkpointing period
+
+        constexpr char checkpointInterval[] = "PT0S";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` WITH (
+                CHECKPOINT_INTERVAL = "{checkpoint_interval}"
+            ) AS DO BEGIN{query_text}END DO;)",
+            "query_name"_a = info.QueryName,
+            "checkpoint_interval"_a = checkpointInterval,
+            "query_text"_a = info.QueryText
+        ));
+        CheckStreamingQueryProperty(queryName, "checkpoint_interval", checkpointInterval);
+
+        CheckScriptExecutionsCount(1, 1);
+        const auto readSession = pqGateway->WaitReadSession(info.InputTopicName);
+        const auto checkpointId = GetStreamingQueryCheckpointId(queryName);
+
+        WaitCheckpointUpdate(checkpointId);
+        WaitCheckpointUpdate(checkpointId);
+
+        // Query with zero checkpoint interval processes data as usual
+
+        readSession->AddDataReceivedEvent(0, "test_message");
+        pqGateway->WaitWriteSession(info.OutputTopicName)->ExpectMessage("test_message");
+    }
 }
 
 } // namespace NKikimr::NKqp

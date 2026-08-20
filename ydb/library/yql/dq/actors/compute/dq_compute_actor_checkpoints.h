@@ -85,6 +85,7 @@ public:
         virtual void CommitState(const NDqProto::TCheckpoint& checkpoint) = 0;
         virtual void InjectBarrierToOutputs(const NDqProto::TCheckpoint& checkpoint) = 0;
         virtual void ResumeInputsByCheckpoint() = 0;
+        virtual TString GetTaskDebugState() const = 0;
 
         virtual void Start() = 0;
         virtual void Stop() = 0;

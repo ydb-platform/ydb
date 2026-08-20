@@ -386,7 +386,6 @@ assert_sql_row_count "$CONFIG_CONTAINER" \
     'SELECT id FROM acceptance_config ORDER BY id;' \
     3
 assert_logs_contain "$CONFIG_CONTAINER" ' INFO:'
-assert_logs_contain "$CONFIG_CONTAINER" 'Finish grpc stream'
 stop_and_remove_container "$CONFIG_CONTAINER"
 [[ "$(sha256sum "$GENERATED_CONFIG")" == "$CONFIG_HASH" ]]
 

@@ -11,6 +11,7 @@ from ydb.tests.stress.oltp_workload.workload.type.select_partition import Worklo
 from ydb.tests.stress.oltp_workload.workload.type.secondary_index import WorkloadSecondaryIndex
 from ydb.tests.stress.oltp_workload.workload.type.bloom_filter_index import WorkloadBloomFilterIndex
 from ydb.tests.stress.oltp_workload.workload.type.tli import WorkloadTli
+from ydb.tests.stress.oltp_workload.workload.type.combined_indexes import WorkloadCombinedIndexes
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -45,7 +46,8 @@ class WorkloadRunner:
             WorkloadSelectPartition(self.client, self.name, stop),
             WorkloadSecondaryIndex(self.client, self.name, stop),
             WorkloadBloomFilterIndex(self.client, self.name, stop),
-            WorkloadTli(self.client, self.name, stop)
+            WorkloadTli(self.client, self.name, stop),
+            WorkloadCombinedIndexes(self.client, self.name, stop),
         ]
 
         if enabled_workloads is not None:

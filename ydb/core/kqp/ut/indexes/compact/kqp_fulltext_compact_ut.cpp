@@ -77,6 +77,19 @@ void RestartFulltextShards(TKikimrRunner& kikimr, NQuery::TQueryClient& db, bool
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
+void CreatePartitionedTexts(NQuery::TQueryClient& db) {
+    ExecuteQuery(db, R"sql(
+        CREATE TABLE `/Root/Texts` (
+            Key Uint64,
+            Text String,
+            Data String,
+            PRIMARY KEY (Key)
+        ) WITH (
+            PARTITION_AT_KEYS = (150, 300)
+        );
+    )sql");
+}
+
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpFulltextCompact) {
@@ -994,6 +1007,82 @@ Y_UNIT_TEST_TWIN(RecoveryBeforeAndAfterCompaction, WithRelevance) {
         [[150u];["Otters chase mice."];["otters data"]];
         [[152u];["Badgers chase otters."];["badgers data"]]
     ])", FulltextSearch(db, "otters"));
+}
+
+// Build compact postings from all three main-table partitions, mutate rows on both sides of each boundary,
+// and reboot every main/implementation tablet. Index queries and GetTableShards are the recovery/topology
+// barriers, so this test has no sleeps or timing assumptions. Plain and relevance layouts share the same
+// posting lifecycle.
+Y_UNIT_TEST_TWIN(MultiShardBuildDmlAndRecovery, WithRelevance) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+
+    CreatePartitionedTexts(db);
+    UpsertTexts(db);
+
+    auto& server = kikimr.GetTestServer();
+    auto& runtime = *server.GetRuntime();
+    const auto sender = runtime.AllocateEdgeActor();
+    auto mainShards = GetTableShards(&server, sender, "/Root/Texts");
+    UNIT_ASSERT_VALUES_EQUAL_C(mainShards.size(), 3u,
+        "PARTITION_AT_KEYS must create a three-shard source for the compact index build");
+
+    AddIndex(db, indexType);
+    CompareYson(R"([
+        [[300u];["Cats love cats."];["cats cats data"]];
+        [[400u];["Foxes love dogs."];["foxes data"]]
+    ])", FulltextSearch(db, "love"));
+
+    // Create durable add/update/delete generations spanning all three source partitions.
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (50, "Owls love mice.", "owls data"),
+            (200, "Dogs chase wolves.", "dogs updated")
+    )sql");
+    ExecuteQuery(db, R"sql(
+        DELETE FROM `/Root/Texts` WHERE Key = 300
+    )sql");
+    CompareYson(R"([
+        [[50u];["Owls love mice."];["owls data"]];
+        [[400u];["Foxes love dogs."];["foxes data"]]
+    ])", FulltextSearch(db, "love"));
+    CompareYson(R"([
+        [[100u];["Cats chase small animals."];["cats data"]];
+        [[200u];["Dogs chase wolves."];["dogs updated"]]
+    ])", FulltextSearch(db, "chase"));
+
+    // Continue with several writes in the final partition, while retaining updates in both lower ones.
+    ExecuteQuery(db, R"sql(
+        UPSERT INTO `/Root/Texts` (Key, Text, Data) VALUES
+            (100, "Cats love otters.", "cats updated"),
+            (325, "Badgers chase owls.", "badgers data"),
+            (350, "Wolves love badgers.", "wolves data")
+    )sql");
+    CompareYson(R"([
+        [[50u];["Owls love mice."];["owls data"]];
+        [[100u];["Cats love otters."];["cats updated"]];
+        [[350u];["Wolves love badgers."];["wolves data"]];
+        [[400u];["Foxes love dogs."];["foxes data"]]
+    ])", FulltextSearch(db, "love"));
+    CompareYson(R"([
+        [[200u];["Dogs chase wolves."];["dogs updated"]];
+        [[325u];["Badgers chase owls."];["badgers data"]]
+    ])", FulltextSearch(db, "chase"));
+
+    // Reboot every main and implementation shard after the split. RestartFulltextShards uses a successful
+    // compact index read as its boot barrier and also covers relevance-only docs/dict/stats tables.
+    RestartFulltextShards(kikimr, db, WithRelevance);
+    CompareYson(R"([
+        [[50u];["Owls love mice."];["owls data"]];
+        [[100u];["Cats love otters."];["cats updated"]];
+        [[350u];["Wolves love badgers."];["wolves data"]];
+        [[400u];["Foxes love dogs."];["foxes data"]]
+    ])", FulltextSearch(db, "love"));
+    CompareYson(R"([
+        [[200u];["Dogs chase wolves."];["dogs updated"]];
+        [[325u];["Badgers chase owls."];["badgers data"]]
+    ])", FulltextSearch(db, "chase"));
 }
 
 Y_UNIT_TEST(UpsertTwoIndexes) {

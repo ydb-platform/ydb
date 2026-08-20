@@ -59,8 +59,15 @@ TMaybeNode<TExprBase> ParseISO8601(TCoAtom input, TExprContext& ctx) {
         return {};
     }
 
+    const i64 signedInterval = out.Get<i64>();
+    if (signedInterval < 0) {
+        ctx.AddError(TIssue(ctx.GetPosition(input.Pos()), TStringBuilder()
+            << "Expected non-negative interval in ISO 8601 format, got " << TString(buf).Quote()));
+        return {};
+    }
+
     return Build<TCoAtom>(ctx, input.Pos())
-        .Value(ToString(out.Get<ui64>()))
+        .Value(ToString(signedInterval))
         .Done();
 }
 

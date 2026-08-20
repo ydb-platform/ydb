@@ -4971,7 +4971,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(createQuery(""), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration:");
         ExecQuery(createQuery("PT1S1M"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration: PT1S1M");
         ExecQuery(createQuery("P100000D"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration: P100000D");
-        ExecQuery(createQuery("-PT1S"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property time is too large: -PT1S");
+        ExecQuery(createQuery("-PT1S"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is should be non-negative interval, but got: -PT1S");
 
         // Valid interval is saved as is (query is not created by failed operations above)
 
@@ -4986,7 +4986,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(alterQuery(""), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration:");
         ExecQuery(alterQuery("PT1S1M"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration: PT1S1M");
         ExecQuery(alterQuery("P100000D"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is not a valid ISO 8601 duration: P100000D");
-        ExecQuery(alterQuery("-PT1S"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property time is too large: -PT1S");
+        ExecQuery(alterQuery("-PT1S"), EStatus::BAD_REQUEST, "CHECKPOINT_INTERVAL property is should be non-negative interval, but got: -PT1S");
         CheckStreamingQueryProperty(queryName, "checkpoint_interval", "PT0.5S");
 
         // Valid interval with all components is accepted on alter

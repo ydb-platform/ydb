@@ -312,8 +312,13 @@ public:
             return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property is not a valid ISO 8601 duration: " << value);
         }
 
-        if (duration.Get<ui64>() > MaxMicrosecondsValue) {
-            return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property time is too large: " << value);
+        const i64 signedDuration = duration.Get<i64>();
+        if (signedDuration < 0) {
+            return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property is should be non-negative interval, but got: " << value);
+        }
+
+        if (static_cast<ui64>(signedDuration) > MaxMicrosecondsValue) {
+            return TStatus::Fail(Ydb::StatusIds::BAD_REQUEST, TStringBuilder() << to_upper(name) << " property interval is too large: " << value);
         }
 
         return TStatus::Success();

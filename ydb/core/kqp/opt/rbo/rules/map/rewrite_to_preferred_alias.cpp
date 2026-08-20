@@ -201,6 +201,23 @@ TRenameMap BuildPreferredAliasRenameMap(IOperator& op, const TVector<TInfoUnit>&
 } // anonymous namespace
 
 bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+    if (input->Kind == EOperator::Map) {
+        const auto& map = static_cast<const TOpMap&>(*input);
+        for (const auto& mapElement : map.MapElements) {
+            const auto& expression = mapElement.GetExpression();
+            if (expression.HasWindowSemantics() &&
+                !expression.GetWindowMetadata())
+            {
+                // The dependency set of an untracked window is deliberately
+                // incomplete.  Its Map is therefore an alias-rewrite barrier:
+                // renaming visible members cannot prove that hidden window
+                // dependencies were renamed, and would fire forever because
+                // all input columns remain conservatively live.
+                return false;
+            }
+        }
+    }
+
     const bool droppedRedundantAppends = DropRedundantAliasAppends(*input);
 
     const auto usedIUs = input->GetUsedIUs(props);

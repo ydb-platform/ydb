@@ -540,6 +540,52 @@ Y_UNIT_TEST_SUITE(KqpRboStageAssignmentRules) {
             used.end());
     }
 
+    Y_UNIT_TEST(UntrackedRawRankBlocksPreferredAliasRewrite) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit source("source_ratio");
+        const TInfoUnit ratio("currency_ratio");
+        const TInfoUnit rank("currency_rank");
+        auto read = MakeRead(pos, {source});
+        auto aliases = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                ratio,
+                MakeColumnAccess(
+                    source,
+                    pos,
+                    &ctx.ExprCtx,
+                    &ctx.PlanProps))});
+        auto ranks = MakeIntrusive<TOpMap>(
+            aliases,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                rank,
+                MakeUntrackedRankExpression(ctx, ratio))});
+        TOpRoot root(ranks, pos, {rank.GetFullName()});
+        root.RecomputeOutputIUsSubtree();
+        root.ComputeParents();
+        ComputePlanAliases(root);
+
+        const auto* candidates = GetAliases(aliases.Get(), ratio);
+        UNIT_ASSERT(candidates);
+        UNIT_ASSERT_VALUES_EQUAL(candidates->size(), 2);
+        const auto expression =
+            ranks->MapElements.front().GetExpression().GetLambda();
+        TIntrusivePtr<IOperator> input = ranks;
+        TRewriteExpressionsToPreferredAliasesRule rule;
+
+        UNIT_ASSERT(!rule.MatchAndApply(
+            input,
+            ctx.RboCtx,
+            root.PlanProps));
+        UNIT_ASSERT_VALUES_EQUAL(input.Get(), ranks.Get());
+        UNIT_ASSERT_VALUES_EQUAL(
+            ranks->MapElements.front().GetExpression().GetLambda().Get(),
+            expression.Get());
+    }
+
     Y_UNIT_TEST(UntrackedRawRankDoesNotMoveAcrossAnotherMap) {
         TRuleTestContext ctx;
         const auto pos = TPositionHandle();

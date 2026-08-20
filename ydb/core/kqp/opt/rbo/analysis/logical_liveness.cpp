@@ -89,17 +89,13 @@ public:
         const auto expression = TExpression(expr.Node, expr.Ctx, &Props);
         AddInfoUnits(target, expression.GetInputIUs(false, true));
 
-        for (const auto& iu : expression.GetInputIUs(true, false)) {
-            if (!iu.IsSubplanContext()) {
+        for (const auto& iu : expression.GetRawInputIUs()) {
+            const auto* subplanEntry = Props.Subplans.Find(iu);
+            if (!subplanEntry) {
                 continue;
             }
 
-            const auto it = Props.Subplans.PlanMap.find(iu);
-            if (it == Props.Subplans.PlanMap.end()) {
-                continue;
-            }
-
-            auto subplan = CastOperator<IOperator>(it->second.Plan);
+            auto subplan = CastOperator<IOperator>(subplanEntry->Plan);
             AddLiveColumns(subplan, subplan->GetOutputIUs());
         }
     }

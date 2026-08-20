@@ -375,6 +375,14 @@ void ComputeLogicalTestProps(TOpRoot& root) {
     ComputePlanAliases(root);
 }
 
+size_t CountOperatorInTraversal(TOpRoot& root, const IOperator* expected) {
+    size_t count = 0;
+    for (const auto& item : root) {
+        count += item.Current.Get() == expected;
+    }
+    return count;
+}
+
 struct TMapRuleTestContext {
     TMapRuleTestContext()
         : FuncRegistry(NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry()))
@@ -1352,6 +1360,270 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(last, op.Get());
     }
 
+    Y_UNIT_TEST(MapUniqueRawInputIUsFollowExpressionMutations) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit firstBinding("first_subplan", true);
+        const TInfoUnit replacementBinding("replacement_subplan", true);
+
+        auto map = MakeIntrusive<TOpMap>(
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            TVector<TMapElement>{
+                TMapElement(TInfoUnit("first"), MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps), false),
+                TMapElement(TInfoUnit("duplicate"), MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps), false),
+            });
+
+        UNIT_ASSERT(map->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{firstBinding}));
+
+        map->SetMapElementExpression(0, MakeColumnAccess(replacementBinding, pos, &exprCtx, &expressionProps));
+        UNIT_ASSERT(map->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{replacementBinding, firstBinding}));
+
+        map->RemoveMapElement(1);
+        UNIT_ASSERT(map->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{replacementBinding}));
+
+        map->AddMapElement(TMapElement(
+            TInfoUnit("first_again"),
+            MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps),
+            false));
+        UNIT_ASSERT(map->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{replacementBinding, firstBinding}));
+
+        map->SetMapElements({
+            TMapElement(TInfoUnit("first_again"), MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps), false),
+        });
+        UNIT_ASSERT(map->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{firstBinding}));
+    }
+
+    Y_UNIT_TEST(MapElementExpressionMutationPreservesRenameInvariant) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit source("source");
+
+        TMapElement element(TInfoUnit("renamed"), source, pos, &exprCtx, &expressionProps);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            element.SetExpression(MakeConstant("Int32", "1", pos, &exprCtx)),
+            yexception,
+            "Rename map element must be a plain column access");
+        UNIT_ASSERT(element.GetRename() == source);
+    }
+
+    Y_UNIT_TEST(MapMutatorsInvalidateCachedOutputIUs) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto input = MakeIntrusive<TOpMap>(
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            TVector<TMapElement>{
+                TMapElement(TInfoUnit("a"), MakeConstant("Int32", "1", pos, &exprCtx)),
+                TMapElement(TInfoUnit("b"), MakeConstant("Int32", "2", pos, &exprCtx)),
+            });
+        auto map = MakeIntrusive<TOpMap>(
+            input,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(TInfoUnit("x"), TInfoUnit("a"), pos, &exprCtx, &expressionProps),
+            });
+
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("b"), TInfoUnit("x")}));
+
+        map->SetMapElementExpression(0, MakeColumnAccess(TInfoUnit("b"), pos, &exprCtx, &expressionProps));
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("x")}));
+
+        map->AddMapElement(TMapElement(TInfoUnit("y"), MakeConstant("Int32", "3", pos, &exprCtx)));
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("x"), TInfoUnit("y")}));
+
+        map->RemoveMapElement(1);
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("x")}));
+
+        map->RenameProducedIUs({{TInfoUnit("x"), TInfoUnit("z")}}, exprCtx);
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("z")}));
+
+        map->SetMapElements({});
+        UNIT_ASSERT(map->GetOutputIUs() == (TVector<TInfoUnit>{TInfoUnit("a"), TInfoUnit("b")}));
+    }
+
+    Y_UNIT_TEST(SubplanRegistryMutationInvariants) {
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit binding("subplan", true);
+        const TInfoUnit dependency("dependency");
+        const TInfoUnit missingBinding("missing_subplan", true);
+        TSubplans subplans;
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.Add(binding, TIntrusivePtr<ISimpleOperator>(), ESubplanType::EXPR),
+            yexception,
+            "null subplan");
+        subplans.Add(binding, MakeIntrusive<TOpEmptySource>(pos), ESubplanType::EXPR);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.Add(binding, MakeIntrusive<TOpEmptySource>(pos), ESubplanType::EXPR),
+            yexception,
+            "Duplicate subplan binding");
+
+        subplans.AddDependentIU(binding, dependency);
+        subplans.AddDependentIU(binding, dependency);
+        UNIT_ASSERT_VALUES_EQUAL(subplans.At(binding).DependentIUs.size(), 1);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.ReplacePlan(binding, TIntrusivePtr<ISimpleOperator>()),
+            yexception,
+            "null subplan");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.Remove(missingBinding),
+            yexception,
+            "Unknown subplan binding");
+    }
+
+    Y_UNIT_TEST(SubplanBindingsCannotBeRenamed) {
+        NYql::TExprContext exprCtx;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit binding("subplan", true);
+        const TInfoUnit replacement("replacement", true);
+        TSubplans subplans;
+
+        subplans.Add(binding, MakeIntrusive<TOpEmptySource>(pos), ESubplanType::EXPR);
+
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.RenameExternalReferences({{binding, replacement}}, exprCtx),
+            yexception,
+            "Subplan bindings are immutable");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            subplans.RenameExternalReferences({{replacement, binding}}, exprCtx),
+            yexception,
+            "Subplan bindings are immutable");
+    }
+
+    Y_UNIT_TEST(ExpressionInputIUsFollowSubplanRegistryMutations) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit binding("subplan", true);
+        const TInfoUnit dependency("outer_dependency");
+        auto expression = MakeColumnAccess(binding, pos, &exprCtx, &planProps);
+
+        UNIT_ASSERT(expression.GetRawInputIUs() == (TVector<TInfoUnit>{binding}));
+        UNIT_ASSERT(expression.GetInputIUs(false, true) == (TVector<TInfoUnit>{binding}));
+
+        planProps.Subplans.Add(binding, MakeIntrusive<TOpEmptySource>(pos), ESubplanType::EXPR);
+        UNIT_ASSERT(expression.GetInputIUs(false, true).empty());
+
+        planProps.Subplans.AddDependentIU(binding, dependency);
+        UNIT_ASSERT(expression.GetInputIUs(false, true) == (TVector<TInfoUnit>{dependency}));
+
+        planProps.Subplans.Remove(binding);
+        UNIT_ASSERT(expression.GetInputIUs(false, true) == (TVector<TInfoUnit>{binding}));
+    }
+
+    Y_UNIT_TEST(ExpressionInputIUBufferSupportsAllResolutionModes) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit binding("subplan", true);
+        const TInfoUnit tupleIU("tuple");
+        const TInfoUnit dependentIU("dependent");
+        auto expression = MakeColumnAccess(binding, pos, &exprCtx, &planProps);
+
+        planProps.Subplans.Add(
+            binding,
+            MakeIntrusive<TOpEmptySource>(pos),
+            ESubplanType::EXPR,
+            {tupleIU});
+        planProps.Subplans.AddDependentIU(binding, dependentIU);
+
+        const auto neither = expression.GetInputIUs(false, false);
+        UNIT_ASSERT(neither.empty());
+
+        const auto contextOnly = expression.GetInputIUs(true, false);
+        UNIT_ASSERT_VALUES_EQUAL(contextOnly.size(), 1);
+        UNIT_ASSERT(contextOnly[0] == binding);
+        UNIT_ASSERT(contextOnly[0].IsSubplanContext());
+        UNIT_ASSERT(contextOnly[0].GetDependencies() == (TVector<TInfoUnit>{tupleIU, dependentIU}));
+
+        const auto dependenciesOnly = expression.GetInputIUs(false, true);
+        UNIT_ASSERT(dependenciesOnly == (TVector<TInfoUnit>{tupleIU, dependentIU}));
+
+        const auto both = expression.GetInputIUs(true, true);
+        UNIT_ASSERT(both == (TVector<TInfoUnit>{binding, tupleIU, dependentIU}));
+        UNIT_ASSERT(both[0].IsSubplanContext());
+        UNIT_ASSERT(both[0].GetDependencies() == (TVector<TInfoUnit>{tupleIU, dependentIU}));
+
+        const auto refreshed = expression.GetInputIUs(false, false);
+        UNIT_ASSERT(refreshed.empty());
+    }
+
+    Y_UNIT_TEST(SubplanTraversalFollowsRegistryMutations) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit binding("subplan", true);
+        const TInfoUnit replacementBinding("replacement_subplan", true);
+        auto filter = MakeIntrusive<TOpFilter>(
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            MakeColumnAccess(binding, pos, &exprCtx, &expressionProps));
+        TOpRoot root(filter, pos, {});
+        filter->BindExpressionPlanProps(&root.PlanProps);
+        auto originalSubplan = MakeIntrusive<TOpEmptySource>(pos);
+        auto replacementSubplan = MakeIntrusive<TOpEmptySource>(pos);
+
+        UNIT_ASSERT(filter->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{binding}));
+        filter->SetFilterExpression(MakeColumnAccess(replacementBinding, pos, &exprCtx, &expressionProps));
+        UNIT_ASSERT(filter->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{replacementBinding}));
+        filter->SetFilterExpression(MakeColumnAccess(binding, pos, &exprCtx, &expressionProps));
+        UNIT_ASSERT(filter->GetUniqueRawInputIUs() == (TVector<TInfoUnit>{binding}));
+        UNIT_ASSERT(filter->GetSubplanIUs(root.PlanProps.Subplans).empty());
+
+        root.PlanProps.Subplans.Add(binding, originalSubplan, ESubplanType::EXPR);
+        UNIT_ASSERT(filter->GetSubplanIUs(root.PlanProps.Subplans) == (TVector<TInfoUnit>{binding}));
+        UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, originalSubplan.Get()), 1);
+
+        root.PlanProps.Subplans.ReplacePlan(binding, replacementSubplan);
+        UNIT_ASSERT(filter->GetSubplanIUs(root.PlanProps.Subplans) == (TVector<TInfoUnit>{binding}));
+        UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, originalSubplan.Get()), 0);
+        UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, replacementSubplan.Get()), 1);
+
+        root.PlanProps.Subplans.Remove(binding);
+        UNIT_ASSERT(filter->GetSubplanIUs(root.PlanProps.Subplans).empty());
+        UNIT_ASSERT_VALUES_EQUAL(CountOperatorInTraversal(root, replacementSubplan.Get()), 0);
+    }
+
+    Y_UNIT_TEST(SubplanTraversalResumesRawIUResolutionAfterMove) {
+        NYql::TExprContext exprCtx;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TInfoUnit firstBinding("first_subplan", true);
+        const TInfoUnit secondBinding("second_subplan", true);
+        auto filter = MakeIntrusive<TOpFilter>(
+            MakeIntrusive<TOpEmptySource>(pos),
+            pos,
+            MakeBinaryPredicate(
+                "And",
+                MakeColumnAccess(firstBinding, pos, &exprCtx, &expressionProps),
+                MakeColumnAccess(secondBinding, pos, &exprCtx, &expressionProps)));
+        TOpRoot root(filter, pos, {});
+        filter->BindExpressionPlanProps(&root.PlanProps);
+        auto firstSubplan = MakeIntrusive<TOpEmptySource>(pos);
+        auto secondSubplan = MakeIntrusive<TOpEmptySource>(pos);
+        root.PlanProps.Subplans.Add(firstBinding, firstSubplan, ESubplanType::EXPR);
+        root.PlanProps.Subplans.Add(secondBinding, secondSubplan, ESubplanType::EXPR);
+
+        auto iterator = root.begin();
+        UNIT_ASSERT(iterator != TOpEnd{});
+        UNIT_ASSERT(iterator->Current == firstSubplan);
+        UNIT_ASSERT(iterator->SubplanIU && *iterator->SubplanIU == firstBinding);
+
+        TOpIterator moved(std::move(iterator));
+        UNIT_ASSERT(iterator == TOpEnd{});
+        ++moved;
+        UNIT_ASSERT(moved != TOpEnd{});
+        UNIT_ASSERT(moved->Current == secondSubplan);
+        UNIT_ASSERT(moved->SubplanIU && *moved->SubplanIU == secondBinding);
+    }
+
     Y_UNIT_TEST(ComputeParentsHandlesSharedDagAndIgnoresInactiveSubplans) {
         const auto pos = NYql::TPositionHandle();
         auto shared = MakeIntrusive<TOpEmptySource>(pos);
@@ -1371,7 +1643,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Cross",
             TVector<std::pair<TInfoUnit, TInfoUnit>>{});
         const TInfoUnit inactiveIU("inactive_subplan", true);
-        root.PlanProps.Subplans.Add(inactiveIU, TSubplanEntry{inactiveSubplan, {}, ESubplanType::EXPR, inactiveIU, {}});
+        root.PlanProps.Subplans.Add(inactiveIU, inactiveSubplan, ESubplanType::EXPR);
 
         root.ComputeParents();
 
@@ -1547,19 +1819,17 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         converter.Converted[inputNode.Get()] = MakeTestRead({TInfoUnit("a"), TInfoUnit("payload")}, pos);
 
         auto converted = CastOperator<TOpMap>(converter.ConvertTKqpOpMap(mapNode));
-        for (auto exprRef : converted->GetExpressions()) {
-            exprRef.get().PlanProps = &converter.PlanProps;
-        }
+        converted->BindExpressionPlanProps(&converter.PlanProps);
 
-        UNIT_ASSERT_VALUES_EQUAL(converted->MapElements.size(), 2);
-        UNIT_ASSERT(converted->MapElements[0].GetElementName() == TInfoUnit("projected"));
-        UNIT_ASSERT(converted->MapElements[0].IsRename());
-        UNIT_ASSERT(converted->MapElements[0].IsColumnAccess());
-        UNIT_ASSERT(converted->MapElements[0].GetColumnAccess() == TInfoUnit("a"));
+        UNIT_ASSERT_VALUES_EQUAL(converted->GetMapElements().size(), 2);
+        UNIT_ASSERT(converted->GetMapElements()[0].GetElementName() == TInfoUnit("projected"));
+        UNIT_ASSERT(converted->GetMapElements()[0].IsRename());
+        UNIT_ASSERT(converted->GetMapElements()[0].IsColumnAccess());
+        UNIT_ASSERT(converted->GetMapElements()[0].GetColumnAccess() == TInfoUnit("a"));
 
-        UNIT_ASSERT(converted->MapElements[1].IsRename());
-        UNIT_ASSERT(converted->MapElements[1].GetRename() == TInfoUnit("payload"));
-        UNIT_ASSERT(IsGeneratedIgnoreIU(converted->MapElements[1].GetElementName()));
+        UNIT_ASSERT(converted->GetMapElements()[1].IsRename());
+        UNIT_ASSERT(converted->GetMapElements()[1].GetRename() == TInfoUnit("payload"));
+        UNIT_ASSERT(IsGeneratedIgnoreIU(converted->GetMapElements()[1].GetElementName()));
 
         const auto convertedOutput = converted->GetOutputIUs();
         UNIT_ASSERT_VALUES_EQUAL(convertedOutput.size(), 2);
@@ -1601,8 +1871,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         auto converted = CastOperator<TOpMap>(converter.ConvertTKqpOpMap(mapNode));
 
-        UNIT_ASSERT_VALUES_EQUAL(converted->MapElements.size(), 1);
-        UNIT_ASSERT(converted->MapElements.front().GetElementName() == TInfoUnit("out"));
+        UNIT_ASSERT_VALUES_EQUAL(converted->GetMapElements().size(), 1);
+        UNIT_ASSERT(converted->GetMapElements().front().GetElementName() == TInfoUnit("out"));
 
         const auto convertedOutput = converted->GetOutputIUs();
         UNIT_ASSERT_VALUES_EQUAL(convertedOutput.size(), 2);
@@ -1654,12 +1924,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(converted->GetRightInput()->Kind == EOperator::Map, converted->ToString(testContext.ExprCtx));
         auto rightMap = CastOperator<TOpMap>(converted->GetRightInput());
         const auto conflictRename = std::find_if(
-            rightMap->MapElements.begin(),
-            rightMap->MapElements.end(),
+            rightMap->GetMapElements().begin(),
+            rightMap->GetMapElements().end(),
             [](const TMapElement& element) {
                 return element.IsRename() && element.GetRename() == TInfoUnit("a");
             });
-        UNIT_ASSERT(conflictRename != rightMap->MapElements.end());
+        UNIT_ASSERT(conflictRename != rightMap->GetMapElements().end());
 
         const auto replacement = conflictRename->GetElementName();
         UNIT_ASSERT(replacement != TInfoUnit("a"));
@@ -5241,10 +5511,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto rewrittenMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL_C(rewrittenMap->MapElements.size(), 1, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT_C(!rewrittenMap->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT(rewrittenMap->MapElements.front().GetElementName() == alias);
-        UNIT_ASSERT(rewrittenMap->MapElements.front().GetColumnAccess() == source);
+        UNIT_ASSERT_VALUES_EQUAL_C(rewrittenMap->GetMapElements().size(), 1, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(!rewrittenMap->GetMapElements().front().IsRename(), root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(rewrittenMap->GetMapElements().front().GetElementName() == alias);
+        UNIT_ASSERT(rewrittenMap->GetMapElements().front().GetColumnAccess() == source);
     }
 
     Y_UNIT_TEST(RemoveIdentityMapRemovesStandaloneIdentityAppend) {
@@ -5296,8 +5566,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto rewrittenMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL_C(rewrittenMap->MapElements.size(), 1, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT(rewrittenMap->MapElements.front().GetElementName() == computed);
+        UNIT_ASSERT_VALUES_EQUAL_C(rewrittenMap->GetMapElements().size(), 1, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(rewrittenMap->GetMapElements().front().GetElementName() == computed);
     }
 
     Y_UNIT_TEST(RemoveIdentityMapNormalizesRenameFromIdentityRename) {
@@ -5322,10 +5592,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto rewrittenMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL_C(rewrittenMap->MapElements.size(), 1, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT_C(!rewrittenMap->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT(rewrittenMap->MapElements.front().GetElementName() == alias);
-        UNIT_ASSERT(rewrittenMap->MapElements.front().GetColumnAccess() == source);
+        UNIT_ASSERT_VALUES_EQUAL_C(rewrittenMap->GetMapElements().size(), 1, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(!rewrittenMap->GetMapElements().front().IsRename(), root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(rewrittenMap->GetMapElements().front().GetElementName() == alias);
+        UNIT_ASSERT(rewrittenMap->GetMapElements().front().GetColumnAccess() == source);
     }
 
     Y_UNIT_TEST(MapMetadataAliasFanout) {
@@ -5416,7 +5686,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         outputPruning.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_VALUES_EQUAL_C(leftMap->MapElements.size(), 6, leftMap->ToString(testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL_C(leftMap->GetMapElements().size(), 6, leftMap->ToString(testContext.ExprCtx));
         const auto mapOutput = leftMap->GetOutputIUs();
         TInfoUnitSet mapOutputSet;
         for (const auto& iu : mapOutput) {
@@ -5908,7 +6178,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         for (const auto& child : rewrittenJoin->Children) {
             UNIT_ASSERT_C(child->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
             auto aliasMap = CastOperator<TOpMap>(child);
-            UNIT_ASSERT_VALUES_EQUAL(aliasMap->MapElements.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(aliasMap->GetMapElements().size(), 1);
             UNIT_ASSERT_C(aliasMap->GetInput() == aggregate, root.PlanToString(testContext.ExprCtx));
         }
     }
@@ -6078,8 +6348,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto residualMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL_C(residualMap->MapElements.size(), 1, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT(residualMap->MapElements.front().GetElementName() == TInfoUnit("sale_type"));
+        UNIT_ASSERT_VALUES_EQUAL_C(residualMap->GetMapElements().size(), 1, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(residualMap->GetMapElements().front().GetElementName() == TInfoUnit("sale_type"));
 
         UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
         auto rewrittenAggregate = CastOperator<TOpAggregate>(residualMap->GetInput());
@@ -6088,9 +6358,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(rewrittenAggregate->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(rewrittenAggregate->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
-        UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("alias_key"));
-        UNIT_ASSERT(pushedMap->MapElements.front().GetColumnAccess() == TInfoUnit("key"));
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("alias_key"));
+        UNIT_ASSERT(pushedMap->GetMapElements().front().GetColumnAccess() == TInfoUnit("key"));
     }
 
     Y_UNIT_TEST(PushAppendPushesDistinctAllKeyAliasAndResultBelowAggregate) {
@@ -6135,9 +6405,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(rewrittenAggregate->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(rewrittenAggregate->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
-        UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("alias_key"));
-        UNIT_ASSERT(pushedMap->MapElements.front().GetColumnAccess() == TInfoUnit("key"));
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("alias_key"));
+        UNIT_ASSERT(pushedMap->GetMapElements().front().GetColumnAccess() == TInfoUnit("key"));
     }
 
     Y_UNIT_TEST(PushAppendDoesNotPushAggregateKeyAliasWhenOriginalKeyIsLive) {
@@ -6229,8 +6499,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto residualMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL_C(residualMap->MapElements.size(), 1, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT(residualMap->MapElements.front().GetElementName() == TInfoUnit("sale_type"));
+        UNIT_ASSERT_VALUES_EQUAL_C(residualMap->GetMapElements().size(), 1, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(residualMap->GetMapElements().front().GetElementName() == TInfoUnit("sale_type"));
 
         UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::Aggregate, root.PlanToString(testContext.ExprCtx));
         auto rewrittenAggregate = CastOperator<TOpAggregate>(residualMap->GetInput());
@@ -6260,13 +6530,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(renameMap, pos, {"l_a"});
 
         auto subplanRead = MakeTestRead({TInfoUnit("rhs")}, pos);
-        TSubplanEntry subplanEntry;
-        subplanEntry.Plan = subplanRead;
-        subplanEntry.Tuple = {TInfoUnit("a")};
-        subplanEntry.Type = ESubplanType::IN_SUBPLAN;
-        subplanEntry.IU = subplanIU;
-        root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
-        filter->FilterExpr.PlanProps = &root.PlanProps;
+        root.PlanProps.Subplans.Add(subplanIU, subplanRead, ESubplanType::IN_SUBPLAN, {TInfoUnit("a")});
+        filter->BindExpressionPlanProps(&root.PlanProps);
 
         TVector<std::unique_ptr<IRule>> rules;
         AddPushRenameRulesForTest(rules);
@@ -6274,7 +6539,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
 
-        const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
+        const auto& rewrittenEntry = root.PlanProps.Subplans.At(subplanIU);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.Tuple.size(), 1);
         UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("l_a"));
 
@@ -6314,14 +6579,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
         );
 
-        TSubplanEntry subplanEntry;
-        subplanEntry.Plan = subplanFilter;
-        subplanEntry.Type = ESubplanType::EXISTS;
-        subplanEntry.IU = subplanIU;
-        subplanEntry.DependentIUs = {TInfoUnit("a")};
-        root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
-        outerFilter->FilterExpr.PlanProps = &root.PlanProps;
-        subplanFilter->FilterExpr.PlanProps = &root.PlanProps;
+        root.PlanProps.Subplans.Add(subplanIU, subplanFilter, ESubplanType::EXISTS);
+        root.PlanProps.Subplans.AddDependentIU(subplanIU, TInfoUnit("a"));
+        outerFilter->BindExpressionPlanProps(&root.PlanProps);
+        subplanFilter->BindExpressionPlanProps(&root.PlanProps);
 
         TVector<std::unique_ptr<IRule>> rules;
         AddPushRenameRulesForTest(rules);
@@ -6329,13 +6590,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
 
-        const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
+        const auto& rewrittenEntry = root.PlanProps.Subplans.At(subplanIU);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.DependentIUs.size(), 1);
         UNIT_ASSERT(rewrittenEntry.DependentIUs.front() == TInfoUnit("l_a"));
         UNIT_ASSERT_VALUES_EQUAL(addDeps->Dependencies.size(), 1);
         UNIT_ASSERT(addDeps->Dependencies.front() == TInfoUnit("l_a"));
 
-        const auto subplanFilterInputs = subplanFilter->FilterExpr.GetInputIUs(false, true);
+        const auto subplanFilterInputs = subplanFilter->GetFilterExpression().GetInputIUs(false, true);
         UNIT_ASSERT(std::find(subplanFilterInputs.begin(), subplanFilterInputs.end(), TInfoUnit("l_a")) != subplanFilterInputs.end());
         UNIT_ASSERT(std::find(subplanFilterInputs.begin(), subplanFilterInputs.end(), TInfoUnit("a")) == subplanFilterInputs.end());
     }
@@ -6358,13 +6619,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(filter, pos, {"payload"});
 
         auto subplanRead = MakeTestRead({TInfoUnit("rhs")}, pos);
-        TSubplanEntry subplanEntry;
-        subplanEntry.Plan = subplanRead;
-        subplanEntry.Tuple = {TInfoUnit("a")};
-        subplanEntry.Type = ESubplanType::IN_SUBPLAN;
-        subplanEntry.IU = subplanIU;
-        root.PlanProps.Subplans.Add(subplanIU, subplanEntry);
-        filter->FilterExpr.PlanProps = &root.PlanProps;
+        root.PlanProps.Subplans.Add(subplanIU, subplanRead, ESubplanType::IN_SUBPLAN, {TInfoUnit("a")});
+        filter->BindExpressionPlanProps(&root.PlanProps);
 
         TVector<std::unique_ptr<IRule>> rules;
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
@@ -6372,7 +6628,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
-        const auto& rewrittenEntry = root.PlanProps.Subplans.PlanMap.at(subplanIU);
+        const auto& rewrittenEntry = root.PlanProps.Subplans.At(subplanIU);
         UNIT_ASSERT_VALUES_EQUAL(rewrittenEntry.Tuple.size(), 1);
         UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("b"));
     }
@@ -6405,7 +6661,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(rewrittenRead->Columns.front(), "a");
         UNIT_ASSERT(rewrittenRead->OutputIUs.front() == TInfoUnit("l_a"));
 
-        const auto filterInputs = rewrittenFilter->FilterExpr.GetInputIUs(false, true);
+        const auto filterInputs = rewrittenFilter->GetFilterExpression().GetInputIUs(false, true);
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("l_a")) != filterInputs.end());
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("a")) == filterInputs.end());
     }
@@ -6438,19 +6694,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto residualMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(residualMap->MapElements.size(), 1);
-        const auto residualInputs = residualMap->MapElements.front().GetExpression().GetInputIUs(false, true);
+        UNIT_ASSERT_VALUES_EQUAL(residualMap->GetMapElements().size(), 1);
+        const auto residualInputs = residualMap->GetMapElements().front().GetExpression().GetInputIUs(false, true);
         UNIT_ASSERT(std::find(residualInputs.begin(), residualInputs.end(), TInfoUnit("l_a")) != residualInputs.end());
         UNIT_ASSERT(std::find(residualInputs.begin(), residualInputs.end(), TInfoUnit("y")) != residualInputs.end());
         UNIT_ASSERT(std::find(residualInputs.begin(), residualInputs.end(), TInfoUnit("a")) == residualInputs.end());
 
         UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(residualMap->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 2);
-        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("y"));
-        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("l_a"));
-        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 2);
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].GetElementName() == TInfoUnit("y"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].IsRename());
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetElementName() == TInfoUnit("l_a"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetRename() == TInfoUnit("a"));
     }
 
     Y_UNIT_TEST(PushMapElementsIntoMapKeepsUnrelatedRenamePushWhenAnotherRenameConflicts) {
@@ -6477,21 +6733,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto residualMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(residualMap->MapElements.size(), 2);
-        UNIT_ASSERT(residualMap->MapElements[0].IsRename());
-        UNIT_ASSERT(residualMap->MapElements[0].GetElementName() == TInfoUnit("x"));
-        UNIT_ASSERT(residualMap->MapElements[0].GetRename() == TInfoUnit("a"));
-        UNIT_ASSERT(residualMap->MapElements[1].IsRename());
-        UNIT_ASSERT(residualMap->MapElements[1].GetElementName() == TInfoUnit("y"));
-        UNIT_ASSERT(residualMap->MapElements[1].GetRename() == TInfoUnit("x"));
+        UNIT_ASSERT_VALUES_EQUAL(residualMap->GetMapElements().size(), 2);
+        UNIT_ASSERT(residualMap->GetMapElements()[0].IsRename());
+        UNIT_ASSERT(residualMap->GetMapElements()[0].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(residualMap->GetMapElements()[0].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT(residualMap->GetMapElements()[1].IsRename());
+        UNIT_ASSERT(residualMap->GetMapElements()[1].GetElementName() == TInfoUnit("y"));
+        UNIT_ASSERT(residualMap->GetMapElements()[1].GetRename() == TInfoUnit("x"));
 
         UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(residualMap->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 2);
-        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("x"));
-        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("q"));
-        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("b"));
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 2);
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].IsRename());
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetElementName() == TInfoUnit("q"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetRename() == TInfoUnit("b"));
     }
 
     Y_UNIT_TEST(PushMapElementsIntoMapPushesAllRenamesHidingSameSource) {
@@ -6517,14 +6773,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 3);
-        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("c"));
-        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("x"));
-        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("a"));
-        UNIT_ASSERT(pushedMap->MapElements[2].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[2].GetElementName() == TInfoUnit("y"));
-        UNIT_ASSERT(pushedMap->MapElements[2].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 3);
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].GetElementName() == TInfoUnit("c"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].IsRename());
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[2].IsRename());
+        UNIT_ASSERT(pushedMap->GetMapElements()[2].GetElementName() == TInfoUnit("y"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[2].GetRename() == TInfoUnit("a"));
     }
 
     Y_UNIT_TEST(PushMapElementsIntoMapPushesReboundAppendWhenOldNameIsHidden) {
@@ -6553,12 +6809,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 2);
-        UNIT_ASSERT(!pushedMap->MapElements[0].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("a"));
-        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("__kqp_rbo_ignore_arg_0"));
-        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 2);
+        UNIT_ASSERT(!pushedMap->GetMapElements()[0].IsRename());
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].GetElementName() == TInfoUnit("a"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].IsRename());
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetElementName() == TInfoUnit("__kqp_rbo_ignore_arg_0"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetRename() == TInfoUnit("a"));
     }
 
     Y_UNIT_TEST(PushMapElementsBatchesRenamesThroughUnary) {
@@ -6596,13 +6852,13 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(rewrittenSort->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(rewrittenSort->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 2);
-        UNIT_ASSERT(pushedMap->MapElements[0].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("l_a"));
-        UNIT_ASSERT(pushedMap->MapElements[0].GetRename() == TInfoUnit("a"));
-        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("l_b"));
-        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("b"));
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 2);
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].IsRename());
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].GetElementName() == TInfoUnit("l_a"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].IsRename());
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetElementName() == TInfoUnit("l_b"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetRename() == TInfoUnit("b"));
     }
 
     Y_UNIT_TEST(PushMapElementsPushesIdentityRenameThroughUnary) {
@@ -6633,10 +6889,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(rewrittenSort->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
 
         auto pushedMap = CastOperator<TOpMap>(rewrittenSort->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
-        UNIT_ASSERT(pushedMap->MapElements[0].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("a"));
-        UNIT_ASSERT(pushedMap->MapElements[0].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].IsRename());
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].GetElementName() == TInfoUnit("a"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].GetRename() == TInfoUnit("a"));
     }
 
     Y_UNIT_TEST(PushMapElementsKeepsRenameShadowingKeptExpressionOutput) {
@@ -6666,7 +6922,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto topMap = CastOperator<TOpMap>(root.GetInput());
         UNIT_ASSERT_C(topMap->GetInput()->Kind == EOperator::Sort, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(topMap->GetMapElements().size(), 2);
     }
 
     Y_UNIT_TEST(PushMapElementsPushesRenameShadowingMovedExpressionOutput) {
@@ -6700,11 +6956,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(rewrittenSort->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
 
         auto pushedMap = CastOperator<TOpMap>(rewrittenSort->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 2);
-        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("a"));
-        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
-        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("x"));
-        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 2);
+        UNIT_ASSERT(pushedMap->GetMapElements()[0].GetElementName() == TInfoUnit("a"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].IsRename());
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(pushedMap->GetMapElements()[1].GetRename() == TInfoUnit("a"));
     }
 
     Y_UNIT_TEST(PushRenamePushesSemanticRenameThroughJoin) {
@@ -6783,7 +7039,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
         UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
 
-        const auto filterInputs = rewrittenFilter->FilterExpr.GetInputIUs(false, true);
+        const auto filterInputs = rewrittenFilter->GetFilterExpression().GetInputIUs(false, true);
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("b")) != filterInputs.end());
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("a")) == filterInputs.end());
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("c")) == filterInputs.end());
@@ -6809,9 +7065,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
-        UNIT_ASSERT(topMap->MapElements.front().IsColumnAccess());
-        UNIT_ASSERT(topMap->MapElements.front().GetColumnAccess() == TInfoUnit("b"));
+        UNIT_ASSERT_VALUES_EQUAL(topMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(topMap->GetMapElements().front().IsColumnAccess());
+        UNIT_ASSERT(topMap->GetMapElements().front().GetColumnAccess() == TInfoUnit("b"));
     }
 
     Y_UNIT_TEST(RewritePreferredAliasDoesNotUpdateMapRenameSource) {
@@ -6834,9 +7090,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
-        UNIT_ASSERT(topMap->MapElements.front().IsRename());
-        UNIT_ASSERT(topMap->MapElements.front().GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT_VALUES_EQUAL(topMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(topMap->GetMapElements().front().IsRename());
+        UNIT_ASSERT(topMap->GetMapElements().front().GetRename() == TInfoUnit("a"));
     }
 
     Y_UNIT_TEST(RewritePreferredAliasDoesNotCreateMapSelfAppend) {
@@ -6859,7 +7115,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(topMap->GetMapElements().size(), 0);
     }
 
     Y_UNIT_TEST(RewritePreferredAliasDoesNotPreferGeneratedIgnoreName) {
@@ -6886,9 +7142,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
-        UNIT_ASSERT(topMap->MapElements.front().IsColumnAccess());
-        UNIT_ASSERT(topMap->MapElements.front().GetColumnAccess() == TInfoUnit("a"));
+        UNIT_ASSERT_VALUES_EQUAL(topMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(topMap->GetMapElements().front().IsColumnAccess());
+        UNIT_ASSERT(topMap->GetMapElements().front().GetColumnAccess() == TInfoUnit("a"));
     }
 
     Y_UNIT_TEST(RenameToAppendConvertsSafeRename) {
@@ -6908,7 +7164,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         renameToAppend.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_C(!map->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(!map->GetMapElements().front().IsRename(), root.PlanToString(testContext.ExprCtx));
     }
 
     Y_UNIT_TEST(RenameToAppendConvertsAllSafeRenamesInOneApply) {
@@ -6930,7 +7186,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TRenameToAppendRule renameToAppend;
         UNIT_ASSERT_C(renameToAppend.MatchAndApply(input, testContext.RboCtx, root.PlanProps), root.PlanToString(testContext.ExprCtx));
 
-        for (const auto& mapElement : map->MapElements) {
+        for (const auto& mapElement : map->GetMapElements()) {
             UNIT_ASSERT_C(!mapElement.IsRename(), root.PlanToString(testContext.ExprCtx));
         }
     }
@@ -6973,7 +7229,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         renameToAppend.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_C(!map->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(!map->GetMapElements().front().IsRename(), root.PlanToString(testContext.ExprCtx));
     }
 
     Y_UNIT_TEST(RenameToAppendKeepsMultiConsumerRenameWhenSourceIsForbidden) {
@@ -7012,7 +7268,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         renameToAppend.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_C(map->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(map->GetMapElements().front().IsRename(), root.PlanToString(testContext.ExprCtx));
     }
 
     Y_UNIT_TEST(RenameToAppendKeepsGeneratedIgnoreRenameWhenSharedSourceWouldReachJoinConflict) {
@@ -7048,7 +7304,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         ComputeLogicalTestProps(root);
         renameToAppend.RunStage(root, testContext.RboCtx);
 
-        UNIT_ASSERT_C(hiddenMap->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(hiddenMap->GetMapElements().front().IsRename(), root.PlanToString(testContext.ExprCtx));
     }
 
     Y_UNIT_TEST(RenameToAppendConvertsOneIndependentHiddenJoinSource) {
@@ -7081,8 +7337,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         renameToAppend.RunStage(root, testContext.RboCtx);
 
         const ui32 converted =
-            (leftMap->MapElements.front().IsRename() ? 0 : 1) +
-            (rightMap->MapElements.front().IsRename() ? 0 : 1);
+            (leftMap->GetMapElements().front().IsRename() ? 0 : 1) +
+            (rightMap->GetMapElements().front().IsRename() ? 0 : 1);
         UNIT_ASSERT_VALUES_EQUAL_C(converted, 1, root.PlanToString(testContext.ExprCtx));
     }
 
@@ -7274,9 +7530,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto rewrittenFilter = CastOperator<TOpFilter>(rewrittenLimit->GetInput());
         UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(rewrittenFilter->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
-        UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
-        UNIT_ASSERT(pushedMap->MapElements.front().IsColumnAccess());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("l_a"));
+        UNIT_ASSERT(pushedMap->GetMapElements().front().IsColumnAccess());
         UNIT_ASSERT_C(pushedMap->GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
     }
 
@@ -7306,9 +7562,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
         UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(rewrittenFilter->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
-        UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
-        UNIT_ASSERT(pushedMap->MapElements.front().IsColumnAccess());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("l_a"));
+        UNIT_ASSERT(pushedMap->GetMapElements().front().IsColumnAccess());
     }
 
     Y_UNIT_TEST(PushMapElementsPushesRenameThroughUnionAll) {
@@ -7341,13 +7597,53 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(rewrittenUnion->Columns[0] == TInfoUnit("payload"));
         UNIT_ASSERT(rewrittenUnion->Columns[1] == TInfoUnit("l_a"));
 
-        for (const auto& child : rewrittenUnion->Children) {
+        for (const auto& child : rewrittenUnion->GetInputs()) {
             UNIT_ASSERT_C(child->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
             auto pushedMap = CastOperator<TOpMap>(child);
-            UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
-            UNIT_ASSERT(pushedMap->MapElements.front().IsRename());
-            UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
-            UNIT_ASSERT(pushedMap->MapElements.front().GetRename() == TInfoUnit("a"));
+            UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+            UNIT_ASSERT(pushedMap->GetMapElements().front().IsRename());
+            UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("l_a"));
+            UNIT_ASSERT(pushedMap->GetMapElements().front().GetRename() == TInfoUnit("a"));
+        }
+    }
+
+    Y_UNIT_TEST(PushMapElementsPushesRenameThroughVariadicUnionAll) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const TVector<TInfoUnit> columns{TInfoUnit("a"), TInfoUnit("payload")};
+
+        TVector<TIntrusivePtr<IOperator>> inputs{
+            MakeTestRead(columns, pos),
+            MakeTestRead(columns, pos),
+            MakeTestRead(columns, pos),
+        };
+        auto unionAll = MakeIntrusive<TOpUnionAll>(std::move(inputs), pos, columns);
+        auto aliasMap = MakeIntrusive<TOpMap>(unionAll, pos, TVector<TMapElement>{
+            MakeTestRename("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(aliasMap, pos, {"l_a", "payload"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsThroughUnionAllRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through variadic UnionAll", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::UnionAll, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenUnion = CastOperator<TOpUnionAll>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenUnion->GetInputs().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenUnion->Columns.size(), 2);
+        UNIT_ASSERT(rewrittenUnion->Columns[0] == TInfoUnit("payload"));
+        UNIT_ASSERT(rewrittenUnion->Columns[1] == TInfoUnit("l_a"));
+
+        for (const auto& child : rewrittenUnion->GetInputs()) {
+            UNIT_ASSERT_C(child->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+            const auto pushedMap = CastOperator<TOpMap>(child);
+            UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+            UNIT_ASSERT(pushedMap->GetMapElements().front().IsRename());
+            UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("l_a"));
+            UNIT_ASSERT(pushedMap->GetMapElements().front().GetRename() == TInfoUnit("a"));
         }
     }
 
@@ -7413,10 +7709,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         for (const auto& child : rewrittenUnion->Children) {
             UNIT_ASSERT_C(child->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
             auto pushedMap = CastOperator<TOpMap>(child);
-            UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
-            UNIT_ASSERT(pushedMap->MapElements.front().IsRename());
-            UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
-            UNIT_ASSERT(pushedMap->MapElements.front().GetRename() == TInfoUnit("a"));
+            UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+            UNIT_ASSERT(pushedMap->GetMapElements().front().IsRename());
+            UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("l_a"));
+            UNIT_ASSERT(pushedMap->GetMapElements().front().GetRename() == TInfoUnit("a"));
         }
     }
 
@@ -7563,7 +7859,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         rewriteAliases.RunStage(root, testContext.RboCtx);
 
         auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
-        const auto filterInputs = rewrittenFilter->FilterExpr.GetInputIUs(false, true);
+        const auto filterInputs = rewrittenFilter->GetFilterExpression().GetInputIUs(false, true);
         UNIT_ASSERT(ContainsInfoUnit(filterInputs, TInfoUnit("x")));
         UNIT_ASSERT(!ContainsInfoUnit(filterInputs, TInfoUnit("a")));
     }
@@ -7666,8 +7962,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto residualMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(residualMap->MapElements.size(), 1);
-        UNIT_ASSERT(residualMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+        UNIT_ASSERT_VALUES_EQUAL(residualMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(residualMap->GetMapElements().front().GetElementName() == TInfoUnit("one"));
 
         UNIT_ASSERT_C(residualMap->GetInput()->Kind == EOperator::UnionAll, root.PlanToString(testContext.ExprCtx));
         auto rewrittenUnion = CastOperator<TOpUnionAll>(residualMap->GetInput());
@@ -7678,10 +7974,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         for (const auto& child : rewrittenUnion->Children) {
             UNIT_ASSERT_C(child->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
             auto pushedMap = CastOperator<TOpMap>(child);
-            UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
-            UNIT_ASSERT(pushedMap->MapElements.front().IsRename());
-            UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
-            UNIT_ASSERT(pushedMap->MapElements.front().GetRename() == TInfoUnit("a"));
+            UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+            UNIT_ASSERT(pushedMap->GetMapElements().front().IsRename());
+            UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("l_a"));
+            UNIT_ASSERT(pushedMap->GetMapElements().front().GetRename() == TInfoUnit("a"));
         }
     }
 
@@ -7716,10 +8012,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto residualMap = CastOperator<TOpMap>(root.GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(residualMap->MapElements.size(), 1);
-        UNIT_ASSERT(!residualMap->MapElements.front().IsRename());
-        UNIT_ASSERT(residualMap->MapElements.front().GetElementName() == TInfoUnit("copy_a"));
-        const auto residualInputs = residualMap->MapElements.front().GetExpression().GetInputIUs(false, true);
+        UNIT_ASSERT_VALUES_EQUAL(residualMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(!residualMap->GetMapElements().front().IsRename());
+        UNIT_ASSERT(residualMap->GetMapElements().front().GetElementName() == TInfoUnit("copy_a"));
+        const auto residualInputs = residualMap->GetMapElements().front().GetExpression().GetInputIUs(false, true);
         UNIT_ASSERT(ContainsInfoUnit(residualInputs, TInfoUnit("l_a")));
         UNIT_ASSERT(!ContainsInfoUnit(residualInputs, TInfoUnit("a")));
 
@@ -7817,9 +8113,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(rewrittenJoin->GetRightInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
 
         auto leftMap = CastOperator<TOpMap>(rewrittenJoin->GetLeftInput());
-        UNIT_ASSERT_VALUES_EQUAL(leftMap->MapElements.size(), 1);
-        UNIT_ASSERT(leftMap->MapElements.front().GetElementName() == TInfoUnit("l_a"));
-        UNIT_ASSERT(leftMap->MapElements.front().IsColumnAccess());
+        UNIT_ASSERT_VALUES_EQUAL(leftMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(leftMap->GetMapElements().front().GetElementName() == TInfoUnit("l_a"));
+        UNIT_ASSERT(leftMap->GetMapElements().front().IsColumnAccess());
 
         const auto joinOutput = rewrittenJoin->GetOutputIUs();
         UNIT_ASSERT(std::find(joinOutput.begin(), joinOutput.end(), TInfoUnit("a")) != joinOutput.end());
@@ -7852,8 +8148,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto rewrittenFilter = CastOperator<TOpFilter>(root.GetInput());
         UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(rewrittenFilter->GetInput());
-        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
-        UNIT_ASSERT(pushedMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(pushedMap->GetMapElements().front().GetElementName() == TInfoUnit("one"));
     }
 
     Y_UNIT_TEST(PushAppendExpressionConstantChoosesPreservedJoinSide) {
@@ -7886,8 +8182,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(rewrittenJoin->GetRightInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
 
         auto leftMap = CastOperator<TOpMap>(rewrittenJoin->GetLeftInput());
-        UNIT_ASSERT_VALUES_EQUAL(leftMap->MapElements.size(), 1);
-        UNIT_ASSERT(leftMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+        UNIT_ASSERT_VALUES_EQUAL(leftMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(leftMap->GetMapElements().front().GetElementName() == TInfoUnit("one"));
     }
 
     Y_UNIT_TEST(PushMapElementsPushesRenameShadowingMovedJoinExpressionOutput) {
@@ -7922,11 +8218,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(rewrittenJoin->GetRightInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
 
         auto leftMap = CastOperator<TOpMap>(rewrittenJoin->GetLeftInput());
-        UNIT_ASSERT_VALUES_EQUAL(leftMap->MapElements.size(), 2);
-        UNIT_ASSERT(leftMap->MapElements[0].GetElementName() == TInfoUnit("a"));
-        UNIT_ASSERT(leftMap->MapElements[1].IsRename());
-        UNIT_ASSERT(leftMap->MapElements[1].GetElementName() == TInfoUnit("x"));
-        UNIT_ASSERT(leftMap->MapElements[1].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT_VALUES_EQUAL(leftMap->GetMapElements().size(), 2);
+        UNIT_ASSERT(leftMap->GetMapElements()[0].GetElementName() == TInfoUnit("a"));
+        UNIT_ASSERT(leftMap->GetMapElements()[1].IsRename());
+        UNIT_ASSERT(leftMap->GetMapElements()[1].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(leftMap->GetMapElements()[1].GetRename() == TInfoUnit("a"));
 
         UNIT_ASSERT_VALUES_EQUAL(rewrittenJoin->JoinKeys.size(), 1);
         UNIT_ASSERT(rewrittenJoin->JoinKeys.front().first == TInfoUnit("x"));
@@ -7960,8 +8256,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto topMap = CastOperator<TOpMap>(root.GetInput());
         UNIT_ASSERT_C(topMap->GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
-        UNIT_ASSERT(topMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+        UNIT_ASSERT_VALUES_EQUAL(topMap->GetMapElements().size(), 1);
+        UNIT_ASSERT(topMap->GetMapElements().front().GetElementName() == TInfoUnit("one"));
     }
 
     Y_UNIT_TEST(TPCH_YQL) {

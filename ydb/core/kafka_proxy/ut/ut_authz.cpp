@@ -71,6 +71,14 @@ std::vector<TString> FetchRecordValues(TKafkaTestClient& client, const TString& 
     return values;
 }
 
+TKafkaInt16 ListOffsetsPartitionError(TKafkaTestClient& client, const TString& topicName) {
+    std::vector<std::pair<i32, i64>> partitions{{0, -1}};
+    auto msg = client.ListOffsets(partitions, topicName);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Topics.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Topics[0].Partitions.size(), 1);
+    return msg->Topics[0].Partitions[0].ErrorCode;
+}
+
 void CreateTopic(NTopic::TTopicClient& pqClient, const TString& topicName, const TString& consumer = {}
 
 void AlterTopicPartitions(NTopic::TTopicClient& pqClient, const TString& topicName, ui64 minActivePartitions) {
@@ -125,10 +133,26 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
             return ProduceError(client, topicName, "after-expire") == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
         }, TDuration::Seconds(20));
         UNIT_ASSERT_VALUES_EQUAL(FetchPartitionError(client, topicName), static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        UNIT_ASSERT_VALUES_EQUAL(ListOffsetsPartitionError(client, topicName), static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
 
         auto apiVersions = client.ApiVersions();
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     }
+
+Y_UNIT_TEST(ListOffsetsUnknownTopicStaysUnknownAfterSasl) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            ListOffsetsPartitionError(client, "/Root/topic-does-not-exist"),
+            static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
+    }
+
 
 Y_UNIT_TEST(ReadOnlyUserCanFetchButNotProduce) {
         TInsecureTestServer testServer(TTestServerSettings{

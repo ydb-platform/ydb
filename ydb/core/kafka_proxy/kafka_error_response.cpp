@@ -36,6 +36,23 @@ TApiMessage::TPtr FetchError(const TFetchRequestData& request, EKafkaErrors erro
     return response;
 }
 
+
+TApiMessage::TPtr ListOffsetsError(const TListOffsetsRequestData& request, EKafkaErrors error) {
+    auto response = std::make_shared<TListOffsetsResponseData>();
+    response->Topics.resize(request.Topics.size());
+    for (size_t i = 0; i < request.Topics.size(); ++i) {
+        auto& topicResponse = response->Topics[i];
+        topicResponse.Name = request.Topics[i].Name;
+        for (const auto& partition : request.Topics[i].Partitions) {
+            TListOffsetsResponseData::TListOffsetsTopicResponse::TListOffsetsPartitionResponse partitionResponse;
+            partitionResponse.PartitionIndex = partition.PartitionIndex;
+            partitionResponse.ErrorCode = error;
+            topicResponse.Partitions.push_back(std::move(partitionResponse));
+        }
+    }
+    return response;
+}
+
 } // namespace
 
 TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors error) {
@@ -44,6 +61,8 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return ProduceError(static_cast<const TProduceRequestData&>(request), error);
         case FETCH:
             return FetchError(static_cast<const TFetchRequestData&>(request), error);
+        case LIST_OFFSETS:
+            return ListOffsetsError(static_cast<const TListOffsetsRequestData&>(request), error);
         default:
             return nullptr;
     }

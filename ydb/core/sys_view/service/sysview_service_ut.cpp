@@ -21,25 +21,25 @@ namespace {
 constexpr ui64 ProcessorTabletId = 100500;
 const TString Database = "/Root/db1";
 
-constexpr ui64 TableOwnerId = 1;
-constexpr ui64 TablePathId = 2;
+// TDetailedTableCounters carries no path id - TablePath is the key (see the
+// sys_view.proto message, whose OwnerId/PathId fields were dropped in favour of it).
 const TString TablePath = "/Root/db1/Table";
 
-// Records every generation it was asked to Pack() and emits one canned
-// TDetailedTableCounters entry, so a test can tell which tick produced
-// which message without inspecting the real per-table aggregator.
+// Emit a different snapshot on every Pack call, so retries must reuse the
+// cached payload to preserve the counters sent for that generation.
 class TStubDetailedCounters : public IDbDetailedCounters {
 public:
-    TVector<ui64> PackedGenerations;
+    ui64 PackCount = 0;
 
-    void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out, ui64 generation) override {
-        PackedGenerations.push_back(generation);
+    void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) override {
+        ++PackCount;
 
         auto* table = out.Add();
-        table->SetOwnerId(TableOwnerId);
-        table->SetPathId(TablePathId);
         table->SetTablePath(TablePath);
         table->SetLevel(NKikimrSchemeOp::TTableDetailedMetricsSettings::MetricsLevelTable);
+        auto* counters = table->MutableTableCounters()->MutableAppCounters();
+        counters->AddSimple(0);
+        counters->AddSimple(PackCount);
     }
 };
 
@@ -118,27 +118,6 @@ TServiceIds SetupService(TTestBasicRuntime& runtime) {
     return {serviceId, pipeCacheEdge};
 }
 
-TServiceIds SetupServiceWithLabeledCounters(TTestBasicRuntime& runtime) {
-    runtime.Initialize(TAppPrepare().Unwrap());
-    runtime.UpdateCurrentTime(TInstant::Now());
-    runtime.GetAppData().FeatureFlags.SetEnableDbCounters(true);
-    runtime.GetAppData().FeatureFlags.SetEnableDataShardDetailedMetrics(true);
-    runtime.GetAppData().FeatureFlags.SetEnablePersistentQueryStats(false);
-
-    TActorId schemeCacheId = runtime.Register(new TFakeSchemeCache());
-    runtime.RegisterService(MakeSchemeCacheID(), schemeCacheId);
-
-    TActorId pipeCacheEdge = runtime.AllocateEdgeActor();
-    runtime.RegisterService(MakePipePerNodeCacheID(false), pipeCacheEdge);
-
-    TActorId serviceId = runtime.Register(CreateSysViewServiceForTests().Release());
-    runtime.RegisterService(MakeSysViewServiceID(runtime.GetNodeId(0)), serviceId);
-    runtime.EnableScheduleForActor(serviceId);
-    runtime.SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
-
-    return {serviceId, pipeCacheEdge};
-}
-
 TIntrusivePtr<TStubDetailedCounters> RegisterStream(TTestBasicRuntime& runtime, const TActorId& serviceId,
     NKikimrSysView::EDbCountersService service)
 {
@@ -184,10 +163,7 @@ Y_UNIT_TEST_SUITE(SysViewServiceDetailedCounters) {
         for (const auto& detailed : req.GetDetailedCounters()) {
             services.insert(detailed.GetService());
             UNIT_ASSERT_VALUES_EQUAL(detailed.TablesSize(), 1);
-            const auto& table = detailed.GetTables(0);
-            UNIT_ASSERT_VALUES_EQUAL(table.GetTablePath(), TablePath);
-            UNIT_ASSERT_VALUES_EQUAL(table.GetOwnerId(), TableOwnerId);
-            UNIT_ASSERT_VALUES_EQUAL(table.GetPathId(), TablePathId);
+            UNIT_ASSERT_VALUES_EQUAL(detailed.GetTables(0).GetTablePath(), TablePath);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(services.size(), 2u);
@@ -216,15 +192,15 @@ Y_UNIT_TEST_SUITE(SysViewServiceDetailedCounters) {
         auto gen3 = req3.GetGeneration();
         UNIT_ASSERT_VALUES_EQUAL(gen3, gen1 + 1);
 
-        // Verify that both stubs were packed with the new generation
-        UNIT_ASSERT(leaderStub->PackedGenerations.size() >= 2);
-        UNIT_ASSERT(followerStub->PackedGenerations.size() >= 2);
-        // The first packing was with gen1, the second (in req3) should be with gen3
-        UNIT_ASSERT_VALUES_EQUAL(leaderStub->PackedGenerations.back(), gen3);
-        UNIT_ASSERT_VALUES_EQUAL(followerStub->PackedGenerations.back(), gen3);
+        // Both stubs are packed once for each new generation.
+        UNIT_ASSERT_VALUES_EQUAL(leaderStub->PackCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(followerStub->PackCount, 2);
+        for (const auto& detailed : req3.GetDetailedCounters()) {
+            UNIT_ASSERT_VALUES_EQUAL(detailed.GetTables(0).GetTableCounters().GetAppCounters().GetSimple(1), 2);
+        }
     }
 
-    Y_UNIT_TEST(UnackedRetryResendsSameGeneration) {
+    Y_UNIT_TEST(UnackedRetryResendsSamePayload) {
         TTestBasicRuntime runtime(1);
         auto [serviceId, pipeCacheEdge] = SetupService(runtime);
 
@@ -234,9 +210,29 @@ Y_UNIT_TEST_SUITE(SysViewServiceDetailedCounters) {
         auto req2 = GrabRequest(runtime, pipeCacheEdge);
 
         UNIT_ASSERT_VALUES_EQUAL(req1.GetGeneration(), req2.GetGeneration());
-        // Both packing attempts should have happened with the same generation
-        UNIT_ASSERT_VALUES_EQUAL(stub->PackedGenerations.size(), 2u);
-        UNIT_ASSERT_VALUES_EQUAL(stub->PackedGenerations[0], stub->PackedGenerations[1]);
+        UNIT_ASSERT_VALUES_EQUAL(req1.SerializeAsString(), req2.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(stub->PackCount, 1);
+    }
+
+    Y_UNIT_TEST(RegistrationDuringRetryWaitsForNextGeneration) {
+        TTestBasicRuntime runtime(1);
+        auto [serviceId, pipeCacheEdge] = SetupService(runtime);
+
+        auto leaderStub = RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS);
+        auto req1 = GrabRequest(runtime, pipeCacheEdge);
+
+        auto followerStub = RegisterStream(runtime, serviceId, NKikimrSysView::TABLETS_FOLLOWERS);
+        auto req2 = GrabRequest(runtime, pipeCacheEdge);
+        UNIT_ASSERT_VALUES_EQUAL(req1.SerializeAsString(), req2.SerializeAsString());
+        UNIT_ASSERT_VALUES_EQUAL(leaderStub->PackCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(followerStub->PackCount, 0);
+
+        SendAck(runtime, serviceId, req1.GetGeneration());
+        auto req3 = GrabRequest(runtime, pipeCacheEdge);
+        UNIT_ASSERT_VALUES_EQUAL(req3.GetGeneration(), req1.GetGeneration() + 1);
+        UNIT_ASSERT_VALUES_EQUAL(req3.DetailedCountersSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(leaderStub->PackCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(followerStub->PackCount, 1);
     }
 
     Y_UNIT_TEST(StaleAckIgnored) {
@@ -268,7 +264,8 @@ Y_UNIT_TEST_SUITE(SysViewServiceDetailedCounters) {
         // Should have DetailedCounters but empty ServiceCounters
         UNIT_ASSERT_VALUES_EQUAL(req.ServiceCountersSize(), 0);
         UNIT_ASSERT_VALUES_EQUAL(req.DetailedCountersSize(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(req.GetDetailedCounters(0).GetService(), NKikimrSysView::TABLETS);
+        UNIT_ASSERT_VALUES_EQUAL((int)req.GetDetailedCounters(0).GetService(),
+            (int)NKikimrSysView::TABLETS);
         UNIT_ASSERT_VALUES_EQUAL(req.GetDetailedCounters(0).TablesSize(), 1);
     }
 

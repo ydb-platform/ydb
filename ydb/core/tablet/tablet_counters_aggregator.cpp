@@ -1254,6 +1254,9 @@ private:
     }
 
     void ResetDetailedMetricsAggregator(TPathId pathId, TDetailedMetricsForDb& db, const TActorContext& ctx) {
+        // No unregister event: the only caller is the database-removed path, and the
+        // SysView Service drops the whole per-database entry - detailed streams
+        // included - on its own TEvRemoveDatabase.
         if (!db.Aggregator) {
             return;
         }

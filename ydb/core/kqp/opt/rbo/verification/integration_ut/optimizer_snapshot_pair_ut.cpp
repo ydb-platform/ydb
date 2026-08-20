@@ -405,7 +405,7 @@ void CreateTpcdsColumnTables(TKikimrRunner& kikimr) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-TString TpcdsQuery96() {
+TString TpcdsQuery(ui32 queryId) {
     const TString prelude = R"(
 $to_decimal = ($x) -> { return cast($x as Decimal(12, 2)); };
 $to_decimal_max_precision = ($x) -> { return cast($x as Decimal(35, 2)); };
@@ -413,7 +413,8 @@ $round = ($x,$y) -> { return $x; };
 )";
     return prelude + TFileInput(
         ArcadiaSourceRoot() +
-        "/ydb/core/kqp/ut/rbo/data/yql-tpcds/q96.yql").ReadAll();
+        "/ydb/core/kqp/ut/rbo/data/yql-tpcds/q" +
+        ToString(queryId) + ".yql").ReadAll();
 }
 
 NJson::TJsonValue BuildVerificationProblem(
@@ -3399,6 +3400,43 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostRejectsUnsafeTpcdsQuery51WindowMetadata) {
+        auto kikimr = MakeTpcdsRunner();
+        CreateTpcdsColumnTables(kikimr);
+
+        NYql::TExprContext moduleContext;
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
+
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const TString query = TpcdsQuery(51);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([
+            host,
+            query,
+            settings
+        ] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
+        UNIT_ASSERT(!prepared.Success());
+
+        const TString issues = prepared.Issues().ToString();
+        UNIT_ASSERT(!issues.empty());
+        UNIT_ASSERT_C(!issues.Contains("Member not found: x.item_sk"), issues);
+        UNIT_ASSERT_C(!issues.Contains("Member not found: x.d_date"), issues);
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
+        for (const auto& result : results) {
+            UNIT_ASSERT(!result.IsSupported());
+            UNIT_ASSERT(!result.UnsupportedReason.empty());
+        }
+    }
+
     Y_UNIT_TEST(RealHostVerifiesTpcdsQuery96) {
         auto kikimr = MakeTpcdsRunner();
         CreateTpcdsColumnTables(kikimr);
@@ -3411,7 +3449,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);
         IKqpHost::TPrepareSettings settings;
         settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-        const auto prepared = host->SyncPrepareDataQuery(TpcdsQuery96(), settings);
+        const auto prepared = host->SyncPrepareDataQuery(TpcdsQuery(96), settings);
         UNIT_ASSERT_C(prepared.Success(), prepared.Issues().ToString());
 
         const auto results = sink->Extract();

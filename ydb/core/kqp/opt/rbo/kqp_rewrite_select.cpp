@@ -52,6 +52,97 @@ TExprNode::TPtr GetCallable(TExprNode::TPtr input, const TString& callableName) 
     return FindNode(input, isCallable);
 }
 
+bool IsOptionalStringTypeDescriptor(const TExprNode& node) {
+    return node.IsCallable("OptionalType") &&
+        node.ChildrenSize() == 1 &&
+        node.Child(0)->IsCallable("DataType") &&
+        node.Child(0)->ChildrenSize() == 1 &&
+        node.Child(0)->Child(0)->IsAtom("String");
+}
+
+bool IsWholePartitionFrameSetting(
+    const TExprNode& node,
+    TStringBuf name,
+    TStringBuf value)
+{
+    return node.IsList() &&
+        node.ChildrenSize() == 2 &&
+        node.Child(0)->IsAtom(name) &&
+        node.Child(1)->IsAtom(value);
+}
+
+bool IsTransportSafeWindowDefinition(
+    const TExprNode& definition,
+    TStringBuf windowName)
+{
+    if (windowName.empty() ||
+        !definition.IsCallable("YqlWindow") ||
+        definition.ChildrenSize() != 5 ||
+        !definition.Child(0)->IsAtom(windowName) ||
+        !definition.Child(1)->IsAtom(""))
+    {
+        return false;
+    }
+
+    const auto& partitions = *definition.Child(2);
+    if (!partitions.IsList() || partitions.ChildrenSize() != 1) {
+        return false;
+    }
+    const auto& group = *partitions.Child(0);
+    if (!group.IsCallable("YqlGroup") || group.ChildrenSize() != 2) {
+        return false;
+    }
+
+    const auto& rowDescriptor = *group.Child(0);
+    if (!rowDescriptor.IsCallable("StructType") ||
+        rowDescriptor.ChildrenSize() != 1)
+    {
+        return false;
+    }
+    const auto& field = *rowDescriptor.Child(0);
+    if (!field.IsList() ||
+        field.ChildrenSize() != 2 ||
+        !field.Child(0)->IsAtom() ||
+        field.Child(0)->Content().empty() ||
+        !IsOptionalStringTypeDescriptor(*field.Child(1)))
+    {
+        return false;
+    }
+
+    const auto& lambda = *group.Child(1);
+    if (!lambda.IsLambda() ||
+        lambda.ChildrenSize() != 2 ||
+        !lambda.Child(0)->IsArguments() ||
+        lambda.Child(0)->ChildrenSize() != 1 ||
+        !lambda.Child(0)->Child(0)->IsArgument())
+    {
+        return false;
+    }
+    const auto* argument = lambda.Child(0)->Child(0);
+    const auto& groupRef = *lambda.Child(1);
+    if (!groupRef.IsCallable("YqlGroupRef") ||
+        groupRef.ChildrenSize() != 4 ||
+        groupRef.Child(0) != argument ||
+        !IsOptionalStringTypeDescriptor(*groupRef.Child(1)) ||
+        !groupRef.Child(2)->IsAtom("3") ||
+        !groupRef.Child(3)->IsAtom(field.Child(0)->Content()))
+    {
+        return false;
+    }
+
+    const auto& order = *definition.Child(3);
+    if (!order.IsList() || order.ChildrenSize() != 0) {
+        return false;
+    }
+
+    const auto& frame = *definition.Child(4);
+    return frame.IsList() &&
+        frame.ChildrenSize() == 3 &&
+        IsWholePartitionFrameSetting(*frame.Child(0), "type", "rows") &&
+        IsWholePartitionFrameSetting(*frame.Child(1), "from", "up") &&
+        IsWholePartitionFrameSetting(*frame.Child(2), "to", "uf");
+}
+
 TExprNode::TPtr FindWindowDefinition(
     const TExprNode::TPtr& expression,
     const TExprNode::TPtr& windowSetting)
@@ -91,7 +182,9 @@ TExprNode::TPtr FindWindowDefinition(
         }
         result = definition;
     }
-    return result;
+    return result && IsTransportSafeWindowDefinition(*result, name)
+        ? result
+        : nullptr;
 }
 
 bool IsAggregation(TExprNode::TPtr node) { return node->IsCallable("YqlAgg"); }

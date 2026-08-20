@@ -6,6 +6,76 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NQuery;
 
+// Helper that wraps a query session and tracks the current transaction.
+//
+//   Exec(query)            — execute in current tx (begin if first call), assert SUCCESS
+//   Check(query, yson)     — execute in current tx, assert SUCCESS, compare YSON result set 0
+//   ExecCommit(query)      — execute in current tx and commit, assert SUCCESS
+//   CheckCommit(query, y)  — execute in current tx, commit, assert SUCCESS, compare YSON
+//   ExecAuto(query)        — execute in a fresh auto-committed tx, assert SUCCESS (setup/teardown)
+//   CheckAuto(query, yson) — same as ExecAuto but also compares YSON (post-commit verification)
+//   ExecExpectError(query) — execute in current tx expecting failure; resets tx, returns EStatus
+struct TTestTx {
+    NYdb::NQuery::TQueryClient Client;
+    NYdb::NQuery::TSession Session;
+    TTxSettings TxSettings;
+    std::optional<NYdb::NQuery::TTransaction> Tx;
+
+    TTestTx(NYdb::NQuery::TQueryClient client, TTxSettings txSettings)
+        : Client(std::move(client))
+        , Session(Client.GetSession().GetValueSync().GetSession())
+        , TxSettings(txSettings)
+    {}
+
+    void Exec(const TString& query) {
+        auto ctrl = Tx ? TTxControl::Tx(*Tx) : TTxControl::BeginTx(TxSettings);
+        auto result = Session.ExecuteQuery(query, ctrl).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        Tx = result.GetTransaction();
+    }
+
+    void Check(const TString& query, const TString& yson) {
+        auto ctrl = Tx ? TTxControl::Tx(*Tx) : TTxControl::BeginTx(TxSettings);
+        auto result = Session.ExecuteQuery(query, ctrl).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        Tx = result.GetTransaction();
+        CompareYson(yson, FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    void ExecCommit(const TString& query) {
+        auto ctrl = Tx ? TTxControl::Tx(*Tx).CommitTx() : TTxControl::BeginTx(TxSettings).CommitTx();
+        auto result = Session.ExecuteQuery(query, ctrl).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        Tx.reset();
+    }
+
+    void CheckCommit(const TString& query, const TString& yson) {
+        auto ctrl = Tx ? TTxControl::Tx(*Tx).CommitTx() : TTxControl::BeginTx(TxSettings).CommitTx();
+        auto result = Session.ExecuteQuery(query, ctrl).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        Tx.reset();
+        CompareYson(yson, FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    void ExecAuto(const TString& query) {
+        auto result = Session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    void CheckAuto(const TString& query, const TString& yson) {
+        auto result = Session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(yson, FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    EStatus ExecExpectError(const TString& query) {
+        auto ctrl = Tx ? TTxControl::Tx(*Tx) : TTxControl::BeginTx(TxSettings);
+        auto result = Session.ExecuteQuery(query, ctrl).ExtractValueSync();
+        Tx.reset();
+        return result.GetStatus();
+    }
+};
+
 Y_UNIT_TEST_SUITE(KqpReadYourWrites) {
 
 // ============================================================================
@@ -16,27 +86,12 @@ Y_UNIT_TEST_SUITE(KqpReadYourWrites) {
 class TInsertThenSelectPointRead : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenSelectPointRead(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenSelectPointRead(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["inserted"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
+        tx.CheckCommit(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["inserted"]]])");
     }
 };
 
@@ -61,32 +116,13 @@ Y_UNIT_TEST(InsertThenSelectPointRead_ReadCommitted) {
 class TUpdateThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TUpdateThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TUpdateThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "original");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            UPDATE KV2 SET Value = "updated" WHERE Key = 1u;
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["updated"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "original");)");
+        tx.Exec(R"(UPDATE KV2 SET Value = "updated" WHERE Key = 1u;)");
+        tx.CheckCommit(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["updated"]]])");
     }
 };
 
@@ -111,32 +147,13 @@ Y_UNIT_TEST(UpdateThenSelect_ReadCommitted) {
 class TDeleteThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TDeleteThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TDeleteThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "original");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM KV2 WHERE Key = 1u;
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "original");)");
+        tx.Exec(R"(DELETE FROM KV2 WHERE Key = 1u;)");
+        tx.CheckCommit(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
     }
 };
 
@@ -165,32 +182,14 @@ Y_UNIT_TEST(DeleteThenSelect_ReadCommitted) {
 class TInsertThenRangeScan : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenRangeScan(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenRangeScan(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (3u, "C");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (2u, "B");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Key, Value FROM KV2 ORDER BY Key;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[1u;["A"]];[2u;["B"]];[3u;["C"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (3u, "C");)");
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (2u, "B");)");
+        tx.CheckCommit(R"(SELECT Key, Value FROM KV2 ORDER BY Key;)",
+            R"([[1u;["A"]];[2u;["B"]];[3u;["C"]]])");
     }
 };
 
@@ -215,32 +214,13 @@ Y_UNIT_TEST(InsertThenRangeScan_ReadCommitted) {
 class TUpdateThenRangeScanByUpdatedColumn : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TUpdateThenRangeScanByUpdatedColumn(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TUpdateThenRangeScanByUpdatedColumn(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "A");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            UPDATE KV2 SET Value = "B" WHERE Key = 2u;
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Key, Value FROM KV2 WHERE Value = "B";
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[2u;["B"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "A");)");
+        tx.Exec(R"(UPDATE KV2 SET Value = "B" WHERE Key = 2u;)");
+        tx.CheckCommit(R"(SELECT Key, Value FROM KV2 WHERE Value = "B";)", R"([[2u;["B"]]])");
     }
 };
 
@@ -265,32 +245,13 @@ Y_UNIT_TEST(UpdateThenRangeScanByUpdatedColumn_ReadCommitted) {
 class TDeleteThenRangeScan : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TDeleteThenRangeScan(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TDeleteThenRangeScan(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "B"), (3u, "C");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM KV2 WHERE Key = 2u;
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Key, Value FROM KV2 ORDER BY Key;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[1u;["A"]];[3u;["C"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "B"), (3u, "C");)");
+        tx.Exec(R"(DELETE FROM KV2 WHERE Key = 2u;)");
+        tx.CheckCommit(R"(SELECT Key, Value FROM KV2 ORDER BY Key;)", R"([[1u;["A"]];[3u;["C"]]])");
     }
 };
 
@@ -319,40 +280,14 @@ Y_UNIT_TEST(DeleteThenRangeScan_ReadCommitted) {
 class TInsertThenUpdateThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenUpdateThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenUpdateThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["inserted"]]])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            UPDATE KV2 SET Value = "updated" WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["updated"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
+        tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["inserted"]]])");
+        tx.Exec(R"(UPDATE KV2 SET Value = "updated" WHERE Key = 1u;)");
+        tx.CheckCommit(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["updated"]]])");
     }
 };
 
@@ -377,32 +312,13 @@ Y_UNIT_TEST(InsertThenUpdateThenSelect_ReadCommitted) {
 class TInsertThenUpdateAfterCommit : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenUpdateAfterCommit(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenUpdateAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            UPDATE KV2 SET Value = "updated" WHERE Key = 1u;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["updated"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
+        tx.ExecCommit(R"(UPDATE KV2 SET Value = "updated" WHERE Key = 1u;)");
+        tx.CheckAuto(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["updated"]]])");
     }
 };
 
@@ -427,40 +343,14 @@ Y_UNIT_TEST(InsertThenUpdateAfterCommit_ReadCommitted) {
 class TInsertThenDeleteThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenDeleteThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenDeleteThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["inserted"]]])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
+        tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["inserted"]]])");
+        tx.Exec(R"(DELETE FROM KV2 WHERE Key = 1u;)");
+        tx.CheckCommit(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
     }
 };
 
@@ -485,32 +375,13 @@ Y_UNIT_TEST(InsertThenDeleteThenSelect_ReadCommitted) {
 class TInsertThenDeleteAfterCommit : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenDeleteAfterCommit(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenDeleteAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
+        tx.ExecCommit(R"(DELETE FROM KV2 WHERE Key = 1u;)");
+        tx.CheckAuto(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
     }
 };
 
@@ -539,45 +410,15 @@ Y_UNIT_TEST(InsertThenDeleteAfterCommit_ReadCommitted) {
 class TUpdateThenUpdateBasedOnNewValueThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TUpdateThenUpdateBasedOnNewValueThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TUpdateThenUpdateBasedOnNewValueThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul);
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            UPDATE Test SET Amount = 200ul WHERE Group = 1u AND Name = "A";
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[[200u]]])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            UPDATE Test SET Amount = Amount + 50ul WHERE Group = 1u AND Name = "A";
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[[250u]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul);)");
+        tx.Exec(R"(UPDATE Test SET Amount = 200ul WHERE Group = 1u AND Name = "A";)");
+        tx.Check(R"(SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";)", R"([[[200u]]])");
+        tx.Exec(R"(UPDATE Test SET Amount = Amount + 50ul WHERE Group = 1u AND Name = "A";)");
+        tx.CheckCommit(R"(SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";)", R"([[[250u]]])");
     }
 };
 
@@ -602,38 +443,15 @@ Y_UNIT_TEST(UpdateThenUpdateBasedOnNewValueThenSelect_ReadCommitted) {
 class TUpdateThenUpdateBasedOnNewValueAfterCommit : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TUpdateThenUpdateBasedOnNewValueAfterCommit(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TUpdateThenUpdateBasedOnNewValueAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul);
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            UPDATE Test SET Amount = 200ul WHERE Group = 1u AND Name = "A";
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul);)");
+        tx.Exec(R"(UPDATE Test SET Amount = 200ul WHERE Group = 1u AND Name = "A";)");
         // Amount + 50 must read 200 (written above), not 100 (original).
-        result = session.ExecuteQuery(R"(
-            UPDATE Test SET Amount = Amount + 50ul WHERE Group = 1u AND Name = "A";
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[[250u]]])", FormatResultSetYson(result.GetResultSet(0)));
+        tx.ExecCommit(R"(UPDATE Test SET Amount = Amount + 50ul WHERE Group = 1u AND Name = "A";)");
+        tx.CheckAuto(R"(SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";)", R"([[[250u]]])");
     }
 };
 
@@ -664,45 +482,15 @@ Y_UNIT_TEST(UpdateThenUpdateBasedOnNewValueAfterCommit_ReadCommitted) {
 class TUpdateThenPredicateDeleteThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TUpdateThenPredicateDeleteThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TUpdateThenPredicateDeleteThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "B");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            UPDATE KV2 SET Value = "X" WHERE Key = 2u;
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Key FROM KV2 WHERE Value = "X";
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[2u]])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM KV2 WHERE Value = "X";
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Key, Value FROM KV2 ORDER BY Key;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[1u;["A"]];[3u;["B"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "B");)");
+        tx.Exec(R"(UPDATE KV2 SET Value = "X" WHERE Key = 2u;)");
+        tx.Check(R"(SELECT Key FROM KV2 WHERE Value = "X";)", R"([[2u]])");
+        tx.Exec(R"(DELETE FROM KV2 WHERE Value = "X";)");
+        tx.CheckCommit(R"(SELECT Key, Value FROM KV2 ORDER BY Key;)", R"([[1u;["A"]];[3u;["B"]]])");
     }
 };
 
@@ -727,37 +515,14 @@ Y_UNIT_TEST(UpdateThenPredicateDeleteThenSelect_ReadCommitted) {
 class TUpdateThenPredicateDeleteAfterCommit : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TUpdateThenPredicateDeleteAfterCommit(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TUpdateThenPredicateDeleteAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "B");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            UPDATE KV2 SET Value = "X" WHERE Key = 2u;
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM KV2 WHERE Value = "X";
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            SELECT Key, Value FROM KV2 ORDER BY Key;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[1u;["A"]];[3u;["B"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "A"), (2u, "A"), (3u, "B");)");
+        tx.Exec(R"(UPDATE KV2 SET Value = "X" WHERE Key = 2u;)");
+        tx.ExecCommit(R"(DELETE FROM KV2 WHERE Value = "X";)");
+        tx.CheckAuto(R"(SELECT Key, Value FROM KV2 ORDER BY Key;)", R"([[1u;["A"]];[3u;["B"]]])");
     }
 };
 
@@ -788,45 +553,15 @@ Y_UNIT_TEST(UpdateThenPredicateDeleteAfterCommit_ReadCommitted) {
 class TDeleteThenInsertSameKeyThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TDeleteThenInsertSameKeyThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TDeleteThenInsertSameKeyThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "original");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM KV2 WHERE Key = 1u;
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "new");
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["new"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "original");)");
+        tx.Exec(R"(DELETE FROM KV2 WHERE Key = 1u;)");
+        tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "new");)");
+        tx.CheckCommit(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["new"]]])");
     }
 };
 
@@ -851,37 +586,14 @@ Y_UNIT_TEST(DeleteThenInsertSameKeyThenSelect_ReadCommitted) {
 class TDeleteThenInsertSameKeyAfterCommit : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TDeleteThenInsertSameKeyAfterCommit(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TDeleteThenInsertSameKeyAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "original");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM KV2 WHERE Key = 1u;
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "new");
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["new"]]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "original");)");
+        tx.Exec(R"(DELETE FROM KV2 WHERE Key = 1u;)");
+        tx.ExecCommit(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "new");)");
+        tx.CheckAuto(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["new"]]])");
     }
 };
 
@@ -910,53 +622,16 @@ Y_UNIT_TEST(DeleteThenInsertSameKeyAfterCommit_ReadCommitted) {
 class TInsertThenUpdateThenDeleteThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenUpdateThenDeleteThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenUpdateThenDeleteThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["inserted"]]])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            UPDATE KV2 SET Value = "updated" WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["updated"]]])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
+        tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["inserted"]]])");
+        tx.Exec(R"(UPDATE KV2 SET Value = "updated" WHERE Key = 1u;)");
+        tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["updated"]]])");
+        tx.Exec(R"(DELETE FROM KV2 WHERE Key = 1u;)");
+        tx.CheckCommit(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
     }
 };
 
@@ -981,38 +656,14 @@ Y_UNIT_TEST(InsertThenUpdateThenDeleteThenSelect_ReadCommitted) {
 class TInsertThenUpdateThenDeleteAfterCommit : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenUpdateThenDeleteAfterCommit(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenUpdateThenDeleteAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            UPDATE KV2 SET Value = "updated" WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "inserted");)");
+        tx.Exec(R"(UPDATE KV2 SET Value = "updated" WHERE Key = 1u;)");
+        tx.ExecCommit(R"(DELETE FROM KV2 WHERE Key = 1u;)");
+        tx.CheckAuto(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
     }
 };
 
@@ -1040,48 +691,20 @@ Y_UNIT_TEST(InsertThenUpdateThenDeleteAfterCommit_ReadCommitted) {
 class TUpdateBasedOnEarlierUpdatedRowThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TUpdateBasedOnEarlierUpdatedRowThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TUpdateBasedOnEarlierUpdatedRowThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul), (2u, "B", 200ul);
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            UPDATE Test SET Amount = Amount * 2ul WHERE Group = 2u AND Name = "B";
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul), (2u, "B", 200ul);)");
+        tx.Exec(R"(UPDATE Test SET Amount = Amount * 2ul WHERE Group = 2u AND Name = "B";)");
         // Read B's new value within the same transaction.
-        result = session.ExecuteQuery(R"(
-            SELECT Amount FROM Test WHERE Group = 2u AND Name = "B";
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[[400u]]])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
+        tx.Check(R"(SELECT Amount FROM Test WHERE Group = 2u AND Name = "B";)", R"([[[400u]]])");
         // Copy B's new value into A.
-        result = session.ExecuteQuery(R"(
+        tx.Exec(R"(
             $b = (SELECT Amount FROM Test WHERE Group = 2u AND Name = "B");
             UPDATE Test SET Amount = $b WHERE Group = 1u AND Name = "A";
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[[400u]]])", FormatResultSetYson(result.GetResultSet(0)));
+        )");
+        tx.CheckCommit(R"(SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";)", R"([[[400u]]])");
     }
 };
 
@@ -1106,39 +729,18 @@ Y_UNIT_TEST(UpdateBasedOnEarlierUpdatedRowThenSelect_ReadCommitted) {
 class TUpdateBasedOnEarlierUpdatedRowAfterCommit : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TUpdateBasedOnEarlierUpdatedRowAfterCommit(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TUpdateBasedOnEarlierUpdatedRowAfterCommit(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul), (2u, "B", 200ul);
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            UPDATE Test SET Amount = Amount * 2ul WHERE Group = 2u AND Name = "B";
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO Test (Group, Name, Amount) VALUES (1u, "A", 100ul), (2u, "B", 200ul);)");
+        tx.Exec(R"(UPDATE Test SET Amount = Amount * 2ul WHERE Group = 2u AND Name = "B";)");
         // Read B's current (updated) value and write it into A in a single statement.
-        result = session.ExecuteQuery(R"(
+        tx.ExecCommit(R"(
             $b = (SELECT Amount FROM Test WHERE Group = 2u AND Name = "B");
             UPDATE Test SET Amount = $b WHERE Group = 1u AND Name = "A";
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[[400u]]])", FormatResultSetYson(result.GetResultSet(0)));
+        )");
+        tx.CheckAuto(R"(SELECT Amount FROM Test WHERE Group = 1u AND Name = "A";)", R"([[[400u]]])");
     }
 };
 
@@ -1167,27 +769,13 @@ Y_UNIT_TEST(UpdateBasedOnEarlierUpdatedRowAfterCommit_ReadCommitted) {
 class TInsertThenSelectByIndex : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenSelectByIndex(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenSelectByIndex(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[1u;"A"]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");)");
+        tx.CheckCommit(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)",
+            R"([[1u;"A"]])");
     }
 };
 
@@ -1210,39 +798,16 @@ Y_UNIT_TEST(InsertThenSelectByIndex_ReadCommitted) {
 class TUpdateIndexedColumnThenSelectByIndex : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TUpdateIndexedColumnThenSelectByIndex(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TUpdateIndexedColumnThenSelectByIndex(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "old_val");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            UPDATE Test2 SET Comment = "new_val" WHERE Group = 1u AND Name = "A";
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "new_val";
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[1u;"A"]])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "old_val";
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "old_val");)");
+        tx.Exec(R"(UPDATE Test2 SET Comment = "new_val" WHERE Group = 1u AND Name = "A";)");
+        tx.Check(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "new_val";)",
+            R"([[1u;"A"]])");
+        tx.CheckCommit(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "old_val";)",
+            R"([])");
     }
 };
 
@@ -1265,32 +830,14 @@ Y_UNIT_TEST(UpdateIndexedColumnThenSelectByIndex_ReadCommitted) {
 class TDeleteThenSelectByIndex : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TDeleteThenSelectByIndex(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TDeleteThenSelectByIndex(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM Test2 WHERE Group = 1u AND Name = "A";
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");)");
+        tx.Exec(R"(DELETE FROM Test2 WHERE Group = 1u AND Name = "A";)");
+        tx.CheckCommit(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)",
+            R"([])");
     }
 };
 
@@ -1317,40 +864,17 @@ Y_UNIT_TEST(DeleteThenSelectByIndex_ReadCommitted) {
 class TInsertThenInsertSamePkConflictThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenInsertSamePkConflictThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenInsertSamePkConflictThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "first");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[["first"]]])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "second");
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "first");)");
+        tx.Check(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([[["first"]]])");
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx.ExecExpectError(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "second");)"),
+            EStatus::PRECONDITION_FAILED);
         // Tx is aborted — first INSERT must also be rolled back.
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        tx.CheckAuto(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
     }
 };
 
@@ -1375,32 +899,15 @@ Y_UNIT_TEST(InsertThenInsertSamePkConflictThenSelect_ReadCommitted) {
 class TInsertThenInsertSamePkConflictAfterAbort : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenInsertSamePkConflictAfterAbort(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenInsertSamePkConflictAfterAbort(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "first");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            INSERT INTO KV2 (Key, Value) VALUES (1u, "second");
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            SELECT Value FROM KV2 WHERE Key = 1u;
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "first");)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx.ExecExpectError(R"(INSERT INTO KV2 (Key, Value) VALUES (1u, "second");)"),
+            EStatus::PRECONDITION_FAILED);
+        tx.CheckAuto(R"(SELECT Value FROM KV2 WHERE Key = 1u;)", R"([])");
     }
 };
 
@@ -1425,39 +932,17 @@ Y_UNIT_TEST(InsertThenInsertSamePkConflictAfterAbort_ReadCommitted) {
 class TInsertThenInsertSameUniqueIndexConflictThenSelect : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenInsertSameUniqueIndexConflictThenSelect(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenInsertSameUniqueIndexConflictThenSelect(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[1u;"A"]])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");)");
+        tx.Check(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)",
+            R"([[1u;"A"]])");
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx.ExecExpectError(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");)"),
+            EStatus::PRECONDITION_FAILED);
+        tx.CheckAuto(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)", R"([])");
     }
 };
 
@@ -1480,32 +965,15 @@ Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictThenSelect_ReadCommitted) {
 class TInsertThenInsertSameUniqueIndexConflictAfterAbort : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TInsertThenInsertSameUniqueIndexConflictAfterAbort(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TInsertThenInsertSameUniqueIndexConflictAfterAbort(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.Exec(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            tx.ExecExpectError(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");)"),
+            EStatus::PRECONDITION_FAILED);
+        tx.CheckAuto(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)", R"([])");
     }
 };
 
@@ -1529,45 +997,16 @@ Y_UNIT_TEST(InsertThenInsertSameUniqueIndexConflictAfterAbort_ReadCommitted) {
 class TDeleteThenInsertSameUniqueIndexValue : public TTableDataModificationTester {
     TTxSettings TxSettings_;
 public:
-    TDeleteThenInsertSameUniqueIndexValue(TTxSettings txSettings)
-        : TxSettings_(txSettings)
-    {
-        SetFillTables(false);
-    }
+    TDeleteThenInsertSameUniqueIndexValue(TTxSettings txSettings) : TxSettings_(txSettings) { SetFillTables(false); }
 protected:
     void DoExecute() override {
-        auto client = Kikimr->GetQueryClient();
-        auto session = client.GetSession().GetValueSync().GetSession();
-
-        auto result = session.ExecuteQuery(R"(
-            INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");
-        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-
-        result = session.ExecuteQuery(R"(
-            DELETE FROM Test2 WHERE Group = 1u AND Name = "A";
-        )", TTxControl::BeginTx(TxSettings_)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        auto tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");
-        )", TTxControl::Tx(*tx)).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        tx = result.GetTransaction();
-
-        result = session.ExecuteQuery(R"(
-            SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";
-        )", TTxControl::Tx(*tx).CommitTx()).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        CompareYson(R"([[2u;"B"]])", FormatResultSetYson(result.GetResultSet(0)));
+        TTestTx tx(Kikimr->GetQueryClient(), TxSettings_);
+        tx.ExecAuto(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (1u, "A", "idx_val");)");
+        tx.Exec(R"(DELETE FROM Test2 WHERE Group = 1u AND Name = "A";)");
+        tx.Check(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)", R"([])");
+        tx.Exec(R"(INSERT INTO Test2 (Group, Name, Comment) VALUES (2u, "B", "idx_val");)");
+        tx.CheckCommit(R"(SELECT Group, Name FROM Test2 VIEW idx_comment WHERE Comment = "idx_val";)",
+            R"([[2u;"B"]])");
     }
 };
 

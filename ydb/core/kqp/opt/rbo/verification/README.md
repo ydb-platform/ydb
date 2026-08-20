@@ -29,8 +29,10 @@ membership/complement predicate, or the reviewed canonical String predicates,
 exact direct Decimal
 `Coalesce(member, zero)`, exact reviewed Decimal `Just` forms, and exact Decimal
 semantics for comparison, weak integral-to-Decimal casts, same-scale
-nondecreasing-precision Decimal widening, arithmetic, ordering, `SUM`, and
-Decimal `MIN`/`MAX` and phase-aware Decimal `AVG`, exact same-output-type
+nondecreasing-precision Decimal widening plus the one exact
+`Decimal(35,2) -> Decimal(15,4)` rescale, arithmetic, ordering, `SUM`, and
+Decimal `MIN`/`MAX` and phase-aware Decimal `AVG`, exact global q49 Decimal
+`Rank` with independently unstable peer order and serial routing, exact same-output-type
 fixed-width signed/unsigned integral `MIN`/`MAX`, narrowly certified ordering of
 completed integral-`AVG` `Optional<Double>` results, exact ordered logical `UnionAll`,
 explicit query-error outcomes, checked nullable-String `Unwrap` Project
@@ -193,12 +195,12 @@ TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14,
 q15, q16, q18, q19, q21, and q22 plus TPC-DS q2, q3, q4, q5, q6, q7, q8,
 q9, q10, q11,
 q12, q13, q15, q16, q18, q19, q20, q21, q22, q24, q25, q26, q28, q29, q31, q33, q34,
-q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q53, q54, q55, q56, q58,
+q35, q37, q38, q40, q42, q43, q45, q46, q48, q49, q50, q52, q53, q54, q55, q56, q58,
 q59, q60, q61, q62, q63, q64, q65, q66, q68, q69, q71, q72, q73, q74, q75, q76,
 q77, q78, q79,
 q80, q82, q83, q84, q85, q87, q88, q89, q90, q91, q93, q94, q95, q96, q97,
-q98, and q99: 99/121 workload queries (81.8%). Schema-v5 now carries only
-q49 and q51 in the supplemental exact-pair-only list. Unioning that list with
+q98, and q99: 100/121 workload queries (82.6%). Schema-v5 now carries only
+q51 in the supplemental exact-pair-only list. Unioning that list with
 every formula and explicit verifier-entry row leaves the effective exact
 Initial/Final pair floors at 20 TPCH plus 81 TPC-DS, 101 overall.
 TPC-DS q8 is pinned at successful preparation, verifier entry, formula
@@ -293,6 +295,16 @@ formula coverage is 99/121 workload queries, 99/101 exact pairs, all 93
 preparation successes, and all 99 verifier entrants. Fresh post-M77 proof gates
 verify the unchanged 32/32 floor, or 32/121 workload queries (26.4%) and 32/99
 formula-covered queries (32.3%).
+
+Milestone 78 is implemented in production commits `27e3f260017`,
+`97a03c64ab9`, and `68eb64102c7`, verifier/exporter commit `0f12406f6c4`, and
+policy commit `e926958d96c`. It adds only q49's exact six-leaf global Decimal
+Rank slice, promotes q49 to the formula floor, and leaves q51 as the sole
+supplemental pair-only row. The post-M78 TPCH dashboard is authoritative at
+20 / 0 / 2 and TPC-DS at 80 / 1 / 18. Combined coverage is 100/121 workload
+queries, 100/101 exact pairs, all 93 preparation successes, and all 100
+verifier entrants. Fresh post-M78 proof gates verify the unchanged 32/32 floor,
+or 32/121 workload queries (26.4%) and 32/100 formula-covered queries (32.0%).
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
 binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
@@ -1060,6 +1072,113 @@ preparation/verifier work. M77 finds no new defect; the qualified inventory
 remains eleven runtime-confirmed findings plus the bounded pre-physical q12
 routing finding.
 
+Milestone 78 admits one closed ordered-window shape, not general window
+execution. TPC-DS q49 contains three private Aggregate-to-ratio-Project-to-Rank-
+Project corridors, one for each sales channel. Each Rank Project contains
+exactly two direct, option-free `YqlWin(rank)` leaves. Across a snapshot their
+names are exactly `_yql_anonymous_window0` through
+`_yql_anonymous_window5`; each local pair has execution order zero then one.
+Every matching `YqlWindow` has an empty partition, one ascending/nulls-first
+direct non-null `Decimal(15,4)` order key, and ROWS from unbounded preceding
+through current row. Rank results are non-null `Uint64`. The exporter rejects
+subplans, fanout, mixed aggregate windows, nested leaves, additional/fewer
+corridors, noncanonical names, and every broader frame, partition, ordering,
+or type.
+
+Each order key is an exact q49 ratio whose separate Project is traced to the
+required grouped SUM family. The source Aggregate is logical phase
+`Undefined`, or exact phase `Final` directly over a matching
+phase-`Intermediate` producer. Per snapshot, six `Int64 -> Decimal(15,4)` and
+six `Decimal(35,2) -> Decimal(15,4)` casts feed the ratios. The second cast is
+the sole scale-changing Decimal exception: finite raw codes are multiplied by
+100, source magnitudes at least `10^13` saturate to signed infinity, specials
+are preserved, and source NULL propagates. C++ and Python independently check
+the types, cast classification, topology, and two-per-Project/six-per-snapshot
+limits.
+
+Stream/Flow window lowering performs an `UnstableSort` for each source
+definition, including consecutive definitions rebuilt in one group. The model
+therefore gives every Rank leaf its own legal equal-key order. Ordinary equal
+keys are peers and receive competition ranks with gaps. Decimal sort order is
+`-Inf < finite < +Inf < NaN`, but peer testing uses ordinary equality; duplicate
+NaNs are non-peers and their unstable order can change their ranks.
+`CalcOverWindow` publishes no sorted constraint, so the internal order changes
+rank values while preserving row association but does not make the Project a
+sequence. q49's explicit downstream TopSort remains observable.
+
+Production commit `27e3f260017` recognizes `YqlWin` as relation-dependent,
+tracks its direct order key through rename history, preserves every input when
+metadata is unavailable, blocks unsafe movement, and gives each empty-partition
+Rank Project a nonparallel `UnionAll` input. The real-host integration then
+found two production robustness regressions. Row-context member normalization
+rewrote a bound Member inside immutable window metadata without rewriting its
+matching StructType; `97a03c64ab9` excludes the attached metadata subtree.
+Preferred-alias rewriting could then repeat for an untracked window whose
+hidden inputs were conservatively live but could not be renamed;
+`68eb64102c7` makes that shape an alias-rewrite barrier. These were
+preparation/termination failures, not result-divergence findings.
+
+Focused formula-only q49 is `FORMULA_EMITTED` after 2,303/3,302 ms, despite a
+later physical `Missed callable: YqlWin` preparation failure. Report SHA-256 is
+`e20010534c98ae2589e39274cf59fd396bd87961ae7bf81e2ce4572f04f26838`.
+The Initial and Final snapshots have SHA-256 values
+`6d05c8c3503d7457e73617a251d89d42e699ad49372d08c608deca09ab52a7ef`
+and
+`e0441964964197a66185053732180f03f2f5a080c8d66ec7515e249640012d1d`.
+The 3,172,413-byte 10-second formula has SHA-256
+`797f6ad7e264ce01d063a55a60a2b307f055bedde766619ab863ee899f19707d`.
+A separate normal 60-second row is `UNKNOWN` after 2,267/63,562 ms because the
+deadline expires before branch 2/4 (`right_language_empty`); report SHA-256 is
+`a45d0f637cc9399f0567e41b3a4ae5d916a9092524e2419a38ab0b67d315dadf`.
+Neither result is a bounded proof, replay, or full-query counterexample.
+
+The routing audit isolates the exact captured web ratio Project and both Rank
+leaves. On a fixed two-row aggregate database, its serial gather is
+`VERIFIED_BOUNDED` in 0.32 seconds; changing only that edge to `HashV2(item)` is
+`COUNTEREXAMPLE` in 0.47 seconds, and concrete trace extraction reproduces the
+mismatch in 0.67 seconds. Logical item 1 has ranks `(2,2)` and item 2 `(1,1)`;
+the hash-split singleton tasks incorrectly give both `(1,1)`. The concrete
+trace binds the before/after semantics with SHA-256 values
+`c1d4d545ea43b7c9489fbc367ee72d7c77a80adf0297f5a91b6b19b867bae93f`
+and
+`704125e48987615de9c4005021e8ec324094503878941edd896a27e387e0b657`.
+A captured web-branch fixed witness makes the hash form `COUNTEREXAMPLE` in
+45.90 seconds; its serial control is `UNKNOWN` after 60.55 seconds. Both the
+complete q49 serial plan and its three-edge hash mutation are `UNKNOWN` at 60
+seconds. Evidence-manifest SHA-256 is
+`04f58ec27c49638b3fe8c5c9065aa0737b8d7109a4fd1906280814a46cc28b79`.
+Together with the retained pre-fix optimizer trace this is a bounded
+pre-physical global-Rank routing finding, not runtime confirmation: physical
+compilation still rejects `YqlWin`.
+
+Policy commit `e926958d96c` promotes q49 and leaves q51 as the only
+supplemental exact-pair row. Full component gates pass 738/738 Python, 310/310
+C++, 51/51 inspector, 46/46 integration, and 16/16 policy checks; focused
+real-host q49 is 1/1 with exactly Initial then Final. The authoritative TPCH
+dashboard is 20 formulas / 0 unsupported / 2 no-pair failures after
+3,275/110,159 ms, with preparation 20/2 and zero policy violations. Report
+SHA-256 is
+`796b138b95716c7d7c14c3498701686f69dade11dd2fdcc23bd369e2bed97c23`;
+wall time is 132.84 seconds. TPC-DS is 80 formulas / one unsupported q51 / 18
+no-pair failures after 78,270/919,472 ms, with preparation 73/26, all 81 exact
+pairs, 80 entrants, all 80/80 formulas, and zero violations. q49 spends
+2,298/3,316 ms. Report SHA-256 is
+`bd475fedf9e5e8a7c11cdbda7adbb5dc2208a34f99bff6cddfee29fe98a4355f`;
+wall time is 1,021.91 seconds.
+
+Combined M78 coverage is 100 formulas / one unsupported / 20 no-pair failures:
+100/121 workload queries (82.6%), 100/101 exact pairs (99.0%), all 93/93
+preparation successes, all 100/100 verifier entrants, and all 101/101 effective
+pairs. Fresh proof gates retain 32/32 obligations. TPCH verifies 13/13 after
+1,745/82,550 ms (SHA-256
+`8a3ca5e010d927d5f90d06c59a0dec6aeba73338adcfdba4b5d5234267428ffd`;
+103.57 seconds wall), while TPC-DS verifies 19/19 after 16,174/116,051 ms
+(SHA-256
+`94c68481abf54be64ef912412aa633519f96563dac302e472f955742a59c85ad`;
+153.30 seconds wall). Both policies are valid with zero violations. This is
+32/121 workload queries (26.4%), 32/100 formulas (32.0%), and 32/32 curated
+obligations after 17,919/198,601 ms of summed preparation/verifier work.
+
 The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
 `97c0048b4bc31c8c02785bc3dea18c676b9ba6e2452411912c8984f06b376205`.
@@ -1278,11 +1397,12 @@ progress before verifier feature work can reach them. M75's focused and full
 formula evidence is complete and its preparation/formula policy gates are
 green. M76 subsequently removes q12/q20/q98 and raises the starting point to
 96 formulas. M77 removes q53/q63/q89 and raises the checked-in starting point
-to 99 formulas, leaving q49 and q51 as the two exact-pair exporter gaps.
-Schema-v5 pins both at exact-pair depth. The M77 TPCH formula gate is closed;
-TPC-DS and both proof gates are also closed. The fresh post-M77 proof checkpoint
-is 32/32. These planning estimates are not coverage promises and assume
-deliberately workload-targeted gates.
+to 99 formulas. M78 removes q49's exact rescale/global-Rank gap and raises the
+checked-in floor to 100 formulas, leaving q51 as the sole exact-pair exporter
+gap. Schema-v5 pins q51 at exact-pair depth. Both M78 formula gates and both
+proof gates are closed; the fresh proof checkpoint is 32/32. These planning
+estimates are not coverage promises and assume deliberately workload-targeted
+gates.
 
 The new correlated form has exactly two ordered, distinct outer dependencies.
 Each dependency occurs in its own predicate conjunct: exactly one conjunct is a
@@ -1343,6 +1463,14 @@ finite, signed-infinity, or NaN code exactly, while propagating NULL.
 an absent or mismatched `source_type`, scale changes, precision narrowing,
 other source types, malformed or mismatched targets, and nullability changes
 all fail closed.
+
+That description is the historical general gate. M78 adds one exact
+scale-changing exception for the q49 rank corridor: `Decimal(35,2)` to
+`Decimal(15,4)` multiplies a finite raw coefficient by 100, saturates an
+absolute rescaled coefficient of at least `10^15` to the corresponding signed
+infinity, preserves signed infinities and NaN, and propagates NULL. The source
+and target types, topology, and six admitted cast sites are fixed; every other
+Decimal scale change still fails closed.
 
 This moves TPC-DS q18 through formula construction after 1,002/51,090 ms of
 preparation/verifier work. The separate real-host regression proves both
@@ -1575,14 +1703,14 @@ formula-covered queries). At M76 the latter is 33.3% of 96 formulas; no window
 row is added to this policy.
 
 The checked-in proof policy still contains 13 TPCH and 19 TPC-DS obligations,
-or 32/121 (26.4%) of the workload and 32/99 (32.3%) of M77's formula-covered
-queries. Fresh post-M77 reports verify all 32/32 as `VERIFIED_BOUNDED`: TPCH
-passes 13/13 after 1,802/82,453 ms (SHA-256
-`6cd133426b494541647cbd7d618785a7bddab72cd56b01c33f874796171d6219`),
-and TPC-DS passes 19/19 after 16,306/114,124 ms (SHA-256
-`3a03efa79824900b7a5e4985294de39c290f0696eca253e27bd0d45c08c1e181`).
+or 32/121 (26.4%) of the workload and 32/100 (32.0%) of M78's formula-covered
+queries. Fresh post-M78 reports verify all 32/32 as `VERIFIED_BOUNDED`: TPCH
+passes 13/13 after 1,745/82,550 ms (SHA-256
+`8a3ca5e010d927d5f90d06c59a0dec6aeba73338adcfdba4b5d5234267428ffd`),
+and TPC-DS passes 19/19 after 16,174/116,051 ms (SHA-256
+`94c68481abf54be64ef912412aa633519f96563dac302e472f955742a59c85ad`).
 Both policies are valid with no violations; the combined summed
-preparation/verifier work is 18,108/196,577 ms, and proof mode does not enforce
+preparation/verifier work is 17,919/198,601 ms, and proof mode does not enforce
 the dashboard-only exact-pair floor. TPC-DS q8 independently
 prepares in 695 ms and proves after 2,041 ms with the 60-second budget. The
 immediately preceding 30-obligation complete gate spent 1,633/56,327 ms for
@@ -2177,15 +2305,20 @@ multiplies the integer by `10^s`; a coefficient whose absolute value reaches
 `10^p` becomes the corresponding signed infinity, matching weak MiniKQL
 `SafeCast`. A present overflow is therefore not NULL. Complete integer literals
 retain the normalized-literal representation, while value-specific incomplete
-literals use `cast_decimal`. For a Decimal source, only a same-scale cast to
-equal or greater precision is accepted. That conversion is raw-code identity:
-finite coefficients, signed infinities, and NaN are preserved exactly, and a
-source NULL remains NULL.
+literals use `cast_decimal`. For a Decimal source, the general rule accepts
+only a same-scale cast to equal or greater precision. That conversion is
+raw-code identity: finite coefficients, signed infinities, and NaN are
+preserved exactly, and a source NULL remains NULL. M78 admits one additional
+exact conversion, only in the six audited q49 rank-order expressions:
+`Decimal(35,2)` to `Decimal(15,4)` rescales a finite raw coefficient by 100 and
+saturates an absolute rescaled coefficient of at least `10^15` to signed
+infinity; special values and NULL are preserved.
 
 `Convert`, `StrictCast`, sources outside exact integers and canonical Decimals,
-missing or mismatched `source_type`, cross-scale Decimal casts, precision
-narrowing, changed nullability, zero-integral-digit targets, and malformed or
-mismatched descriptors or annotations remain outside this explicit gate. A
+missing or mismatched `source_type`, every cross-scale Decimal cast outside
+that fixed q49 exception, precision narrowing, changed nullability,
+zero-integral-digit targets, and malformed or mismatched descriptors or
+annotations remain outside this explicit gate. A
 real-host two-row/two-task regression covers nullable integral-to-Decimal and
 nullable same-scale Decimal-widening expressions and returns
 `VERIFIED_BOUNDED`. The full TPC-DS q18 obligation only emits a formula; this
@@ -2710,8 +2843,9 @@ raise it to 13 TPCH plus 17 TPC-DS obligations. TPC-DS q8 raises that
 floor to 13 TPCH plus 18 TPC-DS obligations; q28 now raises the current floor
 to 13 TPCH plus 19 TPC-DS obligations, 32 total.
 
-The audit has found eleven runtime-confirmed production optimizer defects plus
-one bounded pre-physical StageGraph-routing finding. A stale negation flag
+The audit has found eleven runtime-confirmed production optimizer defects,
+two bounded pre-physical StageGraph-routing findings, and two production
+robustness regressions found and fixed during preparation. A stale negation flag
 could turn a later positive `EXISTS` into `NOT EXISTS`; its focused regression
 and fix are committed in `95a2afad1d3`. The missing scalar-cardinality enforcement made
 a two-row scalar subquery select its first row instead of raising
@@ -2854,6 +2988,24 @@ is a bounded pre-physical finding based on exact StageGraph/task semantics,
 not a runtime-confirmed production defect.
 The repaired q12 pair is `UNKNOWN` after 61,153 ms and is not claimed as
 proved; the M76 section above preserves all artifact digests.
+
+M78 adds the second bounded pre-physical routing finding. An exact extracted
+q49 ratio-plus-two-rank slice on a fixed two-row aggregate database is
+`VERIFIED_BOUNDED` in 0.32 seconds when gathered serially, but the
+`HashV2(item)` mutation is a `COUNTEREXAMPLE` in 0.47 seconds; a 0.67-second concrete trace gives logical ranks `(2,2)` and
+`(1,1)` for items 1 and 2, while task-local hash evaluation gives `(1,1)` for
+both. Commit `27e3f260017` preserves rank order inputs and treats a global
+rank as a serial routing barrier. The complete q49 pair and its hash mutation
+both remain `UNKNOWN` at 60 seconds, and physical replay is blocked by the
+compiler's `YqlWin` rejection, so this is bounded pre-physical evidence rather
+than a runtime-confirmed defect.
+
+The same production-path work exposed two robustness regressions. Commit
+`97a03c64ab9` keeps window-metadata member names aligned when member aliases
+are normalized, preventing a type-annotation failure. Commit `68eb64102c7`
+pins untracked window inputs across preferred-alias rewrites, preventing a
+repeat rewrite loop. These are preparation/termination failures that were
+found and fixed; neither is claimed as an observed result divergence.
 
 An additional legacy probe placed
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer; it

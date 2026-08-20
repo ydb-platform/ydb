@@ -394,7 +394,10 @@ signed-infinity saturation. In particular, present integral overflow produces
 `-Inf` or `+Inf`, not NULL. The second family is canonical Decimal with the
 same scale and no greater precision than the result. That widening preserves
 the encoded value exactly, including finite values, both infinities, and NaN,
-and propagates NULL.
+and propagates NULL. Milestone 78 adds one disjoint exact source/target pair:
+`Decimal(35,2) -> Decimal(15,4)`. It multiplies a finite raw coefficient by
+100, saturates to signed infinity when the source magnitude reaches `10^13`,
+preserves both infinities and NaN, and propagates source NULL.
 
 For both families, source and result nullability must match, the canonical
 target descriptor and every target annotation must agree with the result, and
@@ -404,9 +407,9 @@ argument type before selecting integral-cast or Decimal-widening semantics.
 That field is a required cross-language audit seam rather than redundant
 metadata. Complete integer literals remain normalized literals; other admitted
 expressions remain explicit casts. Missing or mismatched `source_type`,
-`Convert`, `StrictCast`, nullability mismatch, Decimal narrowing or scale
-change, non-integral/non-Decimal sources, and zero-integral-digit targets fail
-closed outside the existing complete-literal normalization.
+`Convert`, `StrictCast`, nullability mismatch, every other Decimal narrowing or
+scale change, non-integral/non-Decimal sources, and zero-integral-digit targets
+fail closed outside the existing complete-literal normalization.
 
 A separate fixed conversion normalizes only
 `SafeCast(String|Utf8 literal, OptionalType(Decimal(p,s))) ->
@@ -927,6 +930,17 @@ Implementation sequence:
     neither the 32-obligation proof floor nor the 101-pair floor changes. Both
     complete dashboards and all 32 fresh proof obligations are green below. M4
     remains current.
+78. M4: exact q49 global Decimal `Rank` semantics, including its one reviewed
+    `Decimal(35,2) -> Decimal(15,4)` rescale, six independently unstable
+    empty-partition Rank definitions, their closed Aggregate/ratio/Rank
+    topology, and a mandatory serial gather before every global-Rank Project.
+    Production commits `27e3f260017`, `97a03c64ab9`, and `68eb64102c7` retain
+    hidden order dependencies, preserve immutable source metadata, and close an
+    untracked-window alias-rewrite loop; verifier commit `0f12406f6c4` models
+    the exact slice. Policy commit `e926958d96c` promotes q49, leaving q51 as
+    the sole supplemental pair-only row. The authoritative floor is 100
+    formulas, 101 exact pairs, and the unchanged 32 bounded proofs; all four
+    complete dashboard/proof gates are green below. M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -1895,11 +1909,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   expressions for every signed and unsigned 8/16/32/64-bit width when the
   canonical Decimal target/result agree and retain an integral digit. Source
   NULL propagates; a present out-of-range integer saturates to signed infinity
-  rather than becoming NULL. Canonical Decimal sources are also admitted only
-  for same-scale, non-decreasing-precision widening, which preserves every
-  finite and special encoded value. Result nullability must equal source
-  nullability, and the independently checked serialized `source_type` selects
-  those two semantics across the C++/Python boundary. Canonical same-type
+  rather than becoming NULL. Canonical Decimal sources normally require
+  same-scale, non-decreasing-precision widening, which preserves every finite
+  and special encoded value. The one additional exact pair is q49's
+  `Decimal(35,2) -> Decimal(15,4)` rescale: finite raw codes are multiplied by
+  100 and source magnitudes at least `10^13` saturate to signed infinity, while
+  specials are preserved. Result nullability must equal source nullability,
+  and the independently checked serialized `source_type` selects those
+  semantics across the C++/Python boundary. Canonical same-type
   Decimal `+`/`-`, `DecimalMul`, and `DecimalDiv` with a same-type Decimal or
   integer right operand have exact `NDecimal` special, scale, rounding, and
   overflow semantics, including the current negative-divisor asymmetry. Sort,
@@ -2110,10 +2127,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   version-four evaluation enforce one orthogonal preparation-success floor
   and four monotonic semantic depths. The exact-pair floor unions every formula
   and explicit verifier-entry row with supplemental TPC-DS
-  q49/q51, yielding 20 TPCH plus 81 TPC-DS pairs because q53/q63/q89 now
+  q51, yielding 20 TPCH plus 81 TPC-DS pairs because q49/q53/q63/q89 now
   belong to the formula tier. TPCH q1, q13,
   and q16 plus TPC-DS q5, q8, q9, q59, q65, q72, q78, and q80 have explicit
-  verifier-entry requirements, the 99-query formula floor must keep
+  verifier-entry requirements, the 100-query formula floor must keep
   constructing SMT, and the 32-query hermetic
   proof floor must remain
   `VERIFIED_BOUNDED`. A verifier-side `UNSUPPORTED` result satisfies only the
@@ -3131,6 +3148,124 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   runtime-confirmed defects plus the one bounded pre-physical q12 routing
   finding.
 
+  Milestone 78 implementation is split across production commits
+  `27e3f260017`, `97a03c64ab9`, and `68eb64102c7`, verifier/exporter commit
+  `0f12406f6c4`, and policy commit `e926958d96c`. It admits only q49's three
+  private Aggregate-to-ratio-Project-to-Rank-Project corridors. Each Rank
+  Project contains exactly two direct, option-free `YqlWin(rank)` leaves; the
+  complete snapshot contains the six canonical names
+  `_yql_anonymous_window0` through `_yql_anonymous_window5`, with local
+  execution orders zero and one. Every definition has an empty partition, one
+  ascending/nulls-first direct non-null `Decimal(15,4)` order key, and the
+  exact ROWS frame from unbounded preceding through current row. Each result is
+  non-null `Uint64`. Subplans, mixed aggregate-window leaves, nested Rank
+  expressions, additional/fewer corridors, fanout, malformed names, and every
+  broader ordered-window shape fail closed.
+
+  The order key is one q49 ratio. The exporter traces it through a separate
+  Project to the exact grouped SUM family and requires the observed logical
+  `Undefined` Aggregate or matching Final-over-Intermediate split. Across each
+  snapshot, six `Int64 -> Decimal(15,4)` and six
+  `Decimal(35,2) -> Decimal(15,4)` casts feed those ratios. The latter is the
+  sole scale-changing Decimal cast: finite raw codes are multiplied by 100,
+  absolute source codes at least `10^13` saturate to signed infinity, and both
+  infinities and NaN are preserved. C++ and Python independently enforce the
+  source/result types, nullability, cast classification, topology, and the
+  two-per-Project/six-per-snapshot limits.
+
+  Each Rank definition receives its own bounded ordinal choice because the
+  Stream/Flow lowering uses `UnstableSort`, including consecutive definitions
+  rebuilt in one window group. Ordinary equal keys are peers and receive the
+  same competition rank with gaps. Decimal order is
+  `-Inf < finite < +Inf < NaN`, while peer equality remains ordinary Decimal
+  equality; duplicate NaNs are therefore non-peers and their legal unstable
+  order affects their ranks. `CalcOverWindow` publishes no sorted constraint,
+  so the internal orders preserve row-to-rank association but do not make the
+  Project output a sequence. q49's later explicit TopSort remains the observable
+  ordering operation.
+
+  Commit `27e3f260017` treats both `YqlAggWin` and `YqlWin` as
+  relation-dependent, carries the direct order key through ordered rename
+  history, keeps every input live when metadata is unavailable, blocks unsafe
+  movement, and gives a global Rank Project a nonparallel `UnionAll` input.
+  The real-host q49 integration then exposed two production robustness
+  regressions. `NormalizeMemberNames` rewrote a bound Member inside immutable
+  source window metadata without rewriting its matching StructType, causing
+  type annotation to fail; `97a03c64ab9` excludes attached metadata from that
+  row-context rewrite. Preferred-alias rewriting could subsequently repeat for
+  an untracked window whose hidden dependencies were conservatively live but
+  could not be renamed; `68eb64102c7` makes that shape an alias-rewrite barrier.
+  These are fixed preparation/termination regressions, not result-divergence
+  findings.
+
+  Focused formula-only q49 is `FORMULA_EMITTED` after 2,303/3,302 ms of
+  preparation/verifier work. Preparation fails only after the exact pair is
+  captured because physical compilation reports `Missed callable: YqlWin`.
+  Its report SHA-256 is
+  `e20010534c98ae2589e39274cf59fd396bd87961ae7bf81e2ce4572f04f26838`;
+  Initial and Final snapshot SHA-256 values are
+  `6d05c8c3503d7457e73617a251d89d42e699ad49372d08c608deca09ab52a7ef`
+  and
+  `e0441964964197a66185053732180f03f2f5a080c8d66ec7515e249640012d1d`.
+  The 3,172,413-byte, 10-second canonical formula has SHA-256
+  `797f6ad7e264ce01d063a55a60a2b307f055bedde766619ab863ee899f19707d`.
+  A separate normal 60-second run is `UNKNOWN` after 2,267/63,562 ms because
+  the global deadline expires before branch 2/4 (`right_language_empty`); its
+  report SHA-256 is
+  `a45d0f637cc9399f0567e41b3a4ae5d916a9092524e2419a38ab0b67d315dadf`.
+  This adds a formula, not a bounded proof or replay result.
+
+  The retained routing evidence isolates the exact captured web ratio Project
+  and its two Rank leaves. On a fixed two-row aggregate database the serial
+  gather is `VERIFIED_BOUNDED` in 0.32 seconds, while changing only that edge to
+  `HashV2(item)` is `COUNTEREXAMPLE` in 0.47 seconds; concrete trace extraction
+  reproduces it in 0.67 seconds. The logical result assigns item 1 ranks `(2,2)`
+  and item 2 `(1,1)`, whereas the two hash-local singleton tasks incorrectly
+  assign `(1,1)` to both. The trace binds semantic snapshots with SHA-256
+  `c1d4d545ea43b7c9489fbc367ee72d7c77a80adf0297f5a91b6b19b867bae93f`
+  and
+  `704125e48987615de9c4005021e8ec324094503878941edd896a27e387e0b657`.
+  A larger captured web-branch fixed witness makes the HashV2 variant
+  `COUNTEREXAMPLE` in 45.90 seconds; its serial control is `UNKNOWN` after
+  60.55 seconds. The full q49 serial plan and its three-edge hash mutation are
+  both `UNKNOWN` at 60 seconds. The complete evidence manifest has SHA-256
+  `04f58ec27c49638b3fe8c5c9065aa0737b8d7109a4fd1906280814a46cc28b79`.
+  Together with the retained pre-fix production trace this establishes a
+  bounded pre-physical global-Rank routing defect. It is not runtime-confirmed:
+  `YqlWin` still cannot be compiled, and neither full-query result is a proof or
+  counterexample.
+
+  Policy commit `e926958d96c` promotes q49 from supplemental pair-only depth to
+  formula construction and leaves q51 as the sole supplemental row. Focused
+  and full component gates pass 738/738 Python verifier checks, 310/310 C++
+  exporter/production checks, 51/51 inspector checks, 46/46 real-host
+  integration checks, and 16/16 policy checks; the focused real q49 integration
+  is 1/1 and captures exactly Initial then Final. The authoritative post-M78
+  TPCH dashboard is 20 formulas / 0 unsupported / 2 no-pair failures after
+  3,275/110,159 ms, with preparation 20/2, all 20/20 pair and formula floors,
+  and zero policy violations. Its report SHA-256 is
+  `796b138b95716c7d7c14c3498701686f69dade11dd2fdcc23bd369e2bed97c23`;
+  the test wall time is 132.84 seconds. TPC-DS is 80 formulas / one unsupported
+  q51 / 18 no-pair failures after 78,270/919,472 ms, with preparation 73/26,
+  all 81 effective pairs, 80 verifier entrants, all 80/80 formulas, and zero
+  violations. q49 spends 2,298/3,316 ms in that dashboard. Its report SHA-256 is
+  `bd475fedf9e5e8a7c11cdbda7adbb5dc2208a34f99bff6cddfee29fe98a4355f`;
+  the test wall time is 1,021.91 seconds.
+
+  The authoritative combined partition is 100 formulas / one unsupported / 20
+  no-pair failures: 100/121 workload formulas (82.6%), 100/101 exact-pair
+  formulas (99.0%), all 93/93 preparation successes, all 100/100 verifier
+  entrants, and all 101/101 effective exact pairs. Fresh proof gates retain the
+  32-obligation floor. TPCH verifies 13/13 after 1,745/82,550 ms (report SHA-256
+  `8a3ca5e010d927d5f90d06c59a0dec6aeba73338adcfdba4b5d5234267428ffd`;
+  103.57 seconds wall), and TPC-DS verifies 19/19 after 16,174/116,051 ms
+  (report SHA-256
+  `94c68481abf54be64ef912412aa633519f96563dac302e472f955742a59c85ad`;
+  153.30 seconds wall). Both proof policies are valid with zero violations.
+  This is 32/121 workload queries (26.4%), 32/100 formula-covered queries
+  (32.0%), and 32/32 curated obligations after 17,919/198,601 ms of summed
+  preparation/verifier work.
+
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
   q35. Narrowly tagged derived-`Double` ordering now removes q22/q85 from the
@@ -3147,11 +3282,10 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   equality. Milestone 73 removes the last verifier-side construction rejection,
   q4, through the three exact reductions above. Milestone 74 removes q28's
   nullable Decimal count-distinct and staged Decimal AVG-carrier blockers.
-  Including exact window
-  semantics for the failed-preparation pairs,
-  the full captured-pair gap is roughly 6--8 feature families or 8--16
-  milestones. Those workload-targeted estimates now start from 93 formulas and
-  can change as later blockers become visible. Milestone 75 removes q84's
+  Including exact window semantics for the failed-preparation pairs, the
+  historical captured-pair gap was roughly 6--8 feature families or 8--16
+  milestones. Those workload-targeted estimates started from 93 formulas and
+  changed as later blockers became visible. Milestone 75 removes q84's
   partial-`Concat` boundary from formula construction, and its complete
   formula dashboards and policy gates are closed. M4 remains current. The 20
   no-pair entries
@@ -3160,11 +3294,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   solver proof. Milestone 76 reset that planning pass to 96 formulas and
   removed q12/q20/q98 from the exact-pair exporter gap. Milestone 77 moves
   q53/q63/q89 through formula construction with the closed AVG/Abs grammar
-  above and raises the checked-in formula floor to 99. q49 and q51 remain:
-  q49 combines a Decimal scale-changing cast with another window shape, while
-  q51 exposes an ordered contextual window and a secondary range boundary.
-  They remain pinned at exact-pair depth. Both M77 formula gates and both proof
-  gates are closed: 99 formulas and all 32/32 curated proofs are green.
+  above and raises the checked-in formula floor to 99. Milestone 78 removes
+  q49's scale-changing cast/global-Rank combination and raises the checked-in
+  floor to 100. q51 alone remains at exact-pair depth: it exposes an ordered
+  contextual aggregate window and a secondary range boundary. Both M78 formula
+  gates and both proof gates are closed: 100 formulas and all 32/32 curated
+  proofs are green.
 
   q54's row spends 50,737 ms in verifier/formula-construction work. Its
   separate 60-second solver experiment is `UNKNOWN`: the global deadline
@@ -3407,14 +3542,14 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   q3, q8, q9, q16, q28, q34, q38, q42, q48, q52, q55, q69, q73, q87, q90, q93,
   q94, q95, and q96 with a fixed 60-second per-query budget. The current
   policy covers 13 TPCH and 19 TPC-DS queries: 32 obligations, 32/121 (26.4%)
-  of the workload, and 32/99 (32.3%) of formula-covered queries. Fresh
-  post-M77 reports verify all 32/32 as `VERIFIED_BOUNDED`: TPCH passes 13/13
-  after 1,802/82,453 ms (SHA-256
-  `6cd133426b494541647cbd7d618785a7bddab72cd56b01c33f874796171d6219`),
-  and TPC-DS passes 19/19 after 16,306/114,124 ms (SHA-256
-  `3a03efa79824900b7a5e4985294de39c290f0696eca253e27bd0d45c08c1e181`).
+  of the workload, and 32/100 (32.0%) of formula-covered queries. Fresh
+  post-M78 reports verify all 32/32 as `VERIFIED_BOUNDED`: TPCH passes 13/13
+  after 1,745/82,550 ms (SHA-256
+  `8a3ca5e010d927d5f90d06c59a0dec6aeba73338adcfdba4b5d5234267428ffd`),
+  and TPC-DS passes 19/19 after 16,174/116,051 ms (SHA-256
+  `94c68481abf54be64ef912412aa633519f96563dac302e472f955742a59c85ad`).
   Both policies are valid with no violations; combined summed
-  preparation/verifier work is 18,108/196,577 ms, and proof mode does not
+  preparation/verifier work is 17,919/198,601 ms, and proof mode does not
   enforce the dashboard-only exact-pair floor.
 
   The immediately preceding complete policy gate on source `4c2c1359e28`
@@ -3909,8 +4044,9 @@ twenty-nine and thirty. The checked nullable-String `Unwrap` slice adds q8 as
 obligation thirty-one, and the exact Decimal count-distinct/staged-AVG slice
 adds q28 as obligation thirty-two.
 
-The audit has found eleven runtime-confirmed production optimizer defects plus
-one bounded pre-physical StageGraph-routing finding.
+The audit has found eleven runtime-confirmed production optimizer defects,
+two bounded pre-physical StageGraph-routing findings, and two production
+robustness regressions found and fixed during preparation.
 First, an unrelated earlier `NOT` left stale state while the simple-subplan rule
 searched later conjuncts, so a positive `EXISTS` could be lowered as
 `NOT EXISTS`; the focused regression and per-conjunct reset are committed in
@@ -4069,6 +4205,26 @@ schema mismatch. All three normal 60-second rows are `UNKNOWN`; the qualified
 finding inventory therefore remains eleven runtime-confirmed defects plus this
 one bounded pre-physical routing finding.
 
+Milestone 78 adds a second bounded pre-physical routing finding. The retained
+pre-fix q49 trace hashes each branch on `item` before evaluating two global
+Rank leaves. An exact extracted ratio-and-Rank slice verifies the serial gather
+on a fixed database and returns `COUNTEREXAMPLE` when only that edge becomes
+`HashV2(item)`: two logical rows with ranks `(2,2)` and `(1,1)` become two
+task-local singleton rows both ranked `(1,1)`. Commit `27e3f260017` retains the
+hidden order dependencies and serially gathers global windows. Physical
+compilation still rejects `YqlWin`, the full-query correct and mutated plans
+are both `UNKNOWN`, and this is therefore not a runtime-confirmed defect.
+
+The same real-host integration found two production robustness regressions.
+Commit `97a03c64ab9` prevents row-context member normalization from corrupting
+immutable window metadata and its self-contained Struct descriptor. Commit
+`68eb64102c7` blocks preferred-alias rewriting for untracked windows whose
+hidden dependencies cannot be renamed, closing a repeat rewrite loop. These
+were preparation/termination failures, not semantic counterexamples. The
+qualified inventory is now eleven runtime-confirmed defects, two bounded
+pre-physical routing findings, and these two separately classified robustness
+regressions.
+
 An additional legacy probe with an intrinsic
 `Ensure(foo.id, false, "inner scalar error")` inside the scalar producer raises
 `PRECONDITION_FAILED` despite an empty top-level consumer, confirming that the
@@ -4122,6 +4278,11 @@ regression locks the corrected boundary.
   changing the 101-pair or 32-proof floors. Focused formula construction is
   complete; both dashboards and both fresh proof gates are closed in the M77
   closeout above.
+  M78 policy commit `e926958d96c` raises the formula floor to 100 by promoting
+  q49 and leaves q51 as the sole supplemental pair-only row. The 101-pair and
+  32-proof floors remain unchanged. Focused construction and the 60-second
+  `UNKNOWN` result, both complete dashboards, both fresh proof gates, and the
+  bounded routing evidence are recorded in the M78 closeout above.
   Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.

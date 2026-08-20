@@ -862,6 +862,10 @@ struct TPersistentBufferFormat {
             ui32 LsnsCount;
             ui64 Size;
             ui32 FastErasesCount;
+            // Direct block group number this info entry belongs to. See TPersistentBufferId for
+            // rationale; defaults to 0 to preserve the pre-existing single-namespace-per-tablet
+            // behavior.
+            ui8 DirectBlockGroupIndex = 0;
         };
 
         struct TOpStats {

@@ -132,6 +132,15 @@ TApiMessage::TPtr OffsetFetchError(const TOffsetFetchRequestData& request, EKafk
 }
 
 
+TApiMessage::TPtr SyncGroupError(EKafkaErrors error) {
+    auto response = std::make_shared<TSyncGroupResponseData>();
+    response->ErrorCode = error;
+    // Non-nullable on the wire; a default (null) value fails serialization.
+    response->Assignment = "";
+    return response;
+}
+
+
 TApiMessage::TPtr CreateTopicsError(const TCreateTopicsRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TCreateTopicsResponseData>();
     for (const auto& topic : request.Topics) {
@@ -198,6 +207,14 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return OffsetCommitError(static_cast<const TOffsetCommitRequestData&>(request), error);
         case OFFSET_FETCH:
             return OffsetFetchError(static_cast<const TOffsetFetchRequestData&>(request), error);
+        case JOIN_GROUP:
+            return TopLevelError<TJoinGroupResponseData>(error);
+        case HEARTBEAT:
+            return TopLevelError<THeartbeatResponseData>(error);
+        case LEAVE_GROUP:
+            return TopLevelError<TLeaveGroupResponseData>(error);
+        case SYNC_GROUP:
+            return SyncGroupError(error);
         case CREATE_TOPICS:
             return CreateTopicsError(static_cast<const TCreateTopicsRequestData&>(request), error);
         case INIT_PRODUCER_ID:

@@ -176,6 +176,26 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
             UNIT_ASSERT_VALUES_EQUAL(createPartitions->Results[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
         }
         {
+            TString joinGroupId = groupId;
+            std::vector<TString> topics{topicName};
+            auto join = client.JoinGroup(topics, joinGroupId, "roundrobin");
+            UNIT_ASSERT_VALUES_EQUAL(join->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        }
+        {
+            TString memberId = "expired-member";
+            TString protocolName = "roundrobin";
+            std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> assignments;
+            auto sync = client.SyncGroup(memberId, 0, groupId, assignments, protocolName);
+            UNIT_ASSERT_VALUES_EQUAL(sync->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+            UNIT_ASSERT(sync->Assignment);
+            UNIT_ASSERT_VALUES_EQUAL(
+                client.Heartbeat(memberId, 0, groupId)->ErrorCode,
+                static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+            UNIT_ASSERT_VALUES_EQUAL(
+                client.LeaveGroup(memberId, groupId)->ErrorCode,
+                static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        }
+        {
             auto describe = client.DescribeConfigs({topicName});
             UNIT_ASSERT_VALUES_EQUAL(describe->Results.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(describe->Results[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));

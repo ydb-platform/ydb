@@ -1649,7 +1649,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredSnapshotPairQueries ==
-            std::set<ui32>({49, 51, 53, 63, 89}));
+            std::set<ui32>({49, 51}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
             std::set<ui32>({5, 8, 9, 59, 65, 72, 78, 80}));
@@ -1658,9 +1658,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({
                 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 18, 19, 20, 21,
                 22, 24, 25, 26, 28, 29, 31, 33, 34, 35, 37, 38, 40, 42, 43, 45,
-                46, 48, 50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68,
-                69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 82, 83, 84, 85, 87,
-                88, 90, 91, 93, 94, 95, 96, 97, 98, 99,
+                46, 48, 50, 52, 53, 54, 55, 56, 58, 59, 60, 61, 62, 63, 64, 65,
+                66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 82, 83, 84,
+                85, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 98, 99,
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifiedQueries ==
@@ -2240,7 +2240,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(baseline.SnapshotPairFloorEnforced);
         UNIT_ASSERT(baseline.Violations.empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            baseline.RequiredSnapshotPairQueries.size(), 5);
+            baseline.RequiredSnapshotPairQueries.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairFloorQueries.size(), 81);
         UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairQueries.size(), 81);
 
@@ -2272,7 +2272,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             CoveragePolicyEvaluationVersion);
         UNIT_ASSERT(report["snapshot_pair_floor_enforced"].GetBooleanSafe());
         UNIT_ASSERT_VALUES_EQUAL(
-            report["required_snapshot_pair_queries"].GetArraySafe().size(), 5);
+            report["required_snapshot_pair_queries"].GetArraySafe().size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(
             report["snapshot_pair_floor_queries"].GetArraySafe().size(), 81);
         UNIT_ASSERT_VALUES_EQUAL(

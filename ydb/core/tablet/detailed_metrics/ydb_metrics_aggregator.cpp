@@ -83,7 +83,8 @@ public:
 
     virtual void AddSourceCountersGroup(
         const TString& sourceGroupId,
-        NMonitoring::TDynamicCounterPtr sourceCounterGroup
+        NMonitoring::TDynamicCounterPtr sourceCounterGroup,
+        bool isFollowerSource
     ) override {
         const auto result = SourceCounterGroups.try_emplace(sourceGroupId);
 
@@ -102,6 +103,7 @@ public:
             sourceGroupId,
             this->SimpleCountersOpts(),
             sourceCounterGroup,
+            isFollowerSource,
             result.first->second.SimpleCounters
         );
 
@@ -114,6 +116,7 @@ public:
             sourceGroupId,
             this->CumulativeCountersOpts(),
             sourceCounterGroup,
+            isFollowerSource,
             result.first->second.CumulativeCounters
         );
 
@@ -126,6 +129,7 @@ public:
             sourceGroupId,
             this->PercentileCountersOpts(),
             sourceCounterGroup,
+            isFollowerSource,
             result.first->second.PercentileCounters
         );
     }
@@ -245,6 +249,10 @@ private:
      * @param[in] sourceGroupId The ID of the corresponding source group
      * @param[in] counterOptions The parsed enum options for the source counters
      * @param[in] sourceCounterGroup The counter group where the source counters are looked up
+     * @param[in] isFollowerSource Whether this source group is a follower leaf (step 09.5):
+     *            a LeaderOnly counter's slot is left null rather than looked up, so it
+     *            is skipped by AggregateValue() and never inflates the leader-only
+     *            target by the replication factor
      * @param[in,out] sourceCounters The container where the source counters will be saved
      */
     template <
@@ -260,12 +268,18 @@ private:
         const TString& sourceGroupId,
         const TCounterOptions* counterOptions,
         NMonitoring::TDynamicCounterPtr sourceCounterGroup,
+        bool isFollowerSource,
         TSourceCounters& sourceCounters
     ) {
         sourceCounters.clear();
         sourceCounters.reserve(counterOptions->Size);
 
         for (size_t i = 0; i < counterOptions->Size; ++i) {
+            if (isFollowerSource && counterOptions->GetLeaderOnly(i)) {
+                sourceCounters.emplace_back();
+                continue;
+            }
+
             const char* counterName = counterOptions->GetNames()[i];
 
             auto sourceCounter = (sourceCounterGroup.Get()->*FindSourceCounter)(

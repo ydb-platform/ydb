@@ -32,6 +32,13 @@ protected:
     TVector<bool> Integral;
 
     /**
+     * Whether the counter at each index is meaningful only on leaders
+     * (TCounterOptions::LeaderOnly, step 09.5). Parallel to Integral: one
+     * entry per enum value, false for a value with no CounterOpts extension.
+     */
+    TVector<bool> LeaderOnly;
+
+    /**
      * The list of source counters for each enum value.
      *
      * @note Each entry is guaranteed to be not empty, if ParseSourceCounters is true.
@@ -47,6 +54,7 @@ public:
         Names.reserve(Size);
         Ranges.reserve(Size);
         Integral.reserve(Size);
+        LeaderOnly.reserve(Size);
 
         if constexpr (ParseSourceCounters) {
             SourceCounters.reserve(Size);
@@ -61,6 +69,7 @@ public:
                 NamesStrings.emplace_back(); // empty name
                 Ranges.emplace_back(); // empty ranges
                 Integral.push_back(false);
+                LeaderOnly.push_back(false);
 
                 Y_ABORT_UNLESS(
                     !ParseSourceCounters,
@@ -84,6 +93,7 @@ public:
             NamesStrings.emplace_back(nameString);
             Ranges.push_back(ParseRanges(co));
             Integral.push_back(co.GetIntegral());
+            LeaderOnly.push_back(co.GetLeaderOnly());
 
             if constexpr (ParseSourceCounters) {
                 // Parse SourceCounters but make sure there is always at least one
@@ -139,6 +149,15 @@ public:
     }
 
     /**
+     * @return Whether the counter at idx is meaningful only on leaders
+     *         (TCounterOptions::LeaderOnly, step 09.5)
+     */
+    virtual bool GetLeaderOnly(size_t idx) const {
+        Y_ABORT_UNLESS(idx < Size);
+        return LeaderOnly[idx];
+    }
+
+    /**
      * Return the source counters for the given enum index.
      *
      * @warning This function can be called only if ParseSourceCounters is set.
@@ -190,6 +209,7 @@ private:
     using TBase::Names;
     using TBase::Ranges;
     using TBase::Integral;
+    using TBase::LeaderOnly;
     using TBase::AppGlobalRanges;
     TVector<TTabletPercentileCounter::TRangeDef> TxGlobalRanges;
 public:
@@ -220,6 +240,7 @@ public:
                     NamesStrings.emplace_back(); // empty name
                     Ranges.emplace_back(); // empty ranges
                     Integral.push_back(false);
+                    LeaderOnly.push_back(false);
                     continue;
                 }
                 const TCounterOptions& co = v->options().GetExtension(CounterOpts);
@@ -229,6 +250,7 @@ public:
                 NamesStrings.push_back(TBase::GetFilePrefix(typesDesc->file()) + txPrefix + co.GetName());
                 Ranges.push_back(TBase::ParseRanges(co));
                 Integral.push_back(co.GetIntegral());
+                LeaderOnly.push_back(co.GetLeaderOnly());
             }
         }
         // Make plain strings out of Strokas to fullfil interface of TTabletCountersBase

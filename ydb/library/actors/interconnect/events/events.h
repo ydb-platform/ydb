@@ -50,6 +50,9 @@ namespace NActors {
         HandshakeBrokerFree,
         HandshakeBrokerPermit,
 
+        EvProxyCall,
+        EvRdmaSyncResult,
+
         // external data channel messages
         EvSubscribeForConnection,
         EvReportConnection,

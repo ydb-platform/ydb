@@ -134,6 +134,7 @@ ydb/core/persqueue/public/describer/ut TDescriberTests.AccessOrAllows
 ydb/core/persqueue/public/describer/ut TDescriberTests.CDCWithEmptyDatabase
 ydb/core/persqueue/public/describer/ut TDescriberTests.CDCWithFederationRoot
 ydb/core/persqueue/public/describer/ut TDescriberTests.CustomAccessRightsAlterSchema
+ydb/core/persqueue/public/describer/ut TDescriberTests.LegacyNameBadRequest
 ydb/core/persqueue/public/describer/ut TDescriberTests.LegacyShortTopicWithFederationRoot
 ydb/core/persqueue/public/describer/ut TDescriberTests.MultipleCDC
 ydb/core/persqueue/public/describer/ut TDescriberTests.NotTopicWithDescribeAccess
@@ -273,6 +274,7 @@ ydb/public/sdk/cpp/tests/integration/bulk_upsert BulkUpsert.RetryOverheadOnHappy
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/0
 ydb/public/sdk/cpp/tests/integration/sessions_pool YdbSdkSessionsPool.PeriodicTask/1
 ydb/services/metadata/secret/ut Secret.Simple
+ydb/services/persqueue_v1/actors/schema/pqv1/ut unittest.sole chunk
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.FailWithoutGrants
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.GetUpdatedValue
 ydb/services/scheme_secret/ut/fast DescribeSchemaSecretsService.GroupGrants

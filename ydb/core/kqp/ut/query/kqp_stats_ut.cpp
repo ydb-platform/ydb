@@ -713,11 +713,14 @@ Y_UNIT_TEST(LegacySimplifiedPlanCpuBoundariesAndCumulativeValue) {
 
     const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
 
-    const auto filter = FindPlanNodeByKv(simplifiedPlan, "Name", "Filter");
+    const auto filterNode = FindPlanNodeByKv(simplifiedPlan, "Node Type", "Filter");
+    UNIT_ASSERT_C(filterNode.IsDefined(), simplifiedPlan);
+
+    const auto filter = FindPlanNodeByKv(filterNode, "Name", "Filter");
     UNIT_ASSERT_C(filter.IsDefined(), simplifiedPlan);
     AssertCpuValues(filter, 7, 10, simplifiedPlan);
 
-    const auto scan = FindPlanNodeByKv(filter, "Name", "TableFullScan");
+    const auto scan = FindPlanNodeByKv(filterNode, "Name", "TableFullScan");
     UNIT_ASSERT_C(scan.IsDefined(), simplifiedPlan);
     AssertCpuValues(scan, 3, 3, simplifiedPlan);
 
@@ -754,11 +757,14 @@ Y_UNIT_TEST(LegacySimplifiedPlanInheritedCpuStopsAtExternalEdge) {
 
     const auto simplifiedPlan = GetLegacySimplifiedPlan(plan);
 
-    const auto filter = FindPlanNodeByKv(simplifiedPlan, "Name", "Filter");
+    const auto filterNode = FindPlanNodeByKv(simplifiedPlan, "Node Type", "Filter");
+    UNIT_ASSERT_C(filterNode.IsDefined(), simplifiedPlan);
+
+    const auto filter = FindPlanNodeByKv(filterNode, "Name", "Filter");
     UNIT_ASSERT_C(filter.IsDefined(), simplifiedPlan);
     AssertCpuValues(filter, 7, 7, simplifiedPlan);
 
-    const auto scan = FindPlanNodeByKv(filter, "Name", "TableFullScan");
+    const auto scan = FindPlanNodeByKv(filterNode, "Name", "TableFullScan");
     UNIT_ASSERT_C(scan.IsDefined(), simplifiedPlan);
     UNIT_ASSERT_C(!scan.GetMapSafe().contains("A-SelfCpu"), simplifiedPlan);
     UNIT_ASSERT_C(!scan.GetMapSafe().contains("A-Cpu"), simplifiedPlan);

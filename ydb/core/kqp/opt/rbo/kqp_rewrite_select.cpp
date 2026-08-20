@@ -686,6 +686,32 @@ TExprNode::TPtr FlattenNestedConjunctions(TExprNode::TPtr node, TExprContext &ct
 }
 
 TExprNode::TPtr NormalizeMemberNames(TExprNode::TPtr node, TExprContext& ctx, TPositionHandle pos) {
+    // Window definitions are immutable source metadata, not expressions in the
+    // current KqpOp row context.  In particular, their StructType descriptor
+    // and bound Member must retain the same historical name so the definition
+    // remains self-contained and can be audited after plan conversion.
+    TNodeSet windowMetadataNodes;
+    TNodeSet visitedWindowMetadataNodes;
+    for (const auto& mapElement : FindNodes(
+             node,
+             [](const TExprNode::TPtr& candidate) {
+                 return TKqpOpMapElementLambda::Match(candidate.Get());
+             }))
+    {
+        const auto windowDefinition =
+            TKqpOpMapElementLambda(mapElement).WindowDefinition();
+        if (!windowDefinition) {
+            continue;
+        }
+        VisitExpr(
+            windowDefinition.Cast().Ptr(),
+            [&windowMetadataNodes](const TExprNode::TPtr& candidate) {
+                windowMetadataNodes.insert(candidate.Get());
+                return true;
+            },
+            visitedWindowMetadataNodes);
+    }
+
     auto isMember = [&](const TExprNode::TPtr& node) -> bool {
         if (node->IsCallable("Member")) {
             return true;
@@ -696,6 +722,9 @@ TExprNode::TPtr NormalizeMemberNames(TExprNode::TPtr node, TExprContext& ctx, TP
     TNodeOnNodeOwnedMap replaces;
     const auto members = FindNodes(node, isMember);
     for (const auto& member : members) {
+        if (windowMetadataNodes.contains(member.Get())) {
+            continue;
+        }
         const TString colName(TCoMember(member).Name().StringValue());
         if (colName.StartsWith("_alias_")) {
             const auto [alias, column] = SplitAliasedMemberName(colName);

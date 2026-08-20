@@ -278,11 +278,6 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext& ctx) {
     Y_UNUSED(ctx);
     StartConsoleInteraction();
 
-    if (!CmsPipe) {
-        CmsPipe = Register(NTabletPipe::CreateClient(SelfId(), MakeCmsID(),
-            NTabletPipe::TClientRetryPolicy::WithRetries()));
-    }
-
     // create stat processor
     StatProcessorActorId = Register(CreateStatProcessorActor());
 

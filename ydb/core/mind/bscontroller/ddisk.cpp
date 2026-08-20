@@ -698,7 +698,11 @@ namespace NKikimr::NBsController {
             }
             TActivationContext::Send(h.release());
 
-            if (ChangedTabletId && Self->CmsPipe) {
+            if (ChangedTabletId) {
+                if (!Self->CmsPipe) {
+                    Self->CmsPipe = Self->Register(NTabletPipe::CreateClient(Self->SelfId(), MakeCmsID(),
+                        NTabletPipe::TClientRetryPolicy::WithRetries()));
+                }
                 auto notification = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged>();
                 notification->Record.SetTabletId(ChangedTabletId);
                 notification->Record.SetRevision(ChangedTabletRevision);

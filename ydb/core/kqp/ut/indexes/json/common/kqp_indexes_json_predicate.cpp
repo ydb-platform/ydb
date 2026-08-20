@@ -296,7 +296,6 @@ private:
             AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != null)')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ == true)')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ == false)')", Mode));
-            AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != null)')", Mode));
             AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != true)')", Mode));
             AddJErr(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ != false)')", Mode));
             AddJ(fmt::format("JSON_EXISTS(Text, '{} $ ? (@ == {})')", Mode, PickFrom(KeysWithScalarNumber)));

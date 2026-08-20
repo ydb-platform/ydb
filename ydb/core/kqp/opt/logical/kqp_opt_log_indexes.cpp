@@ -2309,6 +2309,7 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
 
     TString selectedIndex;
     std::expected<TJsonIndexSettings, TIssue> expectedSettings;
+    std::optional<TIssue> selectionWarning;
     for (const auto& indexInfo : mainTableDesc.Metadata->Indexes) {
         if (indexInfo.Type != TIndexDescription::EType::GlobalJson && indexInfo.Type != TIndexDescription::EType::GlobalJsonCompact) {
             continue;
@@ -2332,9 +2333,18 @@ TMaybeNode<TExprBase> KqpSelectJsonIndex(const NYql::NNodes::TExprBase& node, NY
             selectedIndex = indexInfo.Name;
             break;
         }
+
+        if (!selectionWarning &&
+            expectedSettings.error().GetCode() == EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE)
+        {
+            selectionWarning = expectedSettings.error();
+        }
     }
 
     if (selectedIndex.empty()) {
+        if (selectionWarning) {
+            ctx.AddWarning(*selectionWarning);
+        }
         return node;
     }
 

@@ -23,6 +23,8 @@ using namespace NJsonIndex;
 namespace {
 
 constexpr std::string_view kErrorMessage = "Failed to extract jsonpath tokens from the predicate: ";
+constexpr std::string_view kFullRangeSearchMessage =
+    "full-range search cannot be performed using full-text search";
 
 struct TPredicateCollectResult {
     TString ColumnName;
@@ -832,13 +834,12 @@ std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
         }
 
         const TString message = selectionMode == EJsonIndexSelectionMode::Automatic
-            ? TString{"JSON index was not auto-selected: full-range search cannot be performed using full-text search"}
-            : TStringBuilder() << kErrorMessage << "JSON index cannot be used: full-range search cannot be performed using full-text search";
+            ? TStringBuilder() << "JSON index was not auto-selected: " << kFullRangeSearchMessage
+            : TStringBuilder() << kErrorMessage << "JSON index cannot be used: " << kFullRangeSearchMessage;
         TIssue issue(ctx.GetPosition(node.Pos()), message);
 
         if (selectionMode == EJsonIndexSelectionMode::Automatic) {
             SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, issue);
-            ctx.AddWarning(issue);
         }
 
         return std::unexpected(std::move(issue));

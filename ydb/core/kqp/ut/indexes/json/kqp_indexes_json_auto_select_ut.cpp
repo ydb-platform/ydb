@@ -30,6 +30,11 @@ void ValidateOneOfTwoIndexesSelected(TQueryClient& db, const std::string& predic
 Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
     Y_UNIT_TEST(FullRangeIsNotAutoSelected) {
         TestSelectJsonWithIndex("JsonDocument", std::nullopt, [](TQueryClient& db, const auto&) {
+            const auto addIndexResult = db.ExecuteQuery(R"(
+                ALTER TABLE TestTable ADD INDEX json_idx_2 GLOBAL USING json ON (Text)
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(addIndexResult.IsSuccess(), addIndexResult.GetIssues().ToString());
+
             const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
             const auto query = R"(SELECT * FROM TestTable WHERE JSON_EXISTS(Text, '$[*]');)";
 
@@ -41,6 +46,7 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
             NJson::TJsonValue planJson;
             UNIT_ASSERT_C(NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &planJson, true), "Failed to parse plan JSON");
             UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Index", "json_idx"), 0);
+            UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Index", "json_idx_2"), 0);
         }, /* enableJsonIndexAutoSelect */ true);
     }
 

@@ -10,6 +10,7 @@
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/db_counters.h>
 #include <ydb/core/sys_view/service/query_interval.h>
+#include <ydb/core/tablet/detailed_metrics/processor_database_metrics_aggregator.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx.h>
@@ -183,6 +184,9 @@ private:
     void AttachInternalCounters();
     void DetachExternalCounters();
     void DetachInternalCounters();
+    void AttachDetailedCounters();
+    void DetachDetailedCounters();
+    TProcessorDatabaseMetricsAggregator* GetDetailedAggregator();
     void SendNavigate();
 
     STFUNC(StateInit) {
@@ -361,10 +365,21 @@ private:
     TString CloudId;
     TString FolderId;
     TString DatabaseId;
+    TString MonitoringProjectId;
 
     ::NMonitoring::TDynamicCounterPtr ExternalGroup;
     ::NMonitoring::TDynamicCounterPtr LabeledGroup;
     std::unordered_map<TString, ::NMonitoring::TDynamicCounterPtr> InternalGroups;
+
+    ::NMonitoring::TDynamicCounterPtr DetailedGroup;     // the public ydb_detailed subtree
+    // ponytail: the raw tree is the mapper's private source and is deliberately NOT
+    // registered under AppData()->Counters. The node already owns the root group
+    // counters=ydb_detailed_raw and creates it Private via a find-or-register dance
+    // (tablet_counters_aggregator.cpp GetDetailedMetricsRawGroup); a processor reaching
+    // that root through GetServiceCounters would create it Public when it gets there.
+    // Only the aggregator's public output under DetailedGroup is scrapeable.
+    ::NMonitoring::TDynamicCounterPtr DetailedRawGroup;  // private, deliberately unattached
+    TProcessorDatabaseMetricsAggregatorPtr DetailedAggregator;
 
     using TDbCountersServiceMap = std::unordered_map<NKikimrSysView::EDbCountersService,
         NKikimr::NSysView::TDbServiceCounters>;

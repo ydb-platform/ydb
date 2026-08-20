@@ -505,12 +505,10 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         }
     }
 
-    // TRUNCATE of the source table (from which a read-only copy was made) must be rejected at
-    // propose time. Implementation check: table.GetPathIds().size() > 1 in schema.cpp.
-    // After CopyTable, the source TTableInfo has multiple SchemeShardLocalPathIds mapping to the
-    // same InternalPathId. Truncating would allocate a new InternalPathId for the source, but the
-    // RO copy would still point to the old (now dropped) generation, corrupting MVCC history.
-    Y_UNIT_TEST(TruncateCopySourceFails) {
+    // TRUNCATE of the source table (from which a read-only copy was made) succeeds with retention:
+    // the old generation is kept alive for the copy, and a new generation is allocated for the
+    // source. The copy continues to read the old data, while the source gets a fresh (empty) table.
+    Y_UNIT_TEST(TruncateCopySourceRetention) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -537,17 +535,19 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
 
-        // TRUNCATE of the source must be rejected: the table has 2 path IDs sharing storage.
-        ProposeSchemaTxFail(runtime, sender, TTestSchema::TruncateTableTxBody(srcPathId, 1), ++txId);
+        // TRUNCATE of the source succeeds with retention: old generation kept for copy.
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(srcPathId, 2), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
 
-        // Both source and copy remain readable with all 100 rows.
+        // Source table is now empty (new generation). Empty tables return nullptr from ReadAll.
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
-            UNIT_ASSERT(rb);
-            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+            UNIT_ASSERT(!rb);
+            UNIT_ASSERT(!reader.IsError());
         }
+        // Copy still reads the old data (retained generation).
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(planStep, txId));
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
@@ -587,9 +587,6 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         const ui64 dstPathId = 2;
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
-
-        // TRUNCATE source fails while copy exists.
-        ProposeSchemaTxFail(runtime, sender, TTestSchema::TruncateTableTxBody(srcPathId, 1), ++txId);
 
         // Drop the read-only copy.
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(dstPathId, 2), ++txId);

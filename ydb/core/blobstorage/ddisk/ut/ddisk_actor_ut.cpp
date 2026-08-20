@@ -1800,6 +1800,150 @@ Y_UNIT_TEST_SUITE(TDDiskActorTest) {
         UNIT_ASSERT_VALUES_EQUAL(readResult->Get()->GetPayload(0).ConvertToString(), payload);
     }
 
+    // Regression test for DirectBlockGroupIndex-aware persistent buffer keys: two direct block
+    // groups of the SAME tablet, on the SAME generation, writing to the SAME lsn must be stored,
+    // listed, read and erased as fully independent records (TPersistentBufferId /
+    // TPersistentBufferRecordId now include DirectBlockGroupIndex). Before that change all of these
+    // writes would have collided in a single "generation+lsn" slot.
+    Y_UNIT_TEST(PersistentBufferDirectBlockGroupIndexSeparation) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        const ui64 tabletId = 40;
+        const ui32 generation = 1;
+        const ui64 lsn = 10;
+        const NDDisk::TBlockSelector selector{3, 0, BlockSize};
+
+        NDDisk::TQueryCredentials credsDbg0 = Connect(ctx, disk.PBServiceId, tabletId, generation, /*directBlockGroupIndex=*/0);
+        NDDisk::TQueryCredentials credsDbg1 = Connect(ctx, disk.PBServiceId, tabletId, generation, /*directBlockGroupIndex=*/1);
+
+        const TString payload0 = MakeData('A', BlockSize);
+        auto write0 = std::make_unique<NDDisk::TEvWritePersistentBuffer>(credsDbg0, selector, lsn, NDDisk::TWriteInstruction(0));
+        write0->AddPayloadThenChecksum(TRope(payload0));
+        SendToDDisk(ctx, disk.PBServiceId, write0.release());
+
+        auto writeRaw0 = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT(writeRaw0->Get()->Data.size() > 0);
+        ctx.SendPDiskResponse(disk, *writeRaw0, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        auto writeResult0 = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+        AssertStatus(writeResult0, TReplyStatus::OK);
+
+        const TString payload1 = MakeData('B', BlockSize);
+        auto write1 = std::make_unique<NDDisk::TEvWritePersistentBuffer>(credsDbg1, selector, lsn, NDDisk::TWriteInstruction(0));
+        write1->AddPayloadThenChecksum(TRope(payload1));
+        SendToDDisk(ctx, disk.PBServiceId, write1.release());
+
+        auto writeRaw1 = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT(writeRaw1->Get()->Data.size() > 0);
+        ctx.SendPDiskResponse(disk, *writeRaw1, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        auto writeResult1 = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+        AssertStatus(writeResult1, TReplyStatus::OK);
+
+        // Each direct block group must only see its own record via ListPersistentBuffer.
+        auto listResultDbg0 = SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvListPersistentBuffer(credsDbg0));
+        AssertStatus(listResultDbg0, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(listResultDbg0->Get()->Record.RecordsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listResultDbg0->Get()->Record.GetRecords(0).GetLsn(), lsn);
+
+        auto listResultDbg1 = SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvListPersistentBuffer(credsDbg1));
+        AssertStatus(listResultDbg1, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(listResultDbg1->Get()->Record.RecordsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(listResultDbg1->Get()->Record.GetRecords(0).GetLsn(), lsn);
+
+        // Reads must return the payload belonging to the requesting direct block group, not a
+        // mixed/overwritten value.
+        auto readResultDbg0 = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvReadPersistentBuffer(credsDbg0, selector, lsn, 1, {true}));
+        AssertStatus(readResultDbg0, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readResultDbg0->Get()->GetPayload(0).ConvertToString(), payload0);
+
+        auto readResultDbg1 = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvReadPersistentBuffer(credsDbg1, selector, lsn, 1, {true}));
+        AssertStatus(readResultDbg1, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readResultDbg1->Get()->GetPayload(0).ConvertToString(), payload1);
+
+        // Erasing DBG0's record must not affect DBG1's record for the same tablet/generation/lsn.
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvErasePersistentBuffer(credsDbg0, lsn));
+        auto eraseRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        ctx.SendPDiskResponse(disk, *eraseRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+        auto eraseResult = WaitFromDDisk<NDDisk::TEvErasePersistentBufferResult>(ctx);
+        AssertStatus(eraseResult, TReplyStatus::OK);
+
+        auto missingReadDbg0 = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvReadPersistentBuffer(credsDbg0, selector, lsn, 1, {true}));
+        AssertStatus(missingReadDbg0, TReplyStatus::MISSING_RECORD);
+
+        auto readResultDbg1AfterErase = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvReadPersistentBuffer(credsDbg1, selector, lsn, 1, {true}));
+        AssertStatus(readResultDbg1AfterErase, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(readResultDbg1AfterErase->Get()->GetPayload(0).ConvertToString(), payload1);
+
+        auto listResultDbg0AfterErase = SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvListPersistentBuffer(credsDbg0));
+        AssertStatus(listResultDbg0AfterErase, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(listResultDbg0AfterErase->Get()->Record.RecordsSize(), 0);
+
+        auto listResultDbg1AfterErase = SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(
+            ctx, disk.PBServiceId, new NDDisk::TEvListPersistentBuffer(credsDbg1));
+        AssertStatus(listResultDbg1AfterErase, TReplyStatus::OK);
+        UNIT_ASSERT_VALUES_EQUAL(listResultDbg1AfterErase->Get()->Record.RecordsSize(), 1);
+    }
+
+    // TEvGetPersistentBufferInfo(DescribeTablets=true) must report separate TTabletInfo entries
+    // per (TabletId, DirectBlockGroupIndex) pair, rather than merging every direct block group of a
+    // tablet into one entry.
+    Y_UNIT_TEST(PersistentBufferDirectBlockGroupIndexInfo) {
+        TTestContext ctx;
+        const TDiskHandle disk = ctx.CreateDDisk(6, 1);
+        const ui64 tabletId = 41;
+        const ui32 generation = 1;
+        const NDDisk::TBlockSelector selector{3, 0, BlockSize};
+
+        NDDisk::TQueryCredentials credsDbg0 = Connect(ctx, disk.PBServiceId, tabletId, generation, /*directBlockGroupIndex=*/0);
+        NDDisk::TQueryCredentials credsDbg2 = Connect(ctx, disk.PBServiceId, tabletId, generation, /*directBlockGroupIndex=*/2);
+
+        auto doWrite = [&](const NDDisk::TQueryCredentials& creds, ui64 lsn, char fill) {
+            auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(creds, selector, lsn, NDDisk::TWriteInstruction(0));
+            write->AddPayloadThenChecksum(TRope(MakeData(fill, BlockSize)));
+            SendToDDisk(ctx, disk.PBServiceId, write.release());
+
+            auto writeRaw = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+            UNIT_ASSERT(writeRaw->Get()->Data.size() > 0);
+            ctx.SendPDiskResponse(disk, *writeRaw, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+
+            auto writeResult = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
+            AssertStatus(writeResult, TReplyStatus::OK);
+        };
+
+        doWrite(credsDbg0, /*lsn=*/10, 'X');
+        doWrite(credsDbg2, /*lsn=*/10, 'Y');
+
+        SendToDDisk(ctx, disk.PBServiceId, new NDDisk::TEvGetPersistentBufferInfo(false, true));
+        auto info = WaitFromDDisk<NDDisk::TEvPersistentBufferInfo>(ctx);
+
+        UNIT_ASSERT_VALUES_EQUAL(info->Get()->TabletInfos.size(), 2);
+        bool foundDbg0 = false;
+        bool foundDbg2 = false;
+        for (const auto& ti : info->Get()->TabletInfos) {
+            UNIT_ASSERT_VALUES_EQUAL(ti.TabletId, tabletId);
+            if (ti.DirectBlockGroupIndex == 0) {
+                foundDbg0 = true;
+                UNIT_ASSERT_VALUES_EQUAL(ti.LsnsCount, 1u);
+            } else if (ti.DirectBlockGroupIndex == 2) {
+                foundDbg2 = true;
+                UNIT_ASSERT_VALUES_EQUAL(ti.LsnsCount, 1u);
+            } else {
+                UNIT_FAIL("unexpected DirectBlockGroupIndex " << (ui32)ti.DirectBlockGroupIndex);
+            }
+        }
+        UNIT_ASSERT(foundDbg0);
+        UNIT_ASSERT(foundDbg2);
+    }
+
     Y_UNIT_TEST(PersistentBufferReadPart) {
         TTestContext ctx;
         const TDiskHandle disk = ctx.CreateDDisk(6, 1);

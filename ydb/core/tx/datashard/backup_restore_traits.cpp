@@ -153,6 +153,10 @@ TString SchemeKeySuffix(bool encryptedBackup) {
     return AddEncryptedSuffix("scheme.pb", encryptedBackup);
 }
 
+TString CreateTableQueryKeySuffix(bool encryptedBackup) {
+    return AddEncryptedSuffix("create_table.sql", encryptedBackup);
+}
+
 TString MetadataKeySuffix(bool encryptedBackup) {
     return AddEncryptedSuffix("metadata.json", encryptedBackup);
 }

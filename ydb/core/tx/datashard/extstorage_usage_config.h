@@ -154,6 +154,10 @@ public:
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::SchemeKeySuffix(EncryptionSettings.EncryptedBackup);
     }
 
+    inline TString GetCreateTableQueryKey() const {
+        return ObjectKeyPattern + '/' + NBackupRestoreTraits::CreateTableQueryKeySuffix(EncryptionSettings.EncryptedBackup);
+    }
+
     inline TString GetDataKey(
         NBackupRestoreTraits::EDataFormat format,
         NBackupRestoreTraits::ECompressionCodec codec) const {

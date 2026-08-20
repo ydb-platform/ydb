@@ -1918,8 +1918,9 @@ void FillGlobalIndexSettings(Ydb::Table::GlobalIndexSettings& settings,
     FillReadReplicasSettings(settings, indexImplTableDescription);
 }
 
+template <typename TIndex>
 void FillLocalBloomFilterIndexSettings(Ydb::Table::LocalBloomFilterIndex& settings,
-    const NKikimrSchemeOp::TIndexDescription& tableIndex
+    const TIndex& tableIndex
 ) {
     if (tableIndex.HasBloomFilterDescription()) {
         const auto& desc = tableIndex.GetBloomFilterDescription();
@@ -1933,8 +1934,9 @@ void FillLocalBloomFilterIndexSettings(Ydb::Table::LocalBloomFilterIndex& settin
     }
 }
 
+template <typename TIndex>
 void FillLocalBloomNgramFilterIndexSettings(Ydb::Table::LocalBloomNgramFilterIndex& settings,
-    const NKikimrSchemeOp::TIndexDescription& tableIndex
+    const TIndex& tableIndex
 ) {
     if (tableIndex.HasBloomNGrammFilterDescription()) {
         const auto& desc = tableIndex.GetBloomNGrammFilterDescription();
@@ -1950,120 +1952,147 @@ void FillLocalBloomNgramFilterIndexSettings(Ydb::Table::LocalBloomNgramFilterInd
     }
 }
 
+template <typename TSettings, typename TIndex>
+void FillGlobalIndexSettingsIfPresent(
+    TSettings& settings,
+    const TIndex& tableIndex,
+    int implementationTablePosition)
+{
+    if (implementationTablePosition < tableIndex.GetIndexImplTableDescriptions().size()) {
+        FillGlobalIndexSettings(
+            settings,
+            tableIndex.GetIndexImplTableDescriptions(implementationTablePosition));
+    }
+}
+
+template <typename TYdbIndex, typename TIndex>
+void FillIndexDescriptionImpl(TYdbIndex& index, const TIndex& tableIndex) {
+    index.set_name(tableIndex.GetName());
+
+    *index.mutable_index_columns() = {
+        tableIndex.GetKeyColumnNames().begin(),
+        tableIndex.GetKeyColumnNames().end()
+    };
+
+    *index.mutable_data_columns() = {
+        tableIndex.GetDataColumnNames().begin(),
+        tableIndex.GetDataColumnNames().end()
+    };
+
+    const auto indexType = [&] {
+        if constexpr (std::is_same<TIndex, NKikimrSchemeOp::TIndexCreationConfig>::value) {
+            return NTableIndex::GetIndexType(tableIndex);
+        } else {
+            return tableIndex.GetType();
+        }
+    }();
+
+    switch (indexType) {
+    case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
+        FillGlobalIndexSettingsIfPresent(
+            *index.mutable_global_index()->mutable_settings(),
+            tableIndex,
+            0);
+        break;
+    case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
+        FillGlobalIndexSettingsIfPresent(
+            *index.mutable_global_async_index()->mutable_settings(),
+            tableIndex,
+            0);
+        break;
+    case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
+        FillGlobalIndexSettingsIfPresent(
+            *index.mutable_global_unique_index()->mutable_settings(),
+            tableIndex,
+            0);
+        break;
+    case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree: {
+        auto& settings = *index.mutable_global_vector_kmeans_tree_index();
+        FillGlobalIndexSettingsIfPresent(
+            *settings.mutable_level_table_settings(),
+            tableIndex,
+            NTableIndex::NKMeans::LevelTablePosition);
+        FillGlobalIndexSettingsIfPresent(
+            *settings.mutable_posting_table_settings(),
+            tableIndex,
+            NTableIndex::NKMeans::PostingTablePosition);
+        const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
+        if (prefixVectorIndex) {
+            FillGlobalIndexSettingsIfPresent(
+                *settings.mutable_prefix_table_settings(),
+                tableIndex,
+                NTableIndex::NKMeans::PrefixTablePosition);
+        }
+
+        *settings.mutable_vector_settings() =
+            tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
+        break;
+    }
+    case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+    case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact: {
+        auto& settings = *index.mutable_global_fulltext_plain_index();
+        FillGlobalIndexSettingsIfPresent(
+            *settings.mutable_settings(),
+            tableIndex,
+            0);
+        *settings.mutable_fulltext_settings() =
+            tableIndex.GetFulltextIndexDescription().GetSettings();
+        break;
+    }
+    case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+    case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
+        auto& settings = *index.mutable_global_fulltext_relevance_index();
+        FillGlobalIndexSettingsIfPresent(
+            *settings.mutable_dict_table_settings(),
+            tableIndex,
+            NTableIndex::NFulltext::DictTablePosition);
+        FillGlobalIndexSettingsIfPresent(
+            *settings.mutable_docs_table_settings(),
+            tableIndex,
+            NTableIndex::NFulltext::DocsTablePosition);
+        FillGlobalIndexSettingsIfPresent(
+            *settings.mutable_stats_table_settings(),
+            tableIndex,
+            NTableIndex::NFulltext::StatsTablePosition);
+        FillGlobalIndexSettingsIfPresent(
+            *settings.mutable_posting_table_settings(),
+            tableIndex,
+            NTableIndex::NFulltext::PostingTablePosition);
+        *settings.mutable_fulltext_settings() =
+            tableIndex.GetFulltextIndexDescription().GetSettings();
+        break;
+    }
+    case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+    case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact:
+        FillGlobalIndexSettingsIfPresent(
+            *index.mutable_global_json_index()->mutable_settings(),
+            tableIndex,
+            0);
+        break;
+    case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+        FillLocalBloomFilterIndexSettings(*index.mutable_local_bloom_filter_index(), tableIndex);
+        break;
+    case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+        FillLocalBloomNgramFilterIndexSettings(*index.mutable_local_bloom_ngram_filter_index(), tableIndex);
+        break;
+    case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+        index.mutable_local_min_max_index();
+        break;
+    case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+        // count_min_sketch is a scheme object visible in the scheme tree, but is
+        // intentionally not exposed through the public table index API.
+        break;
+    case NKikimrSchemeOp::EIndexTypeInvalid:
+        break;
+    };
+}
+
 template <typename TYdbProto>
 void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescription& in) {
 
     for (const auto& tableIndex : in.GetTableIndexes()) {
         auto index = out.add_indexes();
-
-        index->set_name(tableIndex.GetName());
-
-        *index->mutable_index_columns() = {
-            tableIndex.GetKeyColumnNames().begin(),
-            tableIndex.GetKeyColumnNames().end()
-        };
-
-        *index->mutable_data_columns() = {
-            tableIndex.GetDataColumnNames().begin(),
-            tableIndex.GetDataColumnNames().end()
-        };
-
-        switch (tableIndex.GetType()) {
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobal:
-            FillGlobalIndexSettings(
-                *index->mutable_global_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions(0)
-            );
-            break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalAsync:
-            FillGlobalIndexSettings(
-                *index->mutable_global_async_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions(0)
-            );
-            break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalUnique:
-            FillGlobalIndexSettings(
-                *index->mutable_global_unique_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions(0)
-            );
-            break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalVectorKmeansTree: {
-            FillGlobalIndexSettings(
-                *index->mutable_global_vector_kmeans_tree_index()->mutable_level_table_settings(),
-                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::LevelTablePosition)
-            );
-            FillGlobalIndexSettings(
-                *index->mutable_global_vector_kmeans_tree_index()->mutable_posting_table_settings(),
-                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PostingTablePosition)
-            );
-            const bool prefixVectorIndex = tableIndex.GetKeyColumnNames().size() > 1;
-            if (prefixVectorIndex) {
-                FillGlobalIndexSettings(
-                    *index->mutable_global_vector_kmeans_tree_index()->mutable_prefix_table_settings(),
-                    tableIndex.GetIndexImplTableDescriptions(NTableIndex::NKMeans::PrefixTablePosition)
-                );
-            }
-
-            *index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings() = tableIndex.GetVectorIndexKmeansTreeDescription().GetSettings();
-
-            break;
-        }
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
-            FillGlobalIndexSettings(
-                *index->mutable_global_fulltext_plain_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions(0)
-            );
-
-            *index->mutable_global_fulltext_plain_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
-
-            break;
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
-            FillGlobalIndexSettings(
-                *index->mutable_global_fulltext_relevance_index()->mutable_dict_table_settings(),
-                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition)
-            );
-            FillGlobalIndexSettings(
-                *index->mutable_global_fulltext_relevance_index()->mutable_docs_table_settings(),
-                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DocsTablePosition)
-            );
-            FillGlobalIndexSettings(
-                *index->mutable_global_fulltext_relevance_index()->mutable_stats_table_settings(),
-                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::StatsTablePosition)
-            );
-            FillGlobalIndexSettings(
-                *index->mutable_global_fulltext_relevance_index()->mutable_posting_table_settings(),
-                tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::PostingTablePosition)
-            );
-
-            *index->mutable_global_fulltext_relevance_index()->mutable_fulltext_settings() = tableIndex.GetFulltextIndexDescription().GetSettings();
-
-            break;
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
-        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact:
-            FillGlobalIndexSettings(
-                *index->mutable_global_json_index()->mutable_settings(),
-                tableIndex.GetIndexImplTableDescriptions(0)
-            );
-            break;
-        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
-            FillLocalBloomFilterIndexSettings(*index->mutable_local_bloom_filter_index(), tableIndex);
-            break;
-        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
-            FillLocalBloomNgramFilterIndexSettings(*index->mutable_local_bloom_ngram_filter_index(), tableIndex);
-            break;
-        case NKikimrSchemeOp::EIndexTypeLocalMinMax:
-            index->mutable_local_min_max_index();
-            break;
-        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
-            // count_min_sketch is a scheme object visible in the scheme tree, but is
-            // intentionally not exposed through the public table index API, so no
-            // specialized oneof is set here.
-            break;
-        case NKikimrSchemeOp::EIndexTypeInvalid:
-            break;
-        };
+        FillIndexDescriptionImpl(*index, tableIndex);
 
         if constexpr (std::is_same<TYdbProto, Ydb::Table::DescribeTableResult>::value) {
             if (tableIndex.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
@@ -2127,6 +2156,11 @@ void FillIndexDescription(Ydb::Table::DescribeTableResult& out,
 
 void FillIndexDescription(Ydb::Table::CreateTableRequest& out,
         const NKikimrSchemeOp::TTableDescription& in) {
+    FillIndexDescriptionImpl(out, in);
+}
+
+void FillIndexDescription(Ydb::Table::TableIndex& out,
+        const NKikimrSchemeOp::TIndexCreationConfig& in) {
     FillIndexDescriptionImpl(out, in);
 }
 

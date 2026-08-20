@@ -374,7 +374,8 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
 
     if (!item.CreationQuery.empty()) {
         record.Update(
-            NIceDb::TUpdate<Schema::ImportItems::CreationQuery>(item.CreationQuery)
+            NIceDb::TUpdate<Schema::ImportItems::CreationQuery>(item.CreationQuery),
+            NIceDb::TUpdate<Schema::ImportItems::CreationQueryPathType>(item.CreationQueryPathType)
         );
     }
 

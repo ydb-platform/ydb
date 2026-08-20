@@ -1749,6 +1749,10 @@ struct Schema : NIceDb::Schema {
         // Table scheme
         struct Scheme : Column<6, NScheme::NTypeIds::String> {};
         struct CreationQuery : Column<13, NScheme::NTypeIds::Utf8> {};
+        struct CreationQueryPathType : Column<23, NScheme::NTypeIds::Uint32> {
+            using Type = NKikimrSchemeOp::EPathType;
+            static constexpr Type Default = NKikimrSchemeOp::EPathTypeInvalid;
+        };
         // NKikimrSchemeOp::TModifyScheme serialized as string
         struct PreparedCreationQuery : Column<14, NScheme::NTypeIds::String> {};
         struct Permissions : Column<11, NScheme::NTypeIds::String> {};
@@ -1776,6 +1780,7 @@ struct Schema : NIceDb::Schema {
             DstPathLocalId,
             Scheme,
             CreationQuery,
+            CreationQueryPathType,
             PreparedCreationQuery,
             Permissions,
             Metadata,

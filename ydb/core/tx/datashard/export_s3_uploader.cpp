@@ -185,6 +185,16 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         auto storageOperator = ExternalStorageConfig->ConstructStorageOperator();
         Client = this->RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(std::move(storageOperator)));
 
+        if (!SchemaDestinationChecked) {
+            AlternateSchemaKeyIdx = 0;
+            CheckSchemaDestination();
+            return;
+        }
+
+        ContinueUpload();
+    }
+
+    void ContinueUpload() {
         if (!MetadataUploaded) {
             UploadMetadata();
         } else if (EnablePermissions && !PermissionsUploaded) {
@@ -202,6 +212,46 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
                 this->Send(Scanner, new TEvExportScan::TEvFeed());
             }
         }
+    }
+
+    void CheckSchemaDestination() {
+        Y_ENSURE(AlternateSchemaKeyIdx < AlternateSchemaKeys.size());
+
+        auto request = Aws::S3::Model::HeadObjectRequest()
+            .WithKey(AlternateSchemaKeys[AlternateSchemaKeyIdx]);
+        this->Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
+        this->Become(&TThis::StateCheckSchemaDestination);
+    }
+
+    static bool NoObjectFound(Aws::S3::S3Errors errorType) {
+        return errorType == Aws::S3::S3Errors::RESOURCE_NOT_FOUND
+            || errorType == Aws::S3::S3Errors::NO_SUCH_KEY;
+    }
+
+    void HandleSchemaDestination(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        const auto& key = AlternateSchemaKeys[AlternateSchemaKeyIdx];
+
+        YDB_LOG_DEBUG("[Export] checked alternate schema object",
+            {"key", key},
+            {"result", result});
+
+        if (result.IsSuccess()) {
+            return Finish(false, TStringBuilder()
+                << "Export destination contains alternate schema object '" << key << "'");
+        }
+
+        if (!NoObjectFound(result.GetError().GetErrorType())) {
+            return RetryOrFinish(result.GetError());
+        }
+
+        if (++AlternateSchemaKeyIdx < AlternateSchemaKeys.size()) {
+            CheckSchemaDestination();
+            return;
+        }
+
+        SchemaDestinationChecked = true;
+        ContinueUpload();
     }
 
     template <typename T>
@@ -238,13 +288,22 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         PutMessage(scheme, Settings.GetSchemeKey(), SchemeChecksum, &TThis::StateUploadScheme, Settings.EncryptionSettings.GetSchemeIV());
     }
 
+    void PutCreateTableQuery(const TString& query) {
+        Buffer = query;
+        PutDataWithChecksum(std::move(Buffer), Settings.GetCreateTableQueryKey(), SchemeChecksum,
+            &TThis::StateUploadScheme, Settings.EncryptionSettings.GetSchemeIV());
+    }
+
     void UploadScheme() {
         Y_ENSURE(!SchemeUploaded);
 
-        if (!Scheme) {
-            return Finish(false, "Cannot infer scheme");
+        if (CreateTableQuery) {
+            return PutCreateTableQuery(CreateTableQuery.GetRef());
         }
-        PutScheme(Scheme.GetRef());
+        if (Scheme) {
+            return PutScheme(Scheme.GetRef());
+        }
+        Finish(false, "Cannot infer scheme");
     }
 
     void PutPermissions(const Ydb::Scheme::ModifyPermissionsRequest& permissions) {
@@ -331,8 +390,13 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader<TSettings>> {
         };
 
         if (EnableChecksums) {
-            TString checksumKey = ChecksumKey(Settings.GetSchemeKey());
-            UploadChecksum(std::move(SchemeChecksum), checksumKey, SchemeKeySuffix(false), nextStep);
+            const auto schemaKey = CreateTableQuery
+                ? Settings.GetCreateTableQueryKey()
+                : Settings.GetSchemeKey();
+            const auto schemaKeySuffix = CreateTableQuery
+                ? CreateTableQueryKeySuffix(false)
+                : SchemeKeySuffix(false);
+            UploadChecksum(std::move(SchemeChecksum), ChecksumKey(schemaKey), schemaKeySuffix, nextStep);
         } else {
             nextStep();
         }
@@ -838,12 +902,16 @@ public:
         , DataShard(dataShard)
         , TxId(txId)
         , Scheme(std::move(scheme))
+        , CreateTableQuery(task.HasCreateTableQuery() && !task.GetCreateTableQuery().empty()
+            ? TMaybe<TString>(task.GetCreateTableQuery())
+            : Nothing())
         , Changefeeds(std::move(changefeeds))
         , Metadata(std::move(metadata))
         , Permissions(std::move(permissions))
         , Retries(task.GetNumberOfRetries())
         , Attempt(0)
         , Delay(TDuration::Minutes(1))
+        , SchemaDestinationChecked(ShardNum != 0)
         , SchemeUploaded(ShardNum == 0 ? false : true)
         , ChangefeedsUploaded(ShardNum == 0 ? false : true)
         , MetadataUploaded(ShardNum == 0 ? false : true)
@@ -851,6 +919,15 @@ public:
         , EnableChecksums(task.GetEnableChecksums())
         , EnablePermissions(task.GetEnablePermissions())
     {
+        if (!SchemaDestinationChecked) {
+            const TString alternateSchemaKey = CreateTableQuery
+                ? Settings.GetSchemeKey()
+                : Settings.GetCreateTableQueryKey();
+            AlternateSchemaKeys = {
+                alternateSchemaKey,
+                ChecksumKey(alternateSchemaKey),
+            };
+        }
     }
 
     void Bootstrap() {
@@ -897,6 +974,16 @@ public:
             {"actorState", "StateUploadScheme"});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvExternalStorage::TEvPutObjectResponse, HandleScheme);
+        default:
+            return StateBase(ev);
+        }
+    }
+
+    STATEFN(StateCheckSchemaDestination) {
+        YDB_LOG_CREATE_CONTEXT(LogPrefix(),
+            {"actorState", "StateCheckSchemaDestination"});
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvExternalStorage::TEvHeadObjectResponse, HandleSchemaDestination);
         default:
             return StateBase(ev);
         }
@@ -993,6 +1080,7 @@ private:
     const TActorId DataShard;
     const ui64 TxId;
     const TMaybe<Ydb::Table::CreateTableRequest> Scheme;
+    const TMaybe<TString> CreateTableQuery;
     const TVector<TChangefeedExportDescriptions> Changefeeds;
     const TString Metadata;
     const TMaybe<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
@@ -1005,6 +1093,9 @@ private:
     static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 
     TActorId Client;
+    TVector<TString> AlternateSchemaKeys;
+    size_t AlternateSchemaKeyIdx = 0;
+    bool SchemaDestinationChecked;
     bool SchemeUploaded;
     bool ChangefeedsUploaded;
     bool MetadataUploaded;
@@ -1058,7 +1149,8 @@ IActor* CreateUploaderBySettingsType(
 }
 
 IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
-    auto scheme = (Task.GetShardNum() == 0)
+    const bool useCreateQuery = Task.HasCreateTableQuery();
+    auto scheme = (Task.GetShardNum() == 0 && !useCreateQuery)
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 

@@ -772,8 +772,15 @@ public:
 
         if (TxType == TTxState::TxBackup && context.SS->Tables.contains(path.Base()->PathId)) {
             TTableInfo::TPtr table = context.SS->Tables.at(path.Base()->PathId);
+            const auto& backup = Transaction.GetBackup();
+            const bool hasCreateTableQuery = !backup.GetCreateTableQuery().empty();
+            const bool supportsGeneratedColumns =
+                (backup.HasS3Settings() || backup.HasFSSettings()) && hasCreateTableQuery;
             for (const auto& [_, column] : table->Columns) {
-                if (column.DefaultKind == ETableColumnDefaultKind::FromExpression && !column.IsDropped()) {
+                if (column.DefaultKind == ETableColumnDefaultKind::FromExpression
+                    && !column.IsDropped()
+                    && !supportsGeneratedColumns)
+                {
                     result->SetError(NKikimrScheme::StatusPreconditionFailed,
                         TStringBuilder() << "Cannot backup table with generated column '" << column.Name << "'");
                     return result;

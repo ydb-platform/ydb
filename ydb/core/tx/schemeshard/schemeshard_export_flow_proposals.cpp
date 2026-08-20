@@ -1,6 +1,7 @@
 #include "schemeshard_export_flow_proposals.h"
 
 #include "schemeshard_path_describer.h"
+#include "schemeshard_scheme_builders.h"
 #include "schemeshard_xxport__helpers.h"
 
 #include <ydb/core/base/path.h>
@@ -195,16 +196,27 @@ void FillPartitioning(TSchemeShard* ss, NKikimrSchemeOp::TTableDescription& desc
     *desc.MutablePartitionConfig()->MutablePartitioningPolicy() = copiedTable.GetPartitionConfig().GetPartitioningPolicy();
 }
 
-void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath) {
+bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, const TPath& sourcePath, const TPath& exportItemPath, TString& error) {
     if (!sourcePath.IsResolved() || (!sourcePath->IsColumnTable() && !exportItemPath.IsResolved())) {
-        return;
+        return true;
     }
 
     auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
     if (sourceDescription.HasTable()) {
+        FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+    }
+
+    TString createTableQuery;
+    if (!BuildCreateTableQuery(sourcePath.PathString(), sourceDescription, createTableQuery, error)) {
+        return false;
+    }
+    if (createTableQuery) {
+        task.SetCreateTableQuery(std::move(createTableQuery));
+    }
+
+    if (sourceDescription.HasTable()) {
         FillSetValForSequences(
             ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-        FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
         for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
             auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
             for (const auto& child : cdcPathDesc.GetChildren()) {
@@ -217,6 +229,7 @@ void FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, 
     }
 
     task.MutableTable()->CopyFrom(sourceDescription);
+    return true;
 }
 
 template <typename TSettings>
@@ -239,7 +252,8 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
     TSchemeShard* ss,
     TTxId txId,
     const TExportInfo& exportInfo,
-    ui32 itemIdx
+    ui32 itemIdx,
+    TString& error
 ) {
     Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
     const auto& item = exportInfo.Items[itemIdx];
@@ -258,7 +272,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         modifyScheme.SetWorkingDir(exportPath.PathString());
         task.SetTableName(ToString(itemIdx));
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)));
+        if (!FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), exportPath.Child(ToString(itemIdx)), error)) {
+            return nullptr;
+        }
     } else {
         auto parentPath = exportPath.Child(ToString(item.ParentIdx));
 
@@ -275,7 +291,9 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
         modifyScheme.SetWorkingDir(parentPath.PathString());
         task.SetTableName(childName);
 
-        FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), parentPath.Child(childName));
+        if (!FillTableDescription(ss, task, TPath::Init(item.SourcePathId, ss), parentPath.Child(childName), error)) {
+            return nullptr;
+        }
     }
 
     task.SetNeedToBill(!exportInfo.UserSID || !ss->SystemBackupSIDs.contains(*exportInfo.UserSID));

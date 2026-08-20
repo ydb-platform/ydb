@@ -41,6 +41,7 @@ TString PermissionsKeySuffix(bool encryptedBackup);
 TString TopicKeySuffix(bool encryptedBackup);
 TString ChangefeedKeySuffix(bool encryptedBackup);
 TString SchemeKeySuffix(bool encryptedBackup);
+TString CreateTableQueryKeySuffix(bool encryptedBackup);
 TString MetadataKeySuffix(bool encryptedBackup);
 TString DataKeySuffix(ui32 n, EDataFormat format, ECompressionCodec codec, bool encryptedBackup);
 

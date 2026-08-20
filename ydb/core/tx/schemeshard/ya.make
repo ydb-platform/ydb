@@ -388,6 +388,7 @@ PEERDIR(
     ydb/core/statistics
     ydb/core/sys_view/common
     ydb/core/sys_view/partition_stats
+    ydb/core/sys_view/show_create/formatters
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/test_tablet

@@ -2,6 +2,7 @@
 #include <ydb/public/api/protos/ydb_import.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
+#include <ydb/core/backup/common/checksum.h>
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/table_index.h>
@@ -1606,12 +1607,13 @@ partitioning_settings {
 )");
     }
 
-    Y_UNIT_TEST(ShouldRejectExportOfTableWithGeneratedColumn) {
+    Y_UNIT_TEST(ShouldCarryCreateTableQueryForGeneratedColumn) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
         Runtime().GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
 
-        const TVector<TString> tables = { R"(
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
             Name: "Table"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "a"   Type: "Int32"  }
@@ -1623,14 +1625,30 @@ partitioning_settings {
                 ExprText: "a + b"
                 Stored: true
                 DependencyColumnNames: ["a", "b"]
-                Context: ""
+                Context: "PRAGMA classic_division = '0';"
               }
             }
             KeyColumnNames: ["key"]
-        )" };
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
 
-        Run(Runtime(), Env(), tables,
-            Sprintf(R"(
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> block(Runtime(), [](auto& ev) {
+            NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+            UNIT_ASSERT(schemeTx.ParseFromString(ev.Get()->Get()->GetTxBody()));
+            if (!schemeTx.HasBackup()) {
+                return false;
+            }
+
+            const auto& backup = schemeTx.GetBackup();
+            UNIT_ASSERT(backup.HasCreateTableQuery());
+            UNIT_ASSERT_STRING_CONTAINS(backup.GetCreateTableQuery(),
+                "GENERATED ALWAYS AS (a + b) STORED");
+            UNIT_ASSERT_STRING_CONTAINS(backup.GetCreateTableQuery(),
+                "PRAGMA classic_division = '0';");
+            return true;
+        });
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -1639,9 +1657,498 @@ partitioning_settings {
                 destination_prefix: ""
               }
             }
-        )",
-                S3Port()),
-            Ydb::StatusIds::CANCELLED);
+        )", S3Port()));
+
+        Runtime().WaitFor("backup task is sent to datashards", [&]{ return block.size() >= 1; });
+        block.Stop();
+    }
+
+    Y_UNIT_TEST(GeneratedTableCreateQueryUsesConsistentCopyPartitioning) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a" Type: "Int32" }
+            Columns {
+              Name: "stored"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + 1"
+                Stored: true
+                DependencyColumnNames: ["a"]
+              }
+            }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 10 } } } }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        bool copyTablesProposed = false;
+        THolder<IEventHandle> copyTablesCompletion;
+        auto previousObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvSchemeShard::EvModifySchemeTransaction: {
+                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+                copyTablesProposed |= record.TransactionSize() == 1
+                    && record.GetTransaction(0).GetOperationType()
+                        == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables;
+                break;
+            }
+            case TEvSchemeShard::EvNotifyTxCompletionResult:
+                if (copyTablesProposed) {
+                    copyTablesCompletion.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                break;
+            default:
+                break;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> backupBlocker(Runtime(), [](auto& ev) {
+            NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+            return schemeTx.ParseFromString(ev->Get()->Record.GetTxBody()) && schemeTx.HasBackup();
+        });
+
+        const ui64 exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        Runtime().WaitFor("consistent copy completion", [&] {
+            return bool(copyTablesCompletion);
+        });
+        Runtime().SetObserverFunc(previousObserver);
+
+        const auto sourceDescription = DescribePath(Runtime(), "/MyRoot/Table", true);
+        const ui64 rightShard = sourceDescription.GetPathDescription()
+            .GetTablePartitions(1).GetDatashardId();
+        TestSplitTable(Runtime(), ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %)" PRIu64 R"(
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 20 } } } }
+        )", rightShard));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        Runtime().Send(copyTablesCompletion.Release(), 0, true);
+        Runtime().WaitFor("backup task is sent to datashards", [&] {
+            return !backupBlocker.empty();
+        });
+
+        NKikimrTxDataShard::TFlatSchemeTransaction backupSchemeTx;
+        UNIT_ASSERT(backupSchemeTx.ParseFromString(
+            backupBlocker.front()->Get()->Record.GetTxBody()));
+        const auto& createTableQuery = backupSchemeTx.GetBackup().GetCreateTableQuery();
+        UNIT_ASSERT_STRING_CONTAINS(createTableQuery, "PARTITION_AT_KEYS = ((10))");
+        UNIT_ASSERT_C(!createTableQuery.Contains("(20)"), createTableQuery);
+
+        backupBlocker.Stop().Unblock();
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
+    Y_UNIT_TEST(ShouldCarryCreateTableQueryForGeneratedColumnWithGlobalIndex) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        ui64 txId = 100;
+        TestCreateIndexedTable(Runtime(), ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "Table"
+              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "a"   Type: "Int32"  }
+              Columns { Name: "b"   Type: "Int32"  }
+              Columns {
+                Name: "sum"
+                Type: "Int32"
+                DefaultFromExpression {
+                  ExprText: "a + b"
+                  Stored: true
+                  DependencyColumnNames: ["a", "b"]
+                }
+              }
+              KeyColumnNames: ["key"]
+            }
+            IndexDescription {
+              Name: "ByA"
+              KeyColumnNames: ["a"]
+              IndexImplTableDescriptions: [ {
+                PartitionConfig {
+                  PartitioningPolicy {
+                    MinPartitionsCount: 10
+                    SplitByLoadSettings: {
+                      Enabled: true
+                    }
+                  }
+                }
+              } ]
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> block(Runtime(), [](auto& ev) {
+            NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+            UNIT_ASSERT(schemeTx.ParseFromString(ev.Get()->Get()->GetTxBody()));
+            if (!schemeTx.HasBackup()) {
+                return false;
+            }
+
+            const auto& backup = schemeTx.GetBackup();
+            UNIT_ASSERT(backup.HasCreateTableQuery());
+            const auto& query = backup.GetCreateTableQuery();
+            UNIT_ASSERT_STRING_CONTAINS(query, "GENERATED ALWAYS AS (a + b) STORED");
+            UNIT_ASSERT_STRING_CONTAINS(query, "INDEX `ByA` GLOBAL SYNC ON (`a`)");
+            UNIT_ASSERT_C(!query.Contains("ALTER TABLE"), query);
+            return true;
+        });
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        Runtime().WaitFor("backup task is sent to datashards", [&]{ return block.size() >= 1; });
+        block.Stop();
+    }
+
+    Y_UNIT_TEST(ShouldExportGeneratedTableAsCreateTableQuery) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        Run(Runtime(), Env(), TVector<TString>{R"(
+            Name: "GeneratedTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a"   Type: "Int32"  }
+            Columns { Name: "b"   Type: "Int32"  }
+            Columns {
+              Name: "sum"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + b"
+                Stored: true
+                DependencyColumnNames: ["a", "b"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )"}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/GeneratedTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        UNIT_ASSERT(HasS3File("/create_table.sql"));
+        UNIT_ASSERT(!HasS3File("/scheme.pb"));
+        const auto createTableQuery = GetS3FileContent("/create_table.sql");
+        UNIT_ASSERT_STRING_CONTAINS(createTableQuery,
+            "GENERATED ALWAYS AS (a + b) STORED");
+
+        UNIT_ASSERT(HasS3File("/create_table.sql.sha256"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetS3FileContent("/create_table.sql.sha256"),
+            NBackup::ComputeChecksum(createTableQuery) + " create_table.sql");
+    }
+
+    Y_UNIT_TEST(ShouldExportTableWithoutDroppedGeneratedColumnAsProtoSchema) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a" Type: "Int32" }
+            Columns {
+              Name: "stored"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + 1"
+                Stored: true
+                DependencyColumnNames: ["a"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        const auto exportTable = [&](const TString& destinationPrefix) {
+            TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+                ExportToS3Settings {
+                  endpoint: "localhost:%d"
+                  scheme: HTTP
+                  items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "%s"
+                  }
+                }
+            )", S3Port(), destinationPrefix.c_str()));
+            Env().TestWaitNotification(Runtime(), txId);
+            TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+        };
+
+        exportTable("with-generated");
+        UNIT_ASSERT(HasS3File("/with-generated/create_table.sql"));
+        UNIT_ASSERT(!HasS3File("/with-generated/scheme.pb"));
+
+        TestAlterTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DropColumns { Name: "stored" }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        exportTable("without-generated");
+        UNIT_ASSERT(!HasS3File("/without-generated/create_table.sql"));
+        const auto scheme = GetS3FileContent("/without-generated/scheme.pb");
+        UNIT_ASSERT(!scheme.empty());
+
+        Ydb::Table::CreateTableRequest request;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(scheme, &request));
+        UNIT_ASSERT_VALUES_EQUAL(request.columns_size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(request.columns(0).name(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(request.columns(1).name(), "a");
+    }
+
+    Y_UNIT_TEST(ShouldRejectGeneratedTableExportToAmbiguousSchemaPrefix) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        S3Mock().GetData()["/generated/scheme.pb"] = "stale ordinary table scheme";
+        S3Mock().GetData()["/generated/scheme.pb.sha256"] = "stale ordinary table checksum";
+
+        Run(Runtime(), Env(), TVector<TString>{R"(
+            Name: "GeneratedTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a" Type: "Int32" }
+            Columns {
+              Name: "stored"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + 1"
+                Stored: true
+                DependencyColumnNames: ["a"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )"}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/GeneratedTable"
+                destination_prefix: "generated"
+              }
+            }
+        )", S3Port()), Ydb::StatusIds::CANCELLED);
+
+        UNIT_ASSERT(!HasS3File("/generated/create_table.sql"));
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetS3FileContent("/generated/scheme.pb"),
+            "stale ordinary table scheme");
+        UNIT_ASSERT_VALUES_EQUAL(
+            GetS3FileContent("/generated/scheme.pb.sha256"),
+            "stale ordinary table checksum");
+    }
+
+    Y_UNIT_TEST(ShouldPreserveOrdinaryTableSchemeNextToGeneratedTableContract) {
+        Env();
+
+        Run(Runtime(), Env(), TVector<TString>{R"(
+            Name: "OrdinaryTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )"}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/OrdinaryTable"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        UNIT_ASSERT(HasS3File("/scheme.pb"));
+        UNIT_ASSERT(!HasS3File("/create_table.sql"));
+    }
+
+    Y_UNIT_TEST(ShouldExportEncryptedGeneratedTableAsCreateTableQuery) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+        Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+        Run(Runtime(), Env(), TVector<TString>{R"(
+            Name: "GeneratedTable"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a"   Type: "Int32"  }
+            Columns { Name: "b"   Type: "Int32"  }
+            Columns {
+              Name: "sum"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + b"
+                Stored: true
+                DependencyColumnNames: ["a", "b"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )"}, Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              destination_prefix: "generated-export"
+              items {
+                source_path: "/MyRoot/GeneratedTable"
+              }
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                  key: "0123456789012345"
+                }
+              }
+            }
+        )", S3Port()));
+
+        UNIT_ASSERT(HasS3File("/generated-export/001/create_table.sql.enc"));
+        UNIT_ASSERT(!HasS3File("/generated-export/001/create_table.sql"));
+        UNIT_ASSERT(!HasS3File("/generated-export/001/scheme.pb"));
+        UNIT_ASSERT(!HasS3File("/generated-export/001/scheme.pb.enc"));
+
+        const auto encryptedQuery = GetS3FileContent("/generated-export/001/create_table.sql.enc");
+        TBuffer decryptedData;
+        NBackup::TEncryptionIV iv;
+        UNIT_ASSERT_NO_EXCEPTION(std::tie(decryptedData, iv) =
+            NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                NBackup::TEncryptionKey("0123456789012345"),
+                TBuffer(encryptedQuery.data(), encryptedQuery.size())));
+        UNIT_ASSERT_STRING_CONTAINS(
+            TString(decryptedData.Data(), decryptedData.Size()),
+            "GENERATED ALWAYS AS (a + b) STORED");
+    }
+
+    Y_UNIT_TEST(ShouldRejectGeneratedTableWithSequence) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        ui64 txId = 100;
+        TestCreateIndexedTable(Runtime(), ++txId, "/MyRoot", R"(
+            TableDescription {
+              Name: "GeneratedSequence"
+              Columns { Name: "key" Type: "Uint32" }
+              Columns { Name: "a" Type: "Int32" }
+              Columns {
+                Name: "stored"
+                Type: "Int32"
+                DefaultFromExpression {
+                  ExprText: "a + 10"
+                  Stored: true
+                  DependencyColumnNames: ["a"]
+                }
+              }
+              KeyColumnNames: ["key"]
+            }
+            SequenceDescription {
+              Name: "seq"
+            }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        const ui64 exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/GeneratedSequence"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), exportId);
+
+        const auto entry = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+            .GetResponse().GetEntry();
+        UNIT_ASSERT_STRING_CONTAINS(
+            NYql::IssuesFromMessageAsString(entry.GetIssues()),
+            "Cannot export a table with both generated and sequence columns");
+    }
+
+    Y_UNIT_TEST(ShouldRejectGeneratedTableYtExport) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "GeneratedYt"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a" Type: "Int32" }
+            Columns {
+              Name: "stored"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + 10"
+                Stored: true
+                DependencyColumnNames: ["a"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        const ui64 exportId = ++txId;
+        NKikimrExport::TCreateExportRequest request;
+        UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(R"(
+            ExportToYtSettings {
+              host: "localhost"
+              port: 1
+              token: "token"
+              items {
+                source_path: "/MyRoot/GeneratedYt"
+                destination_path: "//tmp/generated"
+              }
+            }
+        )", &request));
+        AsyncSend(Runtime(), TTestTxConfig::SchemeShard,
+            new TEvExport::TEvCreateExportRequest(exportId, "/MyRoot", request));
+        TAutoPtr<IEventHandle> handle;
+        const auto createResponse = Runtime().GrabEdgeEvent<TEvExport::TEvCreateExportResponse>(handle);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            createResponse->Record.GetResponse().GetEntry().GetStatus(),
+            Ydb::StatusIds::SUCCESS,
+            createResponse->Record.GetResponse().GetEntry().GetIssues());
+        Env().TestWaitNotification(Runtime(), exportId);
+
+        const auto entry = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+            .GetResponse().GetEntry();
+        UNIT_ASSERT_STRING_CONTAINS(
+            NYql::IssuesFromMessageAsString(entry.GetIssues()),
+            "Cannot backup table with generated column 'stored'");
     }
 
     Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {
@@ -5154,6 +5661,51 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
 
         const TString expected = "1,\"valueA\"\n2,\"valueB\"\n";
         UNIT_ASSERT_VALUES_EQUAL_C(*data, expected, "Buffer corruption detected");
+    }
+
+    Y_UNIT_TEST(ShouldRetryGeneratedTableUploaderWithoutLosingCreateQuery) {
+        EnvOptions().EnableChecksumsExport(true);
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" NotNull: true }
+            Columns { Name: "a" Type: "Int32" }
+            Columns {
+              Name: "stored"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + 10"
+                Stored: true
+                DependencyColumnNames: ["a"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        UploadRow(Runtime(), "/MyRoot/Table", 0, {1}, {2, 3},
+            {TCell::Make(1u)},
+            {TCell::Make<i32>(7), TCell::Make<i32>(17)});
+
+        txId = ExportWithRetryInjection(txId);
+
+        const auto* createTableQuery = S3Mock().GetData().FindPtr("/create_table.sql");
+        UNIT_ASSERT(createTableQuery);
+        UNIT_ASSERT_STRING_CONTAINS(*createTableQuery,
+            "GENERATED ALWAYS AS (a + 10) STORED");
+        UNIT_ASSERT(!HasS3File("/scheme.pb"));
+
+        const auto* checksum = S3Mock().GetData().FindPtr("/create_table.sql.sha256");
+        UNIT_ASSERT(checksum);
+        UNIT_ASSERT_VALUES_EQUAL(*checksum,
+            NBackup::ComputeChecksum(*createTableQuery) + " create_table.sql");
+
+        const auto* data = S3Mock().GetData().FindPtr("/data_00.csv");
+        UNIT_ASSERT(data);
+        UNIT_ASSERT_VALUES_EQUAL(*data, "1,7,17\n");
     }
 
     Y_UNIT_TEST(ShouldNotCorruptCompressedBufferOnRetry) {

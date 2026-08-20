@@ -18,7 +18,9 @@ static constexpr size_t MAX_BLOCK_SIZE = 50_MB;
 TString NormalizeEncryptionAlgorithmName(const TString& name);
 
 // Backup file type.
-// Must be different for all files in one backup item folder.
+// Must be different for all files that coexist in one backup item folder.
+// A row-table schema is stored as either scheme.pb or create_table.sql, never
+// both, so both representations use TableSchema for IV derivation.
 // Must be one byte size.
 enum class EBackupFileType : unsigned char {
     // All items

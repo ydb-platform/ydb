@@ -354,6 +354,10 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::TableScheme().FileName);
     }
 
+    static bool IsCreateTable(TStringBuf schemeKey) {
+        return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTable().FileName);
+    }
+
     static bool IsTopic(TStringBuf schemeKey) {
         return schemeKey.EndsWith(NYdb::NDump::NFiles::CreateTopic().FileName);
     }
@@ -379,7 +383,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
     static bool IsCreatedByQuery(TStringBuf schemeKey) {
-        return IsView(schemeKey)
+        return IsCreateTable(schemeKey)
+            || IsView(schemeKey)
             || IsReplication(schemeKey)
             || IsTransfer(schemeKey)
             || IsExternalDataSource(schemeKey)
@@ -588,23 +593,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         }
     }
 
-    void HandleScheme(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
-        const auto& msg = *ev->Get();
-        const auto& result = msg.Result;
-
-        LOG_D("HandleScheme TEvExternalStorage::TEvGetObjectResponse"
-            << ": self# " << SelfId()
-            << ", result# " << result);
-
-        if (!CheckResult(result, "GetObject")) {
-            return;
-        }
-
-        TString content;
-        if (!MaybeDecrypt(msg.Body, content, SchemeFileType)) {
-            return;
-        }
-
+    void StoreSchemeAndContinue(const TString& content) {
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
@@ -616,6 +605,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
         if (IsCreatedByQuery(SchemeKey)) {
             item.CreationQuery = content;
+            item.CreationQueryPathType = GetXxportProperties().at(SchemePropertiesIdx).PathType;
         } else if (IsTopic(SchemeKey)) {
             Ydb::Topic::CreateTopicRequest request;
             if (!google::protobuf::TextFormat::ParseFromString(content, &request)) {
@@ -638,12 +628,32 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scheme object type");
         }
 
-        auto nextStep = [this]() {
-            if (NeedDownloadPermissions) {
-                StartDownloadingPermissions();
-            } else {
-                StartCheckingMaterializedIndexes();
-            }
+        if (NeedDownloadPermissions) {
+            StartDownloadingPermissions();
+        } else {
+            StartCheckingMaterializedIndexes();
+        }
+    }
+
+    void HandleScheme(TEvExternalStorage::TEvGetObjectResponse::TPtr& ev) {
+        const auto& msg = *ev->Get();
+        const auto& result = msg.Result;
+
+        LOG_D("HandleScheme TEvExternalStorage::TEvGetObjectResponse"
+            << ": self# " << SelfId()
+            << ", result# " << result);
+
+        if (!CheckResult(result, "GetObject")) {
+            return;
+        }
+
+        TString content;
+        if (!MaybeDecrypt(msg.Body, content, SchemeFileType)) {
+            return;
+        }
+
+        auto nextStep = [this, content]() {
+            StoreSchemeAndContinue(content);
         };
 
         if (NeedValidateChecksums) {

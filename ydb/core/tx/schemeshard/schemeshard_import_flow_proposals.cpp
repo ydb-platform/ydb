@@ -220,7 +220,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
 ) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     const auto& item = importInfo.Items.at(itemIdx);
-    Y_ABORT_UNLESS(item.Table);
 
     auto propose = MakeModifySchemeTransaction(ss, txId, importInfo);
     auto& record = propose->Record;
@@ -236,7 +235,12 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestoreTableDataPropose(
 
     auto& task = *modifyScheme.MutableRestore();
     task.SetTableName(dstPath.LeafName());
-    *task.MutableTableDescription() = RebuildTableDescription(GetTableDescription(ss, item.DstPathId), *item.Table);
+    const auto destination = GetTableDescription(ss, item.DstPathId);
+    if (item.Table) {
+        *task.MutableTableDescription() = RebuildTableDescription(destination, *item.Table);
+    } else {
+        *task.MutableTableDescription() = destination;
+    }
 
     switch (importInfo.Kind) {
     case TImportInfo::EKind::S3:
@@ -316,7 +320,6 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
 ) {
     Y_ABORT_UNLESS(itemIdx < importInfo.Items.size());
     const auto& item = importInfo.Items.at(itemIdx);
-    Y_ABORT_UNLESS(item.Table);
 
     NKikimrIndexBuilder::TIndexBuildSettings settings;
 
@@ -326,8 +329,16 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
         settings.set_max_shards_in_flight(ss->MaxRestoreBuildIndexShardsInFlight);
     }
 
-    Y_ABORT_UNLESS(item.NextIndexIdx < item.Table->indexes_size());
-    settings.mutable_index()->CopyFrom(item.Table->indexes(item.NextIndexIdx));
+    if (item.Table) {
+        Y_ABORT_UNLESS(item.NextIndexIdx < item.Table->indexes_size());
+        settings.mutable_index()->CopyFrom(item.Table->indexes(item.NextIndexIdx));
+    } else {
+        Y_ABORT_UNLESS(item.PreparedCreationQuery);
+        Y_ABORT_UNLESS(item.PreparedCreationQuery->GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
+        const auto& indexes = item.PreparedCreationQuery->GetCreateIndexedTable().GetIndexDescription();
+        Y_ABORT_UNLESS(item.NextIndexIdx < indexes.size());
+        FillIndexDescription(*settings.mutable_index(), indexes.Get(item.NextIndexIdx));
+    }
 
     if (settings.mutable_index()->type_case() == Ydb::Table::TableIndex::TypeCase::TYPE_NOT_SET) {
         settings.mutable_index()->mutable_global_index();

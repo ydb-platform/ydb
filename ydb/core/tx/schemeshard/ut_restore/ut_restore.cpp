@@ -6,6 +6,9 @@
 #include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/localdb.h>
 #include <ydb/core/base/table_index.h>
+#include <ydb/core/kqp/common/kqp.h>
+#include <ydb/core/kqp/common/events/events.h>
+#include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
@@ -17,6 +20,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_billing_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
+#include <ydb/core/tx/schemeshard/schemeshard_scheme_builders.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/wrappers/events/get_object.h>
@@ -46,6 +50,7 @@
 #include <util/string/builder.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
+#include <util/string/subst.h>
 
 #include <regex>
 
@@ -68,6 +73,58 @@ namespace {
     }
 
     const TString EmptyYsonStr = R"([[[[];%false]]])";
+
+    NKikimrKqp::TEvQueryResponse ExecuteKqpQuery(
+        TTestBasicRuntime& runtime,
+        const TString& query,
+        NKikimrKqp::EQueryType queryType)
+    {
+        const auto sender = runtime.AllocateEdgeActor();
+        const auto kqpProxy = NKqp::MakeKqpProxyID(runtime.GetNodeId(0));
+
+        auto createSession = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
+        createSession->Record.MutableRequest()->SetDatabase("/MyRoot");
+        runtime.Send(new IEventHandle(kqpProxy, sender, createSession.Release()));
+        const auto createSessionResponse = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvCreateSessionResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            createSessionResponse->Get()->Record.GetYdbStatus(),
+            Ydb::StatusIds::SUCCESS,
+            createSessionResponse->Get()->Record.ShortDebugString());
+
+        auto request = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
+        auto& record = *request->Record.MutableRequest();
+        record.SetSessionId(createSessionResponse->Get()->Record.GetResponse().GetSessionId());
+        record.SetDatabase("/MyRoot");
+        record.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+        record.SetType(queryType);
+        record.SetQuery(query);
+        if (queryType == NKikimrKqp::QUERY_TYPE_SQL_DML) {
+            record.MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            record.MutableTxControl()->set_commit_tx(true);
+        }
+
+        runtime.Send(new IEventHandle(kqpProxy, sender, request.Release()));
+        const auto response = runtime.GrabEdgeEventRethrow<NKqp::TEvKqp::TEvQueryResponse>(sender);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            response->Get()->Record.GetYdbStatus(),
+            Ydb::StatusIds::SUCCESS,
+            response->Get()->Record.ShortDebugString());
+        return response->Get()->Record;
+    }
+
+    NKikimrKqp::TEvQueryResponse ExecuteKqpDataQuery(
+        TTestBasicRuntime& runtime,
+        const TString& query)
+    {
+        return ExecuteKqpQuery(runtime, query, NKikimrKqp::QUERY_TYPE_SQL_DML);
+    }
+
+    NKikimrKqp::TEvQueryResponse ExecuteKqpSchemeQuery(
+        TTestBasicRuntime& runtime,
+        const TString& query)
+    {
+        return ExecuteKqpQuery(runtime, query, NKikimrKqp::QUERY_TYPE_SQL_DDL);
+    }
 
     TString GenerateScheme(const TPathDescription& pathDesc) {
         UNIT_ASSERT(pathDesc.HasTable());
@@ -383,7 +440,17 @@ namespace {
             }
 
             switch (item.Type) {
-            case EPathTypeTable:
+            case EPathTypeTable: {
+                if (item.CreationQuery) {
+                    auto createTableKey = prefix + "/create_table.sql";
+                    result.emplace(createTableKey, item.CreationQuery);
+                    if (withChecksum) {
+                        result.emplace(NBackup::ChecksumKey(createTableKey), item.CreationQuery.Checksum);
+                    }
+                    break;
+                }
+                [[fallthrough]];
+            }
             case EPathTypeColumnTable: {
                 auto schemeKey = prefix + "/scheme.pb";
                 result.emplace(schemeKey, item.Scheme);
@@ -1910,6 +1977,213 @@ value {
         ExportImportOnSupportedDatatypesImpl(true, true, EnableDataShardDirectPartImport, true);
     }
 
+    void GeneratedAlwaysExportImportRoundTripImpl(bool encrypted, bool enableDataShardDirectPartImport) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .EnableChecksumsExport(true)
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+
+        ui64 txId = 100;
+        ExecuteKqpSchemeQuery(runtime, R"(
+            PRAGMA classic_division = '0';
+            CREATE TABLE `/MyRoot/Generated` (
+                key Uint32 NOT NULL,
+                a Int32,
+                stored Int32 NOT NULL
+                    GENERATED ALWAYS AS (COALESCE(a, 0) + 10) STORED,
+                virtual Int32
+                    GENERATED ALWAYS AS (COALESCE(a, 0) * 2) VIRTUAL,
+                PRIMARY KEY (key),
+                INDEX by_a GLOBAL ON (a)
+            );
+        )");
+        ExecuteKqpDataQuery(runtime, R"(
+            UPSERT INTO `/MyRoot/Generated` (key, a) VALUES
+                (1u, 5),
+                (2u, 9);
+        )");
+
+        auto select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, stored, virtual FROM `/MyRoot/Generated` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        const TString sourceRows = NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0));
+        UNIT_ASSERT_VALUES_EQUAL(sourceRows,
+            "[[1u;[5];15;[10]];[2u;[9];19;[18]]]");
+
+        TString encryptionSettings;
+        if (encrypted) {
+            encryptionSettings = R"(
+                encryption_settings {
+                    encryption_algorithm: "AES-128-GCM"
+                    symmetric_key {
+                        key: "0123456789012345"
+                    }
+                }
+            )";
+        }
+
+        const ui64 exportId = ++txId;
+        TestExport(runtime, exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Generated"
+                destination_prefix: "generated"
+              }
+              %s
+            }
+        )", port, encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot");
+
+        const TString createTableKey = encrypted
+            ? "/generated/create_table.sql.enc"
+            : "/generated/create_table.sql";
+        const auto* exportedQuery = s3Mock.GetData().FindPtr(createTableKey);
+        UNIT_ASSERT_C(exportedQuery, createTableKey);
+        UNIT_ASSERT(!s3Mock.GetData().contains("/generated/scheme.pb"));
+        UNIT_ASSERT(!s3Mock.GetData().contains("/generated/scheme.pb.enc"));
+        if (encrypted) {
+            UNIT_ASSERT(!s3Mock.GetData().contains("/generated/create_table.sql"));
+        }
+
+        TString createTableQuery;
+        if (encrypted) {
+            TBuffer decrypted;
+            NBackup::TEncryptionIV iv;
+            UNIT_ASSERT_NO_EXCEPTION(std::tie(decrypted, iv) =
+                NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                    NBackup::TEncryptionKey("0123456789012345"),
+                    TBuffer(exportedQuery->data(), exportedQuery->size())));
+            createTableQuery = TString(decrypted.Data(), decrypted.Size());
+        } else {
+            createTableQuery = *exportedQuery;
+        }
+
+        UNIT_ASSERT_STRING_CONTAINS(createTableQuery, "CREATE TABLE `/MyRoot/Generated`");
+        UNIT_ASSERT_STRING_CONTAINS(createTableQuery,
+            "GENERATED ALWAYS AS (COALESCE(a, 0) + 10) STORED");
+        UNIT_ASSERT_STRING_CONTAINS(createTableQuery,
+            "GENERATED ALWAYS AS (COALESCE(a, 0) * 2) VIRTUAL");
+        UNIT_ASSERT_STRING_CONTAINS(createTableQuery, "PRAGMA classic_division = \"0\";");
+
+        const auto* createTableChecksum =
+            s3Mock.GetData().FindPtr("/generated/create_table.sql.sha256");
+        UNIT_ASSERT(createTableChecksum);
+        UNIT_ASSERT_VALUES_EQUAL(*createTableChecksum,
+            NBackup::ComputeChecksum(createTableQuery) + " create_table.sql");
+
+        TestDropTable(runtime, ++txId, "/MyRoot", "Generated");
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<TString> compileQueries;
+        auto compileObserver = runtime.AddObserver<NKikimr::NKqp::TEvKqp::TEvCompileRequest>([&](auto& ev) {
+            if (ev->Get()->Query) {
+                compileQueries.emplace_back(ev->Get()->Query->Text);
+            }
+        });
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "generated"
+                destination_path: "/MyRoot/RestoredGenerated"
+              }
+              %s
+            }
+        )", port, encryptionSettings.c_str()));
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        UNIT_ASSERT_VALUES_EQUAL(compileQueries.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(compileQueries.front(),
+            SubstGlobalCopy(createTableQuery, "/MyRoot/Generated", "/MyRoot/RestoredGenerated"));
+
+        const auto describe = DescribePath(runtime, "/MyRoot/RestoredGenerated");
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+        const auto& columns = describe.GetPathDescription().GetTable().GetColumns();
+        auto findColumn = [&](TStringBuf name) -> const NKikimrSchemeOp::TColumnDescription* {
+            for (const auto& column : columns) {
+                if (column.GetName() == name) {
+                    return &column;
+                }
+            }
+            return nullptr;
+        };
+
+        const auto* stored = findColumn("stored");
+        UNIT_ASSERT_C(stored && stored->HasDefaultFromExpression(), describe.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(stored->GetDefaultFromExpression().GetExprText(),
+            "COALESCE(a, 0) + 10");
+        UNIT_ASSERT(stored->GetDefaultFromExpression().GetStored());
+        UNIT_ASSERT_STRING_CONTAINS(stored->GetDefaultFromExpression().GetContext(),
+            "PRAGMA classic_division = \"0\";");
+
+        const auto* virtualColumn = findColumn("virtual");
+        UNIT_ASSERT_C(virtualColumn && virtualColumn->HasDefaultFromExpression(), describe.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(virtualColumn->GetDefaultFromExpression().GetExprText(),
+            "COALESCE(a, 0) * 2");
+        UNIT_ASSERT(!virtualColumn->GetDefaultFromExpression().GetStored());
+        UNIT_ASSERT_STRING_CONTAINS(virtualColumn->GetDefaultFromExpression().GetContext(),
+            "PRAGMA classic_division = \"0\";");
+
+        select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, stored, virtual FROM `/MyRoot/RestoredGenerated` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)),
+            sourceRows);
+
+        ExecuteKqpDataQuery(runtime,
+            "UPSERT INTO `/MyRoot/RestoredGenerated` (key, a) VALUES (3u, 7);");
+        select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, stored, virtual FROM `/MyRoot/RestoredGenerated` WHERE key = 3u;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)),
+            "[[3u;[7];17;[14]]]");
+
+        TestDescribeResult(DescribePath(runtime,
+            "/MyRoot/RestoredGenerated/by_a", false, false, true), {
+            NLs::PathExist,
+            NLs::IndexType(EIndexTypeGlobal),
+            NLs::IndexState(EIndexStateReady),
+        });
+        select = ExecuteKqpDataQuery(runtime,
+            "SELECT key FROM `/MyRoot/RestoredGenerated` VIEW by_a WHERE a = 9;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)),
+            "[[2u]]");
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedAlwaysExportImportRoundTrip, EnableDataShardDirectPartImport) {
+        GeneratedAlwaysExportImportRoundTripImpl(false, EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedAlwaysEncryptedExportImportRoundTrip, EnableDataShardDirectPartImport) {
+        GeneratedAlwaysExportImportRoundTripImpl(true, EnableDataShardDirectPartImport);
+    }
+
     Y_UNIT_TEST_FLAG(ZeroLengthEncryptedFileTreatedAsCorrupted, EnableDataShardDirectPartImport) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
@@ -2469,6 +2743,77 @@ value {
             s3["/scheme.pb"] = std::regex_replace(std::string(s3["/scheme.pb"]), std::regex("value"), "val");
         },
         EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST(GeneratedCreateTableQueryChecksumCorruption) {
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+
+        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .EnableChecksumsExport(true)
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        ui64 txId = 100;
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Generated"
+            Columns { Name: "key" Type: "Uint32" NotNull: true }
+            Columns { Name: "a" Type: "Int32" }
+            Columns {
+              Name: "stored"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + 10"
+                Stored: true
+                DependencyColumnNames: ["a"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        const ui64 exportId = ++txId;
+        TestExport(runtime, exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Generated"
+                destination_prefix: "generated"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, exportId);
+        TestGetExport(runtime, exportId, "/MyRoot");
+
+        auto* createTableQuery = s3Mock.GetData().FindPtr("/generated/create_table.sql");
+        UNIT_ASSERT(createTableQuery);
+        createTableQuery->append("\n-- checksum corruption\n");
+
+        const ui64 importId = ++txId;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: "generated"
+                destination_path: "/MyRoot/RestoredGenerated"
+              }
+            }
+        )", port));
+        env.TestWaitNotification(runtime, importId);
+
+        const auto entry = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED)
+            .GetResponse().GetEntry();
+        UNIT_ASSERT_STRING_CONTAINS(
+            NYql::IssuesFromMessageAsString(entry.GetIssues()),
+            "Checksum mismatch for /generated/create_table.sql");
     }
 
     Y_UNIT_TEST_FLAG(ExportImportWithPermissionsCorruption, EnableDataShardDirectPartImport) {
@@ -3751,6 +4096,646 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
         auto content = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, {"key", "value"});
         NKqp::CompareYson(data.Data[0].YsonStr, content);
+    }
+
+    Y_UNIT_TEST(GeneratedCreateTableQueryPersistsAcrossSchemeShardRestart) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        TTestDataWithScheme data;
+        data.Metadata = R"({"version": 1})";
+        NKikimrSchemeOp::TPathDescription sourceDescription;
+        auto& sourceTable = *sourceDescription.MutableTable();
+        auto& generatedSource = *sourceTable.AddColumns();
+        generatedSource.SetId(11);
+        generatedSource.SetName("g");
+        generatedSource.SetType("Int32");
+        generatedSource.MutableDefaultFromExpression()->SetExprText("a + 1");
+        generatedSource.MutableDefaultFromExpression()->SetStored(true);
+        generatedSource.MutableDefaultFromExpression()->AddDependencyColumnNames("a");
+        generatedSource.MutableDefaultFromExpression()->SetContext(
+            "PRAGMA classic_division = \"0\";");
+        auto& keySource = *sourceTable.AddColumns();
+        keySource.SetId(2);
+        keySource.SetName("key");
+        keySource.SetType("Uint32");
+        keySource.SetNotNull(true);
+        auto& dependencySource = *sourceTable.AddColumns();
+        dependencySource.SetId(7);
+        dependencySource.SetName("a");
+        dependencySource.SetType("Int32");
+        sourceTable.AddKeyColumnIds(2);
+        sourceTable.AddKeyColumnNames("key");
+
+        TString createTableQuery;
+        TString createTableQueryError;
+        UNIT_ASSERT_C(
+            BuildCreateTableQuery(
+                "/OldRoot/Original",
+                sourceDescription,
+                createTableQuery,
+                createTableQueryError),
+            createTableQueryError);
+        UNIT_ASSERT_STRING_CONTAINS(createTableQuery, R"(CREATE TABLE `/OldRoot/Original` (
+    key Uint32 NOT NULL,
+    a Int32,
+    g Int32 GENERATED ALWAYS AS (a + 1) STORED,)");
+        data.CreationQuery = createTableQuery;
+        data.Data.emplace_back("1,41,42\n2,99,100\n", EmptyYsonStr);
+
+        const TString expectedQuery = SubstGlobalCopy(
+            createTableQuery,
+            "/OldRoot/Original",
+            "/MyRoot/Restored");
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TVector<TString> compileQueries;
+        auto compileObserver = runtime.AddObserver<NKikimr::NKqp::TEvKqp::TEvCompileRequest>([&](auto& ev) {
+            if (ev->Get()->Query) {
+                compileQueries.emplace_back(ev->Get()->Query->Text);
+            }
+        });
+
+        TString schemeGetterError;
+        auto schemeGetterObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeReady>([&](auto& ev) {
+            if (!ev->Get()->Success) {
+                schemeGetterError = ev->Get()->Error;
+            }
+        });
+
+        TString schemeQueryError;
+        auto schemeQueryObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeQueryResult>([&](auto& ev) {
+            if (std::holds_alternative<TString>(ev->Get()->Result)) {
+                schemeQueryError = std::get<TString>(ev->Get()->Result);
+                if (schemeQueryError.empty()) {
+                    schemeQueryError = TStringBuilder()
+                        << "scheme query failed with status " << ev->Get()->Status;
+                }
+            }
+        });
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> createTableBlocker(runtime, [](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1
+                && record.GetTransaction(0).GetOperationType() == ESchemeOpCreateTable;
+        });
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("prepared CREATE TABLE query", [&] {
+            return !createTableBlocker.empty() || !schemeGetterError.empty() || !schemeQueryError.empty();
+        });
+        UNIT_ASSERT_C(schemeGetterError.empty(), schemeGetterError);
+        UNIT_ASSERT_C(schemeQueryError.empty(), schemeQueryError);
+        UNIT_ASSERT_VALUES_EQUAL(compileQueries.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(compileQueries.front(), expectedQuery);
+
+        const auto& preparedQuery = createTableBlocker.front()->Get()->Record.GetTransaction(0);
+        UNIT_ASSERT_VALUES_EQUAL(preparedQuery.GetWorkingDir(), "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL(preparedQuery.GetCreateTable().GetName(), "Restored");
+        const auto& preparedColumns = preparedQuery.GetCreateTable().GetColumns();
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(0).GetName(), "key");
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(1).GetName(), "a");
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(2).GetName(), "g");
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(0).GetId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(1).GetId(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(preparedColumns.Get(2).GetId(), 3);
+
+        createTableBlocker.Stop();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+        UNIT_ASSERT_VALUES_EQUAL_C(compileQueries.size(), 1,
+            "prepared CREATE TABLE query must be reused after SchemeShard restart");
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Restored");
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+
+        const auto& columns = describe.GetPathDescription().GetTable().GetColumns();
+        const NKikimrSchemeOp::TColumnDescription* generated = nullptr;
+        for (const auto& column : columns) {
+            if (column.GetName() == "g") {
+                generated = &column;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(generated, describe.ShortDebugString());
+        UNIT_ASSERT(generated->HasDefaultFromExpression());
+        const auto& generatedExpression = generated->GetDefaultFromExpression();
+        UNIT_ASSERT_VALUES_EQUAL(generatedExpression.GetExprText(), "a + 1");
+        UNIT_ASSERT(generatedExpression.GetStored());
+        UNIT_ASSERT_VALUES_EQUAL(generatedExpression.DependencyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(generatedExpression.GetDependencyColumnNames(0), "a");
+        UNIT_ASSERT_VALUES_EQUAL(generatedExpression.GetContext(),
+            "PRAGMA classic_division = \"0\";");
+
+        auto select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, g FROM `/MyRoot/Restored` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        NKqp::CompareYson(
+            "[[1u;[41];[42]];[2u;[99];[100]]]",
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
+
+        ExecuteKqpDataQuery(runtime,
+            "UPSERT INTO `/MyRoot/Restored` (key, a) VALUES (3u, 7);");
+        select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, g FROM `/MyRoot/Restored` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        NKqp::CompareYson(
+            "[[1u;[41];[42]];[2u;[99];[100]];[3u;[7];[8]]]",
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
+    }
+
+    Y_UNIT_TEST(LegacyCreationQueryWithoutPathTypeResumesAfterSchemeShardRestart) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+
+        TTestDataWithScheme data;
+        data.Metadata = R"({"version": 1})";
+        data.Type = EPathTypeView;
+        data.CreationQuery = R"(
+            -- backup root: "/OldRoot"
+            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+        )";
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TBlockEvents<NKqp::TEvKqp::TEvCompileRequest> compileBlocker(runtime, [](auto& ev) {
+            return ev->Get()->Query
+                && ev->Get()->Query->Text.Contains("CREATE VIEW");
+        });
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("view creation query is awaiting KQP preparation", [&] {
+            return !compileBlocker.empty();
+        });
+
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('ImportId (Uint64 '%)" PRIu64 R"()) '('Index (Uint32 '0))))
+                (let update '('('CreationQueryPathType)))
+                (return (AsList (UpdateRow 'ImportItems key update)))
+            )
+        )", importId));
+
+        compileBlocker.Stop();
+        compileBlocker.clear();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Restored");
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::IsView,
+        });
+    }
+
+    Y_UNIT_TEST(GeneratedCreateTableQueryWithIndexRestoresDataBeforeBuildingIndex) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalBloomFilterIndex(true);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+        TTestDataWithScheme data;
+        data.Metadata = R"({"version": 1})";
+        data.CreationQuery = R"(CREATE TABLE `/OldRoot/Original` (
+    key Uint32 NOT NULL,
+    a Int32,
+    g Int32 GENERATED ALWAYS AS (a + 1) STORED,
+    PRIMARY KEY (key),
+    INDEX by_a GLOBAL ON (a),
+    INDEX by_key LOCAL USING bloom_filter ON (key)
+);
+)";
+        data.Data.emplace_back("1,41,42\n2,99,100\n", EmptyYsonStr);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TString schemeGetterError;
+        auto schemeGetterObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeReady>([&](auto& ev) {
+            if (!ev->Get()->Success) {
+                schemeGetterError = ev->Get()->Error;
+            }
+        });
+
+        TString schemeQueryError;
+        auto schemeQueryObserver = runtime.AddObserver<TEvPrivate::TEvImportSchemeQueryResult>([&](auto& ev) {
+            if (std::holds_alternative<TString>(ev->Get()->Result)) {
+                schemeQueryError = std::get<TString>(ev->Get()->Result);
+                if (schemeQueryError.empty()) {
+                    schemeQueryError = TStringBuilder()
+                        << "scheme query failed with status " << ev->Get()->Status;
+                }
+            }
+        });
+
+        TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction> createTableBlocker(runtime, [](auto& ev) {
+            const auto& record = ev->Get()->Record;
+            return record.TransactionSize() == 1
+                && record.GetTransaction(0).GetOperationType() == ESchemeOpCreateIndexedTable;
+        });
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              index_population_mode: INDEX_POPULATION_MODE_BUILD
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("prepared indexed CREATE TABLE query", [&] {
+            return !createTableBlocker.empty() || !schemeGetterError.empty() || !schemeQueryError.empty();
+        });
+        UNIT_ASSERT_C(schemeGetterError.empty(), schemeGetterError);
+        UNIT_ASSERT_C(schemeQueryError.empty(), schemeQueryError);
+        const auto& executableQuery = createTableBlocker.front()->Get()->Record.GetTransaction(0);
+        const auto& executableIndexes = executableQuery.GetCreateIndexedTable().GetIndexDescription();
+        UNIT_ASSERT_VALUES_EQUAL(executableIndexes.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(executableIndexes.Get(0).GetName(), "by_key");
+        UNIT_ASSERT_VALUES_EQUAL(executableIndexes.Get(0).GetType(), EIndexTypeLocalBloomFilter);
+        createTableBlocker.Stop();
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored/by_a", false, false, true), {
+            NLs::PathExist,
+            NLs::IndexType(EIndexTypeGlobal),
+            NLs::IndexState(EIndexStateReady),
+        });
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored/by_key", false, false, true), {
+            NLs::PathExist,
+            NLs::IndexType(EIndexTypeLocalBloomFilter),
+            NLs::IndexState(EIndexStateReady),
+        });
+
+        const auto select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, g FROM `/MyRoot/Restored` VIEW by_a WHERE a = 99;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        NKqp::CompareYson(
+            "[[2u;[99];[100]]]",
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
+    }
+
+    Y_UNIT_TEST(GeneratedCreateTableQueryRestoresVirtualGeneratedColumn) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedVirtual(true);
+
+        TTestDataWithScheme data;
+        data.Metadata = R"({"version": 1})";
+        data.CreationQuery = R"(PRAGMA classic_division = '0';
+CREATE TABLE `/OldRoot/Original` (
+    key Uint32 NOT NULL,
+    a Int32,
+    g Int32 GENERATED ALWAYS AS (a + 1) VIRTUAL,
+    PRIMARY KEY (key)
+);
+)";
+        data.Data.emplace_back("1,41\n2,99\n", EmptyYsonStr);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Restored");
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+
+        const NKikimrSchemeOp::TColumnDescription* generated = nullptr;
+        for (const auto& column : describe.GetPathDescription().GetTable().GetColumns()) {
+            if (column.GetName() == "g") {
+                generated = &column;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(generated, describe.ShortDebugString());
+        UNIT_ASSERT(generated->HasDefaultFromExpression());
+        const auto& expression = generated->GetDefaultFromExpression();
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetExprText(), "a + 1");
+        UNIT_ASSERT(!expression.GetStored());
+        UNIT_ASSERT_VALUES_EQUAL(expression.DependencyColumnNamesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetDependencyColumnNames(0), "a");
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetContext(),
+            "PRAGMA classic_division = \"0\";");
+
+        auto select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, g FROM `/MyRoot/Restored` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        NKqp::CompareYson(
+            "[[1u;[41];[42]];[2u;[99];[100]]]",
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
+
+        ExecuteKqpDataQuery(runtime,
+            "UPSERT INTO `/MyRoot/Restored` (key, a) VALUES (3u, 7);");
+        select = ExecuteKqpDataQuery(runtime,
+            "SELECT key, a, g FROM `/MyRoot/Restored` ORDER BY key;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        NKqp::CompareYson(
+            "[[1u;[41];[42]];[2u;[99];[100]];[3u;[7];[8]]]",
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
+    }
+
+    Y_UNIT_TEST(GeneratedCreateTableQueryWithCreateViewTextIsHandledAsTable) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        TTestDataWithScheme data;
+        data.Metadata = R"({"version": 1})";
+        data.CreationQuery = R"(
+            -- CREATE VIEW marker must not override the persisted table path type.
+            CREATE TABLE `/OldRoot/Original` (
+                key Uint32 NOT NULL,
+                a Int32,
+                g Int32
+                    GENERATED ALWAYS AS (a + 1) STORED,
+                PRIMARY KEY (key)
+            );
+        )";
+        data.Data.emplace_back("1,41,42\n", EmptyYsonStr);
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TBlockEvents<NKqp::TEvKqp::TEvCompileRequest> compileBlocker(runtime, [](auto& ev) {
+            return ev->Get()->Query
+                && ev->Get()->Query->Text.Contains("CREATE VIEW marker");
+        });
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("table creation query with CREATE VIEW marker", [&] {
+            return !compileBlocker.empty();
+        });
+
+        const TActorId queryExecutor = compileBlocker.front()->Sender;
+        const TActorId compileService = compileBlocker.front()->GetRecipientRewrite();
+        compileBlocker.Stop();
+        compileBlocker.clear();
+
+        NKikimrSchemeOp::TModifyScheme modifyScheme;
+        modifyScheme.SetOperationType(ESchemeOpCreateTable);
+        modifyScheme.SetWorkingDir("/MyRoot");
+        auto& table = *modifyScheme.MutableCreateTable();
+        table.SetName("Restored");
+
+        auto& key = *table.AddColumns();
+        key.SetName("key");
+        key.SetType("Uint32");
+        key.SetNotNull(true);
+
+        auto& dependency = *table.AddColumns();
+        dependency.SetName("a");
+        dependency.SetType("Int32");
+
+        auto& generatedColumn = *table.AddColumns();
+        generatedColumn.SetName("g");
+        generatedColumn.SetType("Int32");
+        auto& expression = *generatedColumn.MutableDefaultFromExpression();
+        expression.SetExprText("a + 1");
+        expression.SetStored(true);
+        expression.AddDependencyColumnNames("a");
+        table.AddKeyColumnNames("key");
+
+        auto* preparedQuery = new NKikimrKqp::TPreparedQuery();
+        auto& transaction = *preparedQuery->MutablePhysicalQuery()->AddTransactions();
+        transaction.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+        transaction.MutableSchemeOperation()->MutableCreateTable()->CopyFrom(modifyScheme);
+
+        auto compileResult = NKqp::TKqpCompileResult::Make(
+            "", Ydb::StatusIds::SUCCESS, {}, NKqp::ETableReadType::Other);
+        compileResult->PreparedQuery = std::make_shared<NKqp::TPreparedQueryHolder>(
+            preparedQuery, nullptr, true);
+        runtime.Send(new IEventHandle(
+            queryExecutor,
+            compileService,
+            new NKqp::TEvKqp::TEvCompileResponse(compileResult)),
+            0,
+            true);
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Restored");
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::IsTable,
+        });
+
+        const auto& columns = describe.GetPathDescription().GetTable().GetColumns();
+        const NKikimrSchemeOp::TColumnDescription* generated = nullptr;
+        for (const auto& column : columns) {
+            if (column.GetName() == "g") {
+                generated = &column;
+                break;
+            }
+        }
+        UNIT_ASSERT_C(generated && generated->HasDefaultFromExpression(),
+            describe.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(
+            generated->GetDefaultFromExpression().GetExprText(),
+            "a + 1");
+    }
+
+    enum class ECreateTableQueryCompileResult {
+        Empty,
+        Multiple,
+        WrongOperation,
+    };
+
+    void ShouldRejectCreateTableQueryCompileResult(
+        ECreateTableQueryCompileResult mutation,
+        const TString& expectedError)
+    {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+
+        TTestDataWithScheme data;
+        data.CreationQuery = R"(CREATE TABLE `/OldRoot/Original` (
+    key Uint32 NOT NULL,
+    PRIMARY KEY (key)
+);
+)";
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        bool mutated = false;
+        auto compileResponseObserver = runtime.AddObserver<NKikimr::NKqp::TEvKqp::TEvCompileResponse>([&](auto& ev) {
+            const auto* result = ev->Get()->CompileResult.get();
+            if (mutated || !result || !result->PreparedQuery) {
+                return;
+            }
+
+            auto* preparedQuery = new NKikimrKqp::TPreparedQuery();
+            preparedQuery->MutablePhysicalQuery()->CopyFrom(result->PreparedQuery->GetPhysicalQuery());
+            auto* transactions = preparedQuery->MutablePhysicalQuery()->MutableTransactions();
+
+            switch (mutation) {
+            case ECreateTableQueryCompileResult::Empty:
+                transactions->Clear();
+                break;
+            case ECreateTableQueryCompileResult::Multiple: {
+                UNIT_ASSERT_VALUES_EQUAL(transactions->size(), 1);
+                const auto transaction = transactions->Get(0);
+                transactions->Add()->CopyFrom(transaction);
+                break;
+            }
+            case ECreateTableQueryCompileResult::WrongOperation: {
+                UNIT_ASSERT_VALUES_EQUAL(transactions->size(), 1);
+                auto* schemeOperation = transactions->Mutable(0)->MutableSchemeOperation();
+                UNIT_ASSERT(schemeOperation->HasCreateTable());
+                const auto modifyScheme = schemeOperation->GetCreateTable();
+                schemeOperation->MutableCreateView()->CopyFrom(modifyScheme);
+                break;
+            }
+            }
+
+            auto replacement = NKikimr::NKqp::TKqpCompileResult::Make(
+                result->Uid,
+                result->Status,
+                result->Issues,
+                result->MaxReadType);
+            replacement->PreparedQuery = std::make_shared<NKikimr::NKqp::TPreparedQueryHolder>(
+                preparedQuery,
+                nullptr,
+                true);
+            ev->Get()->CompileResult = std::move(replacement);
+            mutated = true;
+        });
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        env.TestWaitNotification(runtime, importId);
+        const auto response = TestGetImport(runtime, importId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        UNIT_ASSERT(mutated);
+        UNIT_ASSERT_STRING_CONTAINS(
+            NYql::IssuesFromMessageAsString(response.GetResponse().GetEntry().GetIssues()),
+            expectedError);
+    }
+
+    Y_UNIT_TEST(CreateTableQueryRejectsEmptyKqpResult) {
+        ShouldRejectCreateTableQueryCompileResult(
+            ECreateTableQueryCompileResult::Empty,
+            "expected exactly one physical transaction");
+    }
+
+    Y_UNIT_TEST(CreateTableQueryRejectsMultipleKqpResults) {
+        ShouldRejectCreateTableQueryCompileResult(
+            ECreateTableQueryCompileResult::Multiple,
+            "expected exactly one physical transaction");
+    }
+
+    Y_UNIT_TEST(CreateTableQueryRejectsWrongKqpOperation) {
+        ShouldRejectCreateTableQueryCompileResult(
+            ECreateTableQueryCompileResult::WrongOperation,
+            "expected CREATE TABLE scheme operation");
     }
 
     Y_UNIT_TEST_FLAG(ShouldSucceedOnMultiShardTable, EnableDataShardDirectPartImport) {
@@ -6752,7 +7737,7 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         }
     }
 
-    void ChangefeedsExportRestore(bool isShouldSuccess, bool enableDataShardDirectPartImport) {
+    void ChangefeedsExportRestore(bool isShouldSuccess, bool enableDataShardDirectPartImport, bool generated = false) {
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
 
@@ -6760,7 +7745,11 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         UNIT_ASSERT(s3Mock.Start());
 
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        auto options = TTestEnvOptions();
+        if (generated) {
+            options.RunFakeConfigDispatcher(true).SetupKqpProxy(true);
+        }
+        TTestEnv env(runtime, options);
         runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
         ui64 txId = 100;
 
@@ -6770,8 +7759,24 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         runtime.SetLogPriority(NKikimrServices::IMPORT, NActors::NLog::PRI_TRACE);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(generated);
 
-        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+        TestCreateTable(runtime, ++txId, "/MyRoot", generated ? R"(
+            Name: "Original"
+            Columns { Name: "key" Type: "Uint32" NotNull: true }
+            Columns { Name: "double_value" Type: "Double" }
+            Columns { Name: "float_value" Type: "Float" }
+            Columns {
+              Name: "generated_value"
+              Type: "Double"
+              DefaultFromExpression {
+                ExprText: "double_value + 1.0"
+                Stored: true
+                DependencyColumnNames: ["double_value"]
+              }
+            }
+            KeyColumnNames: ["key"]
+        )" : R"(
             Name: "Original"
             Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "double_value" Type: "Double" }
@@ -6779,6 +7784,18 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
+
+        TString sourceRows;
+        if (generated) {
+            ExecuteKqpDataQuery(runtime, R"(
+                UPSERT INTO `/MyRoot/Original` (key, double_value)
+                VALUES (1u, 2.5);
+            )");
+            const auto select = ExecuteKqpDataQuery(runtime,
+                "SELECT key, double_value, float_value, generated_value FROM `/MyRoot/Original`;");
+            UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+            sourceRows = NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0));
+        }
 
         TestCreateCdcStreams(env, runtime, txId, "/MyRoot", 3, isShouldSuccess);
 
@@ -6795,6 +7812,25 @@ Y_UNIT_TEST_SUITE(TImportTests) {
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
+        THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> restoreBlocker;
+        THolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>> changefeedBlocker;
+        if (generated) {
+            restoreBlocker = MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(
+                runtime,
+                [](auto& ev) {
+                    const auto& record = ev->Get()->Record;
+                    return record.TransactionSize() == 1
+                        && record.GetTransaction(0).GetOperationType() == ESchemeOpRestore;
+                });
+            changefeedBlocker = MakeHolder<TBlockEvents<TEvSchemeShard::TEvModifySchemeTransaction>>(
+                runtime,
+                [](auto& ev) {
+                    const auto& record = ev->Get()->Record;
+                    return record.TransactionSize() == 1
+                        && record.GetTransaction(0).GetOperationType() == ESchemeOpCreateCdcStream;
+                });
+        }
+
         TestImport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ImportFromS3Settings {
               endpoint: "localhost:%d"
@@ -6805,8 +7841,37 @@ Y_UNIT_TEST_SUITE(TImportTests) {
               }
             }
         )", port));
+
+        if (generated) {
+            runtime.WaitFor("generated table restore proposal", [&] {
+                return !restoreBlocker->empty();
+            });
+            UNIT_ASSERT_C(changefeedBlocker->empty(),
+                "changefeed creation must not be proposed while table data restore is blocked");
+
+            restoreBlocker->Unblock().Stop();
+            runtime.WaitFor("changefeed proposal after generated table restore", [&] {
+                return !changefeedBlocker->empty();
+            });
+
+            const auto select = ExecuteKqpDataQuery(runtime,
+                "SELECT key, double_value, float_value, generated_value FROM `/MyRoot/Restored`;");
+            UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)),
+                sourceRows);
+
+            changefeedBlocker->Unblock().Stop();
+        }
+
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot", isShouldSuccess ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
+
+        if (generated && isShouldSuccess) {
+            TestDescribeResult(DescribePath(runtime, "/MyRoot/Restored/Stream_1", false, false, true), {
+                NLs::PathExist,
+            });
+        }
     }
 
     Y_UNIT_TEST_FLAG(ChangefeedsExportRestore, EnableDataShardDirectPartImport) {
@@ -6815,6 +7880,10 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_FLAG(ChangefeedsExportRestoreUnhappyPropose, EnableDataShardDirectPartImport) {
         ChangefeedsExportRestore(false, EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedChangefeedExportRestore, EnableDataShardDirectPartImport) {
+        ChangefeedsExportRestore(true, EnableDataShardDirectPartImport, true);
     }
 
     Y_UNIT_TEST_FLAG(ShouldSucceedImportTableWithUniqueIndex, EnableDataShardDirectPartImport) {
@@ -7514,6 +8583,136 @@ Y_UNIT_TEST_SUITE(TImportTests) {
 
     Y_UNIT_TEST_FLAG(MaterializedIndexOldMetadata, EnableDataShardDirectPartImport) {
         MaterializedIndex(Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT, EnableDataShardDirectPartImport, R"({"version": 0})");
+    }
+
+    void GeneratedMaterializedIndex(
+        Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode,
+        bool enableDataShardDirectPartImport,
+        bool withMaterializedIndex = true,
+        bool shouldSucceed = true)
+    {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .EnableIndexMaterialization(true)
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableDataShardDirectPartImport(enableDataShardDirectPartImport);
+        runtime.GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        TTestDataWithScheme table;
+        table.Metadata = R"({
+            "version": 1,
+            "indexes": [{
+                "export_prefix": "by_a/indexImplTable",
+                "impl_table_prefix": "by_a/indexImplTable"
+            }]
+        })";
+        table.CreationQuery = R"(
+            CREATE TABLE `/OldRoot/Generated` (
+                key Uint32 NOT NULL,
+                a Int32,
+                stored Int32 GENERATED ALWAYS AS (a + 10) STORED,
+                PRIMARY KEY (key),
+                INDEX by_a GLOBAL ON (a)
+            );
+        )";
+        table.Data.emplace_back("1,41,51\n", EmptyYsonStr);
+
+        TTestDataWithScheme index;
+        index.Metadata = R"({"version": 1})";
+        index.Scheme = R"(
+            columns {
+              name: "a"
+              type { optional_type { item { type_id: INT32 } } }
+            }
+            columns {
+              name: "key"
+              type { type_id: UINT32 }
+              not_null: true
+            }
+            primary_key: "a"
+            primary_key: "key"
+        )";
+        index.Data.emplace_back("41,1\n", EmptyYsonStr);
+
+        THashMap<TString, TTestDataWithScheme> bucketContent = {
+            {"/generated", std::move(table)},
+        };
+        if (withMaterializedIndex) {
+            bucketContent.emplace("/generated/by_a/indexImplTable", std::move(index));
+        }
+
+        Run(runtime, env, ConvertTestData(bucketContent), Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%%d"
+              scheme: HTTP
+              index_population_mode: %s
+              items {
+                source_prefix: "generated"
+                destination_path: "/MyRoot/RestoredGenerated"
+              }
+            }
+        )", Ydb::Import::ImportFromS3Settings::IndexPopulationMode_Name(mode).c_str()),
+            shouldSucceed ? Ydb::StatusIds::SUCCESS : Ydb::StatusIds::CANCELLED);
+
+        if (!shouldSucceed) {
+            return;
+        }
+
+        TestDescribeResult(DescribePath(runtime,
+            "/MyRoot/RestoredGenerated/by_a", false, false, true), {
+            NLs::PathExist,
+            NLs::IndexType(EIndexTypeGlobal),
+            NLs::IndexState(EIndexStateReady),
+        });
+
+        const auto select = ExecuteKqpDataQuery(runtime,
+            "SELECT key FROM `/MyRoot/RestoredGenerated` VIEW by_a WHERE a = 41;");
+        UNIT_ASSERT_VALUES_EQUAL(select.GetResponse().GetYdbResults().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)),
+            "[[1u]]");
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedMaterializedIndexBuild, EnableDataShardDirectPartImport) {
+        GeneratedMaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD,
+            EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedMaterializedIndexImport, EnableDataShardDirectPartImport) {
+        GeneratedMaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+            EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedMaterializedIndexAuto, EnableDataShardDirectPartImport) {
+        GeneratedMaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO,
+            EnableDataShardDirectPartImport);
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedMaterializedIndexAbsentBuild, EnableDataShardDirectPartImport) {
+        GeneratedMaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_BUILD,
+            EnableDataShardDirectPartImport,
+            false);
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedMaterializedIndexAbsentAuto, EnableDataShardDirectPartImport) {
+        GeneratedMaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_AUTO,
+            EnableDataShardDirectPartImport,
+            false);
+    }
+
+    Y_UNIT_TEST_FLAG(GeneratedMaterializedIndexAbsentImport, EnableDataShardDirectPartImport) {
+        GeneratedMaterializedIndex(
+            Ydb::Import::ImportFromS3Settings::INDEX_POPULATION_MODE_IMPORT,
+            EnableDataShardDirectPartImport,
+            false,
+            false);
     }
 
     void MaterializedIndexAbsent(Ydb::Import::ImportFromS3Settings::IndexPopulationMode mode, bool shouldFail, bool enableDataShardDirectPartImport) {

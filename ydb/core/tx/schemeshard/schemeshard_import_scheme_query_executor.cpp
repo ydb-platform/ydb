@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
+#include <ydb/core/protos/schemeshard/operations.pb.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -86,31 +87,72 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             return Finish(Ydb::StatusIds::GENERIC_ERROR, "no prepared query");
         }
         const auto& transactions = result->PreparedQuery->GetPhysicalQuery().GetTransactions();
-        if (transactions.empty()) {
-            return Finish(Ydb::StatusIds::GENERIC_ERROR, "empty transactions");
+        if (transactions.size() != 1) {
+            return Finish(Ydb::StatusIds::GENERIC_ERROR, TStringBuilder()
+                << "expected exactly one physical transaction, got " << transactions.size());
         }
-        if (!transactions[0].HasSchemeOperation()) {
-            return Finish(Ydb::StatusIds::GENERIC_ERROR, "no scheme operations");
+        if (transactions[0].GetType() != NKqpProto::TKqpPhyTx::TYPE_SCHEME
+            || !transactions[0].HasSchemeOperation())
+        {
+            return Finish(Ydb::StatusIds::GENERIC_ERROR, "expected a physical scheme transaction");
         }
 
-        if (transactions[0].GetSchemeOperation().HasCreateView()) {
-            const auto& createView = transactions[0].GetSchemeOperation().GetCreateView();
+        const auto& schemeOperation = transactions[0].GetSchemeOperation();
+        switch (CreationQueryPathType) {
+        case NKikimrSchemeOp::EPathTypeTable: {
+            if (!schemeOperation.HasCreateTable()) {
+                return Finish(Ydb::StatusIds::GENERIC_ERROR, "expected CREATE TABLE scheme operation");
+            }
+
+            const auto& createTable = schemeOperation.GetCreateTable();
+            if (createTable.GetOperationType() != NKikimrSchemeOp::ESchemeOpCreateTable
+                && createTable.GetOperationType() != NKikimrSchemeOp::ESchemeOpCreateIndexedTable)
+            {
+                return Finish(Ydb::StatusIds::GENERIC_ERROR, "expected CREATE TABLE modify scheme operation");
+            }
+
+            return Finish(result->Status, createTable);
+        }
+        case NKikimrSchemeOp::EPathTypeView: {
+            if (!schemeOperation.HasCreateView()) {
+                return Finish(Ydb::StatusIds::GENERIC_ERROR, "expected CREATE VIEW scheme operation");
+            }
+            const auto& createView = schemeOperation.GetCreateView();
             return Finish(result->Status, createView);
-        } else if (transactions[0].GetSchemeOperation().HasCreateReplication()) {
-            const auto& createReplication = transactions[0].GetSchemeOperation().GetCreateReplication();
+        }
+        case NKikimrSchemeOp::EPathTypeReplication: {
+            if (!schemeOperation.HasCreateReplication()) {
+                return Finish(Ydb::StatusIds::GENERIC_ERROR, "expected CREATE ASYNC REPLICATION scheme operation");
+            }
+            const auto& createReplication = schemeOperation.GetCreateReplication();
             return Finish(result->Status, createReplication);
-        } else if (transactions[0].GetSchemeOperation().HasCreateTransfer()) {
-            const auto& createTransfer = transactions[0].GetSchemeOperation().GetCreateTransfer();
+        }
+        case NKikimrSchemeOp::EPathTypeTransfer: {
+            if (!schemeOperation.HasCreateTransfer()) {
+                return Finish(Ydb::StatusIds::GENERIC_ERROR, "expected CREATE TRANSFER scheme operation");
+            }
+            const auto& createTransfer = schemeOperation.GetCreateTransfer();
             return Finish(result->Status, createTransfer);
-        } else if (transactions[0].GetSchemeOperation().HasCreateExternalDataSource()) {
-            const auto& createExternalDataSource = transactions[0].GetSchemeOperation().GetCreateExternalDataSource();
+        }
+        case NKikimrSchemeOp::EPathTypeExternalDataSource: {
+            if (!schemeOperation.HasCreateExternalDataSource()) {
+                return Finish(Ydb::StatusIds::GENERIC_ERROR, "expected CREATE EXTERNAL DATA SOURCE scheme operation");
+            }
+            const auto& createExternalDataSource = schemeOperation.GetCreateExternalDataSource();
             return Finish(result->Status, createExternalDataSource);
-        } else if (transactions[0].GetSchemeOperation().HasCreateExternalTable()) {
-            const auto& createExternalTable = transactions[0].GetSchemeOperation().GetCreateExternalTable();
+        }
+        case NKikimrSchemeOp::EPathTypeExternalTable: {
+            if (!schemeOperation.HasCreateExternalTable()) {
+                return Finish(Ydb::StatusIds::GENERIC_ERROR, "expected CREATE EXTERNAL TABLE scheme operation");
+            }
+            const auto& createExternalTable = schemeOperation.GetCreateExternalTable();
             return Finish(result->Status, createExternalTable);
         }
-
-        return Finish(Ydb::StatusIds::GENERIC_ERROR, "no supported create operation");
+        default:
+            return Finish(Ydb::StatusIds::GENERIC_ERROR, TStringBuilder()
+                << "unsupported create query schema type: "
+                << NKikimrSchemeOp::EPathType_Name(CreationQueryPathType));
+        }
     }
 
     void Finish(Ydb::StatusIds::StatusCode status, std::variant<TString, NKikimrSchemeOp::TModifyScheme> result) {
@@ -143,12 +185,14 @@ public:
         ui64 importId,
         ui32 itemIdx,
         const TString& schemeQuery,
+        NKikimrSchemeOp::EPathType creationQueryPathType,
         const TString& database
     )
         : ReplyTo(replyTo)
         , ImportId(importId)
         , ItemIdx(itemIdx)
         , SchemeQuery(schemeQuery)
+        , CreationQueryPathType(creationQueryPathType)
         , Database(database)
     {
     }
@@ -177,6 +221,7 @@ private:
     ui64 ImportId;
     ui32 ItemIdx;
     TString SchemeQuery;
+    NKikimrSchemeOp::EPathType CreationQueryPathType;
     TString Database;
 
     // The following pointer-type event arguments are necessary for constructing the compile request.
@@ -188,8 +233,21 @@ private:
 
 }; // TSchemeQueryExecutor
 
-IActor* CreateSchemeQueryExecutor(NActors::TActorId replyTo, ui64 importId, ui32 itemIdx, const TString& schemeQuery, const TString& database) {
-    return new TSchemeQueryExecutor(replyTo, importId, itemIdx, schemeQuery, database);
+IActor* CreateSchemeQueryExecutor(
+    NActors::TActorId replyTo,
+    ui64 importId,
+    ui32 itemIdx,
+    const TString& schemeQuery,
+    NKikimrSchemeOp::EPathType creationQueryPathType,
+    const TString& database)
+{
+    return new TSchemeQueryExecutor(
+        replyTo,
+        importId,
+        itemIdx,
+        schemeQuery,
+        creationQueryPathType,
+        database);
 }
 
 } // NKikimr::NSchemeShard

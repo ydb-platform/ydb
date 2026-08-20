@@ -1,18 +1,23 @@
 #include "create_table_formatter.h"
 #include "formatters_common.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
-#include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
+
+#include <arrow/type_fwd.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>
@@ -30,6 +35,12 @@ namespace NIndexParameters = NKikimr::NOlap::NIndexes::NIndexParameters;
 
 namespace {
     const ui64 defaultSizeToSplit = 2ul << 30; // 2048 Mb
+
+    ui32 ShardsToCreate(const NKikimrSchemeOp::TTableDescription& description) {
+        return description.HasUniformPartitionsCount()
+            ? description.GetUniformPartitionsCount()
+            : description.SplitBoundarySize() + 1;
+    }
 }
 
 void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isPartition, TString del) {
@@ -400,7 +411,7 @@ TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TStr
 
     if (tableDesc.HasPartitionConfig()) {
         if (tableDesc.GetPartitionConfig().HasPartitioningPolicy()) {
-            ui32 shardsToCreate = NSchemeShard::TTableInfo::ShardsToCreate(tableDesc);
+            ui32 shardsToCreate = ShardsToCreate(tableDesc);
             printed |= Format(tableDesc.GetPartitionConfig().GetPartitioningPolicy(), shardsToCreate, del, !printed);
         }
     }
@@ -1353,7 +1364,7 @@ void TCreateTableFormatter::FormatIndexImplTable(const TString& tablePath, const
 
     const auto& policy = indexImplDesc.GetPartitionConfig().GetPartitioningPolicy();
 
-    ui32 shardsToCreate = NSchemeShard::TTableInfo::ShardsToCreate(indexImplDesc);
+    ui32 shardsToCreate = ShardsToCreate(indexImplDesc);
 
     bool printed = false;
     if ((policy.HasSizeToSplit() && (policy.GetSizeToSplit() != defaultSizeToSplit)) || policy.HasSplitByLoadSettings()

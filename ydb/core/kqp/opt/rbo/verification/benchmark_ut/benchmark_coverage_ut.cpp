@@ -1649,7 +1649,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             }));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredSnapshotPairQueries ==
-            std::set<ui32>({49, 51}));
+            std::set<ui32>({51}));
         UNIT_ASSERT(
             policy.Suites.at(Tpcds.Name).RequiredVerifierEntryQueries ==
             std::set<ui32>({5, 8, 9, 59, 65, 72, 78, 80}));
@@ -1658,8 +1658,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             std::set<ui32>({
                 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 18, 19, 20, 21,
                 22, 24, 25, 26, 28, 29, 31, 33, 34, 35, 37, 38, 40, 42, 43, 45,
-                46, 48, 50, 52, 53, 54, 55, 56, 58, 59, 60, 61, 62, 63, 64, 65,
-                66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 82, 83, 84,
+                46, 48, 49, 50, 52, 53, 54, 55, 56, 58, 59, 60, 61, 62, 63,
+                64, 65, 66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 82,
+                83, 84,
                 85, 87, 88, 89, 90, 91, 93, 94, 95, 96, 97, 98, 99,
             }));
         UNIT_ASSERT(
@@ -1671,6 +1672,9 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT_VALUES_EQUAL(
             SnapshotPairFloorQueries(policy.Suites.at(Tpcds.Name)).size(),
             81);
+        UNIT_ASSERT_VALUES_EQUAL(
+            policy.Suites.at(Tpcds.Name).RequiredFormulaQueries.size(),
+            80);
 
         const auto report = CoverageReportHeader(Tpcds);
         UNIT_ASSERT_VALUES_EQUAL(
@@ -2240,7 +2244,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
         UNIT_ASSERT(baseline.SnapshotPairFloorEnforced);
         UNIT_ASSERT(baseline.Violations.empty());
         UNIT_ASSERT_VALUES_EQUAL(
-            baseline.RequiredSnapshotPairQueries.size(), 2);
+            baseline.RequiredSnapshotPairQueries.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairFloorQueries.size(), 81);
         UNIT_ASSERT_VALUES_EQUAL(baseline.SnapshotPairQueries.size(), 81);
 
@@ -2272,7 +2276,7 @@ Y_UNIT_TEST_SUITE(TRBOBenchmarkCoverage) {
             CoveragePolicyEvaluationVersion);
         UNIT_ASSERT(report["snapshot_pair_floor_enforced"].GetBooleanSafe());
         UNIT_ASSERT_VALUES_EQUAL(
-            report["required_snapshot_pair_queries"].GetArraySafe().size(), 2);
+            report["required_snapshot_pair_queries"].GetArraySafe().size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(
             report["snapshot_pair_floor_queries"].GetArraySafe().size(), 81);
         UNIT_ASSERT_VALUES_EQUAL(

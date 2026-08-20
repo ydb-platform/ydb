@@ -698,7 +698,7 @@ public:
         } catch (const std::exception& ex) {
             YT_TLOG_DEBUG("Error handling streaming payload")
                 .With("RequestId", RequestId_)
-                .With(TError(ex));
+                .With(ex);
             RequestAttachmentsStream_->Abort(ex);
         }
     }
@@ -723,7 +723,7 @@ public:
         } catch (const std::exception& ex) {
             YT_TLOG_DEBUG("Error handling streaming feedback")
                 .With("RequestId", RequestId_)
-                .With(TError(ex));
+                .With(ex);
             stream->Abort(ex);
         }
     }
@@ -2951,7 +2951,7 @@ void TServiceBase::DoConfigure(
     } catch (const std::exception& ex) {
         THROW_ERROR_EXCEPTION("Error configuring RPC service %v",
             ServiceId_.ServiceName)
-            .With(TError(ex));
+            .With(ex);
     }
 }
 
@@ -2971,7 +2971,7 @@ void TServiceBase::Configure(
         } catch (const std::exception& ex) {
             THROW_ERROR_EXCEPTION("Error parsing RPC service %v config",
                 ServiceId_.ServiceName)
-                .With(TError(ex));
+                .With(ex);
         }
     } else {
         config = New<TServiceConfig>();

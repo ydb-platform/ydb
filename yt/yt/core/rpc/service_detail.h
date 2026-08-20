@@ -274,7 +274,7 @@ public:
                 underlyingContext->Reply(TError(
                     NRpc::EErrorCode::ProtocolError,
                     "Error deserializing request attachments")
-                    .With(TError(ex)));
+                    .With(ex));
                 return false;
             }
 

@@ -481,8 +481,7 @@ public:
         return *this;
     }
 
-    //! Attaches a well-known tag whose key is resolved from #value's type via the
-    //! |GetWellKnownLoggingTag| ADL point (the type must opt in, e.g. errors).
+    //! Attaches a well-known tag whose key comes from #TWellKnownLoggingTagTraits.
     //!
     //! Returns a #TWellKnownTaggedLoggingGuard, which exposes only further well-known
     //! tags: the payload contract requires well-known tags to come last (so
@@ -588,7 +587,7 @@ private:
 template <class TValue>
 TWellKnownTaggedLoggingGuard TTaggedLoggingGuard::With(const TValue& value) &
 {
-    FormatValue(Writer_.BeginWellKnownTag(GetWellKnownLoggingTag(value)), value, "v"_sb);
+    FormatValue(Writer_.BeginWellKnownTag(TWellKnownLoggingTagTraits<TValue>::Key), value, "v"_sb);
     Writer_.EndTag();
     return TWellKnownTaggedLoggingGuard(*this);
 }

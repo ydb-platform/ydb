@@ -474,7 +474,32 @@ TEST(TTaggedApiTest, WellKnownErrorTag)
     EXPECT_FALSE(regular->IsWellKnown);
 
     // |.With(error)| attaches the error under the well-known "Error" key (resolved via
-    // GetWellKnownLoggingTag), with the formatted error as the value.
+    // TWellKnownLoggingTagTraits), with the formatted error as the value.
+    auto errorTag = reader.TryReadTag();
+    ASSERT_TRUE(errorTag);
+    EXPECT_EQ(errorTag->Key, "Error");
+    EXPECT_TRUE(errorTag->IsWellKnown);
+    EXPECT_NE(errorTag->Value.find("boom"), TStringBuf::npos);
+
+    EXPECT_FALSE(reader.TryReadTag());
+}
+
+TEST(TTaggedApiTest, WellKnownExceptionTag)
+{
+    TMockLogManager manager;
+    TLogger Logger(&manager, "Test");
+
+    try {
+        THROW_ERROR_EXCEPTION("boom");
+    } catch (const std::exception& ex) {
+        YT_TLOG_INFO("Message")
+            .With(ex);
+    }
+
+    ASSERT_EQ(manager.GetEvents().size(), 1u);
+    TTaggedPayloadReader reader(std::get<TTaggedLogEventPayload>(manager.GetEvents()[0].Payload));
+    EXPECT_EQ(reader.ReadMessage(), "Message");
+
     auto errorTag = reader.TryReadTag();
     ASSERT_TRUE(errorTag);
     EXPECT_EQ(errorTag->Key, "Error");

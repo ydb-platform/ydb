@@ -502,7 +502,7 @@ private:
             } catch (const std::exception& ex) {
                 YT_TLOG_DEBUG("Failed to parse ssl credentials")
                     .With("RequestId", RequestId_)
-                    .With(TError(ex));
+                    .With(ex);
                 Unref();
                 return;
             }
@@ -927,7 +927,7 @@ private:
             } catch (const std::exception& ex) {
                 YT_TLOG_WARNING("Failed to parse message body size from request metadata")
                     .With("RequestId", RequestId_)
-                    .With(TError(ex));
+                    .With(ex);
                 return false;
             }
 
@@ -946,7 +946,7 @@ private:
             } catch (const std::exception& ex) {
                 YT_TLOG_WARNING("Failed to parse protocol version from string")
                     .With("RequestId", RequestId_)
-                    .With(TError(ex));
+                    .With(ex);
                 return false;
             }
 
@@ -1015,7 +1015,7 @@ private:
             } catch (const std::exception& ex) {
                 YT_TLOG_DEBUG("Failed to receive request body")
                     .With("RequestId", RequestId_)
-                    .With(TError(ex));
+                    .With(ex);
                 Unref();
                 return;
             }

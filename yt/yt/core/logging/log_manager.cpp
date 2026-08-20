@@ -627,7 +627,7 @@ private:
                 NotificationHandle_ = std::make_unique<TInotifyHandle>();
             } catch (const std::exception& ex) {
                 YT_TLOG_ERROR("Error creating inotify handle, watching disabled")
-                    .With(TError(ex));
+                    .With(ex);
                 NotificationHandleCreationFailed_ = true;
             }
         }
@@ -655,7 +655,7 @@ private:
                 // e.g. due to the lack of space.
                 YT_TLOG_ERROR("Error creating inotify watch")
                     .With("Path", writer->GetFileName())
-                    .With(TError(ex));
+                    .With(ex);
                 return nullptr;
             }
         }
@@ -981,7 +981,7 @@ private:
             }
         } catch (const std::exception& ex) {
             YT_TLOG_WARNING("Failed to get log storage disk statistics")
-                .With(TError(ex));
+                .With(ex);
         }
     }
 

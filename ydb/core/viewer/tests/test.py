@@ -821,6 +821,8 @@ class TestViewer(object):
             'fields_required': 'all'
         }))
 
+    # PDisk fields are used for filtering groups by pdisk id for strict database users,
+    # but they must be hidden in their response.
     @classmethod
     def test_storage_groups_pdisk_fields_hidden_for_database_user(cls):
         def pdisk_visibility(data):

@@ -152,8 +152,8 @@ public:
     std::unordered_map<TNodeId, TRequestResponse<TEvWhiteboard::TEvPDiskStateResponse>> PDiskStateResponse;
     ui64 PDiskStateRequestsInFlight = 0;
 
-    // Ids requested by a query param. ToApply is emptied as soon as the corresponding filter has
-    // been applied to the group view, while Requested keeps the original set - it's needed to
+    // Ids requested by a query param. ToApply field is emptied as soon as the corresponding filter has
+    // been applied to the group view, while Requested field keeps the original set - it's needed to
     // validate that the request doesn't reach out of the database.
     template<typename TId>
     struct TIdsFilter {
@@ -161,8 +161,8 @@ public:
         std::unordered_set<TId> ToApply; // not applied to the group view yet
 
         void Parse(const TString& value) {
-            SplitIds(value, ',', ToApply);
-            Requested = ToApply;
+            SplitIds(value, ',', Requested);
+            ToApply = Requested;
         }
     };
 
@@ -1023,10 +1023,6 @@ public:
 
     // Storage objects that belong to the requested database: its groups, the nodes and the pdisks
     // holding the vdisks of those groups, plus the nodes of the database itself.
-    // It's built from the raw BS Controller data, so it doesn't depend on the user-provided filters
-    // and on the order in which the responses arrive. An id which is missing here is either out of
-    // the database, or we have no data to prove it belongs to the database - in both cases the
-    // request of a strict database-only user is denied.
     struct TDatabaseStorageScope {
         std::unordered_set<TGroupId> GroupIds;
         std::unordered_set<TNodeId> NodeIds;
@@ -1048,11 +1044,9 @@ public:
                 scope.GroupIds.insert(group.GroupId);
             }
         }
-        // The disks of a group could also be taken from TGroup::VDisks, but GroupView (and hence
-        // the groups whose VDisks are filled in) shrinks every time a filter is applied, so by the
-        // time we get here the disks of a group filtered out by, say, "with=space" would be missing
-        // and its node would look foreign. VSlotsByVSlotId is a plain index over the BS Controller
-        // vslots response: it holds every vslot of the cluster and no filter ever touches it.
+
+        // We can't use GroupView for getting disks of groups because it shrinks every time a filter is applied.
+        // However, VSlotsByVSlotId contains all vslots of the cluster and no filter ever touches it.
         for (const auto& [vslotId, info] : VSlotsByVSlotId) {
             if (info && scope.GroupIds.count(info->GetGroupId())) {
                 scope.NodeIds.insert(vslotId.NodeId);
@@ -1263,7 +1257,9 @@ public:
                 FilterGroup.clear();
                 GroupsByGroupId.clear();
             }
-            NeedFilter = (With != EWith::Everything) || !Filter.empty() || !FilterStoragePools.empty() || !FilterNodeIds.ToApply.empty() || !FilterPDiskIds.ToApply.empty() || !FilterGroupIds.ToApply.empty() || !FilterGroup.empty();
+            NeedFilter = (With != EWith::Everything) ||
+                !Filter.empty() || !FilterStoragePools.empty() || !FilterGroup.empty()
+                !FilterNodeIds.ToApply.empty() || !FilterPDiskIds.ToApply.empty() || !FilterGroupIds.ToApply.empty();
             FoundGroups = GroupView.size();
         }
     }

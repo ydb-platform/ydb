@@ -64,6 +64,7 @@ private:
     TLocksHashSet Locks;
     TLocksHashSet BrokenLocks;
     std::optional<NUdfStore::NWasm::TQueryCompartmentScope> WasmQueryCompartment_;
+    THashSet<TString> WasmUdfStringColumns_;
 
     ui64 CalcMkqlMemoryLimit() override {
         return TBase::CalcMkqlMemoryLimit() + ComputeCtx.GetTableScans().size() * MemoryLimits.ChannelBufferSize;

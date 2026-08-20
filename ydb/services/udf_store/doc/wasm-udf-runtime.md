@@ -220,12 +220,12 @@ Shared context: один модуль линкует `object_framework`, пер�
 1. **Compile / predictor** (`kqp_predictor`): обходит план, на `TCoUdf` ставит `HasUdf` и собирает имена модулей.
 2. **Резолвер string-колонок** (`kqp_wasm_string_columns`) для каждого стейджа отдельно ведёт аргументы `Apply(Udf, …)` назад к физическим колонкам чтения этого же стейджа (`KqpRowsSourceSettings::Columns` у источника, `KqpWideRead*::Columns` у чтения внутри программы). Прослеживаются только шаги, сохраняющие сам буфер: `Member` физического row, аргументы `ExpandMap` / `WideMap` по индексу, AutoMap-развёртка (`Map` / `FlatMap` / `IfPresent`), `Just` / `Unwrap` / `Coalesce`, item-аргументы свёрток (`Condense1` / `Condense` / `Squeeze1` / `Squeeze` / `Fold1` / `Fold` / `CombineCore`); всё остальное — fail-closed. Свёртки обязательны для агрегатов: `SUM(Udf(column))` без `GROUP BY` компилируется в `Condense1` над строками источника, и UDF вызывается внутри init/update-хендлеров, а не под `Map` / `ExpandMap`.
 3. Колонки попадают в `WasmUdfStringColumns` **только если стейдж содержит и чтение, и UDF**: буфер в линейной памяти WASM не переживает канал между стейджами, поэтому cross-stage пометки бессмысленны.
-4. Модули пишутся в **KQP** `TKqpPhyStage.WasmUdfModules`; string columns остаются в `TProgram::TSettings.WasmUdfStringColumns` и копируются в scan/source settings.
-5. При сериализации task (`SerializeTaskToProto`) список модулей кладётся в `TaskParams["_WasmUdfModules"]` (newline-separated).
+4. Модули пишутся в **KQP** `TKqpPhyStage.WasmUdfModules`; string columns — в `TKqpPhyStage.WasmUdfStringColumns`. При сериализации task оба списка кладутся в `TaskParams` (`_WasmUdfModules` / `_WasmUdfStringColumns`); string columns дополнительно копируются в scan/source settings для PreferWasm на чтении.
+5. При сериализации task (`SerializeTaskToProto`) модули и string columns кладутся в `TaskParams["_WasmUdfModules"]` / `TaskParams["_WasmUdfStringColumns"]` (newline-separated); columns также копируются в scan/source settings.
 6. **Compute actor** / **literal executer**:
-   - CA читает `TaskParams`; literal — напрямую `stage.GetWasmUdfModules()`;
+   - CA читает модули и string columns из `TaskParams`; literal — напрямую `stage.GetWasmUdfModules()`;
    - `TQueryCompartmentScope(modules)` → `FilterLoadedWasmUdfModules` (только каталог) → `Acquire`;
-   - на init scan: `ApplyWasmUdfStringColumns` → `PreferWasm` только для имён из settings;
+   - на init scan: `ApplyWasmUdfStringColumns` → `PreferWasm` только для имён из TaskParams / source settings;
    - на обработке событий / DoExecute: `MakeTlsGuard()` → TLS guard;
    - при ошибке Acquire — `ErrorFromIssue` / failure state **до** `SetTaskRunner`.
 7. Материализация scan: marked string → `MakePreferWasm` (1-copy cell→WASM); остальные large strings → host `MakeString`. Если колонка всё же уйдёт в WASM UDF при false negative — `FillAbiStringArg` сделает `CopyIntoCompartment`.
@@ -303,9 +303,26 @@ TABLES=text_1mb SHAPES=probes WARMUP=1 RUNS=5 ydb/udfs/wasm/text/demo/run_demo.s
 
 Практический вывод для новых типов «внешней» памяти под значения MiniKQL: путей освобождения два (интерпретируемый `UnRef` и `DeleteString` из codegen), и хук нужен в обоих.
 
-**Ограничения:** резолвер не различает wasm- и native-UDF (каталог модулей известен только в рантайме), поэтому в стейдже с обоими видами колонка native-UDF тоже может быть помечена — это лишняя запись в WASM, но не ошибка. Неотслеживаемые формы (literals / computed / join / результаты других UDF) дают false negative с корректным fallback через host + copy. Blocks path и lazy holder — вне скоупа.
+**Ограничения PreferWasm (backlog).** Корректность всегда сохраняется: false negative → host-строка + `CopyIntoCompartment` на вызов. Ниже — что ещё **не** даёт reuse байт в linear memory и зачем это чинить. Дублируется как открытый список в [pitfalls-and-open-issues.md](./pitfalls-and-open-issues.md) §G.
 
-`GROUP BY` пока не покрыт: он компилируется в `DqPhyHashCombine` над **широким** потоком после `ExpandMap`, где item-аргументы хендлеров сдвинуты на число ключей, а не совпадают с колонками входа. Индексного маппинга для этой формы нет, поэтому колонка остаётся непомеченной (fail-closed: host-строка и копия на вызов). Проверяется по логу — `columns=` пустой при непустом `copiedIntoCompartment`.
+| # | Область | Ограничение | Симптом / проверка | Направление фикса |
+|---|---|---|---|---|
+| 1 | Колонки / стейдж | Буфер в linear memory **не переживает канал** между стейджами. Пометка только если в одном стейдже и чтение, и UDF. | UDF после shuffle/join в другом stage: `columns=` пустой, всё в `copiedIntoCompartment` | Либо ко-локация read+UDF, либо сериализация resident через канал (дорого / сомнительно) |
+| 2 | Колонки / AST | Резолвер **fail-closed**: только известные формы (`Member`, `ExpandMap`/`WideMap`, AutoMap, `Just`/`Unwrap`/`Coalesce`, item-аргументы `Condense*`/`Fold*`/`CombineCore`). Join, computed, результат другого UDF, неизвестные callable — нет. | `columns=` пустой при живом `Apply(Udf, col)` | Расширять `kqp_wasm_string_columns` по формам + UT |
+| 3 | Колонки / `GROUP BY` | `DqPhyHashCombine` над wide-потоком: item-аргументы хендлеров сдвинуты на число ключей, индексного маппинга нет. | Агрегат с `GROUP BY` + UDF(col): host + copy | Маппинг wide-индексов в `CollectWasmUdfStringColumns` |
+| 4 | Колонки / не-колонки | Литералы, параметры, скалярный `$dict` (`%kqp%tx_result_binding_*`) **не** физические колонки — резолвер их не помечает. | Словарь копируется на каждую строку без прагмы | `EnableWasmUdfResidentConstArgs` (см. ниже) или общий pin |
+| 5 | ConstArgs | Opt-in, default **false**. На compile-time wasm UDF не отличить от native → риск лишней материализации в WASM для native. | Без прагмы: `residentConstArgs=0`, копии на вызов | Каталог модулей на compile / предиктор; затем default true |
+| 6 | ConstArgs | Только **прямые** string-аргументы `Apply(Udf, …)` без `Argument` в поддереве. Не все строки запроса и не per-row args. | Обёртка вокруг UDF / косвенный вызов — без pin | Расширить peephole на `Apply` через переменную / `Bind` |
+| 7 | ConstArgs | «Const» = loop-invariant **внутри task**, не immutable cell. Snapshot на материализации; concurrent UPDATE не обновляет mid-query. | Ожидаемо для словаря на время запроса | Документировать; при необходимости — explicit refresh API |
+| 8 | ConstArgs / память | Крупный блоб, прочитанный UDF лишь частично, всё равно занимает linear memory на весь task. | Рост RSS / arena при большом `$dict` | Lazy / size threshold / pin только hot ranges |
+| 9 | Runtime / short | `MakePreferWasm` для строк ≤ `InternalBufferSize` (embedded pod) **не** кладёт в linear memory — reuse невозможен. | Короткие ключи (`addr` 4 B): всегда copy на вызов | Обычно не чинить (экономия копии < overhead); порог осознанный |
+| 10 | Runtime / compartment | Нет query compartment → host fallback (`FallbackNoCompartment`). | `FallbackNoCompartment > 0` | Чинить планирование (read и UDF в одном task) |
+| 11 | Native UDF | PreferWasm / ConstArgs **не применимы**: нет guest linear memory. | Native baseline всегда host strings | N/A |
+| 12 | Returns | Строковый **результат** UDF копируется guest→host; resident return path нет. | Многократный reuse результата между вызовами не выигрывает | Resident return + registry (если появится сценарий) |
+| 13 | False positive | Резолвер не знает wasm vs native → в смешанном стейдже колонка для native тоже может быть PreferWasm (лишняя запись в WASM, не ошибка). | Лишние `materializedInWasm` при native | То же, что #5: знание каталога на compile |
+| 14 | Вне скоупа | Blocks path, lazy holder — не покрыты. | Columnar / lazy scan | Отдельный дизайн |
+
+Практический минимум для выигрыша сегодня: один стейдж read+WASM UDF, строка > ~16–32 KB (или много вызовов на значение), без `GROUP BY` (или UDF до combine), для словаря/параметра — `PRAGMA ydb.EnableWasmUdfResidentConstArgs = "true"`. Проверка — строка `Wasm resident string columns` в `KQP_COMPUTE`.
 
 ## 9. Host ABI и calling convention
 

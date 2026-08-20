@@ -83,6 +83,7 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString Database;
     std::optional<NUdfStore::NWasm::TQueryCompartmentScope> WasmQueryCompartment_;
+    THashSet<TString> WasmUdfStringColumns_;
 };
 
 } // namespace NKikimr::NKqp

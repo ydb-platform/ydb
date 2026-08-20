@@ -321,7 +321,7 @@ message TKqpReadRangesSourceSettings {
     optional string PoolId = 28;
 
     // String columns that should materialize into WASM linear memory (PreferWasm).
-    // Copied from TProgram.TSettings.WasmUdfStringColumns for the owning stage.
+    // Copied from TKqpPhyStage.WasmUdfStringColumns for the owning stage.
     repeated string WasmUdfStringColumns = 29;
 }
 

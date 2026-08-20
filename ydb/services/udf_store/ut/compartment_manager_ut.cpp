@@ -60,6 +60,15 @@ Y_UNIT_TEST_SUITE(TWasmCompartmentManagerTest) {
         UNIT_ASSERT_VALUES_EQUAL(ParseWasmUdfModulesTaskParam(SerializeWasmUdfModulesTaskParam({"Only"}))[0], "Only");
     }
 
+    Y_UNIT_TEST(WasmUdfStringColumnsTaskParamRoundtrip) {
+        const TVector<TString> columns = {"blob", "txt", "payload"};
+        const TString encoded = SerializeWasmUdfStringColumnsTaskParam(columns);
+        UNIT_ASSERT_VALUES_EQUAL(encoded, "blob\ntxt\npayload");
+        UNIT_ASSERT_VALUES_EQUAL(ParseWasmUdfStringColumnsTaskParam(encoded), columns);
+        UNIT_ASSERT(ParseWasmUdfStringColumnsTaskParam(SerializeWasmUdfStringColumnsTaskParam({"Only"})).size() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(ParseWasmUdfStringColumnsTaskParam(SerializeWasmUdfStringColumnsTaskParam({"Only"}))[0], "Only");
+    }
+
     Y_UNIT_TEST(QueryCompartmentTlsGuard) {
         TQueryCompartmentHandle handle;
         {

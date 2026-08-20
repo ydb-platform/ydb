@@ -620,6 +620,8 @@ message TKqpPhyStage {
     map<string, TKqpControlPlaneSettings> StageControlPlaneActors = 18;
     // Per-stage WASM UDF module names (from TCoUdf)
     repeated string WasmUdfModules = 20;
+    // Column / Member names for PreferWasm materialization (same-stage read + WASM UDF).
+    repeated string WasmUdfStringColumns = 21;
 }
 
 message TKqpPhyResult {

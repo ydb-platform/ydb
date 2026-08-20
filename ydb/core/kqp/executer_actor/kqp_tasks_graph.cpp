@@ -1938,6 +1938,12 @@ void TKqpTasksGraph::SerializeTaskToProto(const TTask& task, NYql::NDqProto::TDq
             NUdfStore::NWasm::SerializeWasmUdfModulesTaskParam(modules);
     }
 
+    if (stage.WasmUdfStringColumnsSize() > 0) {
+        TVector<TString> columns = NUdfStore::NWasm::WasmUdfStringColumnsFromRepeated(stage.GetWasmUdfStringColumns());
+        (*result->MutableTaskParams())[TString(NUdfStore::NWasm::WasmUdfStringColumnsTaskParam)] =
+            NUdfStore::NWasm::SerializeWasmUdfStringColumnsTaskParam(columns);
+    }
+
     for (const auto& paramName : stage.GetProgramParameters()) {
         auto& dqParams = *result->MutableParameters();
         dqParams[paramName] = stageInfo.Meta.Tx.Params->SerializeParamValue(paramName);
@@ -2162,7 +2168,7 @@ void TKqpTasksGraph::RestoreTasksGraphInfo(const TVector<NKikimrKqp::TKqpNodeRes
                             FillScanTaskLockTxId(*sourceSettings);
                             sourceSettings->ClearSnapshot();
                             const auto& restoredStage = stageInfo.Meta.GetStage(stageId);
-                            for (const auto& columnName : restoredStage.GetProgram().GetSettings().GetWasmUdfStringColumns()) {
+                            for (const auto& columnName : restoredStage.GetWasmUdfStringColumns()) {
                                 sourceSettings->AddWasmUdfStringColumns(columnName);
                             }
                         } else if (settings.Is<NKikimrKqp::TKqpFullTextSourceSettings>()) {
@@ -3050,7 +3056,7 @@ TMaybe<size_t> TKqpTasksGraph::BuildScanTasksFromSource(TStageInfo& stageInfo, T
             protoColumn->SetName(column.Name);
         }
 
-        for (const auto& columnName : stage.GetProgram().GetSettings().GetWasmUdfStringColumns()) {
+        for (const auto& columnName : stage.GetWasmUdfStringColumns()) {
             settings->AddWasmUdfStringColumns(columnName);
         }
 

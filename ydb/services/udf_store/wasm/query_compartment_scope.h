@@ -17,6 +17,10 @@ namespace NKikimr::NUdfStore::NWasm {
 //! Value: newline-separated module names from TKqpPhyStage.WasmUdfModules.
 inline constexpr TStringBuf WasmUdfModulesTaskParam = "_WasmUdfModules";
 
+//! TaskParams key for PreferWasm string column names (KQP → CA).
+//! Value: newline-separated column names from TKqpPhyStage.WasmUdfStringColumns.
+inline constexpr TStringBuf WasmUdfStringColumnsTaskParam = "_WasmUdfStringColumns";
+
 inline TString SerializeWasmUdfModulesTaskParam(const TVector<TString>& modules) {
     return JoinSeq('\n', modules);
 }
@@ -25,6 +29,26 @@ inline TVector<TString> ParseWasmUdfModulesTaskParam(TStringBuf data) {
     TVector<TString> modules;
     StringSplitter(data).Split('\n').SkipEmpty().Collect(&modules);
     return modules;
+}
+
+inline TString SerializeWasmUdfStringColumnsTaskParam(const TVector<TString>& columns) {
+    return JoinSeq('\n', columns);
+}
+
+inline TVector<TString> ParseWasmUdfStringColumnsTaskParam(TStringBuf data) {
+    TVector<TString> columns;
+    StringSplitter(data).Split('\n').SkipEmpty().Collect(&columns);
+    return columns;
+}
+
+template <typename TRepeatedString>
+inline TVector<TString> WasmUdfStringColumnsFromRepeated(const TRepeatedString& repeated) {
+    TVector<TString> columns;
+    columns.reserve(repeated.size());
+    for (const auto& column : repeated) {
+        columns.push_back(column);
+    }
+    return columns;
 }
 
 //! Keep only module names registered in the WASM catalog.

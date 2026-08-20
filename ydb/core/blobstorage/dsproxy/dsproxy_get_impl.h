@@ -208,7 +208,8 @@ public:
             TString errorReason = record.GetErrorReason();
 
             // Currently CRC can be checked only if blob part is fully read
-            if (resultShift == 0 && resultBuffer.size() == Info->Type.PartSize(blobId)) {
+            const bool isFullPart = resultShift == 0 && resultBuffer.size() == Info->Type.PartSize(blobId);
+            if (isFullPart) {
                 bool isCrcOk = CheckCrcAtTheEnd((TErasureType::ECrcMode)blobId.CrcMode(), resultBuffer);
                 if (!isCrcOk) {
                     DSP_LOG_ERROR_SX(logCtx, "BPG66", "Error in CheckCrcAtTheEnd on TEvVGetResult, blobId# " << blobId
@@ -234,6 +235,12 @@ public:
             if (replyStatus == NKikimrProto::OK) {
                 // TODO(cthulhu): Verify shift and response size, and cookie
                 DSP_LOG_DEBUG_SX(logCtx, "BPG58", "Got# OK orderNumber# " << orderNumber << " vDiskId# " << vdisk.ToString());
+                if (isFullPart && LogoBlobCrcModeHasXxh3WholePartChecksum(blobId)) {
+                    // The checksum trailer is stored on VDisk, but it is not part of the erasure data.
+                    const ui64 partUserSize = Info->Type.PartUserSize(blobId.BlobSize());
+                    Y_ABORT_UNLESS(partUserSize <= resultBuffer.size());
+                    resultBuffer.Erase(resultBuffer.Position(partUserSize), resultBuffer.End());
+                }
                 if (resultBuffer.GetOccupiedMemorySize() > resultBuffer.size() * 2) {
                     resultBuffer.Compact();
                 }

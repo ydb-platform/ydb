@@ -3116,6 +3116,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{query_name}` AS
                 DO BEGIN
+                    PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                     UPSERT INTO `{ydb_table}`
                     SELECT * FROM `{pq_source}`.`{input_topic}` WITH (
                         FORMAT = json_each_row,
@@ -3172,6 +3173,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             ExecQuery(fmt::format(R"(
                 CREATE STREAMING QUERY `{query_name}` AS
                 DO BEGIN
+                    PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                     UPSERT INTO `{ydb_table}`
                     SELECT (Key || "x") AS Key, Value FROM `{pq_source}`.`{input_topic}` WITH (
                         FORMAT = json_each_row,
@@ -4427,6 +4429,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ExecQuery(fmt::format(R"sql(
             CREATE STREAMING QUERY `{query_name}` AS
             DO BEGIN
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
                 INSERT INTO `{pq_source}`.`{output_topic}`
                 SELECT * FROM `{pq_source}`.`{input_topic}`
                 LIMIT 1 OFFSET 1
@@ -4799,6 +4802,110 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             });
             error = TStringBuilder() << "Lease generation: " << generation;
             return generation > 1;
+        });
+    }
+
+    Y_UNIT_TEST_F(CheckpointSupportValidationForCallables, TStreamingTestFixture) {
+        ExecQuery("GRANT ALL ON `/Root` TO `" BUILTIN_ACL_ROOT "`");
+
+        constexpr char inputTopicName[] = "checkpointSupportValidationForCallablesInputTopic";
+        constexpr char outputTopicName[] = "checkpointSupportValidationForCallablesOutputTopic";
+        CreateTopic(inputTopicName);
+        CreateTopic(outputTopicName);
+
+        constexpr char pqSourceName[] = "sourceName";
+        CreatePqSource(pqSourceName);
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY streamingQueryFailed AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT * FROM `{pq_source}`.`{input_topic}` LIMIT 1
+            END DO;)",
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ), EStatus::GENERIC_ERROR, "Checkpoints are not supported for LIMIT operator, query may produce unstable results");
+
+        constexpr char queryNameLimit[] = "streamingQueryLimitRun";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}1` AS
+            DO BEGIN
+                PRAGMA ydb.OptValidateStreamingCheckpoints = "FALSE";
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Data || "1" FROM `{pq_source}`.`{input_topic}` LIMIT 1
+            END DO;)",
+            "query_name"_a = queryNameLimit,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}2` AS
+            DO BEGIN
+                PRAGMA ydb.DisableCheckpoints = "TRUE";
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT Data || "2" FROM `{pq_source}`.`{input_topic}` LIMIT 1
+            END DO;)",
+            "query_name"_a = queryNameLimit,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(3, 2);
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "test_message");
+        ReadTopicMessages(outputTopicName, {"test_message1", "test_message2"});
+
+        Sleep(TDuration::Seconds(1));
+        CheckScriptExecutionsCount(3, 0);
+
+        constexpr char queryNameTakeWhile[] = "streamingQueryTakeWhile";
+        ExecQuery(fmt::format(R"(
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO `{pq_source}`.`{output_topic}`
+                SELECT
+                    String::JoinFromList(
+                        ListTakeWhile(String::SplitToList(Data, ","), ($x) -> (LEN($x) <= 3)),
+                        ","
+                    )
+                FROM `{pq_source}`.`{input_topic}`
+            END DO;)",
+            "query_name"_a = queryNameTakeWhile,
+            "pq_source"_a = pqSourceName,
+            "input_topic"_a = inputTopicName,
+            "output_topic"_a = outputTopicName
+        ));
+
+        CheckScriptExecutionsCount(4, 1);
+        const auto disposition = TInstant::Now();
+        Sleep(TDuration::Seconds(1));
+
+        WriteTopicMessage(inputTopicName, "t,es,t_m,essa,gexxx");
+        ReadTopicMessage(outputTopicName, "t,es,t_m", disposition);
+
+        WaitFor(TDuration::Seconds(60), "wait streaming query ast", [&]() {
+            const auto& result = ExecQuery(fmt::format(R"(
+                SELECT Ast FROM `.sys/streaming_queries` WHERE Path = "/Root/{query_name}")",
+                "query_name"_a = queryNameTakeWhile
+            ));
+            UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
+
+            TString ast;
+            CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
+                ast = resultSet.ColumnParser("Ast").GetOptionalUtf8().value_or("");
+            });
+
+            if (!ast) {
+                return false;
+            }
+
+            UNIT_ASSERT_STRING_CONTAINS(ast, "TakeWhile");
+            return true;
         });
     }
 }

@@ -1,10 +1,14 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/partition_direct.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <ydb/core/protos/blockstore_config.pb.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
+
+#include <util/generic/map.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -47,6 +51,9 @@ public:
         const TDirectBlockGroupsConnections& directBlockGroupsConnections);
 
     void StoreVChunkConfig(const TVChunkConfig& cfg);
+
+    bool ReadAllDirtyMapStates(TMap<ui32, TDirtyMapStateProto>& out);
+    void StoreDirtyMapState(ui32 vChunkIndex, const TDirtyMapStateProto& state);
 
     bool ReadAddHostInProgress(TMaybe<TAddHostInProgress>& addHostInProgress);
     void StoreAddHostInProgress(const TAddHostInProgress& addHostInProgress);

@@ -79,15 +79,16 @@ def validate_metrics(rows, configuration, case=None):
 
 def summarize_metrics(repetition_rows, benchmark):
     grouped = {}
-    for affinity_mode, rows in repetition_rows:
+    for item in repetition_rows:
+        affinity_mode, background_load, rows = item if len(item) == 3 else (item[0], "none", item[1])
         for row in rows:
-            key = (affinity_mode,) + tuple(row[item.name] for item in benchmark.dimensions)
+            key = (affinity_mode, background_load) + tuple(row[item.name] for item in benchmark.dimensions)
             grouped.setdefault(key, []).append(row)
     summary = []
     for key in sorted(grouped):
         rows = grouped[key]
-        record = {"affinity_mode": key[0], "repetitions": len(rows)}
-        record.update({item.name: value for item, value in zip(benchmark.dimensions, key[1:])})
+        record = {"affinity_mode": key[0], "background_load": key[1], "repetitions": len(rows)}
+        record.update({item.name: value for item, value in zip(benchmark.dimensions, key[2:])})
         for metric in benchmark.metrics:
             values = [row[metric.name] for row in rows]
             record.update(
@@ -102,7 +103,7 @@ def summarize_metrics(repetition_rows, benchmark):
 
 
 def render_summary(rows, benchmark):
-    columns = ["affinity_mode"] + [item.name for item in benchmark.dimensions] + ["repetitions"]
+    columns = ["affinity_mode", "background_load"] + [item.name for item in benchmark.dimensions] + ["repetitions"]
     for metric in benchmark.metrics:
         columns.extend(("median_" + metric.name, "min_" + metric.name, "max_" + metric.name))
     output = io.StringIO()

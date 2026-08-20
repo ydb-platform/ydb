@@ -5009,6 +5009,30 @@
             "text": "Parameter 'path' or 'tablet_id' is required"
         }
     },
+    "test.TestViewer.test_viewer_database_stats": {
+        "/Root/dedicated_db": {
+            "DatabaseNodes": 1,
+            "Problems": [],
+            "StorageGroups": 1,
+            "StorageNodes": 1
+        },
+        "/Root/serverless_db": {
+            "DatabaseNodes": 1,
+            "Problems": [],
+            "StorageGroups": 1,
+            "StorageNodes": 1
+        },
+        "/Root/shared_db": {
+            "DatabaseNodes": 1,
+            "Problems": [],
+            "StorageGroups": 1,
+            "StorageNodes": 1
+        },
+        "no-database": {
+            "status_code": 400,
+            "text": "Database is required"
+        }
+    },
     "test.TestViewer.test_viewer_describe": {
         "/Root": {
             "LastExistedPrefixDescription": {},

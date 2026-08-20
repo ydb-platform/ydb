@@ -1674,7 +1674,7 @@ void TRequestQueue::RunRequest(TServiceBase::TServiceContextPtr context)
 
 void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 {
-    ++QueueSize_;
+    QueueSize_.fetch_add(1, std::memory_order::relaxed);
     QueueByteSize_.fetch_add(requestTotalSize);
 
     RuntimeInfo_->QueueSize.fetch_add(1, std::memory_order::relaxed);
@@ -1683,16 +1683,16 @@ void TRequestQueue::IncrementQueueSize(i64 requestTotalSize)
 
 void TRequestQueue::DecrementQueueSize(i64 requestTotalSize)
 {
-    auto newQueueSize = --QueueSize_;
+    auto oldQueueSize = QueueSize_.fetch_sub(1, std::memory_order::relaxed);
     auto oldQueueByteSize = QueueByteSize_.fetch_sub(requestTotalSize);
 
-    YT_ASSERT(newQueueSize >= 0);
+    YT_ASSERT(oldQueueSize > 0);
     YT_ASSERT(oldQueueByteSize >= requestTotalSize);
 
-    newQueueSize = RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
+    oldQueueSize = RuntimeInfo_->QueueSize.fetch_sub(1, std::memory_order::relaxed);
     oldQueueByteSize = RuntimeInfo_->QueueByteSize.fetch_sub(requestTotalSize);
 
-    YT_ASSERT(newQueueSize >= 0);
+    YT_ASSERT(oldQueueSize > 0);
     YT_ASSERT(oldQueueByteSize >= requestTotalSize);
 }
 

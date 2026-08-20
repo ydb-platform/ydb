@@ -1824,6 +1824,21 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 100000,
             DefaultValue: 2000 }];
+        optional uint64 HullCompEmergencyMaxSsts = 53 [(ControlOptions) = {
+            Description: "Maximum number of SSTables in one Emergency compaction job. Zero disables the Emergency compaction strategy.",
+            MinValue: 0,
+            MaxValue: 64,
+            DefaultValue: 8 }];
+        optional uint64 HullCompEmergencyChunkReserve = 54 [(ControlOptions) = {
+            Description: "Index chunks reserved for fresh/huge/synclog and subtracted from the Emergency free-chunk budget.",
+            MinValue: 0,
+            MaxValue: 64,
+            DefaultValue: 1 }];
+        optional uint64 HullCompEmergencyEnableAtColor = 55 [(ControlOptions) = {
+            Description: "Enable Emergency compaction mode when local PDisk space color is at least this value (0=GREEN, 10=CYAN, 15=LIGHT_YELLOW, 20=YELLOW, 30=LIGHT_ORANGE, 35=PRE_ORANGE, 40=ORANGE, 50=RED, 60=BLACK).",
+            MinValue: 0,
+            MaxValue: 60,
+            DefaultValue: 15 }];
 
         reserved 14;
         optional uint64 ThrottlingDryRun = 26 [(ControlOptions) = {
@@ -2606,6 +2621,14 @@ message THiveTabletPreference {
 }
 
 message THiveConfig {
+    extend google.protobuf.FieldOptions {
+        optional string ParamDescription = 61002;
+    }
+
+    extend google.protobuf.EnumValueOptions {
+        optional string EnumDescription = 61003;
+    }
+
     enum EHiveStorageBalanceStrategy {
         HIVE_STORAGE_BALANCE_STRATEGY_AUTO = 0;
         HIVE_STORAGE_BALANCE_STRATEGY_IOPS = 1;
@@ -2630,9 +2653,9 @@ message THiveConfig {
 
     enum EHiveTabletBalanceStrategy {
         HIVE_TABLET_BALANCE_STRATEGY_OLD_WEIGHTED_RANDOM = 0;
-        HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST = 1;
-        HIVE_TABLET_BALANCE_STRATEGY_RANDOM = 2;
-        HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3;
+        HIVE_TABLET_BALANCE_STRATEGY_HEAVIEST = 1 [(EnumDescription) = "select tablet with maximum consumption"];
+        HIVE_TABLET_BALANCE_STRATEGY_RANDOM = 2 [(EnumDescription) = "select random tablet"];
+        HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM = 3 [(EnumDescription) = "weighted random selection based on consumption"];
     }
 
     enum EHiveChannelBalanceStrategy {
@@ -2697,8 +2720,8 @@ message THiveConfig {
     optional double ResourceOvercommitment = 25 [default = 3.00];
     optional uint64 BalancerInflight = 26 [default = 1]; // tablets
     optional EHiveNodeBalanceStrategy NodeBalanceStrategy = 27 [default = HIVE_NODE_BALANCE_STRATEGY_HEAVIEST];
-    optional EHiveTabletBalanceStrategy TabletBalanceStrategy = 28 [default = HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM];
-    optional double MinPeriodBetweenBalance = 29 [default = 0.2]; // seconds
+    optional EHiveTabletBalanceStrategy TabletBalanceStrategy = 28 [default = HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM, (ParamDescription) = "Strategy for selecting a tablet to move during auto-balancing."];
+    optional double MinPeriodBetweenBalance = 29 [default = 0.2, (ParamDescription) = "Minimum time period between two auto-balancing iterations. Does not apply to emergency balancing."];
     optional uint64 MaxMovementsOnAutoBalancer = 30 [default = 1]; // tablets
     optional bool ContinueAutoBalancer = 31 [default = true];
     optional double MinNodeUsageToBalance = 32 [default = 0.3];
@@ -2896,6 +2919,35 @@ message TColumnShardConfig {
     optional TReadRetryPolicy ReadRetryPolicy = 70;
     optional uint64 BulkUpsertShardWriteChunkLimitBytes = 71 [default = 50331648]; // 48 MiB
     optional bool EnableBulkUpsertValidation = 72 [default = true];
+    optional uint64 NodePortionsCountLimit = 73;
+
+    message TFlowControlConfig {
+        optional uint64 MaxWaitQueueSize = 1 [default = 500];
+        optional uint64 MaxDelayedRejectQueueSize = 2 [default = 5000];
+        optional uint32 WaitTimeoutPercent = 3 [default = 50];
+        optional uint32 DelayedRejectTimeoutPercent = 4 [default = 20];
+        optional uint32 DrainJitterMinMs = 5 [default = 50];
+        optional uint32 DrainJitterMaxMs = 6 [default = 250];
+        optional double DrainAimdBeta = 7 [default = 0.8];
+        optional double DrainCubicRecoveryTargetSec = 8 [default = 10];
+        optional double DrainCubicProbePercent = 9 [default = 8];
+        // Drain rate bounds, in admits/sec (DrainRate*) and bytes/sec (DrainRate*Bytes). The rate
+        // between them is learned from write outcomes, never nailed to a number here.
+        optional double DrainRateMin = 10 [default = 5];
+        // 0 means no ceiling: the rate is capped by the throughput actually being served, which is
+        // what the controller is for. Set a non-zero value only to impose an external limit.
+        optional double DrainRateMax = 11 [default = 0];
+        // Must not be below DrainRateMin: the FCM seeds the rate (and Wmax, tokens) from it at
+        // construction, before the bounds get a chance to clamp it up.
+        optional double DrainRateStart = 12 [default = 50];
+        optional double DrainRateMinBytes = 13 [default = 50000000];
+        // 0 means no ceiling, as for DrainRateMax.
+        optional double DrainRateMaxBytes = 14 [default = 0];
+        // Must not be below DrainRateMinBytes, as for DrainRateStart.
+        optional double DrainRateStartBytes = 15 [default = 50000000];
+    }
+
+    optional TFlowControlConfig FlowControl = 74;
 }
 
 // Cluster config for the database-wide small-blobs quota. Per-database limits are derived from

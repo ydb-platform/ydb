@@ -405,6 +405,19 @@ NThreading::TFuture<void> TFastPathService::UpdateVChunkConfig(
     return result;
 }
 
+NThreading::TFuture<void> TFastPathService::UpdateDirtyMapState(
+    ui32 vChunkIndex,
+    TDirtyMapStateProto state)
+{
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateDirtyMapState>(
+            vChunkIndex,
+            std::move(state));
+    auto result = event->UpdateCompleted.GetFuture();
+    ActorSystem->Send(PartitionActorId, event.release());
+    return result;
+}
+
 void TFastPathService::QueryAddHost(
     size_t directBlockGroupId,
     size_t newHostIndex)

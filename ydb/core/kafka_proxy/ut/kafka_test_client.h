@@ -62,6 +62,7 @@ class TKafkaTestClient {
         }
 
         TMessagePtr<TApiVersionsResponseData> ApiVersions(bool silent = false);
+        TMessagePtr<TApiVersionsResponseData> ApiVersionsAtVersion(TKafkaVersion version, bool silent = false);
 
         TMessagePtr<TMetadataResponseData> Metadata(const TVector<TString>& topics = {}, bool allowAutoTopicCreation = true);
 

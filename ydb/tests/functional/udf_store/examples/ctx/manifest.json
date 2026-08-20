@@ -1,0 +1,44 @@
+{
+  "module_name": "Ctx",
+  "calling_convention": "unversioned_value",
+  "module_extension": "wasm",
+  "required_libraries": ["sdk"],
+  "objects": [
+    {
+      "name": "Ctx",
+      "create_export": "ctx_create",
+      "destroy_export": "ctx_destroy",
+      "methods": [
+        {
+          "name": "Snapshot",
+          "export": "ctx_snapshot",
+          "yql_binding": "plain",
+          "argument_types": [
+            {"value": "uint64", "tag": "concrete_type"}
+          ],
+          "result_type": {"value": "string", "tag": "concrete_type"}
+        }
+      ]
+    }
+  ],
+  "functions": [
+    {
+      "name": "CountRow",
+      "export": "count_row",
+      "argument_types": [
+        {"value": "uint64", "tag": "concrete_type"},
+        {"value": "int64", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    },
+    {
+      "name": "CountPositive",
+      "export": "count_positive",
+      "argument_types": [
+        {"value": "uint64", "tag": "concrete_type"},
+        {"value": "int64", "tag": "concrete_type"}
+      ],
+      "result_type": {"value": "int64", "tag": "concrete_type"}
+    }
+  ]
+}

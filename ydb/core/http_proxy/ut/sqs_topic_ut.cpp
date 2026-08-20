@@ -147,6 +147,11 @@ namespace {
 
     }
 
+    bool CreateDlqTopic(NYdb::TDriver& driver, const TString& dlqTopicName = "DeadLetterQueue") {
+        NYdb::NTopic::TCreateTopicSettings settings;
+        return CreateTopic(driver, dlqTopicName, settings);
+    }
+
     TMaybe<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent> GetNextDataMessage(const std::shared_ptr<NYdb::NTopic::IReadSession>& reader, TInstant deadline) {
         while (true) {
             reader->WaitEvent().Wait(deadline);
@@ -1436,6 +1441,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 });
 
             const TVector<char> expectedFills = {'a', 'b', 'c'};
+            const TVector<ui64> expectedBaseOffsets = {0, 3, 6};
             size_t receivedCount = 0;
             while (receivedCount < 3) {
                 auto jsonReceived = ReceiveMessage({
@@ -1451,7 +1457,12 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                     UNIT_ASSERT_VALUES_EQUAL(
                         message["Attributes"]["BodyEncoding"].GetString(),
                         ToString(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH)));
-                    NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, expectedFills[receivedCount], dataSize);
+                    NKafka::NTest::AssertKafkaBatchPayload(
+                        Base64Decode(message["Body"].GetString()),
+                        3,
+                        expectedFills[receivedCount],
+                        dataSize,
+                        expectedBaseOffsets[receivedCount]);
                     ++receivedCount;
                 }
             }
@@ -1489,7 +1500,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto messageId = NKikimr::NSqsTopic::V1::DeserializeReceipt(receiptHandle);
             UNIT_ASSERT_C(messageId.has_value(), messageId.error());
 
-            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, 'a', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, 'a', dataSize, 0);
 
             const TString middleReceiptHandle = NKikimr::NSqsTopic::V1::SerializeReceipt({
                 .PartitionId = messageId->PartitionId,
@@ -1508,7 +1519,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"WaitTimeSeconds", 20},
             });
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
-            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(jsonReceived["Messages"][0]["Body"].GetString()), 3, 'a', dataSize);
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(jsonReceived["Messages"][0]["Body"].GetString()), 3, 'a', dataSize, 0);
 
             DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", jsonReceived["Messages"][0]["ReceiptHandle"].GetString()}});
 
@@ -2367,6 +2378,9 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         auto consumerName = [](int i) { return std::format("ydb-sqs-consumer-{}", i); };
         auto queueUrlForConsumer = [&](int i) { return std::format("/v1/{}/{}/{}/{}/{}/{}", database.size(), database.c_str(), topicName.size(), topicName.c_str(), consumerName(i).size(), consumerName(i).c_str()); };
         const TDuration retentionPeriod = TDuration::Hours(10);
+        if (params.Dlq) {
+            UNIT_ASSERT(CreateDlqTopic(driver));
+        }
         {
             NYdb::NTopic::TCreateTopicSettings settings;
             settings.RetentionPeriod(retentionPeriod);

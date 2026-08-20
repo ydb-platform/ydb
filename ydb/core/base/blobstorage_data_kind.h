@@ -23,6 +23,10 @@ inline bool IsSystemTabletType(TTabletTypes::EType type) {
         case TTabletTypes::Cms:
         case TTabletTypes::NodeBroker:
         case TTabletTypes::TenantSlotBroker:
+        // Sits on the data path of a whole group: the user data it relays stays USER, but its own
+        // index is what records the barriers and the trash, so nothing in a group backed by it can
+        // be deleted while it cannot write.
+        case TTabletTypes::BlobDepot:
             return true;
         default:
             return false;

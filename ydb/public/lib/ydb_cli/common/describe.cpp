@@ -756,13 +756,13 @@ int TDescribeLogic::PrintPathResponse(const TString& path, const NScheme::TDescr
     case NScheme::ESchemeEntryType::SysView:
         return DescribeSystemView(path, format);
     case NScheme::ESchemeEntryType::Secret:
-        return DescribeSecret(path, format);
+        return DescribeSecret(path, options, format);
     default:
         return DescribeEntryDefault(entry, options);
     }
 }
 
-int TDescribeLogic::DescribeSecret(const TString& path, EDataFormat format) {
+int TDescribeLogic::DescribeSecret(const TString& path, const TDescribeOptions& options, EDataFormat format) {
     NSecret::TSecretClient secretClient(Driver);
 
     auto secretResult = secretClient.DescribeSecret(path).GetValueSync();
@@ -772,7 +772,7 @@ int TDescribeLogic::DescribeSecret(const TString& path, EDataFormat format) {
     }
 
     if (format == EDataFormat::Pretty || format == EDataFormat::Default) {
-        return PrintSecretResponsePretty(secretResult);
+        return PrintSecretResponsePretty(secretResult, options);
     }
     if (format == EDataFormat::Json) {
         Cerr << "Warning! Option --json is deprecated and will be removed soon. "
@@ -786,8 +786,13 @@ int TDescribeLogic::DescribeSecret(const TString& path, EDataFormat format) {
     return PrintProtoJsonBase64(msg, Out);
 }
 
-int TDescribeLogic::PrintSecretResponsePretty(const NSecret::TDescribeSecretResult& result) const {
+int TDescribeLogic::PrintSecretResponsePretty(const NSecret::TDescribeSecretResult& result, const TDescribeOptions& options) const {
     Out << "Version: " << result.GetVersion() << Endl;
+    if (options.ShowPermissions) {
+        const auto& entry = result.GetEntry();
+        Out << Endl;
+        PrintAllPermissions(entry.Owner, entry.Permissions, entry.EffectivePermissions, entry.InterruptInheritance, Out);
+    }
     return EXIT_SUCCESS;
 }
 

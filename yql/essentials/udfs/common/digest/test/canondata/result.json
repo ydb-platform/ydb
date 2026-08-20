@@ -1,22 +1,22 @@
 {
-    "test.test[Basic]": [
+    "test.test[Basic-Results]": [
         {
-            "uri": "file://test.test_Basic_/results.txt"
+            "uri": "file://test.test_Basic-Results_/results.txt"
         }
     ],
-    "test.test[Init]": [
+    "test.test[Init-Results]": [
         {
-            "uri": "file://test.test_Init_/results.txt"
+            "uri": "file://test.test_Init-Results_/results.txt"
         }
     ],
-    "test.test[Sha512VersionFail_2025.02]": [
+    "test.test[Sha512VersionFail_2025.02-Results]": [
         {
-            "uri": "file://test.test_Sha512VersionFail_2025.02_/extracted"
+            "uri": "file://test.test_Sha512VersionFail_2025.02-Results_/extracted"
         }
     ],
-    "test.test[Sha512_2025.03]": [
+    "test.test[Sha512_2025.03-Results]": [
         {
-            "uri": "file://test.test_Sha512_2025.03_/results.txt"
+            "uri": "file://test.test_Sha512_2025.03-Results_/results.txt"
         }
     ]
 }

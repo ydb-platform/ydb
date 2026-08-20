@@ -53,6 +53,27 @@ TDirectBlockGroupsConnections MakeSampleDirectBlockGroupsConnections()
     return msg;
 }
 
+TDirtyMapStateProto MakeSampleDirtyMapState(ui32 stateGeneration)
+{
+    TDirtyMapStateProto state;
+    state.SetStateGeneration(stateGeneration);
+
+    auto* ddiskState = state.AddDDiskStates();
+    auto* ahead = ddiskState->MutableAhead();
+    ahead->AddStartAndLength(10);
+    ahead->AddStartAndLength(5);
+    auto* behind = ddiskState->MutableBehind();
+    behind->AddStartAndLength(100);
+    behind->AddStartAndLength(20);
+
+    auto* secondDDiskState = state.AddDDiskStates();
+    auto* secondAhead = secondDDiskState->MutableAhead();
+    secondAhead->AddStartAndLength(200);
+    secondAhead->AddStartAndLength(50);
+
+    return state;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -360,6 +381,130 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT_VALUES_EQUAL(
                     connectionsWritten.SerializeAsString(),
                     connections->SerializeAsString());
+            });
+    }
+
+    Y_UNIT_TEST(ShouldReturnEmptyDirtyMapStatesWhenAbsent)
+    {
+        TTestExecutor executor;
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMap<ui32, TDirtyMapStateProto> loaded;
+                UNIT_ASSERT(partitionDb.ReadAllDirtyMapStates(loaded));
+                UNIT_ASSERT(loaded.empty());
+            });
+    }
+
+    Y_UNIT_TEST(ShouldStoreAndReadDirtyMapState)
+    {
+        TTestExecutor executor;
+        const auto written = MakeSampleDirtyMapState(7);
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreDirtyMapState(42, written);
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMap<ui32, TDirtyMapStateProto> loaded;
+                UNIT_ASSERT(partitionDb.ReadAllDirtyMapStates(loaded));
+                UNIT_ASSERT_VALUES_EQUAL(1u, loaded.size());
+                UNIT_ASSERT(loaded.contains(42));
+
+                const auto& state = loaded.at(42);
+                UNIT_ASSERT_VALUES_EQUAL(
+                    written.SerializeAsString(),
+                    state.SerializeAsString());
+                UNIT_ASSERT_VALUES_EQUAL(7u, state.GetStateGeneration());
+                UNIT_ASSERT_VALUES_EQUAL(2, state.DDiskStatesSize());
+            });
+    }
+
+    Y_UNIT_TEST(ShouldStoreDirtyMapStatePerVChunkIndependently)
+    {
+        TTestExecutor executor;
+        const auto first = MakeSampleDirtyMapState(1);
+        const auto second = MakeSampleDirtyMapState(2);
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreDirtyMapState(0, first);
+                partitionDb.StoreDirtyMapState(1, second);
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMap<ui32, TDirtyMapStateProto> loaded;
+                UNIT_ASSERT(partitionDb.ReadAllDirtyMapStates(loaded));
+                UNIT_ASSERT_VALUES_EQUAL(2u, loaded.size());
+
+                UNIT_ASSERT(loaded.contains(0));
+                UNIT_ASSERT_VALUES_EQUAL(1u, loaded.at(0).GetStateGeneration());
+
+                UNIT_ASSERT(loaded.contains(1));
+                UNIT_ASSERT_VALUES_EQUAL(2u, loaded.at(1).GetStateGeneration());
+
+                // A vchunk that was never written must be absent from the map.
+                UNIT_ASSERT(!loaded.contains(2));
+            });
+    }
+
+    Y_UNIT_TEST(ShouldOverwriteDirtyMapStateOnRepeatedStore)
+    {
+        TTestExecutor executor;
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.InitSchema();
+                partitionDb.StoreDirtyMapState(5, MakeSampleDirtyMapState(1));
+            });
+
+        const auto updated = MakeSampleDirtyMapState(99);
+
+        executor.WriteTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                partitionDb.StoreDirtyMapState(5, updated);
+            });
+
+        executor.ReadTx(
+            [&](NKikimr::NTable::TDatabase& db)
+            {
+                TPartitionDatabase partitionDb(db);
+                TMap<ui32, TDirtyMapStateProto> loaded;
+                UNIT_ASSERT(partitionDb.ReadAllDirtyMapStates(loaded));
+                UNIT_ASSERT_VALUES_EQUAL(1u, loaded.size());
+                UNIT_ASSERT(loaded.contains(5));
+
+                const auto& state = loaded.at(5);
+                UNIT_ASSERT_VALUES_EQUAL(99u, state.GetStateGeneration());
+                UNIT_ASSERT_VALUES_EQUAL(
+                    updated.SerializeAsString(),
+                    state.SerializeAsString());
             });
     }
 }

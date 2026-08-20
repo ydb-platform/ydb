@@ -769,7 +769,10 @@ struct TEvBlobStorage {
             std::optional<TMessageRelevanceWatcher> ExternalRelevanceWatcher = std::nullopt;
         };
 
-        TEvPut(TCloneEventPolicy, const TEvPut& origin)
+        // reduceInterpileTraffic overrides the copied value; every other field is taken from origin,
+        // so a new field of TEvPut cannot be silently lost by a caller that only needs to flip this
+        // one flag.
+        TEvPut(TCloneEventPolicy, const TEvPut& origin, std::optional<bool> reduceInterpileTraffic = std::nullopt)
             : Id(origin.Id)
             , Buffer(origin.Buffer)
             , Deadline(origin.Deadline)
@@ -780,7 +783,7 @@ struct TEvBlobStorage {
             , IssueKeepFlag(origin.IssueKeepFlag)
             , IgnoreBlock(origin.IgnoreBlock)
             , AlreadyEncrypted(origin.AlreadyEncrypted)
-            , ReduceInterpileTraffic(origin.ReduceInterpileTraffic)
+            , ReduceInterpileTraffic(reduceInterpileTraffic.value_or(origin.ReduceInterpileTraffic))
             , IsZeroEntry(origin.IsZeroEntry)
             , FailOnSlowDown(origin.FailOnSlowDown)
             , ExtraBlockChecks(origin.ExtraBlockChecks)

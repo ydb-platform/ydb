@@ -1,6 +1,7 @@
 #include "mlp_consumer.h"
 #include "mlp_storage.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/persqueue/common/key.h>
 #include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/constants.h>
@@ -1140,12 +1141,11 @@ void TConsumerActor::MoveToDLQIfPossible() {
     }
 
     auto destinationTopic = [&]() -> TString {
-        auto databasePrefix = TStringBuilder() << Database << "/";
-        if (Config.GetDeadLetterQueue().StartsWith("sqs://") || Config.GetDeadLetterQueue().StartsWith(databasePrefix)) {
-            return Config.GetDeadLetterQueue();
-        } else {
-            return databasePrefix << Config.GetDeadLetterQueue();
+        const auto& dlq = Config.GetDeadLetterQueue();
+        if (dlq.empty() || dlq.StartsWith("sqs://")) {
+            return dlq;
         }
+        return NormalizePath(CanonizePath(Database), CanonizePath(dlq));
     };
 
     auto messages = Storage->GetDLQMessages();

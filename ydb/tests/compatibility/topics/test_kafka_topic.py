@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import concurrent.futures
+from collections import Counter
 import logging
 import os
 import pytest
@@ -163,6 +164,30 @@ def kill_process_tree(process):
         pass
     except OSError:
         process.kill()
+
+
+def assert_kafka_streams_forwarded_payloads(read, expected_payloads):
+    expected = [
+        payload if isinstance(payload, bytes) else payload.encode("utf-8")
+        for payload in expected_payloads
+    ]
+    expected_counts = Counter(expected)
+    actual_counts = Counter()
+    unexpected = []
+
+    for message in read:
+        matches = [
+            payload
+            for payload in expected_counts
+            if message.endswith(payload)
+        ]
+        if len(matches) == 1:
+            actual_counts[matches[0]] += 1
+        else:
+            unexpected.append(message)
+
+    assert not unexpected, f"Unexpected Kafka Streams payloads: {unexpected!r}"
+    assert actual_counts == expected_counts
 
 
 class KafkaStreamsRuntime:
@@ -339,7 +364,7 @@ class TestKafkaTopicMessagesBatchingDisabledRead(CurrentToCurrentVersionFixture)
             len(messages),
         )
         assert len(read) == len(messages)
-        assert all(message.startswith(b"kafka-batching-compat-message-") for message in read)
+        assert_kafka_streams_forwarded_payloads(read, messages)
 
     # Write a physical Kafka batch through the topic protocol, disable batching, and verify that
     # Kafka fetch can still read and forward every logical record from that stored batch.
@@ -367,7 +392,7 @@ class TestKafkaTopicMessagesBatchingDisabledRead(CurrentToCurrentVersionFixture)
             len(messages),
         )
         assert len(read) == len(messages)
-        assert all(message.startswith(b"kafka-fetch-after-disable-") for message in read)
+        assert_kafka_streams_forwarded_payloads(read, messages)
 
     # Mix plain topic messages and a physical Kafka batch in one topic, disable batching, and verify
     # Kafka fetch sees a contiguous logical stream across the format boundary.

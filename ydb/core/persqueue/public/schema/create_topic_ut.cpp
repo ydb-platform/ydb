@@ -180,6 +180,7 @@ Y_UNIT_TEST(CreateTopicWithIdAttribute) {
 
         auto config = DescribeTabletConfig(runtime, path);
         UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetId(), 1234567u);
+        UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetOwnerId(), 0u);
         UNIT_ASSERT(config.GetId().HasTxStep());
         UNIT_ASSERT_VALUES_EQUAL(config.GetId().GetTxStep(), 0u); // sentinel: filled at create
         // Restore FirstClass mode for subsequent sub-cases if any.

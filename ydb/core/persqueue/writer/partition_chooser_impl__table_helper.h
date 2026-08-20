@@ -14,23 +14,21 @@
 
 #include <library/cpp/time_provider/time_provider.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 
 
 namespace NKikimr::NPQ::NPartitionChooser {
 
-// Fallback window for the legacy name-keyed read during the Id-key transition.
-// Must be >= the mapping-row TTL (expire_after_seconds = 1 382 400 = 16 days)
-// set in metadata_initializers.cpp for the TopicPartitionsMapping table
-constexpr TDuration SourceIdLegacyKeyPeriod = TDuration::Days(16);
-
 class TTableHelper {
 public:
-    TTableHelper(const TString& topicName, const TString& topicHashName,
-                  ui64 topicId = 0, ui64 idTxStep = 0)
-        : TopicName(topicName)
-        , TopicHashName(topicHashName)
-        , TopicId(topicId)
-        , IdTxStep(idTxStep) {
+    TTableHelper(const NPersQueue::TTopicConverterPtr& fullConverter,
+                  const NKikimrPQ::TPQTabletConfig::TTopicId* topicId = nullptr)
+        : TopicName(fullConverter->GetClientsideName())
+        , TopicHashName(fullConverter->GetTopicForSrcIdHash())
+        , TopicId(topicId ? topicId->GetId() : 0)
+        , IdTxStep(topicId ? topicId->GetTxStep() : 0)
+        , OwnerId(topicId ? topicId->GetOwnerId() : 0) {
     };
 
     std::optional<ui32> PartitionId() const {
@@ -47,19 +45,20 @@ public:
         TableGeneration = pqConfig.GetTopicsAreFirstClassCitizen() ? ESourceIdTableGeneration::PartitionMapping
                                                                    : ESourceIdTableGeneration::SrcIdMeta2;
 
-        const bool mappingByIdEnabled = AppData(ctx)->FeatureFlags.GetEnableTopicSourceIdMappingById();
+        const bool mappingByIdEnabled = TopicId != 0 && AppData(ctx)->FeatureFlags.GetEnableTopicSourceIdMappingById();
 
-        const TString TopicIdString = TopicId ? "/" + ToString(TopicId) : TString{};
-        TopicKey = (mappingByIdEnabled && TopicId) ? TopicIdString : TopicName;
+        // The composite key must be unique across all schemeshards.
+        const TString topicUniqueId = ToString(OwnerId) + "+" + ToString(TopicId);
+        TopicKey = mappingByIdEnabled ? topicUniqueId : TopicName;
         // The fallback to the legacy name-based key is required only when the Id was
         // back-filled by an alter on a pre-existing topic (IdTxStep != 0, the sentinel 0
         // means the Id was set at create) and only during the transition window.
-        LegacyKeySelectEnabled = mappingByIdEnabled && TopicId && IdTxStep != 0
-            && TAppData::TimeProvider->Now() - TInstant::MilliSeconds(IdTxStep) < SourceIdLegacyKeyPeriod;
+        LegacyKeySelectEnabled = mappingByIdEnabled && IdTxStep != 0
+            && TAppData::TimeProvider->Now() - TInstant::MilliSeconds(IdTxStep) < NPQ::SourceIdMappingTtl;
 
         try {
             EncodedSourceId = NSourceIdEncoding::EncodeSrcId(
-                        (mappingByIdEnabled && TopicId) ? TopicIdString : TopicHashName, sourceId, TableGeneration
+                        mappingByIdEnabled ? TopicKey : TopicHashName, sourceId, TableGeneration
                 );
             if (LegacyKeySelectEnabled) {
                 FallbackEncodedSourceId = NSourceIdEncoding::EncodeSrcId(
@@ -317,6 +316,7 @@ private:
     const TString TopicHashName;
     const ui64 TopicId;
     const ui64 IdTxStep;
+    const ui64 OwnerId;
 
     // The key the mapping rows are written with: TopicId when set, TopicName otherwise.
     TString TopicKey;

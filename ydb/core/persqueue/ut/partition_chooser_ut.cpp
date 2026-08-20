@@ -716,6 +716,8 @@ Y_UNIT_TEST(TPartitionChooserActor_SplitMergeDisabled_BadSourceId_Test) {
 }
 
 static constexpr ui64 TestTopicId = 1234567890;
+static constexpr ui64 TestOwnerId = 100;
+static const TString TestTopicKey = ToString(TestOwnerId) + "+" + ToString(TestTopicId);
 
 Y_UNIT_TEST(TPartitionChooserActor_TopicId_NewSourceId_WriteByIdKey_Test) {
     // With a topic Id the mapping row is written with the id key, not the topic name.
@@ -724,6 +726,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NewSourceId_WriteByIdKey_Test) {
 
     auto config = CreateConfig0(false);
     config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
     config.MutablePQTabletConfig()->MutableId()->SetTxStep(0); // Id filled at create: no name fallback
     AddPartition(config, 0);
 
@@ -731,7 +734,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NewSourceId_WriteByIdKey_Test) {
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
-    AssertTable(server, "Id_Source_0", 0, 0, ToString(TestTopicId));
+    AssertTable(server, "Id_Source_0", 0, 0, TestTopicKey);
     AssertTableEmpty(server, "Id_Source_0"); // no name-keyed row was written
 }
 
@@ -743,6 +746,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NameFallbackInsideWindow_Test) {
 
     auto config = CreateConfig0(false);
     config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
     config.MutablePQTabletConfig()->MutableId()->SetTxStep(TInstant::Now().MilliSeconds()); // back-filled now
     AddPartition(config, 0);
     AddPartition(config, 1);
@@ -752,7 +756,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NameFallbackInsideWindow_Test) {
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 1);
-    AssertTable(server, "Id_Source_1", 1, 13, ToString(TestTopicId)); // migrated to the id key
+    AssertTable(server, "Id_Source_1", 1, 13, TestTopicKey); // migrated to the id key
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenFilledAtCreate_Test) {
@@ -762,6 +766,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenFilledAtCreate_Test
 
     auto config = CreateConfig0(false);
     config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
     config.MutablePQTabletConfig()->MutableId()->SetTxStep(0);
     AddPartition(config, 0);
     AddPartition(config, 1);
@@ -771,7 +776,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenFilledAtCreate_Test
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo.value_or(0), 0); // stale SeqNo not inherited
-    AssertTable(server, "Id_Source_2", r->Result->Get()->PartitionId, 0, ToString(TestTopicId));
+    AssertTable(server, "Id_Source_2", r->Result->Get()->PartitionId, 0, TestTopicKey);
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenWindowClosed_Test) {
@@ -781,6 +786,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenWindowClosed_Test) 
 
     auto config = CreateConfig0(false);
     config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
     config.MutablePQTabletConfig()->MutableId()->SetTxStep((TInstant::Now() - TDuration::Days(20)).MilliSeconds());
     AddPartition(config, 0);
     AddPartition(config, 1);
@@ -790,7 +796,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_NoNameFallbackWhenWindowClosed_Test) 
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo.value_or(0), 0); // stale SeqNo not inherited
-    AssertTable(server, "Id_Source_3", r->Result->Get()->PartitionId, 0, ToString(TestTopicId));
+    AssertTable(server, "Id_Source_3", r->Result->Get()->PartitionId, 0, TestTopicKey);
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_TopicId_IdKeyPreferredOverName_Test) {
@@ -800,17 +806,18 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_IdKeyPreferredOverName_Test) {
 
     auto config = CreateConfig0(false);
     config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
     config.MutablePQTabletConfig()->MutableId()->SetTxStep(TInstant::Now().MilliSeconds());
     AddPartition(config, 0);
     AddPartition(config, 1);
 
-    WriteToTable(server, "Id_Source_4", 0, 21, ToString(TestTopicId)); // id-keyed row
+    WriteToTable(server, "Id_Source_4", 0, 21, TestTopicKey); // id-keyed row
     WriteToTable(server, "Id_Source_4", 1, 13);              // stale name-keyed row
     auto r = ChoosePartition(server, config, "Id_Source_4");
 
     UNIT_ASSERT(r->Result);
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->PartitionId, 0);
-    AssertTable(server, "Id_Source_4", 0, 21, ToString(TestTopicId));
+    AssertTable(server, "Id_Source_4", 0, 21, TestTopicKey);
 }
 
 Y_UNIT_TEST(TPartitionChooserActor_TopicId_FlagOff_UsesLegacyNameKey_Test) {
@@ -821,6 +828,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_FlagOff_UsesLegacyNameKey_Test) {
 
     auto config = CreateConfig0(false);
     config.MutablePQTabletConfig()->MutableId()->SetId(TestTopicId);
+    config.MutablePQTabletConfig()->MutableId()->SetOwnerId(TestOwnerId);
     config.MutablePQTabletConfig()->MutableId()->SetTxStep(TInstant::Now().MilliSeconds());
     AddPartition(config, 0);
     AddPartition(config, 1);
@@ -834,7 +842,7 @@ Y_UNIT_TEST(TPartitionChooserActor_TopicId_FlagOff_UsesLegacyNameKey_Test) {
     UNIT_ASSERT_VALUES_EQUAL(r->Result->Get()->SeqNo.value_or(0), 13);
     // The row is read and written under the name key, not the id key.
     AssertTable(server, "Id_Source_5", 1, 13);
-    AssertTableEmpty(server, "Id_Source_5", ToString(TestTopicId)); // no id-keyed row was written
+    AssertTableEmpty(server, "Id_Source_5", TestTopicKey); // no id-keyed row was written
 }
 
 }

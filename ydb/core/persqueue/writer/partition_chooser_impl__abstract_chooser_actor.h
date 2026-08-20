@@ -42,15 +42,14 @@ public:
                                    const TString& sourceId,
                                    std::optional<ui32> preferedPartition,
                                    NWilson::TTraceId traceId,
-                                   ui64 topicId = 0,
-                                   ui64 idTxStep = 0)
+                                   const NKikimrPQ::TPQTabletConfig::TTopicId* topicId = nullptr)
         : TBase(NKikimrServices::PQ_PARTITION_CHOOSER)
         , Parent(parentId)
         , SourceId(sourceId)
         , PreferedPartition(preferedPartition)
         , Chooser(chooser)
         , Span(TWilsonTopic::TopicDetailed, std::move(traceId), "Topic.ChoosePartition")
-        , TableHelper(fullConverter->GetClientsideName(), fullConverter->GetTopicForSrcIdHash(), topicId, idTxStep)
+        , TableHelper(fullConverter, topicId)
         , PartitionHelper(Span.GetTraceId())
     {
     }

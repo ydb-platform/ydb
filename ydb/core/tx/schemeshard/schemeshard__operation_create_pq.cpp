@@ -475,6 +475,7 @@ public:
             bool configChanged = false;
             if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen() && !config.HasId()) {
                 config.MutableId()->SetId(dstPath.Base()->PathId.LocalPathId);
+                config.MutableId()->SetOwnerId(ui64(ssId));
                 configChanged = true;
             }
             if (config.HasId() && !config.GetId().HasTxStep()) {

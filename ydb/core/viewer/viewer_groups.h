@@ -959,18 +959,11 @@ public:
             FieldsRequired.reset(+EGroupFields::PileName);
         }
         FieldsRequested = FieldsRequired; // no dependent fields
-        for (auto field = +EGroupFields::GroupId; field != +EGroupFields::COUNT; ++field) {
-            if (FieldsRequired.test(field)) {
-                auto itDependentFields = DependentFields.find(static_cast<EGroupFields>(field));
-                if (itDependentFields != DependentFields.end()) {
-                    FieldsRequired |= itDependentFields->second;
-                }
-            }
-        }
-        // Database-only users normally don't fetch NodeId/PDiskId (see CheckAccessViewer above),
-        // but we need that data from BSC to validate the scope of node_id/pdisk_id/group_id params.
-        // These fields are not added to FieldsRequested, so they are not rendered in the response.
+
         if (IsStrictDatabaseOnlyRequest()) {
+            // Database-only users normally don't fetch NodeId/PDiskId (see CheckAccessViewer above),
+            // but we need that data from BSC to validate the scope of node_id/pdisk_id/group_id params.
+            // Required fields shoule be set *after* FieldsRequested, so they are not rendered in the response.
             if (!FilterGroupIds.Requested.empty() || !FilterNodeIds.Requested.empty() || !FilterPDiskIds.Requested.empty()) {
                 FieldsRequired.set(+EGroupFields::PoolName);
             }
@@ -979,6 +972,14 @@ public:
             }
             if (!FilterPDiskIds.Requested.empty()) {
                 FieldsRequired.set(+EGroupFields::PDiskId);
+            }
+        }
+        for (auto field = +EGroupFields::GroupId; field != +EGroupFields::COUNT; ++field) {
+            if (FieldsRequired.test(field)) {
+                auto itDependentFields = DependentFields.find(static_cast<EGroupFields>(field));
+                if (itDependentFields != DependentFields.end()) {
+                    FieldsRequired |= itDependentFields->second;
+                }
             }
         }
         if (Database) {

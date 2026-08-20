@@ -87,7 +87,7 @@ void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest
 
     AFL_VERIFY(!PendingConfigNotification);
     PendingConfigNotification = std::move(ev);
-    if (Manager->StartConfigUpdate(desiredConfig)) {
+    if (Manager->StartConfigUpdate(desiredConfig, SelfId(), Counters)) {
         CompleteConfigUpdate();
     }
     Y_UNUSED(Manager->DrainTasks());

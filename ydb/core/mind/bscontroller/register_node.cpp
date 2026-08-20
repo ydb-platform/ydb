@@ -422,16 +422,7 @@ void TBlobStorageController::ReadGroups(TSet<TGroupId>& groupIDsToRead, bool dis
                 groupProto->SetGroupID(groupId.GetRawId());
                 groupProto->SetEntityStatus(NKikimrBlobStorage::DESTROY);
             } else if (group->Listable()) {
-                const TStoragePoolInfo& info = StoragePools.at(group->StoragePoolId);
-
-                TMaybe<TKikimrScopeId> scopeId;
-                if (info.SchemeshardId && info.PathItemId) {
-                    scopeId.ConstructInPlace(*info.SchemeshardId, *info.PathItemId);
-                } else {
-                    Y_ABORT_UNLESS(!info.SchemeshardId && !info.PathItemId);
-                }
-
-                SerializeGroupInfo(groupProto, *group, info, scopeId);
+                SerializeGroupInfo(groupProto, *group, StoragePools);
             } else if (nodeId) {
                 // group is not listable, so we have to postpone the request from NW
                 group->WaitingNodes.insert(nodeId);

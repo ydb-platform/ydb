@@ -179,6 +179,42 @@ void TPartitionDatabase::StoreVChunkConfig(const TVChunkConfig& cfg)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+bool TPartitionDatabase::ReadAllDirtyMapStates(
+    TMap<ui32, TDirtyMapStateProto>& out)
+{
+    using TTable = TPartitionSchema::DirtyMapStates;
+
+    auto it =
+        Table<TTable>().Range().Select<TTable::VChunkIndex, TTable::State>();
+
+    if (!it.IsReady()) {
+        return false;
+    }
+
+    while (it.IsValid()) {
+        if (it.HaveValue<TTable::State>()) {
+            out[it.GetValue<TTable::VChunkIndex>()] =
+                it.GetValue<TTable::State>();
+        }
+        it.Next();
+    }
+
+    return true;
+}
+
+void TPartitionDatabase::StoreDirtyMapState(
+    ui32 vChunkIndex,
+    const TDirtyMapStateProto& state)
+{
+    using TTable = TPartitionSchema::DirtyMapStates;
+
+    Table<TTable>()
+        .Key(vChunkIndex)
+        .Update(NKikimr::NIceDb::TUpdate<TTable::State>(state));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 bool TPartitionDatabase::ReadAddHostInProgress(
     TMaybe<TAddHostInProgress>& addHostInProgress)
 {

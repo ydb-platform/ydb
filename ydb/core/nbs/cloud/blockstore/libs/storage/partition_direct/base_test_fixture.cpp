@@ -306,6 +306,16 @@ size_t TBaseFixture::ReplyUpdateRequests()
     return requests.size();
 }
 
+size_t TBaseFixture::ReplyUpdateDirtyMapStateRequests()
+{
+    auto requests =
+        std::move(PartitionDirectService->UpdateDirtyMapStateRequests);
+    for (auto& r: requests) {
+        r.Promise.SetValue();
+    }
+    return requests.size();
+}
+
 template <typename T>
 void TBaseFixture::SetResult(
     TVector<NThreading::TPromise<T>>& promises,

@@ -19,6 +19,7 @@ SRCS(
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
     part_updatevchunkconfig.cpp
+    part_updatedirtymapstate.cpp
     part_monitoring.cpp
     partition_direct_actor.cpp
     partition_direct.cpp

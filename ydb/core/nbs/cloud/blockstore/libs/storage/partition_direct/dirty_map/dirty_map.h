@@ -7,7 +7,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_mask.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <library/cpp/threading/future/core/future.h>
 
@@ -154,8 +154,7 @@ public:
 
     // Persist
     [[nodiscard]] bool NeedPersist() const;
-    [[nodiscard]] PartitionDirect::NProto::TDirtyMapState
-    GetStateForPersist() const;
+    [[nodiscard]] TDirtyMapStateProto GetStateForPersist() const;
     void StatePersisted(ui32 persistGeneration);
     [[nodiscard]] ui64 GetCurrentGeneration() const;
 

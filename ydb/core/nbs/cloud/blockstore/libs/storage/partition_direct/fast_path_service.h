@@ -123,6 +123,10 @@ public:
     NThreading::TFuture<void> UpdateVChunkConfig(
         const TVChunkConfig& cfg) override;
 
+    NThreading::TFuture<void> UpdateDirtyMapState(
+        ui32 vChunkIndex,
+        TDirtyMapStateProto state) override;
+
     void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override;
 
     ui64 GenerateLsn() override;

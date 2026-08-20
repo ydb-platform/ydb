@@ -4,6 +4,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_roles.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -740,10 +741,9 @@ bool TBlocksDirtyMap::NeedPersist() const
     return BehindAheadGeneration > PersistedGeneration;
 }
 
-PartitionDirect::NProto::TDirtyMapState
-TBlocksDirtyMap::GetStateForPersist() const
+TDirtyMapStateProto TBlocksDirtyMap::GetStateForPersist() const
 {
-    PartitionDirect::NProto::TDirtyMapState result;
+    TDirtyMapStateProto result;
     result.SetStateGeneration(GetCurrentGeneration());
     for (const auto& ddiskState: DDiskStates) {
         ddiskState.Save(result.AddDDiskStates());

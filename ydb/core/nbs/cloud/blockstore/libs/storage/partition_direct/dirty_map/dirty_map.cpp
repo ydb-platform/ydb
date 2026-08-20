@@ -1028,14 +1028,18 @@ bool TBlocksDirtyMap::CheckEraseAbility(
     TInflightInfo& inflightInfo)
 {
     if (BehindAheadGeneration == 0) {
+        // There is not a single red block.
         return true;
     }
 
-    if (inflightInfo.GetPersistGeneration() < PersistedGeneration) {
+    if (inflightInfo.GetPersistGeneration() &&
+        inflightInfo.GetPersistGeneration() <= PersistedGeneration)
+    {
+        // Red blocks already persisted. Can erase.
         return true;
     }
 
-    bool eraseBlocked = AnyOf(
+    const bool eraseBlocked = AnyOf(
         DDiskStates,
         [&](const TDDiskState& ddiskState)
         {
@@ -1044,10 +1048,14 @@ bool TBlocksDirtyMap::CheckEraseAbility(
         });
 
     if (!eraseBlocked) {
+        // Don't overlaps with red blocks. Can erase.
         return true;
     }
 
     if (!inflightInfo.GetPersistGeneration()) {
+        // The red blocks from this inflightInfo are already in the current
+        // generation. Start waiting for data with the current or newer
+        // generation to be persisted.
         inflightInfo.SetPersistGeneration(BehindAheadGeneration);
     }
     return false;

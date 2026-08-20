@@ -581,7 +581,7 @@ TInternalPathId TTablesManager::TruncateTable(const TSchemeShardLocalPathId sche
     RegisterTable(std::move(newTable), db);
 
     // Clear the propose-time fence now that the live mapping points at the new generation.
-    Truncating.Complete(schemeShardLocalPathId);
+    AFL_VERIFY(TruncatingLocalToInternal.erase(schemeShardLocalPathId));
 
     AFL_INFO(NKikimrServices::TX_COLUMNSHARD)("method", "TruncateTable")("ss_local_path_id", schemeShardLocalPathId)(
         "old_internal_path_id", oldPathId)("new_internal_path_id", newPathId)("version", version.DebugString());
@@ -603,7 +603,9 @@ void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId schemeSh
 
     // Use conditional insert: if already fenced (e.g., re-propose), keep the existing entry.
     // This avoids AFL_VERIFY crash on double-propose while still catching logic errors via logging.
-    if (!Truncating.Propose(schemeShardLocalPathId, *internalPathId)) {
+    auto [it, inserted] = TruncatingLocalToInternal.emplace(schemeShardLocalPathId, *internalPathId);
+    if (!inserted) {
+        AFL_VERIFY(it->second == *internalPathId)("ss", schemeShardLocalPathId)("expected", *internalPathId)("actual", it->second);
         // Already fenced — nothing more to do.
         return;
     }
@@ -611,7 +613,8 @@ void TTablesManager::TruncateTablePropose(const TSchemeShardLocalPathId schemeSh
 }
 
 std::optional<TInternalPathId> TTablesManager::GetTruncatingInternalPathId(const TSchemeShardLocalPathId schemeShardLocalPathId) const {
-    return Truncating.Get(schemeShardLocalPathId);
+    const auto* p = TruncatingLocalToInternal.FindPtr(schemeShardLocalPathId);
+    return p ? std::optional<TInternalPathId>(*p) : std::nullopt;
 }
 
 void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
@@ -803,7 +806,7 @@ void TTablesManager::MoveTablePropose(const TSchemeShardLocalPathId srcSchemeSha
         {"schemeShardSrcLocalPathId", srcSchemeShardLocalPathId});
     const auto& internalPathId = ResolveInternalPathId(srcSchemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
-    AFL_VERIFY(Renaming.Propose(srcSchemeShardLocalPathId, *internalPathId))("src_internal_path_id", internalPathId);
+    AFL_VERIFY(RenamingLocalToInternal.emplace(srcSchemeShardLocalPathId, *internalPathId).second)("src_internal_path_id", internalPathId);
     GenerationIndex.ForgetLive(srcSchemeShardLocalPathId);
 }
 
@@ -812,7 +815,7 @@ void TTablesManager::CopyTablePropose(const TSchemeShardLocalPathId srcSchemeSha
         {"schemeShardSrcLocalPathId", srcSchemeShardLocalPathId});
     const auto& internalPathId = ResolveInternalPathId(srcSchemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
-    AFL_VERIFY(Copying.Propose(srcSchemeShardLocalPathId, *internalPathId))("src_internal_path_id", internalPathId);
+    AFL_VERIFY(CopyingLocalToInternal.emplace(srcSchemeShardLocalPathId, *internalPathId).second)("src_internal_path_id", internalPathId);
 }
 
 void TTablesManager::CopyTablePlanStep(NIceDb::TNiceDb& db, const NOlap::TSnapshot& version,
@@ -822,7 +825,7 @@ void TTablesManager::CopyTablePlanStep(NIceDb::TNiceDb& db, const NOlap::TSnapsh
         {"srcPathId", srcSchemeShardLocalPathId},
         {"dstPathId", dstSchemeShardLocalPathId},
         {"snapshot", version});
-    const auto* pInternalPathId = Copying.FindPtr(srcSchemeShardLocalPathId);
+    const auto* pInternalPathId = CopyingLocalToInternal.FindPtr(srcSchemeShardLocalPathId);
     AFL_VERIFY(pInternalPathId);
     const auto internalPathId = *pInternalPathId;
     AFL_VERIFY(HasTable(internalPathId));
@@ -845,14 +848,14 @@ void TTablesManager::MoveTableProgress(
         {"oldPathId", oldSchemeShardLocalPathId},
         {"newPathId", newSchemeShardLocalPathId});
     AFL_VERIFY(!ResolveInternalPathId(newSchemeShardLocalPathId, false));
-    const auto* pInternalPathId = Renaming.FindPtr(oldSchemeShardLocalPathId);
+    const auto* pInternalPathId = RenamingLocalToInternal.FindPtr(oldSchemeShardLocalPathId);
     AFL_VERIFY(pInternalPathId);
     const auto internalPathId = *pInternalPathId;
     AFL_VERIFY(HasTable(internalPathId));
     auto* table = Tables.FindPtr(internalPathId);
     AFL_VERIFY(table);
     table->RenameTableSchemeShardLocalPathId(db, oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
-    Renaming.Erase(oldSchemeShardLocalPathId);
+    AFL_VERIFY(RenamingLocalToInternal.erase(oldSchemeShardLocalPathId));
     GenerationIndex.Rename(oldSchemeShardLocalPathId, newSchemeShardLocalPathId);
     // Rename each historical table's SS path so HasSchemeShardLocalPathId / path-local drop versions
     // keep working for time-travel reads after MOVE.
@@ -883,7 +886,7 @@ void TTablesManager::CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapsh
         {"event", "copy_table_progress"},
         {"srcPathId", srcSchemeShardLocalPathId},
         {"dstPathId", dstSchemeShardLocalPathId});
-    const auto* pInternalPathId = Copying.FindPtr(srcSchemeShardLocalPathId);
+    const auto* pInternalPathId = CopyingLocalToInternal.FindPtr(srcSchemeShardLocalPathId);
     AFL_VERIFY(pInternalPathId);
     const auto internalPathId = *pInternalPathId;
     AFL_VERIFY(HasTable(internalPathId));
@@ -891,7 +894,7 @@ void TTablesManager::CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapsh
     AFL_VERIFY(table);
     table->CopySchemeShardLocalPathId(db, srcSchemeShardLocalPathId, dstSchemeShardLocalPathId, version);
     RegisterReadOnlyTableSnapshot(version);
-    Copying.Erase(srcSchemeShardLocalPathId);
+    AFL_VERIFY(CopyingLocalToInternal.erase(srcSchemeShardLocalPathId));
     if (const auto existingInternalPathId = ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
         AFL_VERIFY(*existingInternalPathId == internalPathId);
     } else {

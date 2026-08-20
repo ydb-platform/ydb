@@ -38,7 +38,11 @@ TKikimrRunner KikimrJsonPrefix(bool enableJsonIndexAutoSelect = false);
 
 void CreateTestTable(NYdb::NQuery::TQueryClient& db, const std::string& type = "Json", bool withIndex = false);
 
-NYdb::TResultSet ReadIndex(NYdb::NQuery::TQueryClient& db, const char* table = "indexImplTable");
+THashMap<TString, TVector<ui64>> ReadIndex(TKikimrRunner& kikimr);
+
+TString FormatReadIndex(THashMap<TString, TVector<ui64>> tokens);
+
+TString FormatReadIndex(TKikimrRunner& kikimr);
 
 void TestAddJsonIndex(const std::string& type, bool nullable);
 

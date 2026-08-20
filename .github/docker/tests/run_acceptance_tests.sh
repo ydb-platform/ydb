@@ -316,10 +316,10 @@ docker run --rm --pull never --platform linux/amd64 --network host --entrypoint 
     sql -s 'SELECT 1;'
 curl --fail --location --silent --show-error --max-time 10 \
     "http://127.0.0.1:${DEFAULT_MON_PORT}/" >/dev/null
-run_sql "$DEFAULT_CONTAINER" '
-    CREATE TABLE acceptance_default (id Uint64, value Utf8, PRIMARY KEY (id));
-    UPSERT INTO acceptance_default (id, value) VALUES (1, "default-ok");
-'
+run_sql "$DEFAULT_CONTAINER" \
+    'CREATE TABLE acceptance_default (id Uint64, value Utf8, PRIMARY KEY (id));'
+run_sql "$DEFAULT_CONTAINER" \
+    'UPSERT INTO acceptance_default (id, value) VALUES (1, "default-ok");'
 assert_sql_contains "$DEFAULT_CONTAINER" \
     'SELECT value FROM acceptance_default WHERE id = 1;' \
     'default-ok'
@@ -330,10 +330,10 @@ docker cp "${DEFAULT_CONTAINER}:/ydb_data/cluster/kikimr_configs/config.yaml" "$
 docker cp "${DEFAULT_CONTAINER}:/ydb_certs/." "$GENERATED_CERTS"
 hash_certificate_bundle "$GENERATED_CERTS" >/dev/null
 
-run_sql "$DEFAULT_CONTAINER" '
-    CREATE TABLE acceptance_backup (id Uint64, value Utf8, PRIMARY KEY (id));
-    UPSERT INTO acceptance_backup (id, value) VALUES (7, "restored-ok");
-'
+run_sql "$DEFAULT_CONTAINER" \
+    'CREATE TABLE acceptance_backup (id Uint64, value Utf8, PRIMARY KEY (id));'
+run_sql "$DEFAULT_CONTAINER" \
+    'UPSERT INTO acceptance_backup (id, value) VALUES (7, "restored-ok");'
 docker exec "$DEFAULT_CONTAINER" \
     /ydb --endpoint grpc://localhost:2136 --database /local --no-discovery \
     tools dump -p acceptance_backup -o /backup/dump
@@ -368,8 +368,9 @@ start_detached "$CONFIG_CONTAINER" \
     --volume "${GENERATED_CONFIG}:/ydb_data/cluster/kikimr_configs/config.yaml:ro"
 wait_for_ready "$CONFIG_CONTAINER"
 docker exec "$CONFIG_CONTAINER" grep -A 1 -F '_ResultRowsLimit' /ydb_data/cluster/kikimr_configs/config.yaml | grep -Fq '2'
+run_sql "$CONFIG_CONTAINER" \
+    'CREATE TABLE acceptance_config (id Uint64, value Utf8, PRIMARY KEY (id));'
 run_sql "$CONFIG_CONTAINER" '
-    CREATE TABLE acceptance_config (id Uint64, value Utf8, PRIMARY KEY (id));
     UPSERT INTO acceptance_config (id, value) VALUES
         (1, "config-one"),
         (2, "config-two"),
@@ -433,13 +434,15 @@ INIT_DIR="${TEST_ROOT}/init.d"
 mkdir -p "$INIT_DIR"
 cat >"${INIT_DIR}/01-create.sql" <<'SQL'
 CREATE TABLE acceptance_init (id Uint64, value Utf8, PRIMARY KEY (id));
+SQL
+cat >"${INIT_DIR}/02-insert.sql" <<'SQL'
 UPSERT INTO acceptance_init (id, value) VALUES (1, "sql-ok");
 SQL
-cat >"${TEST_ROOT}/02-compressed.sql" <<'SQL'
+cat >"${TEST_ROOT}/03-compressed.sql" <<'SQL'
 UPSERT INTO acceptance_init (id, value) VALUES (2, "gzip-ok");
 SQL
-gzip -c "${TEST_ROOT}/02-compressed.sql" >"${INIT_DIR}/02-compressed.sql.gz"
-cat >"${INIT_DIR}/03-shell.sh" <<'SH'
+gzip -c "${TEST_ROOT}/03-compressed.sql" >"${INIT_DIR}/03-compressed.sql.gz"
+cat >"${INIT_DIR}/04-shell.sh" <<'SH'
 #!/usr/bin/env bash
 set -e
 /ydb --endpoint "grpc://localhost:${GRPC_PORT}" --database /local --no-discovery \
@@ -466,8 +469,9 @@ assert_sql_contains "$INIT_CONTAINER" \
     'shell-ok'
 docker exec "$INIT_CONTAINER" test -f /ydb_data/.user_scripts_initialized
 assert_logs_contain "$INIT_CONTAINER" 'Executing queries from /init.d/01-create.sql'
-assert_logs_contain "$INIT_CONTAINER" 'Executing compressed queries from /init.d/02-compressed.sql.gz'
-assert_logs_contain "$INIT_CONTAINER" 'Running /init.d/03-shell.sh'
+assert_logs_contain "$INIT_CONTAINER" 'Executing queries from /init.d/02-insert.sql'
+assert_logs_contain "$INIT_CONTAINER" 'Executing compressed queries from /init.d/03-compressed.sql.gz'
+assert_logs_contain "$INIT_CONTAINER" 'Running /init.d/04-shell.sh'
 stop_and_remove_container "$INIT_CONTAINER"
 
 INIT_RESTART_CONTAINER="${NAME_PREFIX}-init-restart"

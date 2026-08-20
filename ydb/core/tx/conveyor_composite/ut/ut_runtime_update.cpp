@@ -430,6 +430,17 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT(insertAfter > scanAfter);
     }
 
+    Y_UNIT_TEST(RemovedLinkResetsWeightCounter) {
+        auto initial = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 7}, {ESpecialTaskCategory::Insert, 1}}});
+        TRuntimeFixture fixture(initial);
+        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 7);
+
+        auto withoutScan = BuildTopologyConfig({{{ESpecialTaskCategory::Insert, 1}}});
+        fixture.Update(withoutScan);
+        UNIT_ASSERT_VALUES_EQUAL(GetWeightCounter(fixture, "pool-1", ESpecialTaskCategory::Scan), 0);
+    }
+
     Y_UNIT_TEST(RuntimeValidationIsAtomic) {
         auto initial = BuildTopologyConfig(
             {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Normalizer, 1}},
@@ -886,6 +897,61 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         fixture.WaitForUpdate(id, cookie);
         UNIT_ASSERT(responses > 0);
         fixture.Runtime.SetObserverFunc(previousObserver);
+    }
+
+    Y_UNIT_TEST(NewConfigSupersedesInProgressUpdate) {
+        TRuntimeFixture fixture(BuildSinglePoolConfig(2.4));
+        TAtomicCounter counter;
+        TAutoPtr<NActors::IEventHandle> heldTask;
+        TAutoPtr<NActors::IEventHandle> heldRetire;
+        bool blockEvents = true;
+        auto previousObserver = fixture.Runtime.SetObserverFunc([&](TAutoPtr<NActors::IEventHandle>& ev) {
+            if (blockEvents && ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType) {
+                heldTask = ev.Release();
+                return NActors::TTestActorRuntime::EEventAction::DROP;
+            }
+            if (blockEvents && ev->GetTypeRewrite() == TEvInternal::TEvRetireWorker::EventType) {
+                heldRetire = ev.Release();
+                return NActors::TTestActorRuntime::EEventAction::DROP;
+            }
+            return NActors::TTestActorRuntime::EEventAction::PROCESS;
+        });
+        fixture.Submit(counter, ESpecialTaskCategory::Scan);
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(heldTask);
+
+        std::vector<ui64> responses;
+        auto responseObserver = fixture.Runtime.AddObserver<NConsole::TEvConsole::TEvConfigNotificationResponse>([&](auto& ev) {
+            responses.emplace_back(ev->Get()->Record.GetSubscriptionId());
+        });
+        const auto [firstId, firstCookie] = fixture.SendUpdate(BuildSinglePoolConfig(1.4));
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(heldRetire);
+        UNIT_ASSERT(responses.empty());
+
+        auto latestConfig = BuildTopologyConfig({{{ESpecialTaskCategory::Insert, 1}}}, {1.4});
+        const auto [latestId, latestCookie] = fixture.SendUpdate(latestConfig);
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(responses.empty());
+
+        blockEvents = false;
+        fixture.Runtime.EnableScheduleForActor(heldTask->Recipient, true);
+        fixture.Runtime.Send(heldTask.Release(), 0, true);
+        for (ui32 attempt = 0; attempt < 100 && counter.Val() != 1; ++attempt) {
+            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(counter.Val(), 1);
+        UNIT_ASSERT(responses.empty());
+
+        fixture.Runtime.Send(heldRetire.Release(), 0, true);
+        fixture.WaitForUpdate(latestId, latestCookie);
+        UNIT_ASSERT_VALUES_EQUAL(responses, std::vector<ui64>({latestId}));
+        UNIT_ASSERT(std::find(responses.begin(), responses.end(), firstId) == responses.end());
+        Y_UNUSED(firstCookie);
+
+        fixture.Runtime.SetObserverFunc(previousObserver);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 1);
     }
 
     Y_UNIT_TEST(ThrottledLimitAndTopologyUpdate) {

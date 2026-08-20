@@ -31,9 +31,9 @@ struct TDqBlockJoinContext {
     EJoinKind Kind;
     TSides<i32> TempStateIndes;
     TBlockHashJoinSettings Settings;
-    // Physical side holding the SQL left input, derived from Settings.BuildSide once in
+    // Side whose rows the join kind preserves, derived from Settings.BuildSide once in
     // WrapDqBlockHashJoin so that the rest of the code never branches on LeftIsBuild()
-    ESide LeftSide;
+    ESide PreservedSide;
     // Pre-computed during graph construction in WrapDqBlockHashJoin using the
     // program's TTypeEnvironment.  This avoids creating TOptionalType objects
     // at runtime (inside DoCalculate) whose lifetime depends on the
@@ -142,7 +142,7 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Kind, IBlockLayoutConv
 
     TRenamesPackedTupleOutput(const TDqBlockJoinContext* meta, TSides<IBlockLayoutConverter*> converters,
                               const TVector<TType*>& userNullTypes, arrow::MemoryPool& arrowPool)
-        : TBase(&meta->Renames, converters, meta->LeftSide)
+        : TBase(&meta->Renames, converters, meta->PreservedSide)
     {
         if constexpr (!std::is_same_v<typename TBase::BuildNullIfNeeded, typename TBase::Empty>) {
             TVector<arrow::Datum> nulls;
@@ -154,7 +154,7 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Kind, IBlockLayoutConv
                 builder->Add(NYql::NUdf::TBlockItem{});
                 nulls.push_back(builder->Build(true));
             }
-            this->Converters_.SelectSide(OtherSide(this->LeftSide_))->Pack(nulls, this->Nulls_);
+            this->Converters_.SelectSide(OtherSide(this->PreservedSide_))->Pack(nulls, this->Nulls_);
         }
     }
 
@@ -173,11 +173,11 @@ struct TRenamesPackedTupleOutput : TPackedTupleOutputBase<Kind, IBlockLayoutConv
     TVector<arrow::Datum> FlushAndApplyRenames() {
         if constexpr(LeftSemiOrOnly(Kind)) {
             TVector<arrow::Datum> out;
-            this->Converters_.SelectSide(this->LeftSide_)->Unpack(this->Output_.SelectSide(this->LeftSide_), out);
-            this->Output_.SelectSide(this->LeftSide_).Clear();
+            this->Converters_.SelectSide(this->PreservedSide_)->Unpack(this->Output_.SelectSide(this->PreservedSide_), out);
+            this->Output_.SelectSide(this->PreservedSide_).Clear();
             TVector<arrow::Datum> renamed;
             for(auto rename: *this->Renames_){
-                MKQL_ENSURE(rename.Side == this->LeftSide_, "renames in Semi or Only Left Join shouldn't contain columns from right side");
+                MKQL_ENSURE(rename.Side == this->PreservedSide_, "renames in Semi or Only Left Join shouldn't contain columns from right side");
                 renamed.push_back(out[rename.Index]);
             }
             return renamed;
@@ -217,7 +217,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             const auto roles = MakeColumnRoles(userTypes.SelectSide(side).size(), Meta_->KeyColumns.SelectSide(side));
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
-        const auto& userNullTypes = userTypes.SelectSide(OtherSide(Meta_->LeftSide));
+        const auto& userNullTypes = userTypes.SelectSide(OtherSide(Meta_->PreservedSide));
 
         return ctx.HolderFactory.Create<TStreamValue>(
             ctx, Streams_, std::move(layouts), Meta_.get(), userNullTypes,
@@ -241,7 +241,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                     ctx, "BlockHashJoin",
                     TSides<const NPackedTuple::TTupleLayout*>{.Build = Converters_.Build->GetTupleLayout(),
                                                               .Probe = Converters_.Probe->GetTupleLayout()},
-                    meta->LeftSide)
+                    meta->PreservedSide)
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
             , PairFilter_(std::move(pairFilter))
@@ -322,9 +322,9 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     }
     // Probe is streamed against a hash table of Build. SQL left is Probe by default,
     // or Build when the optimizer asks to hash the smaller left input.
-    meta.LeftSide = meta.Settings.LeftIsBuild() ? ESide::Build : ESide::Probe;
-    const ESide leftSide = meta.LeftSide;
+    const ESide leftSide = meta.Settings.LeftIsBuild() ? ESide::Build : ESide::Probe;
     const ESide rightSide = OtherSide(leftSide);
+    meta.PreservedSide = leftSide;
 
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");

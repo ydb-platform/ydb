@@ -46,7 +46,7 @@ Some features may not be available using the alternate syntax (like encryption a
 ### Additional parameters {#aux}
 
 | Parameter | Description |
---- | ---
+| --- | --- |
 | `--description STRING` | A text description of the operation saved in the operation history. |
 | `--retries NUM` | The number of import retries to be made by the server. The default value is 10. |
 | `--skip-checksum-validation` | Skip the validating imported objects' [checksums](../file-structure.md#checksums) step. |

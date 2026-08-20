@@ -1,4 +1,5 @@
 ### Examples
+
 ```yql
 SELECT
   Bool("true"),

@@ -30,11 +30,11 @@ To deploy YDB EM, you need:
 
 The network configuration must allow TCP connections on the following ports (default values):
 
-Source | Destination | Port | Protocol | Purpose
---- | --- | --- | --- | ---
-User | Gateway | 8789 | HTTP/HTTPS | Web interface and API
-Gateway, Agent | Control Plane | 8787 | gRPC | Management commands
-Gateway, Control Plane | {{ ydb-short-name }} | 2135 | gRPC | Connection to YDB EM DB
+| Source | Destination | Port | Protocol | Purpose |
+| --- | --- | --- | --- | --- |
+| User | Gateway | 8789 | HTTP/HTTPS | Web interface and API |
+| Gateway, Agent | Control Plane | 8787 | gRPC | Management commands |
+| Gateway, Control Plane | {{ ydb-short-name }} | 2135 | gRPC | Connection to YDB EM DB |
 
 ## Downloading the package {#download}
 
@@ -42,9 +42,9 @@ Gateway, Control Plane | {{ ydb-short-name }} | 2135 | gRPC | Connection to YDB 
 
 Download the YDB EM package to the control machine (from which the installation via Ansible will be performed). Check the latest release information for the current version number and archive link:
 
-Version | Link
---- | ---
-`<VERSION>` | [Download archive](https://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz)
+| Version | Link |
+| --- | --- |
+| `<VERSION>` | [Download archive](https://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz) |
 
 Extract the downloaded archive into a working directory (replace `<VERSION>` with the actual version):
 
@@ -54,15 +54,15 @@ tar -xf ydb-em-<VERSION>-stable-linux-amd64.tar.xz
 
 Package contents:
 
-File | Description
---- | ---
-`bin/ydb-em-gateway` | Gateway binary
-`bin/ydb-em-cp` | Control Plane binary
-`bin/ydb-em-agent` | Agent binary
-`collections/ydb_platform-ydb-*.tar.gz` | Ansible collection for {{ ydb-short-name }}
-`collections/ydb_platform-ydb_em-*.tar.gz` | Ansible collection for YDB EM
-`examples.tar.gz` | Ansible configuration templates (inventory and playbooks)
-`install.sh` | Automatic installation script
+| File | Description |
+| --- | --- |
+| `bin/ydb-em-gateway` | Gateway binary |
+| `bin/ydb-em-cp` | Control Plane binary |
+| `bin/ydb-em-agent` | Agent binary |
+| `collections/ydb_platform-ydb-*.tar.gz` | Ansible collection for {{ ydb-short-name }} |
+| `collections/ydb_platform-ydb_em-*.tar.gz` | Ansible collection for YDB EM |
+| `examples.tar.gz` | Ansible configuration templates (inventory and playbooks) |
+| `install.sh` | Automatic installation script |
 
 ## Installing Ansible collections {#install-collections}
 
@@ -154,12 +154,12 @@ ydb:
 
 For each host in the `ydbd_dynamic` group, you can specify additional parameters. If parameters are not specified, default values will be used. Resource settings can be adjusted later through the YDB EM web interface.
 
-Parameter | Description
---- | ---
-`ydb_em_agent_cpu` | Number of CPUs available for nodes on the host
-`ydb_em_agent_memory` | Amount of RAM (in gigabytes) available for nodes on the host
-`ydb_em_agent_name` | Host name used by the agent
-`location` | Host location (availability zone)
+| Parameter | Description |
+| --- | --- |
+| `ydb_em_agent_cpu` | Number of CPUs available for nodes on the host |
+| `ydb_em_agent_memory` | Amount of RAM (in gigabytes) available for nodes on the host |
+| `ydb_em_agent_name` | Host name used by the agent |
+| `location` | Host location (availability zone) |
 
 {% note warning %}
 

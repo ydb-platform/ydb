@@ -3401,12 +3401,11 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
     }
 
     Y_UNIT_TEST(RealHostRejectsUnsafeTpcdsQuery51WindowMetadata) {
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolverWithContext(moduleResolver));
+
         auto kikimr = MakeTpcdsRunner();
         CreateTpcdsColumnTables(kikimr);
-
-        NYql::TExprContext moduleContext;
-        NYql::IModuleResolver::TPtr moduleResolver;
-        UNIT_ASSERT(NYql::GetYqlDefaultModuleResolver(moduleContext, moduleResolver));
 
         auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
         auto host = MakeHost(kikimr.GetTestServer(), std::move(moduleResolver), sink);

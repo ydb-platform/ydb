@@ -6516,6 +6516,48 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_linear-unique_fold_/sql.yql"
         }
     ],
+    "test_sql2yql.test[list_from_range_decimal-decimal_list_from_range]": [
+        {
+            "checksum": "a6859f16e9a277463c9894189b28b8fb",
+            "size": 3553,
+            "uri": "https://{canondata_backend}/1784826/a2d23ad4e04843bf373561a3548a32a8fcc5d7d4/resource.tar.gz#test_sql2yql.test_list_from_range_decimal-decimal_list_from_range_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[list_from_range_decimal-default_step_fail]": [
+        {
+            "checksum": "aa8d67d08a372ffe47e80123fe72c894",
+            "size": 1125,
+            "uri": "https://{canondata_backend}/1599023/3bd8169bee1f0f9db5f291bbfac7caee92b04630/resource.tar.gz#test_sql2yql.test_list_from_range_decimal-default_step_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[list_from_range_decimal-different_end_type_fail]": [
+        {
+            "checksum": "e078c36ab0276e203e318a6d72d7ceba",
+            "size": 1082,
+            "uri": "https://{canondata_backend}/1599023/3bd8169bee1f0f9db5f291bbfac7caee92b04630/resource.tar.gz#test_sql2yql.test_list_from_range_decimal-different_end_type_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[list_from_range_decimal-different_step_type_fail]": [
+        {
+            "checksum": "189765313b2e086577536a93ecc72c4f",
+            "size": 1084,
+            "uri": "https://{canondata_backend}/1937150/aef2777f2c05a4deb71f57ee05a89689bfb5700a/resource.tar.gz#test_sql2yql.test_list_from_range_decimal-different_step_type_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[list_from_range_decimal-mixed_types_fail]": [
+        {
+            "checksum": "724ab8d25a4f02f1f98f310b4f35d230",
+            "size": 1062,
+            "uri": "https://{canondata_backend}/1871102/2c5e8f5b50ffa3fbbffab3b1abad3d3ca5281da9/resource.tar.gz#test_sql2yql.test_list_from_range_decimal-mixed_types_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[list_from_range_decimal-old_langver_fail]": [
+        {
+            "checksum": "e73f770f53a5a2128c0c1dd5d4637f91",
+            "size": 1074,
+            "uri": "https://{canondata_backend}/1871102/2c5e8f5b50ffa3fbbffab3b1abad3d3ca5281da9/resource.tar.gz#test_sql2yql.test_list_from_range_decimal-old_langver_fail_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[match_recognize-after_match_skip_past_last_row]": [
         {
             "checksum": "04f940940df5aed425bb8ca46687ec99",
@@ -17623,6 +17665,36 @@
     "test_sql_format.test[linear-unique_fold]": [
         {
             "uri": "file://test_sql_format.test_linear-unique_fold_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[list_from_range_decimal-decimal_list_from_range]": [
+        {
+            "uri": "file://test_sql_format.test_list_from_range_decimal-decimal_list_from_range_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[list_from_range_decimal-default_step_fail]": [
+        {
+            "uri": "file://test_sql_format.test_list_from_range_decimal-default_step_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[list_from_range_decimal-different_end_type_fail]": [
+        {
+            "uri": "file://test_sql_format.test_list_from_range_decimal-different_end_type_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[list_from_range_decimal-different_step_type_fail]": [
+        {
+            "uri": "file://test_sql_format.test_list_from_range_decimal-different_step_type_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[list_from_range_decimal-mixed_types_fail]": [
+        {
+            "uri": "file://test_sql_format.test_list_from_range_decimal-mixed_types_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[list_from_range_decimal-old_langver_fail]": [
+        {
+            "uri": "file://test_sql_format.test_list_from_range_decimal-old_langver_fail_/formatted.sql"
         }
     ],
     "test_sql_format.test[match_recognize-after_match_skip_past_last_row]": [

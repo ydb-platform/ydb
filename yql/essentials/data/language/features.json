@@ -43,6 +43,10 @@
     "TypeErasure": {
         "min_langver": "2026.02"
     },
+    "DecimalListFromRange": {
+        "description": "ListFromRange over Decimal",
+        "min_langver": "2026.02"
+    },
     "HybridRankFunction": {
         "description": "HybridRank",
         "min_langver": "2026.02",

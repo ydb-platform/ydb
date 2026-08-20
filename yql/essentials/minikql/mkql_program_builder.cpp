@@ -1859,15 +1859,23 @@ TRuntimeNode TProgramBuilder::BlockDecimalMul(TRuntimeNode first, TRuntimeNode s
 }
 
 TRuntimeNode TProgramBuilder::ListFromRange(TRuntimeNode start, TRuntimeNode end, TRuntimeNode step) {
-    MKQL_ENSURE(start.GetStaticType()->IsData(), "Expected data");
-    MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()), "Mismatch type");
-    MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
+    MKQL_ENSURE(start.GetStaticType()->IsData(), "ListFromRange expects Start to be data");
+    MKQL_ENSURE(end.GetStaticType()->IsData(), "ListFromRange expects End to be data");
+    MKQL_ENSURE(step.GetStaticType()->IsData(), "ListFromRange expects Step to be data");
+    const auto startSchemeType = AS_TYPE(TDataType, start)->GetSchemeType();
+    const bool isDecimal = startSchemeType == NUdf::TDataType<NUdf::TDecimal>::Id;
+    MKQL_ENSURE(end.GetStaticType()->IsSameType(*start.GetStaticType()),
+                "ListFromRange expects Start and End to have the same type");
+    MKQL_ENSURE(IsNumericType(startSchemeType) || isDecimal ||
                     IsDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
                     IsTzDateType(AS_TYPE(TDataType, start)->GetSchemeType()) ||
                     IsIntervalType(AS_TYPE(TDataType, start)->GetSchemeType()),
-                "Expected numeric, date or tzdate");
+                "ListFromRange expects numeric, Decimal, date, tzdate, or interval Start");
 
-    if (IsNumericType(AS_TYPE(TDataType, start)->GetSchemeType())) {
+    if (isDecimal) {
+        MKQL_ENSURE(step.GetStaticType()->IsSameType(*start.GetStaticType()),
+                    "ListFromRange expects Decimal Start and Step to have the same precision and scale");
+    } else if (IsNumericType(startSchemeType)) {
         MKQL_ENSURE(IsNumericType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected numeric");
     } else {
         MKQL_ENSURE(IsIntervalType(AS_TYPE(TDataType, step)->GetSchemeType()), "Expected interval");

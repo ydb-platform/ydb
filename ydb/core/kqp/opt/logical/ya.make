@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    kqp_true_cardinalities.cpp
     kqp_opt_log_effects.cpp
     kqp_opt_log_extract.cpp
     kqp_opt_log_helpers.cpp
@@ -25,6 +26,7 @@ PEERDIR(
     yql/essentials/core/extract_predicate
     ydb/library/yql/dq/common
     ydb/library/yql/dq/opt
+    library/cpp/disjoint_sets
 )
 
 YQL_LAST_ABI_VERSION()

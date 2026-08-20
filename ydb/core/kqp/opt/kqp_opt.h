@@ -44,8 +44,10 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     bool UsePessimisticLocks;
     int JoinsCount{};
     int EquiJoinsCount{};
+    ui32 OptLevel = 0;
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};
     std::shared_ptr<NKikimr::NKqp::TOptimizerHints> Hints{};
+    std::shared_ptr<NKikimr::NKqp::TOptimizerTrueCardinalitiesHints> TrueCardinalityHints{};
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
     NKikimr::NKqp::TCBOOptimizerStats CBOStats;

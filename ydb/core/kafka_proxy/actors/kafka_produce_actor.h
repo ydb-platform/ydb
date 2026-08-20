@@ -63,6 +63,8 @@ private:
 
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyDeleted::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev, const TActorContext& ctx);
+    void FailPendingWritesForTopic(const TString& path, EKafkaErrors errorCode, TStringBuf errorMessage);
+    void InvalidateTopic(const TString& path, bool deleted, const TActorContext& ctx);
 
     // StateInit - describe topics
     void HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx);
@@ -176,6 +178,7 @@ private:
 
         NKikimrPQ::TPQTabletConfig::EMeteringMode MeteringMode;
         std::shared_ptr<IPartitionChooser> PartitionChooser;
+        TIntrusivePtr<TSecurityObject> SecurityObject;
     };
     std::map<TString, TTopicInfo> Topics;
 

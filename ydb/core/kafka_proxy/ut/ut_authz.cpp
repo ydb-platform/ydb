@@ -66,9 +66,90 @@ std::vector<TString> FetchRecordValues(TKafkaTestClient& client, const TString& 
 
 void CreateTopic(NTopic::TTopicClient& pqClient, const TString& topicName, const TString& consumer = {}
 
+void AlterTopicPartitions(NTopic::TTopicClient& pqClient, const TString& topicName, ui64 minActivePartitions) {
+    auto result = pqClient
+        .AlterTopic(topicName, NTopic::TAlterTopicSettings().AlterPartitioningSettings(minActivePartitions, 100))
+        .ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+}
+
+void DropTopic(NTopic::TTopicClient& pqClient, const TString& topicName) {
+    auto result = pqClient.DropTopic(topicName).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+}
+
+template <typename TFn>
+void WaitUntil(TFn&& fn, TDuration timeout = TDuration::Seconds(20)) {
+    const auto deadline = TInstant::Now() + timeout;
+    while (TInstant::Now() < deadline) {
+        if (fn()) {
+            return;
+        }
+        Sleep(TDuration::MilliSeconds(200));
+    }
+    UNIT_ASSERT_C(false, "timed out waiting for authorization error");
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
+    Y_UNIT_TEST(ProduceAndFetchFailAfterTokenExpires) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+            .TokenRecheckIntervalMs = 500,
+            .LoginTokenExpireTime = "2s",
+            .AuthRefreshTime = "1s",
+            .ACLRetryTimeoutSec = 1,
+        });
+
+        TString topicName = "/Root/topic-token-expire";
+        TString groupId = "authz-expire-group";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, groupId);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        UNIT_ASSERT_VALUES_EQUAL(ProduceError(client, topicName, "before-expire"), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        WaitUntil([&] {
+            return ProduceError(client, topicName, "after-expire") == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+        }, TDuration::Seconds(20));
+
+        auto apiVersions = client.ApiVersions();
+        UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    }
+
+Y_UNIT_TEST(DroppedTopicFailsProduceWithoutDroppingConnection) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+            .ACLRetryTimeoutSec = 300,
+        });
+
+        TString topicName = "/Root/topic-dropped";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+        UNIT_ASSERT_VALUES_EQUAL(ProduceError(client, topicName, "before-drop"), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        DropTopic(pqClient, topicName);
+
+        WaitUntil([&] {
+            auto error = ProduceError(client, topicName, "after-drop");
+            UNIT_ASSERT_VALUES_UNEQUAL(error, static_cast<TKafkaInt16>(EKafkaErrors::REQUEST_TIMED_OUT));
+            UNIT_ASSERT_VALUES_UNEQUAL(error, static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_SERVER_ERROR));
+            return error == static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION)
+                || error == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+        });
+
+        auto apiVersions = client.ApiVersions();
+        UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    }
+
+
 Y_UNIT_TEST(LongSessionWithValidTokenKeepsProduceAndFetchWorking) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
@@ -128,5 +209,29 @@ Y_UNIT_TEST(TokenRecheckDisabledDoesNotDropConnection) {
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     }
 
+
+Y_UNIT_TEST(ProduceToNewPartitionAfterAlterTopic) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+            .ACLRetryTimeoutSec = 300,
+        });
+
+        TString topicName = "/Root/topic-alter-partitions";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        UNIT_ASSERT_VALUES_EQUAL(ProduceError(client, topicName, "p0", 0), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(ProduceError(client, topicName, "p1-before-alter", 1), static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
+
+        AlterTopicPartitions(pqClient, topicName, 2);
+
+        WaitUntil([&] {
+            return ProduceError(client, topicName, "p1-after-alter", 1) == static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR);
+        }, TDuration::Seconds(20));
+    }
 
 }

@@ -11,6 +11,7 @@
 #include "actors/actors.h"
 #include "actors/kafka_api_versions_actor.h"
 #include "kafka_connection.h"
+#include "kafka_error_response.h"
 #include "kafka_events.h"
 
 
@@ -452,6 +453,29 @@ protected:
             Context->KafkaClient = Request->Header.ClientId.value();
         }
 
+        if (auto error = Context->TokenUnusableError()) {
+            switch (Request->Header.RequestApiKey) {
+                case API_VERSIONS:
+                case SASL_HANDSHAKE:
+                case SASL_AUTHENTICATE:
+                    break;
+                default: {
+                    auto response = BuildErrorResponse(*Request->Message, *error);
+                    if (!response) {
+                        YDB_LOG_ERROR("Unsupported message",
+                            {LogPrefix()},
+                            {"apiKey", Request->Header.RequestApiKey});
+                        PassAway();
+                        return false;
+                    }
+                    Reply(Request->Header.CorrelationId, response, *error, ctx);
+                    Request->Message.reset();
+                    Request->Buffer.reset();
+                    Request.reset();
+                    return true;
+                }
+            }
+        }
 
         if (IsTransactionalApiKey(Request->Header.RequestApiKey) && !TransactionsEnabled()) {
             YDB_LOG_ERROR("Transactional API keys are not enabled. To enable them set \"EnableKafkaTransactions\" feature flag to true in cluster configuration",

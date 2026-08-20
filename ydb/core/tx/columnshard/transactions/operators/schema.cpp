@@ -121,7 +121,7 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
             targetPathId = SchemaTxBody.GetMoveTable().GetDstPathId();
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable:
-            targetPathId = SchemaTxBody.GetTruncateTable().GetPathId();
+            targetPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable()).GetRawValue();
             break;
         default:
             break;

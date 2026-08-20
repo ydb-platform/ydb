@@ -29,6 +29,7 @@ private:
     TCounters Counters;
 
     NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr PendingConfigNotification;
+    NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr QueuedConfigNotification;
 
     void HandleMain(TEvExecution::TEvNewTask::TPtr& ev);
     void HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev);

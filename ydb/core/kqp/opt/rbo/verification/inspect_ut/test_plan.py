@@ -69,6 +69,29 @@ class ExpressionRendererTest(unittest.TestCase):
                 'type="Decimal(35,2)", nullable=true)',
             ),
             (
+                ir.Expr(
+                    kind="window_rank",
+                    window_name="window0",
+                    execution_order=0,
+                    partition_by=(),
+                    order_by=(
+                        ir.SortOrder(
+                            "currency_ratio",
+                            ascending=True,
+                            nulls_first=True,
+                        ),
+                    ),
+                    window_frame=ir.WINDOW_RANK_FRAME,
+                    result_type="Uint64",
+                    nullable=False,
+                ),
+                'window_rank(name="window0", execution_order=0, '
+                'partition_by=[], order_by=[{column="currency_ratio", '
+                'direction=asc, nulls=first}], '
+                'frame="rows_unbounded_preceding_current_row", '
+                'type="Uint64", nullable=false)',
+            ),
+            (
                 ir.Expr(kind="and", args=(one, two)),
                 'and(args=[literal(type="Int64", value=1), '
                 'literal(type="Int64", value=2)])',
@@ -242,6 +265,24 @@ class ExpressionRendererTest(unittest.TestCase):
                     partition_by=("x", "x"),
                     result_type="Decimal(35,2)",
                     nullable=True,
+                )
+            )
+        with self.assertRaisesRegex(InspectionError, "execution_order"):
+            render_expression(
+                ir.Expr(
+                    kind="window_rank",
+                    window_name="window0",
+                    partition_by=(),
+                    order_by=(
+                        ir.SortOrder(
+                            "currency_ratio",
+                            ascending=True,
+                            nulls_first=True,
+                        ),
+                    ),
+                    window_frame=ir.WINDOW_RANK_FRAME,
+                    result_type="Uint64",
+                    nullable=False,
                 )
             )
         with self.assertRaisesRegex(InspectionError, "exactly two arguments"):

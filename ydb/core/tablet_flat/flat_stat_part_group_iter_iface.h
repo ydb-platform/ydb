@@ -31,7 +31,6 @@ struct IStatsPartGroupIter {
     virtual bool IsValid() const = 0;
 
     virtual TRowId GetEndRowId() const = 0;
-    virtual TPageLocation GetLocation() const = 0;
     virtual TRowId GetRowId() const = 0;
 
     virtual TPos GetKeyCellsCount() const = 0;

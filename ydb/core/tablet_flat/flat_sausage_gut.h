@@ -14,6 +14,8 @@ namespace NPageCollection {
 
         virtual const TLogoBlobID& Label() const noexcept = 0;
         virtual ui32 Total() const noexcept = 0;
+        /* Number of structural pages addressable by TPageId */
+        virtual ui32 MetaPages() const noexcept { return Total(); }
         virtual TInfo Page(ui32 page) const = 0;
         virtual TBorder Bounds(ui32 page) const = 0;
         /// Maps a page location to the blob storage range containing it
@@ -24,6 +26,9 @@ namespace NPageCollection {
         virtual bool Verify(const TPageLocation&, TArrayRef<const char>) const = 0;
         virtual size_t BackingSize() const noexcept = 0;
         virtual NTable::NPage::TPageLocation GetLocation(ui32 pageId) const = 0;
+        /// Returns true when the collection carries both BTreeIndex and BTreeIndexV2 pages
+        virtual bool SkipBTreeIndexV1Shadow() const noexcept { return false; }
+        virtual void SetSkipBTreeIndexV1Shadow(bool) const noexcept { }
     };
 
 }

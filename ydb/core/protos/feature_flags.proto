@@ -323,4 +323,7 @@ message TFeatureFlags {
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = false];
     optional bool EnableAccessServiceV2Interface = 283 [default = false, (RequireRestart) = true];
+    optional bool EnableLocalDBBtreeIndexV2 = 284 [default = false];
+    // When EnableLocalDBBtreeIndexV2 is on complete it with V1 shadow index off
+    optional bool EnableLocalDBBtreeIndexV2ShadowV1Write = 285 [default = true];
 }

@@ -217,8 +217,7 @@ namespace {
         }
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override {
-            auto* data = Store->GetPage(Room, pageId);
-            return NTable::NPage::TPageLocation::FromPageIndex(pageId, data->size(), NTable::NPage::EPage::Undef, Store->GetPageChecksum(Room, pageId));
+            return Store->GetPageLocation(Room, pageId);
         }
     };
 
@@ -244,7 +243,8 @@ namespace {
 
         TCacheWrap& Get(TPageId pageId, bool has, bool grow, bool need, NFwd::TStat stat)
         {
-            auto got = Cache->Get(this, TPageOffset::FromPageIndex(pageId), Part->GetPageType(pageId, { }), AheadLo);
+            auto loc = Part->GetPageLocation(pageId, { });
+            auto got = Cache->Get(this, loc.Offset, loc.Type, AheadLo);
 
             if (has != bool(got.Page) || grow != got.Grow || need != got.Need){
                 Log()
@@ -276,7 +276,7 @@ namespace {
             NTest::TTestEnv testEnv;
             size_t i = 0;
             for (auto& loc : std::exchange(Queue, TDeque<TPageLocation>{})) {
-                UNIT_ASSERT_VALUES_EQUAL_C(loc.Offset.AsPageIndex(), pageIds[i++], CurrentStepStr());
+                UNIT_ASSERT_VALUES_EQUAL_C(loc.Offset, Part->GetPageLocation(pageIds[i++], { }).Offset, CurrentStepStr());
                 load.emplace_back(loc, *testEnv.TryGetPage(Part.Get(), loc, { }));
             }
 
@@ -300,7 +300,7 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL_C(Queue.size(), pageIds.size(), CurrentStepStr());
             for (size_t i = 0; i < Queue.size(); i++) {
                 UNIT_ASSERT_VALUES_EQUAL_C(Queue[i].Offset,
-                    NFwd::TPageOffset::FromPageIndex(pageIds[i]), CurrentStepStr());
+                    Part->GetPageLocation(pageIds[i], { }).Offset, CurrentStepStr());
             }
 
             UNIT_ASSERT_VALUES_EQUAL_C(Cache->Stat, stat, CurrentStepStr());
@@ -313,10 +313,11 @@ namespace {
             TVector<NPageCollection::TLoadedPage> load;
             NTest::TTestEnv testEnv;
             for (auto pageId : pageIds) {
+                NFwd::TPageOffset offset = Part->GetPageLocation(pageId, { }).Offset;
                 TPageLocation location;
                 bool found = false;
                 for (auto it = Queue.begin(); it != Queue.end(); it++) {
-                    if (it->Offset == NFwd::TPageOffset::FromPageIndex(pageId)) {
+                    if (it->Offset == offset) {
                         found = true;
                         location = *it;
                         Queue.erase(it);
@@ -340,14 +341,20 @@ namespace {
 
         TCacheWrap& CheckLocator(TVector<TPageId> pageIds)
         {
-            TVector<TPageId> actual;
-            for (const auto& it : IndexPageLocator.GetMap()) {
-                actual.push_back(it.first.AsPageIndex());
+            TVector<NFwd::TPageOffset> expected;
+            for (auto pageId : pageIds) {
+                expected.push_back(Part->GetPageLocation(pageId, { }).Offset);
             }
 
-            std::sort(pageIds.begin(), pageIds.end());
+            TVector<NFwd::TPageOffset> actual;
+            for (const auto& it : IndexPageLocator.GetMap()) {
+                actual.push_back(it.first);
+            }
 
-            UNIT_ASSERT_VALUES_EQUAL_C(actual, pageIds, CurrentStepStr());
+            std::sort(expected.begin(), expected.end());
+            std::sort(actual.begin(), actual.end());
+
+            UNIT_ASSERT_VALUES_EQUAL_C(actual, expected, CurrentStepStr());
 
             return *this;
         }

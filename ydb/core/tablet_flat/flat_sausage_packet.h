@@ -5,6 +5,8 @@
 #include "flat_sausage_gut.h"
 #include "util_fmt_abort.h"
 
+#include <atomic>
+
 namespace NKikimr {
 namespace NPageCollection {
 
@@ -15,6 +17,7 @@ namespace NPageCollection {
         TPageCollection(TLargeGlobId largeGlobId, TSharedData raw)
             : LargeGlobId(largeGlobId)
             , Meta(std::move(raw), LargeGlobId.Group)
+            , SkippedInMeta(Meta.SkippedPages())
         {
             if (!Meta.Raw || LargeGlobId.Bytes != Meta.Raw.size() || LargeGlobId.Group == TLargeGlobId::InvalidGroup) {
                 Y_TABLET_ERROR("Invalid TLargeGlobId of page collection meta blob");
@@ -27,6 +30,14 @@ namespace NPageCollection {
         }
 
         ui32 Total() const noexcept override
+        {
+            return MetaPages() + SkippedInMeta;
+        }
+
+        /* Structural pages addressable by TPageId (enumerated in TMeta).
+           Total() may exceed MetaPages() for shrunk v2 collections. SkippedInMeta
+           carries the number of extra pages beyond MetaPages. */
+        ui32 MetaPages() const noexcept override
         {
             return Meta.TotalPages();
         }
@@ -73,6 +84,16 @@ namespace NPageCollection {
             return Meta.BackingSize();
         }
 
+        bool SkipBTreeIndexV1Shadow() const noexcept override
+        {
+            return SkipBTreeIndexV1Shadow_.load(std::memory_order_relaxed);
+        }
+
+        void SetSkipBTreeIndexV1Shadow(bool v) const noexcept override
+        {
+            SkipBTreeIndexV1Shadow_.store(v, std::memory_order_relaxed);
+        }
+
         template<typename TContainer>
         void SaveAllBlobIdsTo(TContainer &vec) const
         {
@@ -86,12 +107,17 @@ namespace NPageCollection {
 
         const TLargeGlobId LargeGlobId;
         const TMeta Meta;
+        const ui32 SkippedInMeta;
+        // Set before the collection is handed to the shared cache; read afterwards by cache actors
+        mutable std::atomic<bool> SkipBTreeIndexV1Shadow_ = false;
     };
 
     /// Page-index TPageOffset to satisfy forward cache
     class TOuterPageCollection : public TPageCollection {
     public:
-        using TPageCollection::TPageCollection;
+        TOuterPageCollection(TLargeGlobId largeGlobId, TSharedData raw)
+            : TPageCollection(std::move(largeGlobId), std::move(raw))
+        {}
 
         NTable::NPage::TPageLocation GetLocation(ui32 pageId) const override
         {

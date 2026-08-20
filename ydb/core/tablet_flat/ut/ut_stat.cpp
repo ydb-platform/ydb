@@ -18,13 +18,15 @@ namespace {
     struct TTouchEnv : public NTest::TTestEnv {
         const TSharedData* TryGetPage(const TPart *part, const TPageLocation& location, TGroupId groupId) override
         {
-            auto pageId = location.GetPageIndex();
             auto page = NTest::TTestEnv::TryGetPage(part, location, groupId);
 
-            bool newTouch = Touched[{part, groupId}].insert(pageId).second;
+            bool newTouch = Touched[{part, groupId}].insert(location.Offset).second;
 
             if (newTouch) {
-                auto type = part->GetPageType(pageId, groupId);
+                auto type = location.Type;
+                if (type == EPage::Undef && location.Offset.IsPageIndex()) {
+                    type = part->GetPageType(location.Offset.AsPageIndex(), groupId);
+                }
                 if (type == EPage::DataPage) {
                     auto dataPage = NPage::TDataPage(page);
 
@@ -44,7 +46,7 @@ namespace {
                 : page;
         }
 
-        TMap<std::pair<const TPart*, TGroupId>, TSet<TPageId>> Touched;
+        TMap<std::pair<const TPart*, TGroupId>, TSet<TPageOffset>> Touched;
         bool Faulty = true;
         ui64 TouchedBytes = 0, TouchedRows = 0, TouchedIndexBytes = 0, TouchedIndexPages = 0;
     };
@@ -464,7 +466,7 @@ Y_UNIT_TEST_SUITE(BuildStatsHistogram) {
             auto index = CreateIndexIter(part.Part.Get(), &env, {});
             Cerr << "  " << part->Label << " " << index->GetEndRowId() << " rows, "
                 << IndexTools::CountMainPages(*part.Part) << " pages, "
-                << (part->IndexPages.HasBTree() ? part->IndexPages.GetBTree({}).LevelCount : -1) << " levels: ";
+                << (part->IndexPages.HasBTree() ? part->IndexPages.GetBTree({}).LevelCount() : -1) << " levels: ";
             for (ui32 sample : xrange(1u, samples + 1)) {
                 TRowId rowId((index->GetEndRowId() - 1) * sample / samples);
                 Y_ENSURE(index->Seek(rowId) == EReady::Data);

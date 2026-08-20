@@ -417,6 +417,24 @@ public:
         TString RawDataBuffer;
     };
 
+    void StartUnit() {
+        bool registered = false;
+        while (Work && !Work->StartExecution(TMonotonic::Now())) {
+            if (!registered) {
+                Work->RegisterForResume(SelfActorId);
+                registered = true;
+            }
+            (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(&TS3ReadCoroImpl::ProcessUnexpectedEvent, TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
+        }
+    }
+
+    void StopUnit() {
+        if (Work) {
+            bool forced = false;
+            Work->StopExecution(forced);
+        }
+    }
+
     void RunClickHouseParserOverHttp() {
         LOG_CORO_D("RunClickHouseParserOverHttp");
 
@@ -446,16 +464,16 @@ public:
         );
 
         while (true) {
-            SchedulableStart(this, Work, &TS3ReadCoroImpl::ProcessUnexpectedEvent);
+            StartUnit();
             NDB::Block batch = stream->read();
             if (!batch) {
-                SchedulableStop(Work);
+                StopUnit();
                 break;
             }
             Paused = SourceContext->Add(batch.bytes(), SelfActorId);
             const bool isCancelled = StopIfConsumedEnough(batch.rows());
             Send(ParentActorId, new TEvS3Provider::TEvNextBlock(batch, PathIndex, TakeIngressDelta(), TakeCpuTimeDelta(), ReadSpec->Compression ? TakeIngressDecompressedDelta(buffer->count()) : 0ULL));
-            SchedulableStop(Work);
+            StopUnit();
             if (Paused) {
                 CpuTime += GetCpuTimeDelta();
                 auto ev = WaitForSpecificEvent<TEvS3Provider::TEvContinue>(&TS3ReadCoroImpl::ProcessUnexpectedEvent);
@@ -785,8 +803,8 @@ public:
                 LOG_CORO_D("Decode RowGroup " << readyGroupIndex << " of " << numGroups << " from reader " << readyReaderIndex);
                 // TODO: split DecodeRowGroups into smaller units (arrow async / column streaming)
                 {
-                    SchedulableStart(this, Work, &TS3ReadCoroImpl::ProcessUnexpectedEvent);
-                    Y_DEFER { SchedulableStop(Work); };
+                    StartUnit();
+                    Y_DEFER { StopUnit(); };
                     ThrowParquetNotOk(readers[readyReaderIndex]->DecodeRowGroups({ hasPredicate ? static_cast<int>(matchedRowGroups[readyGroupIndex]) : static_cast<int>(readyGroupIndex) }, columnIndices, &table));
                 }
                 readyGroupCount++;
@@ -802,8 +820,8 @@ public:
                 bool isCancelled = false;
                 ui64 numRows = 0;
                 while (status = reader->ReadNext(&batch), status.ok() && batch) {
-                    SchedulableStart(this, Work, &TS3ReadCoroImpl::ProcessUnexpectedEvent);
-                    Y_DEFER { SchedulableStop(Work); };
+                    StartUnit();
+                    Y_DEFER { StopUnit(); };
                     auto convertedBatch = ConvertArrowColumns(batch, columnConverters);
                     auto size = NUdf::GetSizeOfArrowBatchInBytes(*convertedBatch);
                     decodedBytes += size;

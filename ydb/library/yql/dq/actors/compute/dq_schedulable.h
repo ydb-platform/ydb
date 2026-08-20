@@ -1,7 +1,6 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorid.h>
-#include <ydb/library/actors/core/events.h>
 #include <library/cpp/time_provider/monotonic.h>
 
 #include <util/datetime/base.h>
@@ -63,30 +62,6 @@ struct IDqSchedulerContext {
 };
 
 using IDqSchedulerContextPtr = std::shared_ptr<IDqSchedulerContext>;
-
-template <class Actor, class Handler>
-inline void SchedulableStart(Actor* self, const std::unique_ptr<IDqSchedulableWork>& work, Handler handler) {
-    if (!work) {
-        return;
-    }
-    bool registered = false;
-    while (!work->StartExecution(TMonotonic::Now())) {
-        if (!registered) {
-            work->RegisterForResume(self->SelfActorId);
-            registered = true;
-        }
-        (void)self->template WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
-            handler, TMonotonic::Now() + work->CalculateDelay(TMonotonic::Now()));
-    }
-}
-
-inline void SchedulableStop(const std::unique_ptr<IDqSchedulableWork>& work) {
-    if (!work) {
-        return;
-    }
-    bool forced = false;
-    work->StopExecution(forced);
-}
 
 } // namespace NYql::NDq
 

@@ -76,6 +76,26 @@ private:
         InputFinished = true;
     }
 
+    void StartUnit() {
+        bool registered = false;
+        while (Work && !Work->StartExecution(TMonotonic::Now())) {
+            if (!registered) {
+                Work->RegisterForResume(SelfActorId);
+                registered = true;
+            }
+            (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
+                [this](TAutoPtr<::NActors::IEventHandle> ev) { StateFunc(ev); },
+                TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
+        }
+    }
+
+    void StopUnit() {
+        if (Work) {
+            bool forced = false;
+            Work->StopExecution(forced);
+        }
+    }
+
     void Run() final {
         StartCycleCount = GetCycleCountFast();
 
@@ -86,8 +106,8 @@ private:
             YQL_ENSURE(decompressorBuffer, "Unsupported " << Compression << " compression.");
             while (!decompressorBuffer->eof()) {
                 decompressorBuffer->nextIfAtEnd();
-                SchedulableStart(this, Work, [this](TAutoPtr<::NActors::IEventHandle> ev) { StateFunc(ev); });
-                Y_DEFER { SchedulableStop(Work); };
+                StartUnit();
+                Y_DEFER { StopUnit(); };
                 TString data{decompressorBuffer->available(), ' '};
                 decompressorBuffer->read(&data.front(), decompressorBuffer->available());
                 Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::move(data), TakeCpuTimeDelta()));

@@ -132,6 +132,19 @@ TApiMessage::TPtr OffsetFetchError(const TOffsetFetchRequestData& request, EKafk
 }
 
 
+TApiMessage::TPtr FindCoordinatorError(const TFindCoordinatorRequestData& request, EKafkaErrors error) {
+    auto response = std::make_shared<TFindCoordinatorResponseData>();
+    response->ErrorCode = error;
+    for (const auto& key : request.CoordinatorKeys) {
+        TFindCoordinatorResponseData::TCoordinator coordinator;
+        coordinator.ErrorCode = error;
+        coordinator.Key = key;
+        response->Coordinators.push_back(std::move(coordinator));
+    }
+    return response;
+}
+
+
 TApiMessage::TPtr SyncGroupError(EKafkaErrors error) {
     auto response = std::make_shared<TSyncGroupResponseData>();
     response->ErrorCode = error;
@@ -219,6 +232,8 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return OffsetCommitError(static_cast<const TOffsetCommitRequestData&>(request), error);
         case OFFSET_FETCH:
             return OffsetFetchError(static_cast<const TOffsetFetchRequestData&>(request), error);
+        case FIND_COORDINATOR:
+            return FindCoordinatorError(static_cast<const TFindCoordinatorRequestData&>(request), error);
         case JOIN_GROUP:
             return TopLevelError<TJoinGroupResponseData>(error);
         case HEARTBEAT:

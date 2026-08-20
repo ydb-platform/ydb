@@ -787,6 +787,31 @@ protected:
         this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
     }
 
+    void ApplyResultChannelAck(ui32 channelId, const NKikimrKqp::TEvExecuterStreamDataAck& record) {
+        auto& state = ResultChannelFlow[channelId];
+        const bool wasPaused = state.IsPaused();
+        if (record.HasFreeSpace()) {
+            state.EstimatedFreeSpace = record.GetFreeSpace();
+        } else {
+            state.EstimatedFreeSpace = Max<i64>();
+        }
+        if (wasPaused && !state.IsPaused()) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Result channel resumed",
+                {"marker", "KQPEX"},
+                {"actorId", SelfId()},
+                {"txId", TxId},
+                {"ctx", *GetUserRequestContext()},
+                {"channelId", channelId},
+                {"freeSpace", state.EstimatedFreeSpace},
+                {"traceId", TraceId()});
+        }
+        if (!state.IsPaused()) {
+            if (auto it = ResultInputBuffers.find(channelId); it != ResultInputBuffers.end()) {
+                ReadResultFromInputBuffer(channelId, it->second);
+            }
+        }
+    }
+
     void HandleStreamAck(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
         if (ev->Get()->Record.GetChannelId() == std::numeric_limits<ui32>::max())
             return;
@@ -800,24 +825,16 @@ protected:
                 return;
             }
 
-            const ui32 channelId = ev->Get()->Record.GetChannelId();
-            auto& state = ResultChannelFlow[channelId];
-            const bool wasPaused = state.IsPaused();
-            state.EstimatedFreeSpace = ev->Get()->Record.GetFreeSpace();
-            if (wasPaused && !state.IsPaused()) {
-                YDB_LOG_DEBUG_COMP(NKikimrServices::KQP_EXECUTER, "Result channel resumed",
-                    {"marker", "KQPEX"},
-                    {"actorId", SelfId()},
-                    {"txId", TxId},
-                    {"ctx", *GetUserRequestContext()},
-                    {"channelId", channelId},
-                    {"freeSpace", state.EstimatedFreeSpace},
-                    {"traceId", TraceId()});
-            }
-            if (!state.IsPaused()) {
-                if (auto it = ResultInputBuffers.find(channelId); it != ResultInputBuffers.end()) {
-                    ReadResultFromInputBuffer(channelId, it->second);
+            const auto& record = ev->Get()->Record;
+            const ui32 requestedChannelId = record.GetChannelId();
+            if (requestedChannelId == 0) {
+                // Channel id 0 is not used by the task graph; scan-query RPC uses it
+                YQL_ENSURE(ResultInputBuffers.size() <= 1, "Expected at most one result channel");
+                for (const auto& [channelId, _] : ResultInputBuffers) {
+                    ApplyResultChannelAck(channelId, record);
                 }
+            } else {
+                ApplyResultChannelAck(requestedChannelId, record);
             }
             return;
         }

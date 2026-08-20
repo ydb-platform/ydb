@@ -112,7 +112,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
                 if (!resuming) {
                     pausedChannels.insert(record.GetChannelId());
                     rowsWhilePaused += record.GetResultSet().rows().size();
-                    resp->Record.SetFreeSpace(0);
+                    resp->Record.SetFreeSpace(-1);
                 } else {
                     rowsAfterResume += record.GetResultSet().rows().size();
                     resp->Record.SetFreeSpace(100_MB);
@@ -134,12 +134,11 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
             "not all rows should be delivered while every result channel is paused");
 
         resuming = true;
-        for (ui32 channelId : pausedChannels) {
-            auto resumeAck = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(0, channelId);
-            resumeAck->Record.SetEnough(false);
-            resumeAck->Record.SetFreeSpace(100_MB);
-            runtime.Send(new IEventHandle(executerId, sender, resumeAck.Release()));
-        }
+        // StreamExecuteScanQuery historically resumes with ChannelId=0 while result channel ids start from 1.
+        auto resumeAck = MakeHolder<TEvKqpExecuter::TEvStreamDataAck>(0, 0);
+        resumeAck->Record.SetEnough(false);
+        resumeAck->Record.SetFreeSpace(100_MB);
+        runtime.Send(new IEventHandle(executerId, sender, resumeAck.Release()));
 
         auto reply = runtime.GrabEdgeEventRethrow<TEvKqp::TEvQueryResponse>(streamSender);
         UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Record.GetYdbStatus(), Ydb::StatusIds::SUCCESS,

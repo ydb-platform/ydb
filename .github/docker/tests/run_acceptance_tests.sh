@@ -458,11 +458,14 @@ SH
 chmod +x "${INIT_DIR}/04-shell.sh"
 
 INIT_VOLUME="${NAME_PREFIX}-init-volume"
+INIT_CERTS_VOLUME="${NAME_PREFIX}-init-certs-volume"
 create_volume "$INIT_VOLUME"
+create_volume "$INIT_CERTS_VOLUME"
 INIT_CONTAINER="${NAME_PREFIX}-init-first"
 start_detached "$INIT_CONTAINER" \
     --no-healthcheck \
     --volume "${INIT_VOLUME}:/ydb_data" \
+    --volume "${INIT_CERTS_VOLUME}:/ydb_certs" \
     --volume "${INIT_DIR}:/init.d:ro"
 wait_for_file "$INIT_CONTAINER" /ydb_data/.user_scripts_initialized
 assert_sql_contains "$INIT_CONTAINER" \
@@ -485,6 +488,7 @@ INIT_RESTART_CONTAINER="${NAME_PREFIX}-init-restart"
 start_detached "$INIT_RESTART_CONTAINER" \
     --no-healthcheck \
     --volume "${INIT_VOLUME}:/ydb_data" \
+    --volume "${INIT_CERTS_VOLUME}:/ydb_certs" \
     --volume "${INIT_DIR}:/init.d:ro"
 wait_for_ready "$INIT_RESTART_CONTAINER"
 assert_sql_contains "$INIT_RESTART_CONTAINER" \

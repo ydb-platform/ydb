@@ -123,6 +123,18 @@ TApiMessage::TPtr OffsetFetchError(const TOffsetFetchRequestData& request, EKafk
     return response;
 }
 
+
+TApiMessage::TPtr CreateTopicsError(const TCreateTopicsRequestData& request, EKafkaErrors error) {
+    auto response = std::make_shared<TCreateTopicsResponseData>();
+    for (const auto& topic : request.Topics) {
+        TCreateTopicsResponseData::TCreatableTopicResult topicResponse;
+        topicResponse.Name = topic.Name;
+        topicResponse.ErrorCode = error;
+        response->Topics.push_back(std::move(topicResponse));
+    }
+    return response;
+}
+
 } // namespace
 
 TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors error) {
@@ -139,6 +151,8 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return OffsetCommitError(static_cast<const TOffsetCommitRequestData&>(request), error);
         case OFFSET_FETCH:
             return OffsetFetchError(static_cast<const TOffsetFetchRequestData&>(request), error);
+        case CREATE_TOPICS:
+            return CreateTopicsError(static_cast<const TCreateTopicsRequestData&>(request), error);
         default:
             return nullptr;
     }

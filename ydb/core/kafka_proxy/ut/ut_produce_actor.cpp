@@ -434,6 +434,7 @@ namespace {
             const i64 producerId = 0;
             const i32 producerEpoch = 0;
 
+            KafkaContext->UserToken = new NACLib::TUserToken("user@builtin", TVector<TString>{});
             SetSchemeCacheReplyTopicNotFound();
 
             SendProduce(TransactionalId, producerId, producerEpoch + 0);

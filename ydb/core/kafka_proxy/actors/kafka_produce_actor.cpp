@@ -1170,11 +1170,13 @@ std::pair<TKafkaProduceActor::ETopicStatus, TActorId> TKafkaProduceActor::Partit
     }
 
     auto& topicInfo = it->second;
-    if (!Context->HasTopicAccess(topicInfo.SecurityObject.Get(), NACLib::EAccessRights::UpdateRow)) {
-        return { UNAUTHORIZED, TActorId{} };
-    }
+    // Status first: a missing topic has no SecurityObject, and HasTopicAccess would
+    // otherwise map that to AUTH for any SASL session (UserToken set).
     if (topicInfo.Status != OK) {
         return { topicInfo.Status, TActorId{} };
+    }
+    if (!Context->HasTopicAccess(topicInfo.SecurityObject.Get(), NACLib::EAccessRights::UpdateRow)) {
+        return { UNAUTHORIZED, TActorId{} };
     }
     if (!topicInfo.PartitionChooser) {
         return { NOT_FOUND, TActorId{} };

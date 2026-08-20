@@ -52,6 +52,8 @@ Y_NO_INLINE arrow::Status ExecStringScalarArrayImpl(const arrow::compute::ExecBa
         const size_t val1Size = val1.size();
         const auto offsets2 = arr2.buffers[1]->data();
         const auto data2 = arr2.buffers[2]->data();
+        // Length is passed via &val1Size (stringOffsets1); callee builds string_view(data, size).
+        // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage)
         func(reinterpret_cast<const TOffset1*>(&val1Size), val1.data(),
              reinterpret_cast<const TOffset2*>(offsets2), reinterpret_cast<const char*>(data2),
              reinterpret_cast<TOutput*>(resPtr), length, 0, arr2.offset);
@@ -74,6 +76,8 @@ Y_NO_INLINE arrow::Status ExecStringArrayScalarImpl(const arrow::compute::ExecBa
         const size_t val2Size = val2.size();
         const auto offsets1 = arr1.buffers[1]->data();
         const auto data1 = arr1.buffers[2]->data();
+        // Length is passed via &val2Size (stringOffsets2); callee builds string_view(data, size).
+        // NOLINTNEXTLINE(bugprone-suspicious-stringview-data-usage)
         func(reinterpret_cast<const TOffset1*>(offsets1), reinterpret_cast<const char*>(data1),
              reinterpret_cast<const TOffset2*>(&val2Size), val2.data(),
              reinterpret_cast<TOutput*>(resPtr), length, arr1.offset, 0);

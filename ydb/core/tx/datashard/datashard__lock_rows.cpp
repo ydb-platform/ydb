@@ -4,6 +4,8 @@
 
 #include <ydb/library/actors/async/continuation.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr::NDataShard {
 
 using namespace NLongTxService;
@@ -247,12 +249,12 @@ TLockInfo::TPtr TDataShard::FindValidLockOwner(ui64 lockId) {
 
 void TDataShard::HandleLockRowsRequest(NEvents::TDataEvents::TEvLockRows::TPtr ev) {
     auto* msg = ev->Get();
-    LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD,
-        "Handle TEvLockRows: at tablet# " << TabletID()
-        << ", sender: " << ev->Sender
-        << ", RequestId: " << msg->Record.GetRequestId()
-        << ", LockId: " << msg->Record.GetLockId()
-        << ", LockNode: " << msg->Record.GetLockNodeId());
+    YDB_LOG_TRACE("Handle TEvLockRows",
+        {"tabletId", TabletID()},
+        {"senderActorId", ev->Sender},
+        {"requestId", msg->Record.GetRequestId()},
+        {"lockId", msg->Record.GetLockId()},
+        {"lockNode", msg->Record.GetLockNodeId()});
 
     TLockRowsRequestId requestId(ev->Sender, msg->Record.GetRequestId());
 

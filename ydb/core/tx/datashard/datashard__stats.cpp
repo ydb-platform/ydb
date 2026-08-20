@@ -103,8 +103,10 @@ public:
         Interrupt();
         auto ev = WaitForSpecificEvent<NSharedCache::TEvResult>(&TTableStatsCoroBuilder::ProcessUnexpectedEvent);
         if (auto status = ev->Get()->Status; status != NKikimrProto::OK) {
-            LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to build at datashard "
-                << TabletId << ", for tableId " << TableId << " requested pages but got " << status);
+            YDB_LOG_ERROR_CTX_COMP(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to build table stats, page fetch failed",
+                {"tabletId", TabletId},
+                {"tableId", TableId},
+                {"status", status});
             throw TExTableStatsError(ECode::FETCH_PAGE_FAILED, NKikimrProto::EReplyStatus_Name(status));
         }
         Resume();
@@ -155,12 +157,15 @@ private:
 
         Y_ASSERT(IndexSize == ev->Stats.IndexSize.Size);
 
-        LOG_INFO_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId << ": "
-            << ev->Stats.ToString()
-            << " PartCount: " << ev->PartCount
-            << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
-            << (ev->HasSchemaChanges ? ", with schema changes" : "")
-            << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent));
+        YDB_LOG_INFO_CTX_COMP(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Table stats loaded at datashard",
+            {"tabletId", TabletId},
+            {"tableId", TableId},
+            {"stats", ev->Stats},
+            {"partCount", ev->PartCount},
+            {"borrowedPartsSuffix", (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")},
+            {"schemaChangesSuffix", (ev->HasSchemaChanges ? ", with schema changes" : "")},
+            {"pagesSize", PagesSize},
+            {"spent", NFmt::Do(*Spent)});
 
         Send(ReplyTo, ev.Release());
     }
@@ -169,9 +174,10 @@ private:
         switch (ev->GetTypeRewrite()) {
             case TEvResourceBroker::EvTaskOperationError: {
                 const auto* msg = ev->CastAsLocal<TEvResourceBroker::TEvTaskOperationError>();
-                LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to allocate resource"
-                    << " error '" << msg->Status.Message << "'"
-                    << " at datashard " << TabletId << ", for tableId " << TableId);
+                YDB_LOG_ERROR_CTX_COMP(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Failed to allocate resource for table stats at datashard",
+                    {"statusMessage", msg->Status.Message},
+                    {"tabletId", TabletId},
+                    {"tableId", TableId});
                 throw TExTableStatsError(ECode::RESOURCE_ALLOCATION_FAILED, msg->Status.Message);
             }
 
@@ -494,18 +500,23 @@ void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsResult::TPtr& ev, const TA
     ui64 tableId = ev->Get()->TableId;
 
     if (!TableInfos.contains(tableId)) {
-        LOG_INFO_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Result dropped at datashard " << TabletID() << ", for tableId " << tableId
-            << ", but table is gone (moved ot dropped)");
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Result dropped at datashard, table is gone (moved or dropped)",
+            {"tabletId", TabletID()},
+            {"tableId", tableId});
         return;
     }
 
-    LOG_INFO_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Result received at datashard " << TabletID() << ", for tableId " << tableId
-        << ": " << ev->Get()->Stats.ToString());
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Table stats result received at datashard",
+        {"tabletId", TabletID()},
+        {"tableId", tableId},
+        {"stats", ev->Get()->Stats});
 
     const TUserTable& tableInfo = *TableInfos[tableId];
 
     if (!tableInfo.StatsUpdateInProgress) { // how can this happen?
-        LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Unexpected async stats update at datashard " << TabletID() << ", for tableId " << tableId);
+        YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Unexpected async stats update at datashard",
+            {"tabletId", TabletID()},
+            {"tableId", tableId});
     }
 
     tableInfo.Stats.DataStats = std::move(ev->Get()->Stats);
@@ -532,10 +543,11 @@ void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsResult::TPtr& ev, const TA
         TStringBuilder names;
         ListTableNames(GetUserTables(), names);
 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "Data size " << tableInfo.Stats.DataStats.DataSize.Size
-            << " is higher than threshold of " << (i64)HighDataSizeReportThresholdBytes
-            << " at datashard " << TabletID() << ", for tables " << names
-            << " consider reconfiguring table partitioning settings");
+        YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "Table data size exceeds threshold, consider reconfiguring table partitioning settings",
+            {"dataSize", tableInfo.Stats.DataStats.DataSize.Size},
+            {"highDataSizeReportThresholdBytes", (i64)HighDataSizeReportThresholdBytes},
+            {"tabletId", TabletID()},
+            {"names", names});
     }
 }
 
@@ -544,9 +556,11 @@ void TDataShard::Handle(TEvPrivate::TEvBuildTableStatsError::TPtr& ev, const TAc
 
     auto msg = ev->Get();
 
-    LOG_ERROR_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Stats rebuilt error '" << msg->Message
-        << "', code: " << ui32(msg->Code)
-        << " at datashard " << TabletID() << ", for tableId " << msg->TableId);
+    YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Table stats rebuild error at datashard",
+        {"message", msg->Message},
+        {"statusCode", ui32(msg->Code)},
+        {"tabletId", TabletID()},
+        {"tableId", msg->TableId});
 
     if (msg->Exception) {
         std::rethrow_exception(msg->Exception);
@@ -629,9 +643,12 @@ public:
                 stats.SearchHeight = searchHeight;
                 stats.HasSchemaChanges = hasSchemaChanges;
 
-                LOG_INFO_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Skipped at datashard " << Self->TabletID() << ", for tableId " << tableId << ": "
-                    << stats.DataStats.ToString() << " PartCount " << stats.PartCount
-                    << (stats.HasSchemaChanges ? ", with schema changes" : ""));
+                YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TABLET_STATS_BUILDER, "Table stats update skipped at datashard",
+                    {"tabletId", Self->TabletID()},
+                    {"tableId", tableId},
+                    {"dataStats", stats.DataStats},
+                    {"partCount", stats.PartCount},
+                    {"schemaChangesSuffix", (stats.HasSchemaChanges ? ", with schema changes" : "")});
 
                 continue;
             }
@@ -754,7 +771,8 @@ void TDataShard::UpdateTableStats(const TActorContext &ctx) {
 
     LastDbStatsUpdateTime = now;
 
-    LOG_INFO_S(ctx, NKikimrServices::TABLET_STATS_BUILDER, "UpdateTableStats at datashard " << TabletID());
+    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::TABLET_STATS_BUILDER, "UpdateTableStats at datashard",
+        {"tabletId", TabletID()});
 
     Executor()->Execute(new TTxInitiateStatsUpdate(this), ctx);
 }
@@ -783,13 +801,14 @@ void TDataShard::CollectCpuUsage(const TActorContext &ctx) {
         TStringBuilder names;
         ListTableNames(GetUserTables(), names);
 
-        LOG_ERROR_S(ctx, NKikimrServices::TX_DATASHARD, "CPU usage " << cpuPercent
-                    << " is higher than threshold of " << (i64)CpuUsageReportThresholdPercent
-                    << " in-flight Tx: " << TxInFly()
-                    << " immediate Tx: " << ImmediateInFly()
-                    << " readIterators: " << ReadIteratorsInFly()
-                    << " at datashard: " << TabletID()
-                    << " table: " << names);
+        YDB_LOG_ERROR_CTX_COMP(ctx, NKikimrServices::TX_DATASHARD, "CPU usage exceeds threshold",
+            {"cpuPercent", cpuPercent},
+            {"cpuUsageReportThresholdPercent", (i64)CpuUsageReportThresholdPercent},
+            {"inFlightTx", TxInFly()},
+            {"immediateTx", ImmediateInFly()},
+            {"readIterators", ReadIteratorsInFly()},
+            {"tabletId", TabletID()},
+            {"table", names});
     }
 }
 

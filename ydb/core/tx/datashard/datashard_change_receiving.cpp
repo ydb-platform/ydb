@@ -1,5 +1,7 @@
 #include "datashard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_DATASHARD
+
 namespace NKikimr::NDataShard {
 
 using namespace NTabletFlatExecutor;
@@ -151,9 +153,9 @@ class TDataShard::TTxApplyChangeRecords: public TTransactionBase<TDataShard> {
         recordStatus.SetReason(reason);
 
         if (error) {
-            LOG_CRIT_S(ctx, NKikimrServices::TX_DATASHARD, "Cannot apply change record"
-                << ": error# " << error
-                << ", at tablet# " << Self->TabletID());
+            YDB_LOG_CRIT_CTX(ctx, "Cannot apply change record",
+                {"error", error},
+                {"tablet", Self->TabletID()});
         }
 
         if (status == NKikimrChangeExchange::TEvStatus::STATUS_REJECT) {
@@ -463,10 +465,10 @@ void TDataShard::Handle(TEvChangeExchange::TEvHandshake::TPtr& ev, const TActorC
 }
 
 void TDataShard::Handle(TEvChangeExchange::TEvApplyRecords::TPtr& ev, const TActorContext& ctx) {
-    LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Handle TEvChangeExchange::TEvApplyRecords"
-        << ": origin# " << ev->Get()->Record.GetOrigin()
-        << ", generation# " << ev->Get()->Record.GetGeneration()
-        << ", at tablet# " << TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "Handle TEvChangeExchange::TEvApplyRecords",
+        {"origin", ev->Get()->Record.GetOrigin()},
+        {"generation", ev->Get()->Record.GetGeneration()},
+        {"tablet", TabletID()});
     Execute(new TTxApplyChangeRecords(this, Pipeline, ev), ctx);
 }
 

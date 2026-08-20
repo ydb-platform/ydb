@@ -1506,7 +1506,8 @@ Y_UNIT_TEST(AlterCdcAllowsRetentionAndWriteLimits) {
         AssertStatus(result, Ydb::StatusIds::SUCCESS);
     }
 
-    const auto& partConfig = DescribeTabletConfig(runtime, path).GetPartitionConfig();
+    const auto config = DescribeTabletConfig(runtime, path);
+    const auto& partConfig = config.GetPartitionConfig();
     UNIT_ASSERT_VALUES_EQUAL(partConfig.GetStorageLimitBytes(), 100_MB);
     UNIT_ASSERT_VALUES_EQUAL(partConfig.GetWriteSpeedInBytesPerSecond(), 9000u);
     UNIT_ASSERT_VALUES_EQUAL(partConfig.GetBurstSize(), 100500u);

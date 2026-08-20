@@ -453,7 +453,7 @@ protected:
             Context->KafkaClient = Request->Header.ClientId.value();
         }
 
-        if (auto error = Context->TokenUnusableError()) {
+        if (auto error = Context->Token.UnusableError()) {
             switch (Request->Header.RequestApiKey) {
                 case API_VERSIONS:
                 case SASL_HANDSHAKE:
@@ -653,12 +653,12 @@ protected:
         }
 
         Context->RequireAuthentication = NKikimr::AppData()->EnforceUserTokenRequirement || NKikimr::AppData()->PQConfig.GetRequireCredentialsInNewProtocol();
-        Context->UserToken = event->UserToken;
-        Context->Ticket = event->Ticket;
-        Context->TicketParserEntries = event->TicketParserEntries;
-        Context->AuthDatabasePath = event->AuthDatabasePath;
-        Context->PeerName = event->PeerName;
-        Context->TokenCheck = ETokenCheckStatus::Ok;
+        Context->Token.UserToken = event->UserToken;
+        Context->Token.Ticket = event->Ticket;
+        Context->Token.TicketParserEntries = event->TicketParserEntries;
+        Context->Token.AuthDatabasePath = event->AuthDatabasePath;
+        Context->Token.PeerName = event->PeerName;
+        Context->Token.Status = ETokenCheckStatus::Ok;
         Context->DatabasePath = event->DatabasePath;
         Context->AuthenticationStep = authStep;
         Context->RlContext = {event->Coordinator, event->ResourcePath, event->DatabasePath, event->UserToken->GetSerializedToken()};
@@ -666,14 +666,12 @@ protected:
         Context->CloudId = event->CloudId;
         Context->FolderId = event->FolderId;
         Context->IsServerless = event->IsServerless;
-        Context->Coordinator = event->Coordinator;
-        Context->RlResourcePath = event->ResourcePath;
         Context->ResourceDatabasePath = event->ResourceDatabasePath ? NKikimr::CanonizePath(event->ResourceDatabasePath) : Context->DatabasePath;
         Context->InitialServerlessTransactionsFlagValue = NKikimr::AppData()->FeatureFlags.GetEnableKafkaServerlessTransactions();
 
         YDB_LOG_DEBUG("Authentication successful",
             {LogPrefix()},
-            {"SID", Context->UserToken->GetUserSID()});
+            {"SID", Context->Token.UserToken->GetUserSID()});
         ScheduleTokenRecheck(ctx);
         if (Context->SaslMechanism != "MTLS") {
             Reply(event->ClientResponse->CorrelationId, event->ClientResponse->Response, event->ClientResponse->ErrorCode, ctx);
@@ -709,7 +707,7 @@ protected:
             return;
         }
         TokenRecheckInFlight = false;
-        Context->TokenCheck = ETokenCheckStatus::Unavailable;
+        Context->Token.Status = ETokenCheckStatus::Unavailable;
         YDB_LOG_WARN("Token recheck timed out",
             {LogPrefix()},
             {"cookie", cookie});
@@ -720,10 +718,10 @@ protected:
         TokenRecheckInFlight = true;
         ++TokenRecheckCookie;
         Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
-            .Ticket = Context->Ticket,
-            .Database = Context->AuthDatabasePath ? Context->AuthDatabasePath : Context->DatabasePath,
-            .PeerName = Context->PeerName,
-            .Entries = Context->TicketParserEntries,
+            .Ticket = Context->Token.Ticket,
+            .Database = Context->Token.AuthDatabasePath ? Context->Token.AuthDatabasePath : Context->DatabasePath,
+            .PeerName = Context->Token.PeerName,
+            .Entries = Context->Token.TicketParserEntries,
         }), 0, TokenRecheckCookie);
         ctx.Schedule(TokenRecheckRequestTimeout, new TEvKafka::TEvTokenRecheck(
             TEvKafka::TEvTokenRecheck::EKind::Timeout, TokenRecheckCookie));
@@ -731,7 +729,7 @@ protected:
 
     void Handle(TEvTicketParser::TEvAuthorizeTicketResult::TPtr ev, const TActorContext& ctx) {
         // Accept a matching cookie even after timeout cleared InFlight, so a late
-        // success can recover TokenCheck from Unavailable. Ignore cookie 0 (no recheck
+        // success can recover Token.Status from Unavailable. Ignore cookie 0 (no recheck
         // has been issued yet) and cookies from a newer in-flight request.
         if (TokenRecheckCookie == 0 || ev->Cookie != TokenRecheckCookie) {
             YDB_LOG_DEBUG("Ignoring stale token recheck result",
@@ -744,29 +742,30 @@ protected:
         auto* result = ev->Get();
         if (result->HasError()) {
             if (result->Error.Retryable) {
-                Context->TokenCheck = ETokenCheckStatus::Unavailable;
+                Context->Token.Status = ETokenCheckStatus::Unavailable;
                 YDB_LOG_WARN("Token recheck unavailable",
                     {LogPrefix()},
                     {"error", result->Error.ToString()});
             } else {
-                Context->TokenCheck = ETokenCheckStatus::Invalid;
+                Context->Token.Status = ETokenCheckStatus::Invalid;
                 YDB_LOG_ERROR("Token recheck failed",
                     {LogPrefix()},
                     {"error", result->Error.ToString()});
             }
         } else if (result->Token && !result->Token->GetSerializedToken().empty()) {
-            Context->TokenCheck = ETokenCheckStatus::Ok;
-            Context->UserToken = result->Token;
+            Context->Token.Status = ETokenCheckStatus::Ok;
+            Context->Token.UserToken = result->Token;
+            const auto& path = Context->RlContext.GetPath();
             Context->RlContext = NKikimr::NPQ::TRlContext(
-                Context->Coordinator,
-                Context->RlResourcePath,
+                path.CoordinationNode,
+                path.ResourcePath,
                 Context->DatabasePath,
                 result->Token->GetSerializedToken());
             YDB_LOG_DEBUG("Token recheck successful",
                 {LogPrefix()},
-                {"SID", Context->UserToken->GetUserSID()});
+                {"SID", Context->Token.UserToken->GetUserSID()});
         } else {
-            Context->TokenCheck = ETokenCheckStatus::Invalid;
+            Context->Token.Status = ETokenCheckStatus::Invalid;
             YDB_LOG_ERROR("Token recheck returned empty token",
                 {LogPrefix()});
         }

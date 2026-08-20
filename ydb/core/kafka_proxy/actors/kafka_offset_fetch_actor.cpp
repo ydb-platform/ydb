@@ -323,7 +323,7 @@ void TKafkaOffsetFetchActor::Bootstrap(const NActors::TActorContext& ctx) {
                 topicToEntities.second.Partitions,
                 topicToEntities.first,
                 GetUsernameOrAnonymous(Context),
-                Context->UserToken,
+                Context->Token.UserToken,
                 Context->RequireAuthentication
             ));
             InflyTopics++;
@@ -405,7 +405,7 @@ void TKafkaOffsetFetchActor::Handle(const TEvKafka::TEvResponse::TPtr& ev, const
         TopicToEntities[createdTopicName].Partitions,
         createdTopicName,
         GetUsernameOrAnonymous(Context),
-        Context->UserToken,
+        Context->Token.UserToken,
         Context->RequireAuthentication
     ));
 }
@@ -445,7 +445,7 @@ void TKafkaOffsetFetchActor::Handle(NKikimr::NReplication::TEvYdbProxy::TEvAlter
         TopicToEntities[alteredTopicName].Partitions,
         alteredTopicName,
         GetUsernameOrAnonymous(Context),
-        Context->UserToken,
+        Context->Token.UserToken,
         Context->RequireAuthentication
     ));
 
@@ -517,7 +517,7 @@ void NKafka::TKafkaOffsetFetchActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr
             topicToEntities.second.Partitions,
             topicToEntities.first,
             GetUsernameOrAnonymous(Context),
-            Context->UserToken,
+            Context->Token.UserToken,
             Context->RequireAuthentication
         ));
         InflyTopics++;
@@ -594,7 +594,7 @@ void TKafkaOffsetFetchActor::CreateConsumerGroupIfNecessary(const TString& topic
     };
     NKikimr::NGRpcService::DoAlterTopicRequest(
         std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
-        topicName, DatabasePath, std::move(request), callback, Context->UserToken),
+        topicName, DatabasePath, std::move(request), callback, Context->Token.UserToken),
         NKikimr::NReplication::TLocalProxyActor(DatabasePath));
 
 }
@@ -617,7 +617,7 @@ void TKafkaOffsetFetchActor::CreateTopicIfNecessary(const TString& topicName,
     TContext::TPtr ContextForTopicCreation;
     ContextForTopicCreation = std::make_shared<TContext>(TContext(*Context));
     ContextForTopicCreation->ConnectionId = ctx.SelfID;
-    ContextForTopicCreation->UserToken = Context->UserToken;
+    ContextForTopicCreation->Token.UserToken = Context->Token.UserToken;
     ContextForTopicCreation->DatabasePath = Context->DatabasePath;
     ContextForTopicCreation->ResourceDatabasePath = Context->ResourceDatabasePath;
     ContextForTopicCreation->RequireAuthentication = Context->RequireAuthentication;

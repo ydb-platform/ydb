@@ -82,6 +82,27 @@ struct TReadSession {
     NActors::TActorId ProxyActorId;
 };
 
+struct TCredentials {
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString Ticket;
+    TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> TicketParserEntries;
+    TString AuthDatabasePath;
+    TString PeerName;
+    ETokenCheckStatus Status = ETokenCheckStatus::Ok;
+
+    std::optional<EKafkaErrors> UnusableError() const {
+        switch (Status) {
+            case ETokenCheckStatus::Invalid:
+                return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+            case ETokenCheckStatus::Unavailable:
+                return EKafkaErrors::BROKER_NOT_AVAILABLE;
+            case ETokenCheckStatus::Ok:
+                return std::nullopt;
+        }
+        return std::nullopt;
+    }
+};
+
 struct TContext {
     using TPtr = std::shared_ptr<TContext>;
 
@@ -101,15 +122,8 @@ struct TContext {
         , CloudId(other.CloudId)
         , DatabaseId(other.DatabaseId)
         , ResourceDatabasePath(other.ResourceDatabasePath)
-        , Coordinator(other.Coordinator)
-        , RlResourcePath(other.RlResourcePath)
         , InitialServerlessTransactionsFlagValue(other.InitialServerlessTransactionsFlagValue)
-        , UserToken(other.UserToken)
-        , Ticket(other.Ticket)
-        , TicketParserEntries(other.TicketParserEntries)
-        , AuthDatabasePath(other.AuthDatabasePath)
-        , PeerName(other.PeerName)
-        , TokenCheck(other.TokenCheck)
+        , Token(other.Token)
         , ClientDC(other.ClientDC)
         , IsServerless(other.IsServerless)
         , RequireAuthentication(other.RequireAuthentication)
@@ -132,15 +146,8 @@ struct TContext {
     TString CloudId;
     TString DatabaseId;
     TString ResourceDatabasePath;
-    TString Coordinator;
-    TString RlResourcePath;
     std::optional<bool> InitialServerlessTransactionsFlagValue;
-    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TString Ticket;
-    TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> TicketParserEntries;
-    TString AuthDatabasePath;
-    TString PeerName;
-    ETokenCheckStatus TokenCheck = ETokenCheckStatus::Ok;
+    TCredentials Token;
     TString ClientDC;
     bool IsServerless = false;
     bool RequireAuthentication = false;
@@ -155,29 +162,17 @@ struct TContext {
     }
 
     bool ShouldCheckTopicAcl() const {
-        return RequireAuthentication || bool(UserToken);
+        return RequireAuthentication || bool(Token.UserToken);
     }
 
     bool HasTopicAccess(const NACLib::TSecurityObject* securityObject, NACLib::EAccessRights rights) const {
         if (!ShouldCheckTopicAcl()) {
             return true;
         }
-        if (!UserToken || !securityObject) {
+        if (!Token.UserToken || !securityObject) {
             return false;
         }
-        return securityObject->CheckAccess(rights, *UserToken);
-    }
-
-    std::optional<EKafkaErrors> TokenUnusableError() const {
-        switch (TokenCheck) {
-            case ETokenCheckStatus::Invalid:
-                return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
-            case ETokenCheckStatus::Unavailable:
-                return EKafkaErrors::BROKER_NOT_AVAILABLE;
-            case ETokenCheckStatus::Ok:
-                return std::nullopt;
-        }
-        return std::nullopt;
+        return securityObject->CheckAccess(rights, *Token.UserToken);
     }
 
     TDuration TokenRecheckInterval() const {
@@ -185,7 +180,7 @@ struct TContext {
     }
 
     bool TokenRecheckEnabled() const {
-        return Config.GetTokenRecheckIntervalMs() > 0 && !Ticket.empty();
+        return Config.GetTokenRecheckIntervalMs() > 0 && !Token.Ticket.empty();
     }
 
     void RememberTopicAclOk(const TString& topic) {
@@ -311,17 +306,17 @@ inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {
 }
 
 inline TString GetUsernameOrAnonymous(std::shared_ptr<TContext> context) {
-    return context->UserToken ? context->UserToken->GetUserSID() : "anonymous";
+    return context->Token.UserToken ? context->Token.UserToken->GetUserSID() : "anonymous";
 }
 
 inline TString GetUserSerializedToken(std::shared_ptr<TContext> context) {
-    if (!context->UserToken) {
+    if (!context->Token.UserToken) {
         return "";
     }
-    if (!context->UserToken->GetSerializedToken().empty()) {
-        return context->UserToken->GetSerializedToken();
+    if (!context->Token.UserToken->GetSerializedToken().empty()) {
+        return context->Token.UserToken->GetSerializedToken();
     }
-    return context->UserToken->SerializeAsString();
+    return context->Token.UserToken->SerializeAsString();
 }
 
 NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message,

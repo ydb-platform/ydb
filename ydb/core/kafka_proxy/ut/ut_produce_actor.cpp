@@ -434,7 +434,7 @@ namespace {
             const i64 producerId = 0;
             const i32 producerEpoch = 0;
 
-            KafkaContext->UserToken = new NACLib::TUserToken("user@builtin", TVector<TString>{});
+            KafkaContext->Token.UserToken = new NACLib::TUserToken("user@builtin", TVector<TString>{});
             SetSchemeCacheReplyTopicNotFound();
 
             SendProduce(TransactionalId, producerId, producerEpoch + 0);
@@ -455,7 +455,7 @@ namespace {
         }
 
         Y_UNIT_TEST(WatchNotifyUpdatedWithoutSelfDoesNotFailInFlightProduce) {
-            KafkaContext->UserToken = new NACLib::TUserToken("owner@builtin", TVector<TString>{});
+            KafkaContext->Token.UserToken = new NACLib::TUserToken("owner@builtin", TVector<TString>{});
 
             SendProduce();
             auto first = GrabProduceResponse();
@@ -468,7 +468,7 @@ namespace {
         }
 
         Y_UNIT_TEST(WatchNotifyUpdatedWithEmptyAclDoesNotDenyAccess) {
-            KafkaContext->UserToken = new NACLib::TUserToken("owner@builtin", TVector<TString>{});
+            KafkaContext->Token.UserToken = new NACLib::TUserToken("owner@builtin", TVector<TString>{});
 
             SendProduce();
             auto first = GrabProduceResponse();
@@ -481,7 +481,7 @@ namespace {
         }
 
         Y_UNIT_TEST(WatchNotifyUpdatedWithBrokenAclDoesNotAbort) {
-            KafkaContext->UserToken = new NACLib::TUserToken("owner@builtin", TVector<TString>{});
+            KafkaContext->Token.UserToken = new NACLib::TUserToken("owner@builtin", TVector<TString>{});
 
             SendProduce();
             auto first = GrabProduceResponse();

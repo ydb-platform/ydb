@@ -74,7 +74,7 @@ void TKafkaFetchActor::SendFetchRequests(const TActorContext& ctx) {
             .CanReadBatches = true,
             .RequestId = 0,
             .RlCtx = Context->RlContext,
-            .UserToken = Context->UserToken
+            .UserToken = Context->Token.UserToken
         };
         auto fetchActor = NKikimr::NPQ::CreatePQFetchRequestActor(request, NKikimr::MakeSchemeCacheID(), ctx.SelfID);
         auto actorId = ctx.Register(fetchActor);

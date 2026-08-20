@@ -84,7 +84,7 @@ void TKafkaOffsetCommitActor::CreateConsumerGroupIfNecessary(const TString& topi
     };
     NKikimr::NGRpcService::DoAlterTopicRequest(
         std::make_unique<NKikimr::NReplication::TLocalProxyRequest>(
-        topicName, Context->DatabasePath, std::move(request), callback, Context->UserToken),
+        topicName, Context->DatabasePath, std::move(request), callback, Context->Token.UserToken),
         NKikimr::NReplication::TLocalProxyActor(Context->DatabasePath));
 }
 
@@ -408,7 +408,7 @@ void TKafkaOffsetCommitActor::SendAuthRequest(const NActors::TActorContext& ctx)
 
     AuthInitActor = ctx.Register(new NKikimr::NGRpcProxy::V1::TReadInitAndAuthActor(
             ctx, ctx.SelfID, Message->GroupId.value(), 0, "",
-            NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NKikimr::MakeSchemeCacheID(), nullptr, Context->UserToken, topicsToConverter,
+            NKikimr::NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), NKikimr::MakeSchemeCacheID(), nullptr, Context->Token.UserToken, topicsToConverter,
         topicHandler->GetLocalCluster(), false)
     );
 }

@@ -1403,6 +1403,133 @@ TJoinTestData LeftOnlyCommonFilterTestDataLeftIsBuild() {
     return td;
 }
 
+void AsCrossJoin(TJoinTestData& td) {
+    td.Kind = EJoinKind::Cross;
+    td.LeftKeyColmns = {};
+    td.RightKeyColmns = {};
+}
+
+TJoinTestData TrueCrossJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2};
+    TVector<TString> leftValues = {"a", "b"};
+    TVector<ui64> rightKeys = {10, 20, 30};
+    TVector<TString> rightValues = {"x", "y", "z"};
+
+    TVector<ui64> expectedKeysLeft = {1, 1, 1, 2, 2, 2};
+    TVector<TString> expectedValuesLeft = {"a", "a", "a", "b", "b", "b"};
+    TVector<ui64> expectedKeysRight = {10, 20, 30, 10, 20, 30};
+    TVector<TString> expectedValuesRight = {"x", "y", "z", "x", "y", "z"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData EmptyLeftCrossJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> emptyKeys;
+    TVector<TString> emptyValues;
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"x", "y", "z"};
+
+    td.Left = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, emptyKeys, emptyValues, emptyKeys, emptyValues);
+    AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData EmptyRightCrossJoinTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<TString> leftValues = {"a", "b", "c"};
+    TVector<ui64> emptyKeys;
+    TVector<TString> emptyValues;
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, emptyKeys, emptyValues);
+    td.Result = ConvertVectorsToTuples(setup, emptyKeys, emptyValues, emptyKeys, emptyValues);
+    AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData CrossJoinCommonFilterTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 30};
+    TVector<ui64> rightKeys = {10, 20, 30};
+    TVector<ui64> rightVals = {100, 50, 15};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    // Cartesian 3x3, keep pairs where right[1] > left[1]:
+    // (1,5)x(10,100), (1,5)x(20,50), (1,5)x(30,15),
+    // (2,20)x(10,100), (2,20)x(20,50),
+    // (3,30)x(10,100), (3,30)x(20,50)
+    TVector<ui64> expLeftKeys = {1, 1, 1, 2, 2, 3, 3};
+    TVector<ui64> expLeftVals = {5, 5, 5, 20, 20, 30, 30};
+    TVector<ui64> expRightKeys = {10, 20, 30, 10, 20, 10, 20};
+    TVector<ui64> expRightVals = {100, 50, 15, 100, 50, 100, 50};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData CrossJoinLeftFilterTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 30};
+    TVector<ui64> rightKeys = {10, 20};
+    TVector<ui64> rightVals = {100, 50};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    // left[1] > 10 drops (1,5); remaining 2x2 cartesian
+    TVector<ui64> expLeftKeys = {2, 2, 3, 3};
+    TVector<ui64> expLeftVals = {20, 20, 30, 30};
+    TVector<ui64> expRightKeys = {10, 20, 10, 20};
+    TVector<ui64> expRightVals = {100, 50, 100, 50};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    AsCrossJoin(td);
+    return td;
+}
+
+TJoinTestData CrossJoinAllFiltersTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<ui64> leftVals = {5, 20, 30};
+    TVector<ui64> rightKeys = {10, 20, 30};
+    TVector<ui64> rightVals = {100, 50, 15};
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftVals);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightVals);
+
+    // left[1] > 10 drops (1,5); right[1] < 80 drops (10,100);
+    // remaining pairs: (2,20)x(20,50), (2,20)x(30,15), (3,30)x(20,50), (3,30)x(30,15)
+    // common right[1] > left[1] keeps only (2,20)x(20,50) and (3,30)x(20,50)
+    TVector<ui64> expLeftKeys = {2, 3};
+    TVector<ui64> expLeftVals = {20, 30};
+    TVector<ui64> expRightKeys = {20, 20};
+    TVector<ui64> expRightVals = {50, 50};
+    td.Result = ConvertVectorsToTuples(setup, expLeftKeys, expLeftVals, expRightKeys, expRightVals);
+    td.LeftFilter = GreaterThanConstFilter(td.Setup.get(), 1, 10);
+    td.RightFilter = LessThanConstFilter(td.Setup.get(), 1, 80);
+    td.CommonFilter = RightGreaterThanLeftFilter(td.Setup.get(), 1);
+    AsCrossJoin(td);
+    return td;
+}
+
 // Shape of a probe side produced by a chain of LEFT JOINs in the new optimizer:
 // several 4-byte payload columns interleaved with 1-byte flag columns, with the
 // join key sitting in the middle. Such a row is short enough for the small-tuple
@@ -1778,6 +1905,30 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestHashLeftOnlyJoinCommonFilterLeftIsBuild) {
         Test(LeftOnlyCommonFilterTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoin, BlockJoin) {
+        Test(TrueCrossJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyLeft, BlockJoin) {
+        Test(EmptyLeftCrossJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinEmptyRight, BlockJoin) {
+        Test(EmptyRightCrossJoinTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinCommonFilter, BlockJoin) {
+        Test(CrossJoinCommonFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinLeftFilter, BlockJoin) {
+        Test(CrossJoinLeftFilterTestData(), BlockJoin);
+    }
+
+    Y_UNIT_TEST_TWIN(TestHashCrossJoinAllFilters, BlockJoin) {
+        Test(CrossJoinAllFiltersTestData(), BlockJoin);
     }
 
     Y_UNIT_TEST(TestBlockSpilling) { 

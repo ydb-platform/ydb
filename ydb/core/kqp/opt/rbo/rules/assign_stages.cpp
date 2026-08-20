@@ -29,10 +29,18 @@ void FinalizeJoinPhysicalProps(TOpJoin& join, const TRBOContext& rboCtx) {
     }
 
     const auto joinKind = GetValidJoinKind(join.JoinKind);
+    const bool useBlockHashJoinForCross = rboCtx.KqpCtx.Config->GetUseBlockHashJoin()
+        && rboCtx.KqpCtx.Config->GetUseBlockHashJoinForCross();
+    if (joinKind == "Cross" && useBlockHashJoinForCross) {
+        // MapJoin cannot build a Cross join; BlockHashJoin treats it as a cartesian product.
+        props.JoinAlgo = EJoinAlgoType::GraceJoin;
+    }
+
     const auto joinAlgo = *props.JoinAlgo;
     props.UseBlockHashJoin = rboCtx.KqpCtx.Config->GetUseBlockHashJoin()
         && (joinAlgo == EJoinAlgoType::GraceJoin || joinAlgo == EJoinAlgoType::ReverseBlockJoin)
-        && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly");
+        && (joinKind == "Inner" || joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly"
+            || (joinKind == "Cross" && useBlockHashJoinForCross));
 }
 
 // For row storage read we create a separate stage.

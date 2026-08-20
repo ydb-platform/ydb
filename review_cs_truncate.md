@@ -1,10 +1,10 @@
 # TRUNCATE TABLE в ColumnShard: архитектурный документ
 
-**Дата:** 2026-08-15 (ревизия структуры: 2026-08-17)
+**Дата:** 2026-08-15 (ревизия структуры: 2026-08-17; ревью: 2026-08-20)
 **Область:** standalone columnshard-таблицы (не in-store)
-**Статус:** базовый TRUNCATE реализован (функциональные + compatibility + стресс-тесты); TRUNCATE
-источника копий (retention, §9) реализован без feature-флага; осталось —
-рефакторинг `tables_manager` (§11) и наблюдаемость/раскатка. Целевая картина и разметка «сделано/осталось» — §3.
+**Статус:** базовый TRUNCATE реализован; TRUNCATE источника копий (retention, §9) реализован;
+рефакторинг `tables_manager` (§11: `TGenerationIndex`, `TPendingOpFence`) выполнен;
+осталось — наблюдаемость/раскатка (Ц5, M3). Целевая картина и разметка «сделано/осталось» — §3.
 
 ---
 
@@ -24,6 +24,7 @@
 12. [Приложение A: обзор изменений по файлам](#приложение-a-обзор-изменений-по-файлам)
 13. [Приложение B: TtlProtos](#приложение-b-ttlprotos)
 14. [Приложение C: SchemeShardLocalToInternalAll](#приложение-c-schemeshardlocaltointernalall)
+15. [Приложение D: пофайловое ревью изменений (зачем + альтернативы)](#приложение-d-пофайловое-ревью-изменений-зачем--альтернативы)
 
 ---
 
@@ -141,18 +142,17 @@ struct TPathInfo {
 
 Каждая ось — желаемое конечное состояние; в скобках у пунктов — фактический статус.
 
-**Ц1. Функциональность для пользователя** — 🟡 частично.
+**Ц1. Функциональность для пользователя** — ✅ сделано.
 
 - ✅ `TRUNCATE TABLE` работает для **standalone** columnshard-таблиц: очищает данные, сохраняет схему.
 - ✅ Операция **идемпотентно восстановима** после рестарта таблетки между propose и plan
   (fence + `DoOnTabletInit`).
 - ✅ Поддержаны таблицы с **чистым TTL** (delete-action); таблицы с **tiering** — осознанный реджект
   с понятной ошибкой.
-- 🔲 `TRUNCATE` **источника read-only копий** (`CopyTable`) — пока **реджект** (Check 2); целевое
-  поведение (копии продолжают видеть свои `CopyVersion`, источник получает пустое поколение) реализуют
-  вместе с TRUNCATE прочих типов таблиц (retention, §9).
+- ✅ `TRUNCATE` **источника read-only копий** (`CopyTable`) — retention-режим реализован (§9.2):
+  копии продолжают видеть свои `CopyVersion` на `OLD`, источник получает пустое `NEW` поколение.
 
-**Ц2. MVCC / time-travel гарантии** — ✅ сделано (для базового TRUNCATE).
+**Ц2. MVCC / time-travel гарантии** — ✅ сделано.
 
 - ✅ Чтение на `R < T` видит старые данные до закрытия read-window; на `R >= T` — пустое новое поколение
   (`ResolveInternalPathIdForSnapshot`).
@@ -161,19 +161,20 @@ struct TPathInfo {
 - ✅ `MoveTable`/`CopyTable` над таблицей с историей поколений **сохраняют** историю (`MoveTableProgress`
   переносит `SchemeShardLocalToInternalAll`).
 
-**Ц3. Модель хранения** — 🟡 частично.
+**Ц3. Модель хранения** — ✅ сделано.
 
 - ✅ TRUNCATE **не копирует данные физически**: новое поколение — новый `InternalPathId`; старые порции
   живут как dropped-поколение и чистятся штатным cleanup'ом после read-window.
-- 🔲 Retention `OLD` под копиями (удержание, пока есть хоть одна копия; финализация после DROP последней)
-  — не реализовано (см. §9, идёт вместе с TRUNCATE источника копий).
+- ✅ Retention `OLD` под копиями реализован: `OLD` удерживается, пока есть хоть одна копия;
+  финализация после DROP последней копии через существующий partial-drop →
+  `TryFinalizeDropPathOnComplete` путь.
 
-**Ц4. Внутренняя структура кода (сопровождаемость)** — 🔲 осталось.
+**Ц4. Внутренняя структура кода (сопровождаемость)** — ✅ сделано.
 
-- 🔲 Инкапсуляция «live + история согласованы» в `TGenerationIndex` (§11): сейчас маппинги —
-  «сырые» поля `THashMap` с ручными `insert/erase` в 5–7 методах.
-- 🔲 Сведение fence-карт `Renaming`/`Copying`/`Truncating` к одному `TPendingOpFence` (§11): сейчас три
-  отдельных `THashMap`.
+- ✅ Инкапсуляция «live + история согласованы» в [`TGenerationIndex`](ydb/core/tx/columnshard/tables_manager.h:599) (§11):
+  маппинги `Live`/`All` инкапсулированы, все `insert/erase` — через методы индекса.
+- ✅ Сведение fence-карт `Renaming`/`Copying`/`Truncating` к одному [`TPendingOpFence`](ydb/core/tx/columnshard/tables_manager.h:556) (§11):
+  три экземпляра одного типа с единым протоколом `Propose`/`Get`/`Complete`/`Abort`.
 - ✅ Документ приведён в соответствие с фактической реализацией.
 
 **Ц5. Наблюдаемость и раскатка** — 🟡 частично.
@@ -190,14 +191,15 @@ struct TPathInfo {
 |---------|:---:|-----|
 | Proto `TTruncateTable` + поле в `TSchemaTxBody` | ✅ | [`tx_columnshard.proto`](ydb/core/protos/tx_columnshard.proto) |
 | Plan-фаза `RunTruncateTable` | ✅ | [`columnshard_impl.cpp`](ydb/core/tx/columnshard/columnshard_impl.cpp) |
-| Lifecycle `TruncateTable` / `TruncateTablePropose` | ✅ | [`tables_manager.cpp`](ydb/core/tx/columnshard/tables_manager.cpp:587) |
-| История поколений `SchemeShardLocalToInternalAll` | ✅ | [`tables_manager.h:429`](ydb/core/tx/columnshard/tables_manager.h:429) |
-| Fence `TruncatingLocalToInternal` | ✅ | [`tables_manager.h:434`](ydb/core/tx/columnshard/tables_manager.h:434) |
-| Выбор поколения `ResolveInternalPathIdForSnapshot` | ✅ | [`tables_manager.h:471`](ydb/core/tx/columnshard/tables_manager.h:471) |
+| Lifecycle `TruncateTable` / `TruncateTablePropose` | ✅ | [`tables_manager.cpp`](ydb/core/tx/columnshard/tables_manager.cpp:550) |
+| `TGenerationIndex` (live + история поколений) | ✅ | [`tables_manager.h:599`](ydb/core/tx/columnshard/tables_manager.h:599) |
+| `TPendingOpFence` (fence для Move/Copy/Truncate) | ✅ | [`tables_manager.h:556`](ydb/core/tx/columnshard/tables_manager.h:556) |
+| Выбор поколения `ResolveInternalPathIdForSnapshot` | ✅ | [`tables_manager.cpp:79`](ydb/core/tx/columnshard/tables_manager.cpp:79) |
 | Бит-в-бит перенос TTL `TtlProtos` | ✅ | [`tables_manager.h`](ydb/core/tx/columnshard/tables_manager.h) |
-| Recovery-fence в `DoOnTabletInit` | ✅ | [`schema.cpp`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:415) |
-| Валидация propose (5 проверок: GenerateInternalPathId, IsStoreTablet, Check 1 read-only, Check 2 копии, Check 3 tiering) | ✅ | [`schema.cpp:228`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:228) |
-| Функциональные тесты (15 сценариев, 890 строк) | ✅ | [`ut_columnshard_truncate_table.cpp`](ydb/core/tx/columnshard/ut_schema/ut_columnshard_truncate_table.cpp) |
+| Recovery-fence в `DoOnTabletInit` | ✅ | [`schema.cpp:408`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:408) |
+| Валидация propose (4 проверки: GenerateInternalPathId, IsStoreTablet, Check 1 read-only, Check 3 tiering) | ✅ | [`schema.cpp:232`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:232) |
+| Retention источника копий (`hasCopies` ветка) | ✅ | [`tables_manager.cpp:556`](ydb/core/tx/columnshard/tables_manager.cpp:556) |
+| Функциональные тесты (17 сценариев, 888 строк) | ✅ | [`ut_columnshard_truncate_table.cpp`](ydb/core/tx/columnshard/ut_schema/ut_columnshard_truncate_table.cpp) |
 | Compatibility-тест (restart/rolling upgrade) | ✅ | [`test_truncate_table.py`](ydb/tests/compatibility/olap/test_truncate_table.py) |
 | Стресс-нагрузки `truncate_insert` / `truncate_concurrent` | ✅ | [`ydb/tests/stress/olap_truncate/`](ydb/tests/stress/olap_truncate/workload/type/truncate_insert.py) |
 
@@ -217,21 +219,24 @@ struct TPathInfo {
    [`tx_scan.cpp:113`](ydb/core/tx/columnshard/engines/reader/transaction/tx_scan.cpp:113) (изменённый overload, передаёт `TSnapshot`) и
    [`tx_internal_scan.cpp:61`](ydb/core/tx/columnshard/engines/reader/transaction/tx_internal_scan.cpp:61) (неизменённый overload с `internalPathId`, передаёт `TSnapshot` в `optional`).
 
-**До Ц4 (сопровождаемость, рефакторинг §11) — в коде ещё НЕ сделано:**
-- 🔲 Ось A: ввести `TGenerationIndex`, перенести `SchemeShardLocalToInternal` +
-  `SchemeShardLocalToInternalAll` и все ручные `insert/erase` внутрь; `ResolveInternalPathIdForSnapshot`
-  как метод индекса.
-- 🔲 Ось B: ввести `TPendingOpFence`, свести `Renaming`/`Copying`/`Truncating` к одному типу.
-- 🔲 Прогнать существующие тесты TRUNCATE/Move/Copy после рефакторинга (поведение не меняется).
+**До Ц4 (сопровождаемость, рефакторинг §11) — ✅ сделано:**
+- ✅ Ось A: [`TGenerationIndex`](ydb/core/tx/columnshard/tables_manager.h:599) введён, заменил сырые
+  `SchemeShardLocalToInternal`/`SchemeShardLocalToInternalAll`; все `insert/erase` — через методы индекса;
+  `ResolveInternalPathIdForSnapshot` делегирует в `GenerationIndex.ResolveForSnapshot()` (шаблон с callback'ами).
+- ✅ Ось B: [`TPendingOpFence`](ydb/core/tx/columnshard/tables_manager.h:556) введён, заменил три сырые
+  карты `RenamingLocalToInternal`/`CopyingLocalToInternal`/`TruncatingLocalToInternal` на экземпляры
+  `Renaming`/`Copying`/`Truncating`.
+- ✅ Все 105+ тестов schema-операций проходят после рефакторинга (поведение не изменилось).
 
-**До Ц1/Ц3 (TRUNCATE источника копий, retention §9) — в коде НЕ сделано:**
-- 🔲 Снять реджект Check 2 (`GetPathIds().size() > 1`) для источника (реджект копии — Check 1 — оставить).
-- 🔲 Retention-ветка в [`TruncateTable`](ydb/core/tx/columnshard/tables_manager.cpp:587): пометить
-  источник dropped на `T`, не удаляя из `OLD`; выделить `NEW`; не помечать `OLD` на полный cleanup (§9.2).
-- 🔲 Симметрично снять `break` по числу путей в `DoOnTabletInit`.
-- 🔲 Гарантировать финализацию `OLD` после DROP последней копии в
-  [`DropTable`](ydb/core/tx/columnshard/tables_manager.cpp:553).
-- 🔲 Тесты §9.7 (видимость, time-travel, cleanup, concurrency, recovery, реджект копии).
+**До Ц1/Ц3 (TRUNCATE источника копий, retention §9) — ✅ сделано:**
+- ✅ Реджект Check 2 (`GetPathIds().size() > 1`) для источника убран из [`schema.cpp`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:232)
+  (реджект копии — Check 1 `IsReadOnly` — оставлен).
+- ✅ Retention-ветка в [`TruncateTable`](ydb/core/tx/columnshard/tables_manager.cpp:550): при `hasCopies`
+  помечает источник dropped на `T`, не удаляя из `OLD`; выделяет `NEW`; не помечает `OLD` на полный cleanup (§9.2).
+- ✅ `DoOnTabletInit` recovery для TRUNCATE реализован ([`schema.cpp:408`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:408)).
+- ✅ Финализация `OLD` после DROP последней копии — существующий partial-drop →
+  [`TryFinalizeDropPathOnComplete`](ydb/core/tx/columnshard/tables_manager.cpp) путь.
+- ✅ Тесты: `TruncateCopySourceRetention`, `TruncateSourceAfterDropCopySucceeds`.
 
 **До Ц5 (наблюдаемость и раскатка):**
 - 🔲 Метрика размера `SchemeShardLocalToInternalAll` и числа поколений на путь; hard-limit/алерт.
@@ -313,8 +318,11 @@ TRUNCATE отклоняется (`SCHEMA_ERROR`), если:
 1. таблетка не генерирует internal path ids (`!IsGenerateInternalPathId()`);
 2. это store-таблетка (`IsStoreTablet()`);
 3. таблица read-only (это **копия**, созданная `CopyTable`) — Check 1;
-4. **таблица имеет копии** (`table.GetPathIds().size() > 1`) — Check 2, предмет доработки в §6–9;
-5. у таблицы есть tiering (`!ttl->GetUsedTiers().empty()`) — Check 3.
+4. у таблицы есть tiering (`!ttl->GetUsedTiers().empty()`) — Check 3.
+
+> **Check 2 убран.** Ранее TRUNCATE источника с копиями отклонялся (`GetPathIds().size() > 1`).
+> После реализации retention (§9) этот реджект удалён: TRUNCATE источника с копиями идёт в
+> retention-режиме, где `OLD` сохраняется для копий, а источник получает `NEW`.
 
 > **Про feature-flag.** В columnshard propose проверки feature-flag **нет** (grep по
 > `EnableTruncate*` в `schema.cpp` пуст). Соответствующий флаг `EnableTruncateTable` в
@@ -593,12 +601,14 @@ TRUNCATE источника — зеркальный случай: «снять�
 
 ### 9.6 Точки изменений в коде
 
-1. ✅ [`schema.cpp` propose](ydb/core/tx/columnshard/transactions/operators/schema.cpp:246):
+1. ✅ [`schema.cpp` propose](ydb/core/tx/columnshard/transactions/operators/schema.cpp:232):
    убран реджект `GetPathIds().size() > 1` для источника (Check 1 — реджект TRUNCATE копии `IsReadOnly` — оставлен).
-2. ✅ [`TruncateTable`](ydb/core/tx/columnshard/tables_manager.cpp:587): retention-ветка реализована (§9.2) —
-   не звать обычный partial-drop `DropTable`, а выполнить шаги 1–3 с сохранением источника в `OLD`.
+2. ✅ [`TruncateTable`](ydb/core/tx/columnshard/tables_manager.cpp:550): retention-ветка реализована (§9.2) —
+   при `hasCopies` помечает источник dropped на `T`, не удаляя из `OLD`; выделяет `NEW`; не помечает `OLD` на полный cleanup.
 3. ✅ [`DropTable`](ydb/core/tx/columnshard/tables_manager.cpp:553): подтверждено, что DROP
    последней копии финализирует полный drop `OLD` (существующий partial-drop путь).
+4. ✅ [`DoOnTabletInit`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:408): recovery для TRUNCATE
+   реализован — после рестарта повторно устанавливает fence через `TruncateTablePropose`.
 
 ### 9.7 Тесты для валидации
 
@@ -627,7 +637,7 @@ TRUNCATE источника с одной или несколькими копи
 
 ### Этап 0 — краткосрочно (сделано ✅)
 - ✅ Базовая реализация TRUNCATE (без копий) — 17 тестов, compatibility + стресс.
-- ✅ Рефакторинг `tables_manager`: `TGenerationIndex` (§11), `TPendingOpFence` (ось B).
+- ✅ Рефакторинг `tables_manager`: [`TGenerationIndex`](ydb/core/tx/columnshard/tables_manager.h:599) (§11), [`TPendingOpFence`](ydb/core/tx/columnshard/tables_manager.h:556) (ось B).
 - ✅ `ResolveInternalPathIdForSnapshot` перенесён в `TGenerationIndex::ResolveForSnapshot` (шаблон с callback'ами).
 
 ### Этап 1 — реализация retention (Вариант 5) — сделано ✅
@@ -641,12 +651,12 @@ TRUNCATE источника с одной или несколькими копи
 - ✅ `TruncateSourceAfterDropCopySucceeds`: copy → drop copy → truncate source — работает.
 
 ### Этап 3 — наблюдаемость и защита
-- [ ] Метрика размера `SchemeShardLocalToInternalAll` и числа поколений на путь.
-- [ ] Рассмотреть hard-limit / алерт на аномальный рост поколений при частых TRUNCATE.
+- 🔲 Метрика размера `SchemeShardLocalToInternalAll` и числа поколений на путь.
+- 🔲 Рассмотреть hard-limit / алерт на аномальный рост поколений при частых TRUNCATE.
 
 ### Этап 4 — раскатка
-- [ ] Включить флаг в тестовых стендах; прогнать нагрузочные сценарии copy+truncate.
-- [ ] Поэтапный rollout; обновить пользовательскую документацию.
+- 🔲 Включить флаг в тестовых стендах; прогнать нагрузочные сценарии copy+truncate.
+- 🔲 Поэтапный rollout; обновить пользовательскую документацию.
 
 **Риски и открытые вопросы:**
 - Согласование поведения с SchemeShard-уровнем (видит ли пользователь копии как независимые таблицы).
@@ -805,14 +815,19 @@ overload `PrepareTablet(runtime, schemaTxBody)` и параметр `inStore` в
 без изменений.
 
 ### A.9 `ut_schema/ut_columnshard_truncate_table.cpp` (новый)
-890 строк, 15 тестов (`Y_UNIT_TEST_SUITE(TruncateTable)`): `EmptyTable`, `WithData`, `TruncateAndInsert`,
+888 строк, 17 тестов (`Y_UNIT_TEST_SUITE(TruncateTable)`): `EmptyTable`, `WithData`, `TruncateAndInsert`,
 `TruncateAbsentTable`, `MultipleTruncates`, `TruncatePreservesTtl`, `TruncateSnapshotBoundary`,
-`TruncateAndDrop`, `TruncateReadOnlyTableFails`, `TruncateCopySourceFails`,
-`TruncateSourceAfterDropCopySucceeds`, `TruncateSeqNoCheck`, `TruncateFencesWritesOnPropose`,
-`TruncateInStoreTableFails`, `TruncateSurvivesRestart`. Покрытие включает: tiering
-(`TruncatePreservesTtl`), multiple-truncate (`MultipleTruncates`), copy-source reject
-(`TruncateCopySourceFails`, `TruncateSourceAfterDropCopySucceeds`), concurrent fence
-(`TruncateFencesWritesOnPropose`), seqno-контроль (`TruncateSeqNoCheck`).
+`TruncateAndDrop`, `TruncateReadOnlyTableFails`, `TruncateCopySourceRetention`,
+`TruncateSourceAfterDropCopySucceeds`, `TruncateSeqNoCheck`, `TruncateWithCommitInProgress` (DUO: Normal/Reboot),
+`TruncateFencesWritesOnPropose`, `TruncateInStoreTableFails`, `TruncateSurvivesRestart`.
+Покрытие включает: tiering (`TruncatePreservesTtl`), multiple-truncate (`MultipleTruncates`),
+retention источника копий (`TruncateCopySourceRetention`), drop-копии → truncate
+(`TruncateSourceAfterDropCopySucceeds`), concurrent fence (`TruncateFencesWritesOnPropose`),
+seqno-контроль (`TruncateSeqNoCheck`), in-flight commit wait + restart
+(`TruncateWithCommitInProgress`), restart между propose/plan (`TruncateSurvivesRestart`).
+
+> **Примечание:** тест `TruncateCopySourceFails` переименован в `TruncateCopySourceRetention` —
+> после снятия Check 2 TRUNCATE источника с копиями больше не отклоняется, а идёт в retention-режиме.
 
 ### Итоговая оценка базовой реализации
 **Сильные стороны:** дизайн через новое поколение элегантен (MVCC «бесплатно»); паттерн
@@ -902,13 +917,13 @@ insert/erase, N обычно 2–3. Линейный скан оптимален
 |------|------|--------|
 | M0 | Базовый TRUNCATE (без копий) — реализация, тесты, сборка | ✅ |
 | M1 | Закрытие остаточных пунктов ревью базовой реализации | ✅ |
-| M2 | Рефакторинг `tables_manager` (§11: `TGenerationIndex`, `TPendingOpFence`) | 🔲 |
+| M2 | Рефакторинг `tables_manager` (§11: `TGenerationIndex`, `TPendingOpFence`) | ✅ |
 | M3 | Наблюдаемость, защита от роста поколений, раскатка | 🔲 |
 
 > **Соответствие целевой картине.** Целевая картина имеет пять осей Ц1–Ц5; вехи M0–M3 покрывают их так:
 > Ц1/Ц2 (базовый TRUNCATE) — M0+M1; Ц4 (сопровождаемость/рефакторинг) — M2; Ц5 (наблюдаемость/раскатка)
-> — M3. Ось Ц1/Ц3 в части TRUNCATE источника копий (retention, §9) вынесена из вех: по решению команды
-> её реализуют **одновременно** с TRUNCATE для остальных типов таблиц, отдельной вехи здесь нет.
+> — M3. Ось Ц1/Ц3 в части TRUNCATE источника копий (retention, §9) реализована одновременно с базовым
+> TRUNCATE (без отдельной вехи).
 
 ### Детальный чеклист
 
@@ -923,11 +938,11 @@ insert/erase, N обычно 2–3. Линейный скан оптимален
   [`tx_internal_scan.cpp:61`](ydb/core/tx/columnshard/engines/reader/transaction/tx_internal_scan.cpp:61) (неизменённый overload).
 
 #### M2 — рефакторинг tables_manager (см. §11) — **Обе оси завершены**
-- ✅ Ось A: ввести `TGenerationIndex`, перенести `SchemeShardLocalToInternal` + `SchemeShardLocalToInternalAll`.
+- ✅ Ось A: ввести [`TGenerationIndex`](ydb/core/tx/columnshard/tables_manager.h:599), перенести `SchemeShardLocalToInternal` + `SchemeShardLocalToInternalAll`.
 - ✅ Ось A: заменить ручные `insert/erase` в 7 методах на вызовы `TGenerationIndex` (чистый рефактор).
-- ✅ Ось A: перенести `ResolveInternalPathIdForSnapshot` внутрь `TGenerationIndex` (как шаблонный метод с callback'ами).
-- ✅ Ось B: ввести `TPendingOpFence`, свести `Renaming`/`Copying`/`Truncating` карты к одному типу.
-- ✅ Прогнать существующие тесты TRUNCATE/Move/Copy — поведение не должно измениться (105 GOOD, 1 SKIPPED).
+- ✅ Ось A: перенести `ResolveInternalPathIdForSnapshot` внутрь `TGenerationIndex` (как шаблонный метод [`ResolveForSnapshot`](ydb/core/tx/columnshard/tables_manager.h:648) с callback'ами).
+- ✅ Ось B: ввести [`TPendingOpFence`](ydb/core/tx/columnshard/tables_manager.h:556), свести `Renaming`/`Copying`/`Truncating` карты к одному типу.
+- ✅ Прогнать существующие тесты TRUNCATE/Move/Copy — поведение не должно измениться (105+ GOOD).
 
 #### M3 — наблюдаемость и раскатка
 - 🔲 Метрика размера `SchemeShardLocalToInternalAll` и числа поколений на путь.
@@ -938,6 +953,126 @@ insert/erase, N обычно 2–3. Линейный скан оптимален
 ### Открытые вопросы
 - 🔲 Согласование с SchemeShard-уровнем: видит ли пользователь копии как независимые таблицы.
 - 🔲 Стоимость `RenameTableSchemeShardLocalPathId` при `MoveTable` над таблицей с длинной историей поколений.
+
+---
+
+## Приложение D: пофайловое ревью изменений (зачем + альтернативы)
+
+> Ревью 2026-08-20 относительно `origin/main`. Для каждого изменения: **зачем** оно нужно, **можно ли
+> было иначе**, и **консистентно** ли оно с остальной веткой. Легенда: ✅ консистентно · ⚠️ замечание.
+
+### D.1 `ydb/core/protos/tx_columnshard.proto` — ✅
+- **Зачем:** отдельный `message TTruncateTable { optional uint64 PathId = 1; }` и поле `TruncateTable = 9`
+  в `TSchemaTxBody`, чтобы отличать TRUNCATE от DROP на уровне schema tx.
+- **Альтернатива:** переиспользовать `TDropTable` с флагом `is_truncate` — дешевле, но смешивает две
+  семантики и усложняет валидацию. Отдельный message согласован с паттерном `MoveTable`/`CopyTable`.
+- **Консистентность:** ✅. Поле `9` не конфликтует с 1–8; `FromProto`/`ToProto` добавлены в `path_id.cpp`.
+
+### D.2 `columnshard_impl.cpp` / `.h` — `RunTruncateTable` — ✅
+- **Зачем:** plan-фаза: резолвит старый `InternalPathId` (fence → fallback `ResolveInternalPathId`),
+  захватывает schema/TTL **до** дропа, вызывает `TruncateTable`, регистрирует версию/TTL на новом id.
+- **Альтернатива:** перенести захват schema/TTL внутрь `TruncateTable` — но тогда `TruncateTable` тянет
+  proto-логику `TTableVersionInfo`, смешивая слои. Текущее разделение (менеджер — маппинги, caller —
+  версии) чище и повторяет `RunDropTable`/`RunMoveTable`.
+- **Консистентность:** ✅. `case kTruncateTable` в `RunSchemaTx` симметричен соседним; `RunTruncateTable`
+  объявлен в `.h` рядом с `RunDropTable`.
+
+### D.3 `common/path_id.cpp` — `FromProto`/`ToProto` для `TTruncateTable` — ✅
+- **Зачем:** стандартные конвертеры `TSchemeShardLocalPathId ↔ TTruncateTable`.
+- **Альтернатива:** без них пришлось бы вручную читать `GetPathId()` в каждом месте.
+- **Консистентность:** ✅. Хелпер `FromProto(TTruncateTable)` ([`path_id.cpp:188`](ydb/core/tx/columnshard/common/path_id.cpp:188))
+  используется в propose ([`schema.cpp:245`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:245)),
+  в `RunTruncateTable` и в seqno-switch ([`schema.cpp:123`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:123))
+  — унифицировано через `FromProto(...).GetRawValue()` (как `kDropTable`). Замечание о непоследовательности
+  снято.
+
+### D.4 `hooks/testing/controller.h` — `AddPathId` — ✅
+- **Зачем:** тестовый контроллер ведёт reverse-маппинг `Internal → {SS}`. TRUNCATE переиспользует тот же
+  `SchemeShardLocalPathId` с новым `InternalPathId`, поэтому перед вставкой нужно снять старую пару.
+- **Альтернатива:** хранить историю поколений в контроллере — избыточно для тестов. Текущее «снять старое,
+  вставить новое» достаточно.
+- **Консистентность:** ✅. Только тестовый код; не влияет на прод-логику.
+
+### D.5 `tables_manager.cpp` — ядро — ✅ (с оговорками)
+- **`ResolveInternalPathIdOptional` → `GenerationIndex.ResolveLive`** — чистый рефактор (ось A).
+- **`ResolveInternalPathIdForSnapshot`** — новое, делегирует в `GenerationIndex.ResolveForSnapshot`.
+  **Зачем:** MVCC time-travel по поколениям. **Альтернатива:** держать историю в `TTableInfo` — циклическая
+  зависимость (индекс по `InternalPathId`, искать надо по SS). Текущий внешний индекс — правильный выбор.
+- **`AddTableInfo` → `SetLive` с dropped-guard** — **Зачем:** при recovery порядок загрузки поколений не
+  гарантирован; dropped-поколение не должно перетирать live-маппинг. **Альтернатива:** сортировать загрузку —
+  хрупко. Guard в `SetLive` надёжнее.
+- **`GenerateNextInternalPathId`** — вынесен инкремент `MaxInternalPathId`. **Зачем:** единая точка для
+  создания и TRUNCATE. ✅ хороший рефактор.
+- **`LoadLastTableVersionInfo`** — **Зачем:** перенос `SchemaPresetId`/`VersionAdj` на новое поколение.
+  **Альтернатива:** `AFL_VERIFY(IsReady())` — краш на cold-страницах; graceful `nullopt` безопаснее
+  (деградация до default preset). ✅.
+- **`DropTable` → `ForgetLive`/`ForgetGeneration`** — рефактор (ось A).
+- **`TruncateTable`** — retention-ветка (§9.2). **Зачем:** TRUNCATE источника с копиями. **Альтернатива:**
+  deep copy / cascade drop / deferred — отвергнуты (§8). ✅.
+- **`TruncateTablePropose`** — fence + lazy-populate `All`. **Зачем:** блокировка writes + корректный
+  time-travel при rolling deploy. ✅.
+- **`TryFinalizeDropPathOnComplete` → `ForgetLiveIfMatches` + `Ttl.RemovePathId`** — **Зачем:** erase только
+  если маппинг всё ещё указывает на дропаемый id; чистка TTL-истории. ✅.
+- **`MoveTableProgress`** — перенос всей истории поколений + переименование SS в исторических `TTableInfo`.
+  **Зачем:** time-travel после MOVE. ✅.
+- **`BuildTableMetadataAccessor`** — сигнатура `optional<TSnapshot>&` → `TSnapshot&`. **Зачем:** теперь
+  резолвинг по snapshot обязателен. **Альтернатива:** оставить `optional` и внутри выбирать live при
+  `nullopt` — но тогда time-travel для sys-view чтений теряется. Breaking-изменение, все 2 caller'а
+  обновлены (проверено). ✅.
+
+### D.6 `tables_manager.h` — `TGenerationIndex`, `TPendingOpFence`, `TtlProtos` — ✅
+- **`TGenerationIndex`** — инкапсулирует `Live`/`All`. **Зачем:** инвариант «Live и All согласованы» в одном
+  месте (ось A). ✅.
+- **`TPendingOpFence`** — единый тип для `Renaming`/`Copying`/`Truncating`. **Зачем:** три одинаковых
+  `THashMap` с одинаковым протоколом (ось B). ✅.
+- **`TtlProtos`** — параллельный map сырых proto. **Зачем:** `TTiering` не имеет `SerializeToProto`,
+  round-trip lossy; нужен бит-в-бит перенос на новое поколение. **Альтернатива:** `SerializeToProto` в
+  `TTiering` (lossy), чтение из `TTableVersionInfo` (нет MVCC-истории), колонка в NiceDb (миграция).
+  Текущий параллельный map — простейший MVCC-aware вариант. ✅.
+- **`GetPathDropVersionOptional`/`HasSchemeShardLocalPathId`** — доступ к path-local drop-версии для
+  `ResolveForSnapshot`. ✅.
+
+### D.7 `transactions/operators/schema.cpp` / `.h` — ✅
+- **Seqno-switch `targetPathId`:** тип `optional<TSchemeShardLocalPathId>` → `optional<ui64>`.
+  **Зачем:** добавить `kTruncateTable`. `kTruncateTable` использует `FromProto(TTruncateTable).GetRawValue()`
+  (унифицировано с `kDropTable`, см. D.3). **Альтернатива:** оставить `TSchemeShardLocalPathId` и не
+  переводить в `ui64` — но тогда `kCopyTable`/`kMoveTable` (читают `GetDstPathId()` как `ui64`) всё равно
+  требовали бы конверсии. Текущий вариант единообразен.
+- **Propose-валидация** (`kTruncateTable`): 4 проверки (GenerateInternalPathId, IsStoreTablet, Check 1
+  read-only, Check 3 tiering) + fence + wait txs. **Зачем:** безопасность операции. ✅.
+- **`DoOnTabletInit` recovery** (`kTruncateTable`): повторный fence после рестарта. **Зачем:** writes
+  остаются заблокированными, пока TRUNCATE pending. ✅.
+- **`schema.h` `GetType`** — `case kTruncateTable` → `"Scheme:TruncateTable"`. ✅.
+
+### D.8 `test_helper/columnshard_ut_common.h` / `.cpp` — ✅
+- **`TruncateTableTxBody`** — сборка `TSchemaTxBody` с `TTruncateTable`. **Зачем:** тесты.
+- **`PrepareTablet` overload + `inStore`** — **Зачем:** тест `TruncateInStoreTableFails` требует standalone
+  таблицу. **Альтернатива:** отдельный хелпер — но параметр с default `true` сохраняет обратную
+  совместимость. ✅.
+
+### D.9 `ut_schema/ut_columnshard_truncate_table.cpp` — ✅
+- 17 тестов, 888 строк. Покрывают: базовый TRUNCATE, time-travel, multiple-truncate, TTL-перенос,
+  snapshot-boundary, drop-после-truncate, read-only reject, retention источника копий, drop-копии →
+  truncate, seqno, in-flight commit wait (DUO), fence writes, in-store reject, restart. ✅.
+
+### D.10 `ydb/services/persqueue_v1/actors/schema_actors.cpp` — ✅ (изменение откачено)
+- **Зачем:** ветка добавляла `#include <ydb/core/ydb_convert/topic_description.h>` в начало файла.
+- **Консистентность:** ⚠️ **избыточный дублирующий include.** Проверка показала, что этот же заголовок
+  **уже включён** в файле ниже ([`schema_actors.cpp:10`](ydb/services/persqueue_v1/actors/schema_actors.cpp:10))
+  — и в `origin/main`, и в ветке. Ветка добавляла **второй, дублирующий** `#include` того же заголовка.
+  Изменение не относилось к TRUNCATE и функционально ничего не давало.
+- **Итог:** ✅ **изменение откачено** — дублирующий include убран, файл приведён к `origin/main`
+  (`git diff origin/main` для этого файла пуст). Замечание снято.
+
+### D.11 Итоговая консистентность
+- **В целом ветка консистентна:** retention, рефакторинг (`TGenerationIndex`/`TPendingOpFence`), recovery
+  и тесты согласованы между собой и с дизайном §4–9.
+- **Замечание (1) снято:** `schema.cpp` seqno-switch теперь использует `FromProto(TTruncateTable)` (D.3, D.7).
+- **Замечание (2) снято:** избыточный дублирующий `#include` в `persqueue_v1/schema_actors.cpp` убран,
+  файл приведён к `origin/main` (D.10).
+- **Все замечания ревью закрыты.**
+- **Альтернативы рассмотрены** для каждого нетривиального решения (TTL-перенос, история поколений,
+  retention, graceful degradation) — выбранные варианты обоснованы.
 
 ### Журнал изменений плана
 | Дата | Что изменилось |
@@ -952,3 +1087,8 @@ insert/erase, N обычно 2–3. Линейный скан оптимален
 | 2026-08-18 | **`ResolveInternalPathIdForSnapshot` перенесён внутрь `TGenerationIndex`.** Добавлен шаблонный метод [`ResolveForSnapshot<TMemberCheck, TDropVersionGet>()`](ydb/core/tx/columnshard/tables_manager.h:511) с callback'ами для table-dependent проверок (membership + drop version). [`TTablesManager::ResolveInternalPathIdForSnapshot`](ydb/core/tx/columnshard/tables_manager.cpp:79) теперь делегирует в `GenerationIndex.ResolveForSnapshot()`, передавая lambdas для `Tables.FindPtr()` и `TTableInfo::GetPathDropVersionOptional()`. 17 truncate-тестов GOOD. |
 | 2026-08-19 | **Ось B рефакторинга `TPendingOpFence` выполнена.** Класс [`TPendingOpFence`](ydb/core/tx/columnshard/tables_manager.h:556) введён в [`tables_manager.h`](ydb/core/tx/columnshard/tables_manager.h), заменил сырые карты `RenamingLocalToInternal`/`CopyingLocalToInternal`/`TruncatingLocalToInternal` на экземпляры `Renaming`/`Copying`/`Truncating`. Методы: `Propose()` (идемпотентный insert), `Get()`, `Complete()`, `Abort()`, `FindPtr()`, `Erase()` (с AFL_VERIFY). Все 11 точек использования в [`tables_manager.cpp`](ydb/core/tx/columnshard/tables_manager.cpp) обновлены. Комментарии в [`columnshard_impl.cpp`](ydb/core/tx/columnshard/columnshard_impl.cpp) и [`schema.cpp`](ydb/core/tx/columnshard/transactions/operators/schema.cpp) синхронизированы. Сборка OK, 105 тестов GOOD. |
 | 2026-08-20 | **Исправлена ошибка сборки в `schema.cpp`:** `targetPathId` имеет тип `optional<ui64>` (сырое значение), но `LastSchemaSeqNoByPath` использует `TSchemeShardLocalPathId` как ключ. Деструкция `*targetPathId` давала `ui64`, и `THashMap::operator[]` пытался сконструировать `TSchemeShardLocalPathId(ui64)`, но конструктор приватный. Исправлено: явное `TSchemeShardLocalPathId::FromRawValue(*targetPathId)` в двух местах (строки 132, 290). Сборка OK, 106 тестов GOOD. |
+| 2026-08-20 | **Ревью относительно origin/main завершено.** Подтверждено: (1) retention-ветка в [`TruncateTable`](ydb/core/tx/columnshard/tables_manager.cpp:550) реализована — при `hasCopies` помечает источник dropped, сохраняет `OLD` для копий, выделяет `NEW`. (2) Check 2 убран из [`schema.cpp:232`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:232). (3) [`TGenerationIndex`](ydb/core/tx/columnshard/tables_manager.h:599) и [`TPendingOpFence`](ydb/core/tx/columnshard/tables_manager.h:556) существуют в коде — M2 завершена. (4) Recovery в `DoOnTabletInit` ([`schema.cpp:408`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:408)) реализован. (5) Тесты `TruncateCopySourceRetention`, `TruncateSourceAfterDropCopySucceeds` покрывают retention-сценарии. (6) Изменение в `persqueue_v1/schema_actors.cpp` — несвязанное добавление `#include`. (7) Ц1–Ц4 достигнуты; осталось Ц5 (наблюдаемость/раскатка). |
+| 2026-08-20 | **Добавлено Приложение D — пофайловое ревью изменений (зачем + альтернативы + консистентность).** Для каждого из 10 файлов/групп изменений описано назначение, рассмотрены альтернативы и оценена консистентность. Выявлены 2 замечания: (1) `schema.cpp` seqno-switch ([`schema.cpp:123`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:123)) читает `GetPathId()` напрямую, не используя добавленный `FromProto(TTruncateTable)` ([`path_id.cpp:188`](ydb/core/tx/columnshard/common/path_id.cpp:188)) — непоследовательно с `kDropTable`; (2) `persqueue_v1/schema_actors.cpp` — несвязанный `#include`, рекомендуется вынести в отдельный коммит. Остальные изменения консистентны; альтернативы для нетривиальных решений (TTL-перенос, история поколений, retention, graceful degradation) обоснованы. |
+| 2026-08-20 | **Исправлено замечание (1) из Приложения D:** `schema.cpp` seqno-switch для `kTruncateTable` теперь использует `TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable()).GetRawValue()` вместо прямого `GetPathId()` — унифицировано с `kDropTable`. Обновлены D.3, D.7, D.11. Осталось одно замечание — несвязанный `#include` в `persqueue_v1/schema_actors.cpp` (D.10). |
+| 2026-08-20 | **Уточнено замечание (2) из Приложения D (D.10):** проверка показала, что `#include <ydb/core/ydb_convert/topic_description.h>`, добавленный веткой в `persqueue_v1/schema_actors.cpp`, — **избыточный дубликат**: этот же заголовок уже включён ниже в файле ([`schema_actors.cpp:10`](ydb/services/persqueue_v1/actors/schema_actors.cpp:10)) и в `origin/main`, и в ветке. Изменение не относится к TRUNCATE и функционально ничего не даёт. Рекомендация уточнена: **откатить** изменение целиком (убрать дублирующий include), а не выносить в отдельный коммит. Обновлены D.10, D.11. |
+| 2026-08-20 | **Замечание (2) из Приложения D закрыто:** дублирующий `#include <ydb/core/ydb_convert/topic_description.h>` убран из `persqueue_v1/schema_actors.cpp`; файл приведён к `origin/main` (`git diff origin/main` для него пуст). Обновлены D.10, D.11. **Все замечания ревью закрыты.** |

@@ -46,6 +46,17 @@ class ExpressionRendererTest(unittest.TestCase):
                 'null(type="Int64")',
             ),
             (
+                ir.Expr(
+                    kind="window_sum",
+                    window_input="group_total",
+                    partition_by="i_class",
+                    result_type="Decimal(35,2)",
+                    nullable=True,
+                ),
+                'window_sum(input="group_total", partition_by="i_class", '
+                'type="Decimal(35,2)", nullable=true)',
+            ),
+            (
                 ir.Expr(kind="and", args=(one, two)),
                 'and(args=[literal(type="Int64", value=1), '
                 'literal(type="Int64", value=2)])',

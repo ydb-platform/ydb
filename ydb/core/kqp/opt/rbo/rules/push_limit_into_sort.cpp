@@ -6,6 +6,10 @@ namespace NKqp {
 namespace {
 
 bool IsSafeToDelayAfterTopSort(const TExpression& expression) {
+    if (expression.HasWindowSemantics()) {
+        return false;
+    }
+
     return !FindNode(
         expression.GetExpressionBody(),
         [](const TExprNode::TPtr& node) {

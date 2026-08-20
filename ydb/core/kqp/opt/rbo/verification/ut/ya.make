@@ -20,6 +20,7 @@ TEST_SRCS(
     test_subplans.py
     test_smt.py
     test_verify.py
+    test_window_sum.py
 )
 
 PEERDIR(

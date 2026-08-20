@@ -103,6 +103,48 @@ void ComputeParents(
     root.ComputeParents();
 }
 
+TExpression MakeWindowColumnAccess(
+    const TInfoUnit& column,
+    TPositionHandle pos,
+    TExprContext& exprCtx,
+    TPlanProps& planProps)
+{
+    const auto access = MakeColumnAccess(
+        column,
+        pos,
+        &exprCtx,
+        &planProps);
+    return TExpression(
+        access.GetLambda(),
+        &exprCtx,
+        &planProps,
+        exprCtx.NewAtom(pos, "window_definition"));
+}
+
+TExpression MakeUntrackedWindowColumnAccess(
+    const TInfoUnit& column,
+    TPositionHandle pos,
+    TExprContext& exprCtx,
+    TPlanProps& planProps)
+{
+    const auto access = MakeColumnAccess(
+        column,
+        pos,
+        &exprCtx,
+        &planProps);
+    const auto lambda = access.GetLambda();
+    return TExpression(
+        exprCtx.NewLambda(
+            pos,
+            lambda->ChildPtr(0),
+            exprCtx.NewCallable(
+                pos,
+                "YqlAggWin",
+                {lambda->ChildPtr(1)})),
+        &exprCtx,
+        &planProps);
+}
+
 Y_UNIT_TEST_SUITE(KqpRboLimitPushdownRules) {
     Y_UNIT_TEST(DelaysPureProjectionUntilAfterTopSort) {
         TRuleTestContext ctx;
@@ -326,6 +368,55 @@ Y_UNIT_TEST_SUITE(KqpRboLimitPushdownRules) {
         UNIT_ASSERT_VALUES_EQUAL(sort->GetInput().Get(), map.Get());
     }
 
+    Y_UNIT_TEST(KeepsUntrackedWindowProjectionBelowTopSort) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit id("id");
+        const TInfoUnit projected("projected");
+
+        auto read = MakeRead(
+            NYql::EStorageType::ColumnStorage,
+            pos,
+            {},
+            TVector<TInfoUnit>{id});
+        const auto windowExpression = MakeUntrackedWindowColumnAccess(
+            id,
+            pos,
+            ctx.ExprCtx,
+            ctx.PlanProps);
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{TMapElement(projected, windowExpression)});
+        auto sort = MakeIntrusive<TOpSort>(
+            map,
+            pos,
+            TVector<TSortElement>{TSortElement(id, true, true)});
+        auto limit = MakeIntrusive<TOpLimit>(
+            sort,
+            pos,
+            MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
+            EOpPhase::Undefined);
+        TOpRoot root(limit, pos, {projected.GetFullName()});
+        root.ComputeParents();
+
+        TPushLimitIntoSortRule rule;
+        const auto result =
+            rule.SimpleMatchAndApply(limit, ctx.RboCtx, ctx.PlanProps);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Get(), sort.Get());
+        UNIT_ASSERT(sort->LimitCond.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(sort->GetInput().Get(), map.Get());
+        UNIT_ASSERT(!map->GetMapElements()
+            .front()
+            .GetExpression()
+            .GetWindowMetadata());
+        UNIT_ASSERT(map->GetMapElements()
+            .front()
+            .GetExpression()
+            .HasWindowSemantics());
+    }
+
     Y_UNIT_TEST(KeepsNestedPositionAwareProjectionBelowTopSort) {
         TRuleTestContext ctx;
         const auto pos = TPositionHandle();
@@ -400,6 +491,48 @@ Y_UNIT_TEST_SUITE(KqpRboLimitPushdownRules) {
         UNIT_ASSERT_VALUES_EQUAL(read->Parents.size(), 2);
     }
 
+    Y_UNIT_TEST(DoesNotPushIntermediateLimitThroughWindowProjection) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit id("id");
+        const TInfoUnit projected("projected");
+
+        TPhysicalOpProps stageProps;
+        stageProps.StageId = 1;
+        auto read = MakeRead(
+            NYql::EStorageType::ColumnStorage,
+            pos,
+            stageProps,
+            TVector<TInfoUnit>{id});
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            stageProps,
+            TVector<TMapElement>{TMapElement(
+                projected,
+                MakeWindowColumnAccess(
+                    id,
+                    pos,
+                    ctx.ExprCtx,
+                    ctx.PlanProps))});
+        auto limit = MakeIntrusive<TOpLimit>(
+            map,
+            pos,
+            stageProps,
+            MakeConstant("Uint64", "1", pos, &ctx.ExprCtx),
+            EOpPhase::Intermediate);
+        TOpRoot root(limit, pos, {projected.GetFullName()});
+        root.ComputeParents();
+
+        TPropagateLimitThroughStageRule rule;
+        const auto result =
+            rule.SimpleMatchAndApply(limit, ctx.RboCtx, ctx.PlanProps);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Get(), limit.Get());
+        UNIT_ASSERT_VALUES_EQUAL(limit->GetInput().Get(), map.Get());
+        UNIT_ASSERT_VALUES_EQUAL(map->GetInput().Get(), read.Get());
+    }
+
     Y_UNIT_TEST(DoesNotPushLimitIntoSharedSort) {
         TRuleTestContext ctx;
         const auto pos = TPositionHandle();
@@ -431,6 +564,47 @@ Y_UNIT_TEST_SUITE(KqpRboLimitPushdownRules) {
         UNIT_ASSERT_VALUES_EQUAL(result.Get(), limit.Get());
         UNIT_ASSERT(!sort->LimitCond);
         UNIT_ASSERT_VALUES_EQUAL(sort->Parents.size(), 2);
+    }
+}
+
+Y_UNIT_TEST_SUITE(KqpRboWindowMapRules) {
+    Y_UNIT_TEST(DoesNotPushFilterUnderWindowProjection) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit id("id");
+        const TInfoUnit keep("keep");
+        const TInfoUnit projected("projected");
+
+        auto read = MakeRead(
+            NYql::EStorageType::ColumnStorage,
+            pos,
+            {},
+            TVector<TInfoUnit>{id, keep});
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                projected,
+                MakeWindowColumnAccess(
+                    id,
+                    pos,
+                    ctx.ExprCtx,
+                    ctx.PlanProps))});
+        auto predicate = MakeBinaryPredicate(
+            "==",
+            MakeColumnAccess(keep, pos, &ctx.ExprCtx, &ctx.PlanProps),
+            MakeConstant("Int64", "1", pos, &ctx.ExprCtx));
+        auto filter = MakeIntrusive<TOpFilter>(map, pos, predicate);
+        TOpRoot root(filter, pos, {projected.GetFullName()});
+        root.ComputeParents();
+
+        TPushFilterUnderMapRule rule;
+        const auto result =
+            rule.SimpleMatchAndApply(filter, ctx.RboCtx, ctx.PlanProps);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Get(), filter.Get());
+        UNIT_ASSERT_VALUES_EQUAL(filter->GetInput().Get(), map.Get());
+        UNIT_ASSERT_VALUES_EQUAL(map->GetInput().Get(), read.Get());
     }
 }
 

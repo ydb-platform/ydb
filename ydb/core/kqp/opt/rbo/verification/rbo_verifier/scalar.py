@@ -128,14 +128,20 @@ class Encoder:
             )
         return self._integral_average(count, minimum, maximum)
 
-    def evaluate(self, expression: Expr, row: Mapping[str, Value]) -> Value:
-        return self._evaluate(expression, row, ())
+    def evaluate(
+        self,
+        expression: Expr,
+        row: Mapping[str, Value],
+        relational_values: Mapping[Expr, Value] | None = None,
+    ) -> Value:
+        return self._evaluate(expression, row, (), relational_values or {})
 
     def _evaluate(
         self,
         expression: Expr,
         row: Mapping[str, Value],
         bindings: tuple[Value, ...],
+        relational_values: Mapping[Expr, Value],
     ) -> Value:
         if expression.kind == "column":
             assert expression.column is not None
@@ -170,25 +176,39 @@ class Encoder:
             assert expression.result_type is not None
             return self.null(expression.result_type)
 
+        if expression.kind == "window_sum":
+            try:
+                return relational_values[expression]
+            except KeyError as error:
+                raise AssertionError(
+                    "window_sum requires its enclosing Project relation"
+                ) from error
+
         if expression.kind == "not":
-            argument = self._evaluate(expression.args[0], row, bindings)
+            argument = self._evaluate(
+                expression.args[0], row, bindings, relational_values
+            )
             return Value(BOOL, argument.is_null, smt.not_(argument.value))
 
         if expression.kind == "exists":
-            argument = self._evaluate(expression.args[0], row, bindings)
+            argument = self._evaluate(
+                expression.args[0], row, bindings, relational_values
+            )
             return Value(BOOL, smt.FALSE, smt.not_(argument.is_null))
 
         if expression.kind in {"and", "or"}:
             arguments = tuple(
-                self._evaluate(argument, row, bindings)
+                self._evaluate(argument, row, bindings, relational_values)
                 for argument in expression.args
             )
             return self._and(arguments) if expression.kind == "and" else self._or(arguments)
 
         if expression.kind == "in":
-            lookup = self._evaluate(expression.args[0], row, bindings)
+            lookup = self._evaluate(
+                expression.args[0], row, bindings, relational_values
+            )
             items = tuple(
-                self._evaluate(item, row, bindings)
+                self._evaluate(item, row, bindings, relational_values)
                 for item in expression.args[1:]
             )
             comparisons = tuple(
@@ -202,8 +222,12 @@ class Encoder:
             return self._or(comparisons)
 
         if expression.kind in {"eq", "lt", "lte", "gt", "gte"}:
-            left = self._evaluate(expression.args[0], row, bindings)
-            right = self._evaluate(expression.args[1], row, bindings)
+            left = self._evaluate(
+                expression.args[0], row, bindings, relational_values
+            )
+            right = self._evaluate(
+                expression.args[1], row, bindings, relational_values
+            )
             return self._comparison(
                 expression.kind,
                 left,
@@ -213,8 +237,12 @@ class Encoder:
 
         if expression.kind in {"add", "sub", "mul", "div"}:
             assert expression.result_type is not None
-            left = self._evaluate(expression.args[0], row, bindings)
-            right = self._evaluate(expression.args[1], row, bindings)
+            left = self._evaluate(
+                expression.args[0], row, bindings, relational_values
+            )
+            right = self._evaluate(
+                expression.args[1], row, bindings, relational_values
+            )
             operand_is_null = smt.or_(left.is_null, right.is_null)
             if decimal.is_type(expression.result_type):
                 if expression.kind == "add":
@@ -283,7 +311,9 @@ class Encoder:
 
         if expression.kind == "cast_decimal":
             assert expression.result_type is not None
-            argument = self._evaluate(expression.args[0], row, bindings)
+            argument = self._evaluate(
+                expression.args[0], row, bindings, relational_values
+            )
             if family(argument.type) == "int":
                 value = decimal.cast_integral(
                     argument.value,
@@ -316,7 +346,9 @@ class Encoder:
 
         if expression.kind == "cast_integral":
             assert expression.result_type is not None and expression.nullable is True
-            argument = self._evaluate(expression.args[0], row, bindings)
+            argument = self._evaluate(
+                expression.args[0], row, bindings, relational_values
+            )
             assert family(argument.type) == "int"
             in_range = integer_domain(argument.value, expression.result_type)
             is_null = smt.or_(argument.is_null, smt.not_(in_range))
@@ -328,9 +360,15 @@ class Encoder:
 
         if expression.kind == "if":
             assert expression.result_type is not None
-            condition = self._evaluate(expression.args[0], row, bindings)
-            then = self._evaluate(expression.args[1], row, bindings)
-            otherwise = self._evaluate(expression.args[2], row, bindings)
+            condition = self._evaluate(
+                expression.args[0], row, bindings, relational_values
+            )
+            then = self._evaluate(
+                expression.args[1], row, bindings, relational_values
+            )
+            otherwise = self._evaluate(
+                expression.args[2], row, bindings, relational_values
+            )
             assert condition.type == BOOL
             assert then.type == otherwise.type == expression.result_type
             bound = (
@@ -353,7 +391,9 @@ class Encoder:
 
         if expression.kind == "if_present":
             assert expression.result_type is not None
-            optional = self._evaluate(expression.args[0], row, bindings)
+            optional = self._evaluate(
+                expression.args[0], row, bindings, relational_values
+            )
             present_expression = expression.args[1]
             missing_expression = expression.args[2]
             if (
@@ -387,8 +427,11 @@ class Encoder:
                 present_expression,
                 row,
                 (payload, *bindings),
+                relational_values,
             )
-            missing = self._evaluate(missing_expression, row, bindings)
+            missing = self._evaluate(
+                missing_expression, row, bindings, relational_values
+            )
             assert present.type == missing.type == expression.result_type
             bound = (
                 _selected_decimal_finite_abs_bound(present, missing)
@@ -406,7 +449,12 @@ class Encoder:
             )
 
         if expression.kind in {"opaque", "opaque_double", "checked_concat"}:
-            return self._evaluate_opaque(expression, row, bindings)
+            return self._evaluate_opaque(
+                expression,
+                row,
+                bindings,
+                relational_values,
+            )
 
         raise AssertionError(f"unknown expression kind {expression.kind!r}")
 
@@ -453,8 +501,14 @@ class Encoder:
         expression: Expr,
         row: Mapping[str, Value],
         bindings: tuple[Value, ...],
+        relational_values: Mapping[Expr, Value],
     ) -> Value:
-        application = self._opaque_application(expression, row, bindings)
+        application = self._opaque_application(
+            expression,
+            row,
+            bindings,
+            relational_values,
+        )
         assert expression.fingerprint is not None
         assert expression.result_type is not None
         assert expression.nullable is not None
@@ -517,7 +571,7 @@ class Encoder:
         assert expression.fingerprint is not None
         assert expression.result_type == "String"
         assert expression.nullable is False
-        application = self._opaque_application(expression, row, ())
+        application = self._opaque_application(expression, row, (), {})
         function = self._checked_concat_failure.get(application.key)
         if function is None:
             function = self.script.fresh_function(
@@ -533,6 +587,7 @@ class Encoder:
         expression: Expr,
         row: Mapping[str, Value],
         bindings: tuple[Value, ...],
+        relational_values: Mapping[Expr, Value],
     ) -> _OpaqueApplication:
         """Canonical shared identity and arguments for every opaque UF."""
 
@@ -540,7 +595,7 @@ class Encoder:
         assert expression.result_type is not None
         assert expression.nullable is not None
         arguments = tuple(
-            self._evaluate(argument, row, bindings)
+            self._evaluate(argument, row, bindings, relational_values)
             for argument in expression.args
         )
         return _OpaqueApplication(

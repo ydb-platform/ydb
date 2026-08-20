@@ -707,11 +707,36 @@ class Evaluator:
         if isinstance(node, Project):
             source = self._input(node.id, 0, node.input)
             columns = self._columns(node.id)
+            window_sums = tuple(
+                window
+                for projection in node.columns
+                if (window := _window_sum_expression(projection.expression)) is not None
+            )
+            assert len(window_sums) <= 1
+            window_sum = window_sums[0] if window_sums else None
 
             def project(
                 relation: Relation,
                 bindings: Callable[[int, Row], Mapping[str, Value]],
             ) -> Relation:
+                relational_values: tuple[Mapping[Expr, Value], ...]
+                if window_sum is None:
+                    relational_values = tuple({} for _row in relation.rows)
+                else:
+                    _require_relation_row_pairs(
+                        len(relation.rows) * len(relation.rows),
+                        "window sum",
+                    )
+                    relational_values = tuple(
+                        {
+                            window_sum: self._window_sum_value(
+                                window_sum,
+                                relation,
+                                row,
+                            )
+                        }
+                        for row in relation.rows
+                    )
                 rows = []
                 for row_index, row in enumerate(relation.rows):
                     values = dict(row.values) | bindings(row_index, row)
@@ -720,6 +745,7 @@ class Evaluator:
                         value = self.scalar.evaluate(
                             projection.expression,
                             values,
+                            relational_values[row_index],
                         )
                         projected[projection.output] = (
                             replace(value, is_null=smt.FALSE)
@@ -940,6 +966,40 @@ class Evaluator:
             return combine_families(sources, union)
 
         raise AssertionError(f"unknown plan node {type(node).__name__}")
+
+    def _window_sum_value(
+        self,
+        expression: Expr,
+        source: Relation,
+        candidate: Row,
+    ) -> Value:
+        """Exact unordered whole-partition SUM for one Project input row."""
+
+        assert expression.kind == "window_sum"
+        assert expression.window_input is not None
+        assert expression.partition_by is not None
+        assert expression.result_type is not None
+        partition = candidate.values[expression.partition_by]
+        guarded_values = tuple(
+            (
+                smt.and_(
+                    row.present,
+                    self.scalar.not_distinct(
+                        partition,
+                        row.values[expression.partition_by],
+                    ),
+                    smt.not_(row.values[expression.window_input].is_null),
+                ),
+                row.values[expression.window_input],
+            )
+            for row in source.rows
+        )
+        return _decimal_sum_value(
+            guarded_values,
+            expression.result_type,
+            True,
+            "Decimal window sum",
+        )
 
     def _aggregate(self, node: Aggregate, source: Relation) -> Relation:
         modeled_functions = (
@@ -1277,31 +1337,11 @@ class Evaluator:
                     for guard, row in zip(non_null, source.rows)
                     if guard != smt.FALSE
                 )
-                finite_abs_bound = sum(
-                    _decimal_finite_abs_bound(value)
-                    for _, value in guarded_values
-                )
-                result_type = decimal.parse_type(trait.output_type)
-                assert result_type is not None
-                if finite_abs_bound >= 10**result_type.precision:
-                    raise RelationError(
-                        f"Decimal sum may overflow its {trait.output_type} accumulator "
-                        "within the current bound; non-associative overflow is not modeled"
-                    )
-                return Value(
+                return _decimal_sum_value(
+                    guarded_values,
                     trait.output_type,
-                    smt.not_(smt.or_(*non_null))
-                    if trait.output_nullable
-                    else smt.FALSE,
-                    decimal.sum_with_headroom(
-                        tuple(
-                            (guard, value.value)
-                            for guard, value in guarded_values
-                        ),
-                        trait.output_type,
-                        finite_abs_bound,
-                    ),
-                    decimal_finite_abs_bound=finite_abs_bound,
+                    trait.output_nullable,
+                    "Decimal sum",
                 )
             total = smt.add(
                 *(
@@ -2719,6 +2759,52 @@ def _integral_extremum(
             ))
         level = next_level
     return level[0][1]
+
+
+def _window_sum_expression(expression: Expr) -> Expr | None:
+    """Return the one validated relation-dependent leaf below an expression."""
+
+    if expression.kind == "window_sum":
+        return expression
+    matches = tuple(
+        match
+        for argument in expression.args
+        if (match := _window_sum_expression(argument)) is not None
+    )
+    assert len(matches) <= 1
+    return matches[0] if matches else None
+
+
+def _decimal_sum_value(
+    guarded_values: tuple[tuple[smt.Term, Value], ...],
+    output_type: str,
+    output_nullable: bool,
+    operation: str,
+) -> Value:
+    """Build one exact Decimal SUM after proving accumulator headroom."""
+
+    finite_abs_bound = sum(
+        _decimal_finite_abs_bound(value)
+        for _guard, value in guarded_values
+    )
+    result_type = decimal.parse_type(output_type)
+    assert result_type is not None
+    if finite_abs_bound >= 10**result_type.precision:
+        raise RelationError(
+            f"{operation} may overflow its {output_type} accumulator "
+            "within the current bound; non-associative overflow is not modeled"
+        )
+    guards = tuple(guard for guard, _value in guarded_values)
+    return Value(
+        output_type,
+        smt.not_(smt.or_(*guards)) if output_nullable else smt.FALSE,
+        decimal.sum_with_headroom(
+            tuple((guard, value.value) for guard, value in guarded_values),
+            output_type,
+            finite_abs_bound,
+        ),
+        decimal_finite_abs_bound=finite_abs_bound,
+    )
 
 
 def _decimal_finite_abs_bound(value: Value) -> int:

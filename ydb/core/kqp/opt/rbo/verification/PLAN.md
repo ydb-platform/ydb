@@ -306,6 +306,19 @@ alpha-normalized through lineage, while callable shape, constants, argument
 positions, repeated arguments, and types remain part of the identity. The same
 fingerprint is shared between both plans.
 
+Milestone 75 adds one deliberately partial member of that fingerprinted
+family. The existing restricted stored-String `Concat` audit still proves the
+same closed grammar, storage provenance, exact literal bytes, and worst-case
+result length. A tree whose maximum fits `UINT32_MAX` remains an ordinary total
+`opaque` expression. An otherwise identical audited tree whose maximum exceeds
+that runtime result bound is instead serialized as non-null String
+`checked_concat`. Its successful value uses the ordinary shared opaque function;
+a separate shared Boolean function represents whether that exact fingerprint
+and ordered nullable argument tuple raises the observable Concat error. Both
+functions are arbitrary, so the model includes the concrete deterministic
+runtime interpretation and may add spurious `SAT` or `UNKNOWN` cases, but
+cannot make an inequivalent supported pair prove `UNSAT`.
+
 Volatile, stateful, observably failing, evaluation-count-sensitive, or otherwise
 unsupported expressions produce `UNSUPPORTED`. New concrete scalar semantics are
 added only in response to real optimizer transformations or spurious witnesses.
@@ -721,6 +734,13 @@ success but does not compare error categories, codes, or text. Error-aware
 real-YDB replay remains a separate extension and currently fails closed on such
 a trace.
 
+A `checked_concat` Project ORs its shared failure predicate into the outcome
+error for every present input row. Its result payload is irrelevant on the
+error path and its error composes with the same inherited, subplan, and
+cardinality errors. This eager projection rule is admitted only through the
+demand corridor described below; it is not generic eager evaluation for Map
+expressions.
+
 Implementation sequence:
 
 1. M1: one-row empty source, scan, exact projection, and filter;
@@ -882,10 +902,13 @@ Implementation sequence:
     through formula construction without raising a global construction bound;
 74. M4: exact nullable Decimal count-distinct with raw aggregate-code equality
     plus the independently certified staged Decimal AVG carrier, moving TPC-DS
-    q28 through both exporters, formula construction, and bounded proof.
-    M4 remains current. A fresh blocker audit selected Milestone 75 as the
-    demand-aware, partial stored-String `Concat` slice led by TPC-DS q84; it is
-    in progress and carries no formula or proof claim yet.
+    q28 through both exporters, formula construction, and bounded proof;
+75. M4: a demand-aware partial stored-String `Concat` outcome: the existing
+    restricted grammar and fingerprint supply a shared successful value and a
+    separate shared failure predicate, while independent topology and
+    row-bound gates restrict eager projection to q84's result corridor. q84
+    now constructs a formula; its 60-second solver result is `UNKNOWN`, so it
+    does not join the proof floor. M4 remains current.
 
 More than two dependencies, broader correlations, coercing and nullable-String
 dynamic `IN`, broader range grammars, and other OLAP pushdowns remain.
@@ -1619,6 +1642,34 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   grouped-aggregate construction cap. q84 had two Olap String occurrences and
   stopped at the allocation-totality gate. The formula slice remained 23/121
   (19.0%) and the proof floor remained ten.
+- Milestone 75 retains that proven-total branch and admits only an over-bound
+  tree which has already passed the identical restricted grammar, provenance,
+  type, scalar-safety, and `ui64` length audit. It emits exactly one top-level
+  non-null String `checked_concat` Project expression with the canonical
+  root-`Concat` fingerprint and one or two distinct direct stored-String
+  arguments. The normal value is the existing fingerprinted opaque function;
+  a second shared Boolean function of the same ordered NULL/value envelopes is
+  the possible runtime error. A present producer row contributes that predicate
+  to the observable query-error outcome.
+
+  The checked expression must be private to the main plan, have one producer
+  and one returned output, and may reach an unstaged root only through a
+  single-consumer chain of direct Project transports, non-key Sort, and
+  offset-free non-error Limit or TopSort. When that corridor contains a
+  selector, the verifier independently bounds its producer through only Scan,
+  Filter, Cross, and Inner Join. Every selector must be nonbinding at the
+  requested row bound; q84's six scans give at most `2^6 = 64` producer rows
+  at bound two beneath `LIMIT 100`, while
+  bound three gives `3^6 = 729` and fails closed. In a staged snapshot the
+  checked Project must be the result root after every materializing edge.
+  Subplans, nesting, multiple checked expressions, fanout, computed consumers,
+  sort-key use, offsets, error-bearing Limits, other operators in a
+  selector-bounded producer spine, and non-result outputs remain unsupported.
+  C++ validates the source expression and structural corridor; Python
+  independently validates the serialized
+  expression, physical Project inputs, topology, and requested-bound premise.
+  Focused q84 formula and solver evidence is recorded in the current
+  checkpoint below.
 - A disjoint literal-only `Concat` gate accepts exactly a non-null String
   binary tree at a Map-body root whose leaves are canonical String literals.
   It audits every source node's scalar safety metadata, exact type, arity,
@@ -2040,7 +2091,7 @@ Larger bounds are query-specific because multiway joins grow rapidly.
 - Its strict version-four input policy and independently versioned
   version-three evaluation enforce one orthogonal preparation-success floor
   and three monotonic semantic depths: TPCH q1, q13, and q16 plus TPC-DS q5,
-  q8, q9, q59, q65, q72, q78, and q80 must reach the verifier, the 92-query
+  q8, q9, q59, q65, q72, q78, and q80 must reach the verifier, the 93-query
   formula floor must keep constructing SMT, and the 32-query hermetic
   proof floor must remain
   `VERIFIED_BOUNDED`. A verifier-side `UNSUPPORTED` result satisfies only the
@@ -2730,12 +2781,59 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   and a checked `UNWRAP`, below row-discarding Filter and Join boundaries even
   though expression pushdown was disabled. Commit `564010e2e4e` removes that
   unsafe mode and moves only direct column accesses and semantic renames.
-  q84 now retains its computed projection after row selection, but still stops
-  at the exact checked-Concat result-bound gate. The regenerated final trace is
+  At that pre-M75 checkpoint, q84 retained its computed projection after row
+  selection but still stopped at the exact checked-Concat result-bound gate.
+  The regenerated final trace is
   `Map[Concat] -> Limit[100, Final] -> Map -> TopSort[100, Intermediate] ->`
   joins: Concat is on the stage-11 consumer side and runs on at most 100 rows.
-  q84 therefore still has no formula or proof and the post-M74 numerical
-  coverage remains the current baseline.
+  Before Milestone 75, q84 therefore still had no formula or proof and the
+  post-M74 numerical coverage remained the current baseline.
+
+  Milestone 75 implementation commit `cda99a952cb` separates this partial
+  expression from the total opaque branch instead of rejecting it. The
+  successful result and possible error are shared by canonical fingerprint and
+  ordered stored-String arguments, and admission is restricted to the
+  independently checked demand corridor and row-bound proof above. The focused
+  production formula-only row
+  is `FORMULA_EMITTED` after 186/4,461 ms of preparation/verifier work (report
+  SHA-256
+  `e9e59667815b676420d05b7e70decc3d106b22dbc28e7202c88d3979915341ce`).
+  Its Initial and Final snapshots have SHA-256 values
+  `9f5d05ad7d373a9160df5d4d37220795dd615e42321d9c6dec56f79c33b5740a`
+  and
+  `39371b1e7a6b6c2cc97fa215721ae8cc3cb137437b5713fcae95dcf8076186e5`.
+  They preserve the exact same complete checked fingerprint, whose prefix is
+  `format:13:yql-opaque-v1;node:8:callable;content:6:Concat;`. Its ordered
+  arguments are `/Root/test/ds/customer.c_last_name`, then
+  `/Root/test/ds/customer.c_first_name`. The canonical 9,339,706-byte,
+  977-line SMT formula has SHA-256
+  `4ba91650e4486b5e7578a47708c9aeea8750edd44cb5cb4d596ef79bc0a86d97`.
+
+  The separate normal 60-second solver row returns `UNKNOWN` after 64,577 ms:
+  `counterexample decomposition remains unresolved; first: global solver
+  deadline expired before branch 2/4 (right_language_empty)` (report SHA-256
+  `5713bd9065c40c07e31d4f9a1a20cc0fa77e1eaaf62a2b0ef78441f79ab1e9f8`).
+  This is formula-construction evidence, not a bounded proof, counterexample,
+  replay result, or optimizer finding. Policy commit `c6fbadcc9a8` pins q84
+  only at preparation and formula construction. The complete post-M75
+  formula-only TPCH dashboard is 20 / 0 / 2 after 3,198/112,378 ms of
+  preparation/verifier work (report SHA-256
+  `dc0ec2ac610b767e33fbb6e30ab9f1d60ec09beca8ac0a610a68ed89ecc88b2d`).
+  TPC-DS is 73 / 8 / 18 after 113,191/1,239,636 ms, with q84 at 177/4,490 ms
+  (report SHA-256
+  `bc7f0576091888f493971a21228902fd57c75d06c6bc3772d5ad636c531663ce`).
+  Both embedded policies are valid with no violations. The authoritative
+  partition is therefore 93 / 8 / 20 overall: 93/121 workload queries (76.9%),
+  93/101 exact pairs (92.1%), and all 93/93 preparation successes and verifier
+  entrants construct formulas. The checked-in proof floor remains 32/121
+  (26.4%), 32/93 formula-covered queries (34.4%), and 32 obligations: 13 TPCH
+  plus 19 TPC-DS. Fresh post-M75 proof-floor reports are policy-valid with no
+  violations and verify every obligation as `VERIFIED_BOUNDED`: TPCH passes
+  13/13 after 1,744/81,538 ms of preparation/verifier work (report SHA-256
+  `8fe212d2536b7561e630dbd3e1b3bac9b8dfa7510c55b1f2a91114e4b791c5f8`),
+  and TPC-DS passes 19/19 after 15,499/124,840 ms (report SHA-256
+  `6fe57d9e56cd4ed23755494831a2cd1450ad5a103652583fa234c5292cc4b023`).
+  This is 32/32 curated obligations.
 
   The passive-carrier slice removes q83 from the numeric blocker inventory,
   integral-AVG Slice A removes q7/q13/q26, and exact integral extrema remove
@@ -2756,11 +2854,12 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   Including exact window
   semantics for the failed-preparation pairs,
   the full captured-pair gap is roughly 6--8 feature families or 8--16
-  milestones. Those workload-targeted estimates now start from 92 formulas and
-  can change as later blockers become visible. The fresh audit selected q84's
-  partial-`Concat` and checked-projection demand boundary for Milestone 75.
-  M4 remains current. The 20 no-pair entries require frontend/optimizer
-  progress; the
+  milestones. Those workload-targeted estimates now start from 93 formulas and
+  can change as later blockers become visible. Milestone 75 removes q84's
+  partial-`Concat` boundary from formula construction, and its complete
+  formula dashboards and policy gates are closed. M4 remains current. The 20
+  no-pair entries
+  require frontend/optimizer progress; the
   present captured-pair ceiling is 101/121, and formula construction is not
   solver proof.
 
@@ -3004,9 +3103,15 @@ Larger bounds are query-specific because multiway joins grow rapidly.
   q4, q6, q11, q12, q13, q14, q15, q16, q18, q19, q21, and q22 plus TPC-DS
   q3, q8, q9, q16, q28, q34, q38, q42, q48, q52, q55, q69, q73, q87, q90, q93,
   q94, q95, and q96 with a fixed 60-second per-query budget. The current
-  policy covers 13 TPCH and 19 TPC-DS queries, all independently confirmed
-  `VERIFIED_BOUNDED`: 32/32 obligations and 32/121 (26.4%)
-  of the workload. Its complete and focused report hashes are recorded above.
+  policy covers 13 TPCH and 19 TPC-DS queries: 32 obligations and 32/121
+  (26.4%) of the workload and 32/93 (34.4%) of formula-covered queries. Fresh
+  post-M75 reports verify all 32/32 as `VERIFIED_BOUNDED`: TPCH passes 13/13
+  after 1,744/81,538 ms (SHA-256
+  `8fe212d2536b7561e630dbd3e1b3bac9b8dfa7510c55b1f2a91114e4b791c5f8`),
+  and TPC-DS passes 19/19 after 15,499/124,840 ms (SHA-256
+  `6fe57d9e56cd4ed23755494831a2cd1450ad5a103652583fa234c5292cc4b023`).
+  Both policies are valid with no violations; focused report hashes are
+  recorded above.
 
   The immediately preceding complete policy gate on source `4c2c1359e28`
   passed 10/10 TPCH and 12/12 TPC-DS. Its TPCH proof-floor report spent
@@ -3680,10 +3785,12 @@ regression locks the corrected boundary.
 - Explicit diagnostic transformation-prefix verifier boundary, committed-rule
   and atomic-stage snapshot hooks, strict real-host capture command, and
   separate sequential localization driver are implemented.
-- The 92 formula-construction and 32 curated proof obligations have
-  separate checked-in regression floors. The current complete gate confirms all
-  32 as `VERIFIED_BOUNDED`; focused rows retain independent
-  evidence for the newly added obligations. Every future solver witness has a
+- The 93 formula-construction and 32 curated proof obligations have
+  separate checked-in regression floors. Fresh post-M75 proof-floor reports
+  confirm all 32 as `VERIFIED_BOUNDED`: 13/13 TPCH after 1,744/81,538 ms and
+  19/19 TPC-DS after 15,499/124,840 ms, with valid policies and no violations.
+  Focused rows retain independent evidence for the newly added obligations.
+  Every future solver witness has a
   mandatory, automatic all-candidates confirmation command; the external
   target mutation remains outside recursive tests and the verifier kernel.
 - A separate manual real-YDB Decimal `SUM` diagnostic checks one- versus

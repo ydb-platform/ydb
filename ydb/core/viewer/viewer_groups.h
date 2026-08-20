@@ -963,7 +963,7 @@ public:
         if (IsStrictDatabaseOnlyRequest()) {
             // Database-only users normally don't fetch NodeId/PDiskId (see CheckAccessViewer above),
             // but we need that data from BSC to validate the scope of node_id/pdisk_id/group_id params.
-            // Required fields shoule be set *after* FieldsRequested, so they are not rendered in the response.
+            // Required fields should be set *after* FieldsRequested, so they are not rendered in the response.
             if (!FilterGroupIds.Requested.empty() || !FilterNodeIds.Requested.empty() || !FilterPDiskIds.Requested.empty()) {
                 FieldsRequired.set(+EGroupFields::PoolName);
             }

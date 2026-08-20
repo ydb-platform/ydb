@@ -13,6 +13,7 @@
 #include <util/system/unaligned_mem.h>
 
 #include <cstring>
+#include <type_traits>
 
 namespace NKikimr {
 namespace NScheme {
@@ -356,20 +357,25 @@ public:
     inline TType Peek(const char* data, const char* end) const {
         TType value;
         TValueDecoder::Load(data, end, value);
-        return Rev ? Last - value : Last + value;
+        return ApplyDelta(value);
     }
 
     inline size_t Load(const char* data, const char* end, TType& value) {
         auto bytes = TValueDecoder::Load(data, end, value);
-        if (Rev)
-            Last -= value;
-        else
-            Last += value;
+        Last = ApplyDelta(value);
         value = Last;
         return bytes;
     }
 
 private:
+    TType ApplyDelta(TType delta) const {
+        using TUnsigned = std::make_unsigned_t<TType>;
+        const TUnsigned next = Rev
+            ? static_cast<TUnsigned>(Last) - static_cast<TUnsigned>(delta)
+            : static_cast<TUnsigned>(Last) + static_cast<TUnsigned>(delta);
+        return static_cast<TType>(next);
+    }
+
     TType Last = 0;
 };
 

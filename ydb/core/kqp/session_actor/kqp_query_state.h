@@ -52,6 +52,9 @@ public:
 
         void SetValue(const TTxId& id);
         TTxId GetValue();
+        bool HasValue() const {
+            return Id.Defined();
+        }
 
         void Reset();
 
@@ -207,6 +210,7 @@ public:
 
     TKqpTempTablesState::TConstPtr TempTablesState;
     TMaybe<TActorId> PoolHandlerActor;
+    bool WaitingForWmAdmission = false;
 
     std::shared_ptr<NYql::TExprContext> SplittedCtx;
     TVector<NYql::TExprNode::TPtr> SplittedExprs;

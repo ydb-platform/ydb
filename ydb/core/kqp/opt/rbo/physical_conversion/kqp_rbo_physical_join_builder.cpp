@@ -359,7 +359,7 @@ void TPhysicalJoinBuilder::PrepareJoinFilters(TExprNode::TPtr& leftLambda, TExpr
 
     // Common filter.
     leftInputs.insert(leftInputs.end(), rightInputs.begin(), rightInputs.end());
-    auto commonFilter = commonFilters.size() ? MakeConjunction(rightFilters).Node : NPhysicalConvertionUtils::BuildVoidLambda(Ctx, Pos);
+    auto commonFilter = commonFilters.size() ? MakeConjunction(commonFilters).Node : NPhysicalConvertionUtils::BuildVoidLambda(Ctx, Pos);
     commonLambda = NPhysicalConvertionUtils::ConvertToWideJoinFilter(commonFilter, leftInputs, Ctx);
 }
 
@@ -637,6 +637,9 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
     const auto joinKind = to_lower(Join->JoinKind);
     if (joinKind == "cross") {
+        if (useBlockHashJoin) {
+            return BuildPhysicalJoin(leftInput, rightInput, useBlockHashJoin, typesCtx);
+        }
         return BuildCrossJoin(leftInput, rightInput);
     }
 

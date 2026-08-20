@@ -541,7 +541,14 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 }
             };
             bool found = false;
-            if constexpr (Kind == EJoinKind::Left) {
+            if constexpr (Kind == EJoinKind::Cross) {
+                // No equality keys: every probe row matches every build row, then filters apply.
+                table.ForEach([&](TSingleTuple tableMatch) {
+                    if (pairPasses(tableMatch)) {
+                        consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = probeRow});
+                    }
+                });
+            } else if constexpr (Kind == EJoinKind::Left) {
                 table.Lookup(probeRow, [&](TSingleTuple tableMatch) {
                     if (pairPasses(tableMatch)) {
                         found = true;
@@ -875,6 +882,11 @@ inline TParsedHashJoinArgs ParseCommonHashJoinArgs(TCallable& callable) {
     res.KeyColumns.Probe = parseKeys(callable.GetInput(3));
     res.KeyColumns.Build = parseKeys(callable.GetInput(4));
     MKQL_ENSURE(res.KeyColumns.Build.size() == res.KeyColumns.Probe.size(), "Key columns mismatch");
+    if (res.Kind == EJoinKind::Cross) {
+        MKQL_ENSURE(res.KeyColumns.Build.empty(), "Specifying key columns is not allowed for cross join");
+    } else {
+        MKQL_ENSURE(!res.KeyColumns.Build.empty(), "At least one key column must be specified");
+    }
 
     res.UserRenames = FromGraceFormat(TGraceJoinRenames::FromRuntimeNodes(callable.GetInput(5), callable.GetInput(6)));
     return res;
@@ -901,6 +913,8 @@ TResult* DispatchHashJoinByKind(EJoinKind kind, TStringBuf unsupportedMessage, A
         return new Wrapper<LeftSemi>(std::forward<Args>(args)...);
     case Left:
         return new Wrapper<Left>(std::forward<Args>(args)...);
+    case Cross:
+        return new Wrapper<Cross>(std::forward<Args>(args)...);
     default:
         break;
     }
@@ -1034,9 +1048,9 @@ protected:
         if constexpr (LeftSemiOrOnly(Kind)) {
             MKQL_ENSURE(Output_.Build.NTuples == 0,
                         "Left Only and Left Semi join types shouldn't collect any Build(right) tuples");
-        } else if constexpr (Kind == EJoinKind::Left || Kind == EJoinKind::Inner) {
+        } else if constexpr (Kind == EJoinKind::Left || Kind == EJoinKind::Inner || Kind == EJoinKind::Cross) {
             MKQL_ENSURE(Output_.Build.NTuples == Output_.Probe.NTuples,
-                        "Inner and Left join types must collect same amount of tuples from build and probe");
+                        "Inner, Left and Cross join types must collect same amount of tuples from build and probe");
         }
     }
 

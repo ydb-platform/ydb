@@ -719,22 +719,25 @@ void TColumnShard::MoveDataCompleted(const TActorContext& ctx) {
     }
     MoveDataState.VacuumCompleted = true;
 
-    // All three conditions must hold before responding to Hive:
-    //  1. Rewriting queue is empty (pending + confirmed portions).
-    //  2. No target-group blobs remain in keep/delete queues or shared-blob tables.
     NOlap::NActualizer::TMoveDataQueueSizes queues;
     if (HasIndex()) {
         queues = GetIndexAs<NOlap::TColumnEngineForLogs>().GetMoveDataQueueSizes();
     }
     Counters.GetCSCounters().OnMoveDataQueues(queues.Pending, queues.ConfirmedToMove, queues.InFlight);
-    if (queues.GetTotal() != 0) {
-        Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
-        return;
-    }
-    if (GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups)) {
-        Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
-        LOG_S_INFO("TColumnShard::MoveDataCompleted: blobs still pending GC, will re-check on next wakeup at tablet " << TabletID());
-        return;
+    switch (NOlap::NActualizer::ClassifyMoveDataGate(
+        MoveDataState.VacuumCompleted, queues, GetStoragesManager()->GetDefaultOperator()->HasBlobsForGroups(MoveDataState.TargetGroups))) {
+        case NOlap::NActualizer::EMoveDataGate::BlockedByVacuum:
+            // Unreachable here: VacuumCompleted is set above, and the wakeup path checks it.
+            return;
+        case NOlap::NActualizer::EMoveDataGate::BlockedByPortions:
+            Counters.GetCSCounters().OnMoveDataGateBlockedByPortions();
+            return;
+        case NOlap::NActualizer::EMoveDataGate::BlockedByGC:
+            Counters.GetCSCounters().OnMoveDataGateBlockedByGC();
+            LOG_S_INFO("TColumnShard::MoveDataCompleted: blobs still pending GC, will re-check on next wakeup at tablet " << TabletID());
+            return;
+        case NOlap::NActualizer::EMoveDataGate::Ready:
+            break;
     }
     LOG_S_INFO("TColumnShard::MoveDataCompleted at tablet " << TabletID());
 

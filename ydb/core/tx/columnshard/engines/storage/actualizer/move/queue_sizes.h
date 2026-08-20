@@ -25,4 +25,25 @@ struct TMoveDataQueueSizes {
     }
 };
 
+enum class EMoveDataGate {
+    Ready,
+    BlockedByVacuum,
+    BlockedByPortions,
+    BlockedByGC,
+};
+
+// The check order decides which GateBlocked sensor a refusal increments.
+inline EMoveDataGate ClassifyMoveDataGate(const bool vacuumCompleted, const TMoveDataQueueSizes& queues, const bool hasBlobsForGroups) {
+    if (!vacuumCompleted) {
+        return EMoveDataGate::BlockedByVacuum;
+    }
+    if (queues.GetTotal() != 0) {
+        return EMoveDataGate::BlockedByPortions;
+    }
+    if (hasBlobsForGroups) {
+        return EMoveDataGate::BlockedByGC;
+    }
+    return EMoveDataGate::Ready;
+}
+
 }   // namespace NKikimr::NOlap::NActualizer

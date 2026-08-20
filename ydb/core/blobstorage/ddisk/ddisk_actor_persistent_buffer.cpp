@@ -383,7 +383,20 @@ namespace NKikimr::NDDisk {
         const TBlockSelector selector(record.GetSelector());
         const ui64 lsn = record.GetLsn();
 
-        auto barrierRecord = PersistentBufferBarriersManager.GetBarrier(creds.TabletId, creds.DirectBlockGroupIndex);
+        // DirectBlockGroupIndex is stored on disk as ui8; reject out-of-range values explicitly
+        // instead of silently truncating them (which could collide with an existing namespace).
+        if (creds.DirectBlockGroupIndex > Max<ui8>()) {
+            YDB_LOG_DEBUG_COMP(BS_DDISK, "TDDiskActor::PreprocessPersistentBufferWrite DirectBlockGroupIndex out of range",
+                {"marker", "BSDD41"},
+                {"tabletId", creds.TabletId},
+                {"directBlockGroupIndex", creds.DirectBlockGroupIndex});
+            SendReply(ev, std::make_unique<TEvWritePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                TStringBuilder() << "directBlockGroupIndex# " << creds.DirectBlockGroupIndex << " out of range"));
+            return false;
+        }
+
+        auto barrierRecord = PersistentBufferBarriersManager.GetBarrier(creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex));
         if (barrierRecord.Generation > creds.Generation
             || (barrierRecord.Generation == creds.Generation && lsn <= barrierRecord.Lsn)) {
             YDB_LOG_DEBUG_COMP(BS_DDISK, "TDDiskActor::PreprocessPersistentBufferWrite write before barrier",
@@ -996,7 +1009,7 @@ namespace NKikimr::NDDisk {
 
         auto parts = SlicePersistentBuffer(creds.TabletId, creds.Generation,
             selector.VChunkIndex, lsn, selector.OffsetInBytes, selector.Size, std::move(payloadWithHeader), sectors,
-            payloadChecksums, creds.DirectBlockGroupIndex);
+            payloadChecksums, static_cast<ui8>(creds.DirectBlockGroupIndex));
 
         auto opCookie = NextCookie++;
         auto& inflightRecord = PersistentBufferDiskOperationInflight[opCookie];
@@ -1868,9 +1881,22 @@ namespace NKikimr::NDDisk {
         const auto& record = ev->Get()->Record;
         const TQueryCredentials creds(record.GetCredentials());
 
+        // DirectBlockGroupIndex is stored on disk as ui8; reject out-of-range values explicitly
+        // instead of silently truncating them (which could collide with an existing namespace).
+        if (creds.DirectBlockGroupIndex > Max<ui8>()) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::Handle(TEvBatchErasePersistentBuffer) DirectBlockGroupIndex out of range",
+                {"marker", "BSDD42"},
+                {"tabletId", creds.TabletId},
+                {"directBlockGroupIndex", creds.DirectBlockGroupIndex});
+            SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                TStringBuilder() << "directBlockGroupIndex# " << creds.DirectBlockGroupIndex << " out of range"));
+            return;
+        }
+
         std::vector<TEraseLsnId> erases;
         std::vector<ui64> fastErases;
-        bool canFastErase = PersistentBufferBarriersManager.CanFastErase(creds.TabletId, creds.Generation, creds.DirectBlockGroupIndex);
+        bool canFastErase = PersistentBufferBarriersManager.CanFastErase(creds.TabletId, creds.Generation, static_cast<ui8>(creds.DirectBlockGroupIndex));
         fastErases.reserve(record.ErasesSize());
         for (auto& e : record.GetErases()) {
             auto lsn = e.GetLsn();
@@ -1896,7 +1922,7 @@ namespace NKikimr::NDDisk {
             ErasePersistentBuffer(*ev, creds, erases);
             return;
         }
-        if (auto fastErase = PersistentBufferBarriersManager.Erase(creds.TabletId, creds.Generation, fastErases, PersistentBufferSpaceAllocator, creds.DirectBlockGroupIndex); fastErase) {
+        if (auto fastErase = PersistentBufferBarriersManager.Erase(creds.TabletId, creds.Generation, fastErases, PersistentBufferSpaceAllocator, static_cast<ui8>(creds.DirectBlockGroupIndex)); fastErase) {
             FastErasePersistentBuffer(*ev, creds, erases, fastErase.value());
         } else {
             ErasePersistentBuffer(*ev, creds, erases);
@@ -1933,6 +1959,19 @@ namespace NKikimr::NDDisk {
         const TQueryCredentials creds(record.GetCredentials());
         const ui64 lsn = record.GetLsn();
 
+        // DirectBlockGroupIndex is stored on disk as ui8; reject out-of-range values explicitly
+        // instead of silently truncating them (which could collide with an existing namespace).
+        if (creds.DirectBlockGroupIndex > Max<ui8>()) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PERSISTENT_BUFFER, "TDDiskActor::Handle(TEvErasePersistentBuffer) DirectBlockGroupIndex out of range",
+                {"marker", "BSDD43"},
+                {"tabletId", creds.TabletId},
+                {"directBlockGroupIndex", creds.DirectBlockGroupIndex});
+            SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::INCORRECT_REQUEST,
+                TStringBuilder() << "directBlockGroupIndex# " << creds.DirectBlockGroupIndex << " out of range"));
+            return;
+        }
+
         std::vector<TEraseLsnId> erases;
 
         // Persistent buffer keys are ordered (TabletId, Generation, DirectBlockGroupIndex), so a
@@ -1957,7 +1996,7 @@ namespace NKikimr::NDDisk {
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL, "not enough free space to move barrier"));
             return;
         }
-        if (!PersistentBufferBarriersManager.CanMoveBarrier(creds.TabletId, PersistentBufferFormat.MaxBarriersLimit, creds.DirectBlockGroupIndex)) {
+        if (!PersistentBufferBarriersManager.CanMoveBarrier(creds.TabletId, PersistentBufferFormat.MaxBarriersLimit, static_cast<ui8>(creds.DirectBlockGroupIndex))) {
             SendReply(*ev, std::make_unique<TEvErasePersistentBufferResult>(
                 NKikimrBlobStorage::NDDisk::TReplyStatus::OVERFILL, "barrier can not be moved"));
             return;
@@ -2115,7 +2154,7 @@ namespace NKikimr::NDDisk {
 
         auto reply = std::make_unique<TEvListPersistentBufferResult>(NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
         auto& rr = reply->Record;
-        rr.SetBarrierLsn(PersistentBufferBarriersManager.GetBarrier(creds.TabletId, creds.DirectBlockGroupIndex).Lsn);
+        rr.SetBarrierLsn(PersistentBufferBarriersManager.GetBarrier(creds.TabletId, static_cast<ui8>(creds.DirectBlockGroupIndex)).Lsn);
         // Persistent buffer keys are ordered (TabletId, Generation, DirectBlockGroupIndex), so filter
         // to the caller's DirectBlockGroupIndex explicitly instead of relying on a contiguous range.
         for (auto it = PersistentBuffers.lower_bound({creds.TabletId, 0}); it != PersistentBuffers.end() &&

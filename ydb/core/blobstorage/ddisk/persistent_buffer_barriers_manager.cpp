@@ -73,12 +73,13 @@ namespace NKikimr::NDDisk {
             || PersistentBufferBarriers.size() < barriersLimit;
     }
 
-    std::unordered_map<ui64, ui64> TPersistentBufferBarriersManager::GetBarriers() const {
-        std::unordered_map<ui64, ui64> res;
+    std::map<std::pair<ui64, ui8>, ui64> TPersistentBufferBarriersManager::GetBarriers() const {
+        std::map<std::pair<ui64, ui8>, ui64> res;
         for (auto& b : PersistentBufferBarriers) {
             for (auto& h : b.Header.Barriers) {
                 if (h.TabletId != 0) {
-                    res[h.TabletId] = Max(res[h.TabletId], h.Lsn);
+                    const std::pair<ui64, ui8> key{h.TabletId, h.DirectBlockGroupIndex};
+                    res[key] = Max(res[key], h.Lsn);
                 }
             }
         }

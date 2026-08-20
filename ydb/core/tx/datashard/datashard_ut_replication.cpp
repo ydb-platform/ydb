@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         }
     }
 
-    void DoSplitReplicationSourceOffsets(bool rebootSrc) {
+    Y_UNIT_TEST_TWIN(SplitReplicationSourceOffsets, RebootSrc) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         NKikimrConfig::TAppConfig app;
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             });
 
         TTestActorRuntime::TEventObserverHolder rebootObserver;
-        if (rebootSrc) {
+        if (RebootSrc) {
             bool rebooted = false;
             // Reboot src during offset fetch.
             rebootObserver = runtime.AddObserver<TEvDataShard::TEvGetReplicationSourceOffsets>(
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             "key = 5, value = 555\n");
     }
 
-    void DoSplitMergeChanges(bool withReboots) {
+    Y_UNIT_TEST_TWIN(SplitMergeChanges, WithReboots) {
         TPortManager pm;
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
@@ -250,7 +250,7 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             CompactTable(runtime, shardId, tableId1, true);
         }
 
-        if (withReboots) {
+        if (WithReboots) {
             for (ui64 shardId : shards1) {
                 RebootTablet(runtime, shardId, sender);
             }
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
 
         CommitWrites(server, { "/Root/table-1" }, 123);
 
-        if (withReboots) {
+        if (WithReboots) {
             for (ui64 shardId : shards1) {
                 RebootTablet(runtime, shardId, sender);
             }
@@ -283,7 +283,7 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
                 "key = 6, value = 88\n");
         }
 
-        if (withReboots) {
+        if (WithReboots) {
             for (ui64 shardId : shards1) {
                 RebootTablet(runtime, shardId, sender);
             }
@@ -296,7 +296,7 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
         shards1 = GetTableShards(server, sender, "/Root/table-1");
         UNIT_ASSERT_VALUES_EQUAL(shards1.size(), 1u);
 
-        if (withReboots) {
+        if (WithReboots) {
             for (ui64 shardId : shards1) {
                 RebootTablet(runtime, shardId, sender);
             }
@@ -324,22 +324,6 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
                 "key = 7, value = 95\n"
                 "key = 10, value = 94\n");
         }
-    }
-
-    Y_UNIT_TEST(SplitMergeChanges) {
-        DoSplitMergeChanges(false);
-    }
-
-    Y_UNIT_TEST(SplitMergeChangesReboots) {
-        DoSplitMergeChanges(true);
-    }
-
-    Y_UNIT_TEST(SplitReplicationSourceOffsetsOnSrcSplit) {
-        DoSplitReplicationSourceOffsets(false);
-    }
-
-    Y_UNIT_TEST(SplitReplicationSourceOffsetsOnSrcRestart) {
-        DoSplitReplicationSourceOffsets(true);
     }
 
     Y_UNIT_TEST(ReplicatedTable) {

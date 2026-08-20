@@ -9,7 +9,6 @@
 #include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/resource_pools/resource_pool_settings.h>
-#include <ydb/core/kqp/gateway/utils/metadata_helpers.h>
 #include <ydb/services/metadata/service.h>
 #include <ydb/services/workload_manager/metadata_subscription/resource_pool_classifier/fetcher.h>
 
@@ -136,7 +135,8 @@ TAsyncStatus CheckPoolNotReferencedByClassifiers(const TString& poolId, ui32 nod
         NMetadata::NProvider::MakeServiceId(nodeId), event.release(), promise,
         [databaseId = context.GetDatabaseId(), poolId](NThreading::TPromise<TClassifiersCheckResult> promise, TResponse&& response) {
             TVector<TString> referencingClassifiers;
-            const auto& configs = response.GetSnapshotAs<TResourcePoolClassifierSnapshot>()->GetResourcePoolClassifierConfigs();
+            const auto snapshot = response.GetValidatedSnapshotAs<TResourcePoolClassifierSnapshot>();
+            const auto& configs = snapshot->GetResourcePoolClassifierConfigs();
             if (const auto it = configs.find(databaseId); it != configs.end()) {
                 for (const auto& [name, config] : it->second.ByName) {
                     if (config.GetClassifierSettings().ResourcePool == poolId) {

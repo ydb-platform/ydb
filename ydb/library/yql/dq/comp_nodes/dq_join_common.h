@@ -1,5 +1,6 @@
 #pragma once
 #include "dq_hash_join_table.h"
+#include "dq_block_hash_join_settings.h"
 #include "dq_join_filters.h"
 #include <algorithm>
 #include <numeric>
@@ -894,12 +895,11 @@ inline TParsedHashJoinArgs ParseCommonHashJoinArgs(TCallable& callable) {
     return res;
 }
 
-inline TDqRenames<ESide> BuildImplRenames(const TDqUserRenames& userRenames, ESide leftSide = ESide::Probe) {
-    const ESide rightSide = OtherSide(leftSide);
+inline TDqRenames<ESide> BuildImplRenames(const TDqUserRenames& userRenames) {
     TDqRenames<ESide> renames;
     for (auto rename : userRenames) {
-        renames.push_back({.Index = rename.Index,
-                           .Side = rename.Side == EJoinSide::kLeft ? leftSide : rightSide});
+        const ESide side = rename.Side == EJoinSide::kLeft ? ESide::Probe : ESide::Build;
+        renames.push_back({.Index = rename.Index, .Side = side});
     }
     return renames;
 }

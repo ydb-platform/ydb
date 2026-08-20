@@ -11,7 +11,6 @@
 
 #include <arrow/scalar.h>
 
-#include "dq_block_hash_join_settings.h"
 #include "dq_join_common.h"
 #include "dq_join_filters.h"
 
@@ -310,17 +309,6 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         meta.ResultItemTypes.push_back(AS_TYPE(TBlockType, blockType));
     }
 
-    {
-        const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
-        if (settingsTuple->GetValuesCount() >= 1) {
-            meta.Settings.BuildSide = static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
-        }
-    }
-    // Probe is streamed against a hash table of Build. SQL left is Probe by default,
-    // or Build when the optimizer asks to hash the smaller left input.
-    const ESide leftSide = meta.Settings.LeftIsBuild() ? ESide::Build : ESide::Probe;
-    const ESide rightSide = OtherSide(leftSide);
-
     const auto leftType = callable.GetInput(0).GetStaticType();
     MKQL_ENSURE(leftType->IsStream(), "Expected WideStream as a left stream");
     const auto leftStreamType = AS_TYPE(TStreamType, leftType);
@@ -329,7 +317,7 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     MKQL_ENSURE(leftStreamComponents.size() > 0, "Expected at least one column");
     for (auto* blockType : leftStreamComponents) {
         MKQL_ENSURE(blockType->IsBlock(), "Expected block types as wide components of left stream");
-        meta.InputTypes.SelectSide(leftSide).push_back(AS_TYPE(TBlockType, blockType));
+        meta.InputTypes.Probe.push_back(AS_TYPE(TBlockType, blockType));
     }
 
     const auto rightType = callable.GetInput(1).GetStaticType();
@@ -340,18 +328,17 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
     MKQL_ENSURE(rightStreamComponents.size() > 0, "Expected at least one column");
     for (auto* blockType : rightStreamComponents) {
         MKQL_ENSURE(blockType->IsBlock(), "Expected block types as wide components of right stream");
-        meta.InputTypes.SelectSide(rightSide).push_back(AS_TYPE(TBlockType, blockType));
+        meta.InputTypes.Build.push_back(AS_TYPE(TBlockType, blockType));
     }
     const auto parsed = ParseCommonHashJoinArgs(callable);
     const auto joinKind = parsed.Kind;
     meta.Kind = joinKind;
-    meta.KeyColumns.SelectSide(leftSide) = parsed.KeyColumns.Probe;
-    meta.KeyColumns.SelectSide(rightSide) = parsed.KeyColumns.Build;
+    meta.KeyColumns = parsed.KeyColumns;
 
     const auto leftStream = LocateNode(ctx.NodeLocator, callable, 0);
     const auto rightStream = LocateNode(ctx.NodeLocator, callable, 1);
-    ValidateRenames(parsed.UserRenames, joinKind, std::ssize(meta.InputTypes.SelectSide(leftSide)) - 1,
-                    std::ssize(meta.InputTypes.SelectSide(rightSide)) - 1);
+    ValidateRenames(parsed.UserRenames, joinKind, std::ssize(meta.InputTypes.Probe) - 1,
+                    std::ssize(meta.InputTypes.Build) - 1);
     for(ESide side: EachSide) {
         int size = std::ssize(meta.InputTypes.SelectSide(side));
         for(int index = 0; index < size; ++index) {
@@ -364,7 +351,21 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         }
     }
 
-    meta.Renames = BuildImplRenames(parsed.UserRenames, leftSide);
+    meta.Renames = BuildImplRenames(parsed.UserRenames);
+
+    {
+        const auto settingsTuple = AS_VALUE(TTupleLiteral, callable.GetInput(7));
+        if (settingsTuple->GetValuesCount() >= 1) {
+            meta.Settings.BuildSide = static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
+        }
+    }
+    if (meta.Settings.LeftIsBuild()) {
+        std::swap(meta.InputTypes.Build, meta.InputTypes.Probe);
+        std::swap(meta.KeyColumns.Build, meta.KeyColumns.Probe);
+        for (auto& rename : meta.Renames) {
+            rename.Side = OtherSide(rename.Side);
+        }
+    }
 
     ApplyKeyColumnPermutation(meta.KeyColumns, meta.InputTypes, /* trailingColumns */ 1, meta.Renames,
                               meta.ColumnPermutation);
@@ -379,19 +380,22 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
             itemTypes.SelectSide(side).push_back(meta.InputTypes.SelectSide(side)[index]->GetItemType());
         }
     }
-    meta.UserTypes = ForceOptionalOnNullableSide(itemTypes, meta.Kind, rightSide, ctx.Env);
+    // Left/Semi/Only joins keep the rows of the SQL left input, which the swap above may have moved to Build
+    const ESide preservedSide = meta.Settings.LeftIsBuild() ? ESide::Build : ESide::Probe;
+    meta.UserTypes = ForceOptionalOnNullableSide(itemTypes, meta.Kind, OtherSide(preservedSide), ctx.Env);
 
-    TSides<IComputationNode*> streams{};
-    streams.SelectSide(leftSide) = leftStream;
-    streams.SelectSide(rightSide) = rightStream;
+    const auto streams = meta.Settings.LeftIsBuild()
+        ? TSides<IComputationNode*>{.Build = leftStream, .Probe = rightStream}
+        : TSides<IComputationNode*>{.Build = rightStream, .Probe = leftStream};
 
     TJoinFilters filters = ParseJoinFilters(ctx, callable, BaseInputs);
-    if (leftSide == ESide::Build) {
+    if (meta.Settings.LeftIsBuild()) {
+        // Filters are parsed as left/right, so they have to follow the inputs swapped above
         filters.SwapSides();
     }
 
     return DispatchHashJoinByKind<TBlockHashJoinWrapper, IComputationNode>(
-        joinKind, leftSide, "unsupported join type in block hash join", ctx.Mutables, std::move(meta), streams,
+        joinKind, preservedSide, "unsupported join type in block hash join", ctx.Mutables, std::move(meta), streams,
         std::move(filters));
 }
 

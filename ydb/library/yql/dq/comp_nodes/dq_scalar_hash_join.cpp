@@ -135,7 +135,7 @@ struct TRenamesScalarOutput : TPackedTupleOutputBase<Join, IScalarLayoutConverte
 
     TFlushResult Flush() {
         TFlushResult res;
-        const i64 nItems = this->SizeTuples();
+        const i64 nItems = this->Output_.Probe.NTuples;
         res.Packs.Build = std::move(this->Output_.Build);
         res.Packs.Probe = std::move(this->Output_.Probe);
 

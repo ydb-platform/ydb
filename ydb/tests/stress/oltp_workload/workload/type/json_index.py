@@ -1,5 +1,5 @@
 import logging
-import random
+import os
 import time
 
 from itertools import cycle
@@ -18,16 +18,24 @@ class WorkloadJsonIndex(WorkloadBase):
         self.row_count = 200
         self.limit = 20
         self.query_count = 25
+        self.model_seed = int(os.getenv("YDB_JSON_INDEX_SEED", "19088743"), 0)
+        self.model_marker = f"json-index-model-{self.model_seed}"
+        self.iteration = 0
+        logger.info(
+            "JSON index model seed=%d (override with YDB_JSON_INDEX_SEED)",
+            self.model_seed,
+        )
 
-    def _create_table(self, table_path, json_document):
+    def _create_table(self, table_path, json_document, string_pk=False):
         logger.info(f"Create table {table_path}")
         if json_document:
             json_type = "JsonDocument"
         else:
             json_type = "Json"
+        pk_type = "Utf8 NOT NULL" if string_pk else "Uint64"
         create_table_sql = f"""
             CREATE TABLE `{table_path}` (
-                pk Uint64,
+                pk {pk_type},
                 json {json_type},
                 PRIMARY KEY (pk)
             );
@@ -121,6 +129,141 @@ class WorkloadJsonIndex(WorkloadBase):
             return
         raise Exception("Error getting index status")
 
+    def _model_keys(self, string_pk):
+        if string_pk:
+            return [f"model-{self.model_seed:x}-{slot}" for slot in range(4)]
+        base = 1_000_000 + (self.model_seed % 10_000) * 10
+        return [base + slot for slot in range(4)]
+
+    @staticmethod
+    def _key_literal(key, string_pk):
+        return f'"{key}"u' if string_pk else str(key)
+
+    @staticmethod
+    def _json_type(json_document):
+        return "JsonDocument" if json_document else "Json"
+
+    def _model_json(self, json_document, bucket, generation):
+        json_type = self._json_type(json_document)
+        return (
+            f"{json_type}('{{\"stress_marker\":\"{self.model_marker}\","
+            f"\"bucket\":\"{bucket}\",\"generation\":{generation}}}')"
+        )
+
+    def _write_model_rows(self, table_path, json_document, string_pk, verb, rows):
+        values = ",".join(
+            f"({self._key_literal(key, string_pk)}, "
+            f"{self._model_json(json_document, bucket, generation)})"
+            for key, bucket, generation in rows
+        )
+        self.client.query(f"""
+            {verb} INTO `{table_path}` (pk, json) VALUES {values};
+        """, False)
+
+    def _delete_model_rows(self, table_path, string_pk, keys):
+        key_list = ",".join(self._key_literal(key, string_pk) for key in keys)
+        self.client.query(f"""
+            DELETE FROM `{table_path}` WHERE pk IN ({key_list});
+        """, False)
+
+    def _model_predicate(self):
+        return (
+            f'JSON_VALUE(json, \'$.stress_marker\' RETURNING Utf8) = "{self.model_marker}"u '
+            'AND JSON_VALUE(json, \'$.bucket\' RETURNING Utf8) = "match"u'
+        )
+
+    def _select_model_keys(self, table_path, index_name, view):
+        result = self.client.query(f"""
+            SELECT pk FROM `{table_path}` {view}
+            WHERE {self._model_predicate()}
+            ORDER BY pk;
+        """, False)
+        return [row['pk'] for row in result[0].rows]
+
+    def _assert_model_oracle(self, table_path, index_name, expected):
+        primary = self._select_model_keys(table_path, index_name, "VIEW PRIMARY KEY")
+        explicit = self._select_model_keys(table_path, index_name, f"VIEW `{index_name}`")
+        automatic = self._select_model_keys(table_path, index_name, "")
+        expected = sorted(expected)
+        if primary != expected or explicit != expected or automatic != expected:
+            raise AssertionError(
+                f"JSON model mismatch seed={self.model_seed} table={table_path}: "
+                f"expected={expected}, primary={primary}, explicit={explicit}, auto={automatic}"
+            )
+
+    def _wait_model_index_ready(self, table_path, index_name):
+        start_time = time.time()
+        while time.time() - start_time < 60:
+            try:
+                self._select_model_keys(table_path, index_name, f"VIEW `{index_name}`")
+                return
+            except Exception as error:
+                message = str(error)
+                if ("No global indexes for table" in message or
+                        "not ready to use" in message or
+                        "Required global index not found" in message):
+                    time.sleep(1)
+                    continue
+                raise
+        raise Exception(f"Model index {index_name} did not become ready, seed={self.model_seed}")
+
+    def _mutate_and_check_model(self, table_path, index_name, json_document, string_pk, state):
+        keys = self._model_keys(string_pk)
+        self._write_model_rows(
+            table_path, json_document, string_pk, "UPSERT",
+            [(keys[1], "match", 2), (keys[2], "other", 2)],
+        )
+        state[keys[1]] = "match"
+        state[keys[2]] = "other"
+        self._assert_model_oracle(
+            table_path, index_name, [key for key, bucket in state.items() if bucket == "match"])
+
+        self._delete_model_rows(table_path, string_pk, [keys[0]])
+        del state[keys[0]]
+        self._assert_model_oracle(
+            table_path, index_name, [key for key, bucket in state.items() if bucket == "match"])
+        return state
+
+    def _insert_and_check_model(self, table_path, index_name, json_document, string_pk):
+        keys = self._model_keys(string_pk)
+        state = dict(zip(keys, ("match", "other", "match", "other")))
+        self._write_model_rows(
+            table_path, json_document, string_pk, "INSERT",
+            [(key, bucket, 1) for key, bucket in state.items()],
+        )
+        self._assert_model_oracle(
+            table_path, index_name, [key for key, bucket in state.items() if bucket == "match"])
+        return self._mutate_and_check_model(
+            table_path, index_name, json_document, string_pk, state)
+
+    def _check_string_pk_row_id(self, table_path):
+        index_name = f"{self.index_name_prefix}_StringPk"
+        keys = self._model_keys(True)
+        state = dict(zip(keys, ("match", "other", "match", "other")))
+
+        # Seed the table before build so row-id allocation and snapshot ingestion
+        # are both exercised for a non-integer primary key.
+        self._write_model_rows(
+            table_path, True, True, "INSERT",
+            [(key, bucket, 1) for key, bucket in state.items()],
+        )
+        self._create_index(index_name, table_path)
+        self._wait_model_index_ready(table_path, index_name)
+        self._assert_model_oracle(
+            table_path, index_name, [key for key, bucket in state.items() if bucket == "match"])
+        state = self._mutate_and_check_model(table_path, index_name, True, True, state)
+
+        replacement = index_name + "Rename"
+        self._create_index(replacement, table_path)
+        self._wait_model_index_ready(table_path, replacement)
+        self.client.replace_index(table_path, replacement, index_name)
+        self._assert_model_oracle(
+            table_path, index_name, [key for key, bucket in state.items() if bucket == "match"])
+
+        self._delete_model_rows(table_path, True, list(state))
+        self._assert_model_oracle(table_path, index_name, [])
+        self._drop_index(index_name, table_path)
+
     def _check_loop(self, table_path, json_document=False):
         if json_document:
             json_type = "JsonDocument"
@@ -137,6 +280,9 @@ class WorkloadJsonIndex(WorkloadBase):
             index_name=index_name,
             table_path=table_path,
         )
+
+        model_state = self._insert_and_check_model(
+            table_path, index_name, json_document, False)
 
         n = 0
         for _ in range(0, self.query_count):
@@ -170,12 +316,22 @@ class WorkloadJsonIndex(WorkloadBase):
             max_key=self.row_count+3,
         )
 
-        if random.randint(0, 1) == 0:
+        # Keep the old roughly-every-other-iteration replacement load, but make
+        # its schedule reproducible and always verify it against the model.
+        if self.iteration % 2 == 0:
             self._create_index(
                 index_name=index_name+'Rename',
                 table_path=table_path,
             )
+            self._wait_model_index_ready(table_path, index_name+'Rename')
             self.client.replace_index(table_path, index_name+'Rename', index_name)
+            self._assert_model_oracle(
+                table_path, index_name,
+                [key for key, bucket in model_state.items() if bucket == "match"],
+            )
+
+        self._delete_model_rows(table_path, False, list(model_state))
+        self._assert_model_oracle(table_path, index_name, [])
 
         self._drop_index(index_name, table_path)
         logger.info(f'Check was completed successfully for table `{table_path}`')
@@ -183,15 +339,18 @@ class WorkloadJsonIndex(WorkloadBase):
     def _loop(self):
         json_table = self.get_table_path(f"{self.table_name_prefix}_json")
         json_document_table = self.get_table_path(f"{self.table_name_prefix}_json_document")
+        string_pk_table = self.get_table_path(f"{self.table_name_prefix}_json_document_string_pk")
         tables = [json_table, json_document_table]
 
         self._create_table(json_table, 0)
         self._create_table(json_document_table, 1)
+        self._create_table(string_pk_table, 1, string_pk=True)
 
         json_opts = [0, 1]
         opt_iter = cycle(json_opts)
 
         while not self.is_stop_requested():
+            self.iteration += 1
             json_document = next(opt_iter)
 
             try:
@@ -207,10 +366,12 @@ class WorkloadJsonIndex(WorkloadBase):
                     table_path=tables[json_document],
                     json_document=json_document,
                 )
+                if json_document:
+                    self._check_string_pk_row_id(string_pk_table)
             except Exception as ex:
                 logger.info(f"ERROR: {ex}")
                 raise ex
-        for t in tables:
+        for t in tables + [string_pk_table]:
             self._drop_table(t)
 
     def get_stat(self):

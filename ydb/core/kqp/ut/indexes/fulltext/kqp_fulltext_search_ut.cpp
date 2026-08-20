@@ -4354,6 +4354,71 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedMultiColumnTyped, Compact) {
         WHERE Tenant = "acme" AND UserId = 100 AND FulltextMatch(Text, "cats") ORDER BY Key;)sql"));
 }
 
+Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedKeyTypeBoundaries, Compact) {
+    // Prefix cells are serialized as part of the posting-table key. Exercise every broad key-type
+    // family used by prefixed indexes, including values whose byte representation is easy to get
+    // wrong (signed minima, unsigned maxima, empty/long strings and non-ASCII Utf8). The same
+    // ALTER ADD INDEX build and equality lookup oracle is used for legacy and compact postings.
+    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
+    auto db = kikimr.GetQueryClient();
+
+    struct TCase {
+        TString Name;
+        TString Type;
+        TVector<TString> Values;
+    };
+
+    const TString longValue(1024, 'x');
+    const TVector<TCase> cases = {
+        {"Int32", "Int32", {"CAST(\"-2147483648\" AS Int32)", "CAST(\"2147483647\" AS Int32)"}},
+        {"Int64", "Int64", {"CAST(\"-9223372036854775808\" AS Int64)", "CAST(\"9223372036854775807\" AS Int64)"}},
+        {"Uint32", "Uint32", {"CAST(\"0\" AS Uint32)", "CAST(\"4294967295\" AS Uint32)"}},
+        {"Uint64", "Uint64", {"CAST(\"0\" AS Uint64)", "CAST(\"18446744073709551615\" AS Uint64)"}},
+        {"Bool", "Bool", {"false", "true"}},
+        {"Date", "Date", {"Date(\"1970-01-01\")", "Date(\"2105-12-31\")"}},
+        {"Utf8", "Utf8", {"Utf8(\"\")", "Utf8(\"Москва-日本-🙂\")", TStringBuilder() << "Utf8(\"" << longValue << "\")"}},
+        {"String", "String", {"\"\"", "\"Москва-日本-🙂\"", TStringBuilder() << "\"" << longValue << "\""}},
+    };
+
+    auto exec = [&](const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    };
+
+    for (const auto& testCase : cases) {
+        const TString table = TStringBuilder() << "/Root/Prefix" << testCase.Name << (Compact ? "Compact" : "Plain");
+        exec(TStringBuilder() << "CREATE TABLE `" << table << "` ("
+            << "Key Uint64, Prefix " << testCase.Type << ", Text Utf8, PRIMARY KEY (Key));");
+
+        TStringBuilder upsert;
+        upsert << "UPSERT INTO `" << table << "` (Key, Prefix, Text) VALUES ";
+        for (size_t i = 0; i < testCase.Values.size(); ++i) {
+            if (i) {
+                upsert << ", ";
+            }
+            upsert << "(" << (i + 1) << ", " << testCase.Values[i] << ", \"cats boundary\")";
+        }
+        // A different token under the first prefix guards against an accidentally unbounded lookup.
+        upsert << ", (100, " << testCase.Values.front() << ", \"dogs boundary\");";
+        exec(upsert);
+
+        exec(TStringBuilder() << "ALTER TABLE `" << table << "` ADD INDEX fulltext_idx "
+            << "GLOBAL USING fulltext_plain ON (Prefix, Text) "
+            << "WITH (tokenizer=standard, use_filter_lowercase=true);");
+
+        for (size_t i = 0; i < testCase.Values.size(); ++i) {
+            const TString query = TStringBuilder() << "SELECT Key FROM `" << table << "` VIEW `fulltext_idx` "
+                << "WHERE Prefix = " << testCase.Values[i]
+                << " AND FulltextMatch(Text, \"cats\") ORDER BY Key;";
+            auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                testCase.Name << ": " << result.GetIssues().ToString());
+            CompareYson(TStringBuilder() << "[[[" << (i + 1) << "u]]]",
+                NYdb::FormatResultSetYson(result.GetResultSet(0)));
+        }
+    }
+}
+
 Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedPerPrefixStats) {
     // Prefixed relevance index: BM25 statistics (DocCount, SumDocLength, document frequency) must be
     // aggregated per prefix, not corpus-globally. The same document text under two prefixes scores

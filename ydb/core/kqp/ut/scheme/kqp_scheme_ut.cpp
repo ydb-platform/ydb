@@ -4659,6 +4659,113 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         BuildingUniqIndexAllowsTableModifications(true, true, EnableIndexStreamWrite);
     }
 
+    Y_UNIT_TEST(OnlineUniqueValidationFailureCleansUpAndAllowsRetry) {
+        TKikimrRunnerWithPauseIndexBuild kikimr(
+            false /* yqlDetailedLogging */, true /* onlineUnique */, true /* enableIndexStreamWrite */);
+
+        kikimr.RunCall([&] {
+            auto queryClient = kikimr.GetQueryClient();
+            auto tableClient = kikimr.GetTableClient();
+
+            auto execute = [&](const TString& query, EStatus expected) {
+                auto result = queryClient.ExecuteQuery(
+                    query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                if (result.GetStatus() != expected) {
+                    ythrow yexception() << "Unexpected status " << result.GetStatus()
+                        << ", expected " << expected << ": " << result.GetIssues().ToString()
+                        << "\nQuery:\n" << query;
+                }
+                return result;
+            };
+
+            execute(R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )sql", EStatus::SUCCESS);
+            execute(R"sql(
+                UPSERT INTO `/Root/TestTable` (Key, Value) VALUES
+                    (1, "duplicate"), (2, "initial");
+            )sql", EStatus::SUCCESS);
+
+            auto firstBuild = queryClient.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/TestTable`
+                ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (Value);
+            )sql", NYdb::NQuery::TTxControl::NoTx());
+
+            // The request is paused before the snapshot is created. Online mode
+            // allows this conflicting row to enter the source table.
+            kikimr.WaitBuildIndex();
+            execute(R"sql(
+                INSERT INTO `/Root/TestTable` (Key, Value) VALUES (3, "duplicate");
+            )sql", EStatus::SUCCESS);
+
+            kikimr.ContinueBuildIndex();
+            kikimr.WaitValidateIndex();
+
+            // A non-conflicting write at the validation boundary must survive
+            // cleanup even though validation subsequently rejects the build.
+            execute(R"sql(
+                INSERT INTO `/Root/TestTable` (Key, Value) VALUES (4, "during-validation");
+            )sql", EStatus::SUCCESS);
+            kikimr.ContinueValidateIndex();
+
+            auto failedBuild = firstBuild.GetValueSync();
+            if (failedBuild.GetStatus() != EStatus::PRECONDITION_FAILED ||
+                failedBuild.GetIssues().ToString().find("Duplicate key found") == std::string::npos)
+            {
+                ythrow yexception() << "Unique build must fail validation: "
+                    << failedBuild.GetStatus() << ": " << failedBuild.GetIssues().ToString();
+            }
+
+            // A failed online build must not expose a partial public index and
+            // must release the table for ordinary modifications.
+            auto describe = tableClient.CreateSession().GetValueSync().GetSession()
+                .DescribeTable("/Root/TestTable").ExtractValueSync();
+            if (!describe.IsSuccess() || !describe.GetTableDescription().GetIndexDescriptions().empty()) {
+                ythrow yexception() << "Failed build left a public index: "
+                    << describe.GetIssues().ToString();
+            }
+            execute(R"sql(
+                UPDATE `/Root/TestTable` SET Value = "repaired" WHERE Key = 3;
+            )sql", EStatus::SUCCESS);
+
+            // Retry after repairing the duplicate. The interception points are
+            // one-shot, so this build runs to READY without timing or sleeps.
+            execute(R"sql(
+                ALTER TABLE `/Root/TestTable`
+                ADD INDEX uniq_value_idx GLOBAL UNIQUE ON (Value);
+            )sql", EStatus::SUCCESS);
+
+            describe = tableClient.CreateSession().GetValueSync().GetSession()
+                .DescribeTable("/Root/TestTable").ExtractValueSync();
+            if (!describe.IsSuccess() || describe.GetTableDescription().GetIndexDescriptions().size() != 1 ||
+                describe.GetTableDescription().GetIndexDescriptions().front().GetIndexType() != EIndexType::GlobalUnique)
+            {
+                ythrow yexception() << "Retried unique index is not READY/public: "
+                    << describe.GetIssues().ToString();
+            }
+
+            // The recovered index enforces uniqueness, while the table remains
+            // writable for a non-conflicting value.
+            execute(R"sql(
+                INSERT INTO `/Root/TestTable` (Key, Value) VALUES (5, "duplicate");
+            )sql", EStatus::PRECONDITION_FAILED);
+            execute(R"sql(
+                INSERT INTO `/Root/TestTable` (Key, Value) VALUES (5, "free");
+            )sql", EStatus::SUCCESS);
+
+            auto indexed = execute(R"sql(
+                SELECT Key FROM `/Root/TestTable` VIEW uniq_value_idx ORDER BY Key;
+            )sql", EStatus::SUCCESS);
+            NKqp::CompareYson(R"([[[1u]];[[2u]];[[3u]];[[4u]];[[5u]]])",
+                FormatResultSetYson(indexed.GetResultSet(0)));
+            return true;
+        });
+    }
+
     void ValidatingUniqIndex(bool sqlInterface, bool isUnique) {
         NKikimrConfig::TFeatureFlags featureFlags;
         featureFlags.SetEnableAddUniqueIndex(true);

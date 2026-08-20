@@ -1838,6 +1838,66 @@ Y_UNIT_TEST_SUITE(KqpStreamIndexes) {
         }
     }
 
+    // Establish a deterministic two-transaction overlap without sleeps or racing futures. Transaction 1
+    // stages its write without committing. Transaction 2 targets a different main-table partition but the
+    // same unique key and commits first; transaction 1's later commit must then abort on validation. This
+    // exercises both the legacy and stream index-write paths and verifies that the loser leaves neither a
+    // main row nor a partial index row.
+    Y_UNIT_TEST_TWIN(ConcurrentTransactionsConflictOnUniqueKey, StreamIndex) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(StreamIndex);
+
+        TKikimrRunner kikimr(settings);
+        Tests::NCommon::TLoggerInit(kikimr).Initialize();
+
+        auto tableSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto createResult = tableSession.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/T` (
+                pk Int64,
+                u Int64,
+                payload Utf8,
+                PRIMARY KEY (pk),
+                INDEX uniq GLOBAL UNIQUE SYNC ON (u)
+            ) WITH (
+                PARTITION_AT_KEYS = (0)
+            );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues().ToString());
+
+        auto client = kikimr.GetQueryClient();
+        auto session1 = client.GetSession().GetValueSync().GetSession();
+        auto session2 = client.GetSession().GetValueSync().GetSession();
+
+        auto first = session1.ExecuteQuery(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            INSERT INTO `/Root/T` (pk, u, payload) VALUES (-1, 42, "first-aborted");
+        )", TTxControl::BeginTx(TTxSettings::SnapshotRW())).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), EStatus::SUCCESS, first.GetIssues().ToString());
+        auto tx1 = first.GetTransaction();
+        UNIT_ASSERT_C(tx1 && tx1->IsActive(), "the first transaction must remain open until validation");
+
+        auto second = session2.ExecuteQuery(R"(
+            PRAGMA kikimr.KqpForceImmediateEffectsExecution="true";
+            INSERT INTO `/Root/T` (pk, u, payload) VALUES (1, 42, "second-winner");
+        )", TTxControl::BeginTx(TTxSettings::SnapshotRW()).CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(second.GetStatus(), EStatus::SUCCESS, second.GetIssues().ToString());
+
+        auto commit = tx1->Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(commit.GetStatus(), EStatus::ABORTED, commit.GetIssues().ToString());
+
+        auto main = client.StreamExecuteQuery(R"(
+            SELECT pk, u, payload FROM `/Root/T` ORDER BY pk;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(main.GetStatus(), EStatus::SUCCESS, main.GetIssues().ToString());
+        CompareYson(R"([[[1];[42];["second-winner"]]])", StreamResultToYson(main));
+
+        auto index = client.StreamExecuteQuery(R"(
+            SELECT u, pk FROM `/Root/T/uniq/indexImplTable` ORDER BY u, pk;
+        )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(index.GetStatus(), EStatus::SUCCESS, index.GetIssues().ToString());
+        CompareYson(R"([[[42];[1]]])", StreamResultToYson(index));
+    }
+
     Y_UNIT_TEST_TWIN(UpdateIndexedColumnToNullAndBack, EnableIndexStreamWrite) {
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         settings.AppConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);

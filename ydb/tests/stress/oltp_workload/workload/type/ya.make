@@ -9,6 +9,7 @@ PY_SRCS(
     select_partition.py
     secondary_index.py
     tli.py
+    combined_indexes.py
 )
 
 PEERDIR(

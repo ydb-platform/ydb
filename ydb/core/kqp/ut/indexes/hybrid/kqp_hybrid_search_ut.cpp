@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/tx.h>
 
@@ -137,12 +139,84 @@ void SetupDocs(TQueryClient& db) {
     AddVectorIndex(db);
 }
 
+void SetupMultiBranchDocs(TQueryClient& db) {
+    ExecOk(db, R"sql(
+        CREATE TABLE `/Root/MultiDocs` (
+            Key Uint64,
+            TextA Utf8,
+            TextB Utf8,
+            EmbeddingA String,
+            EmbeddingB String,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+    ExecOk(db, Sprintf(R"sql(
+        UPSERT INTO `/Root/MultiDocs` (Key, TextA, TextB, EmbeddingA, EmbeddingB) VALUES
+            (1u, "alpha alpha alpha", "plain", %s, %s),
+            (2u, "plain", "beta beta beta", %s, %s),
+            (3u, "alpha", "beta", %s, %s),
+            (4u, "plain", "plain", %s, %s);
+    )sql", Emb(1).c_str(), Emb(3).c_str(), Emb(2).c_str(), Emb(3).c_str(),
+        Emb(3).c_str(), Emb(1).c_str(), Emb(4).c_str(), Emb(2).c_str()));
+    ExecOk(db, R"sql(
+        ALTER TABLE `/Root/MultiDocs` ADD INDEX ft_a
+            GLOBAL USING fulltext_relevance
+            ON (TextA)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+    ExecOk(db, R"sql(
+        ALTER TABLE `/Root/MultiDocs` ADD INDEX ft_b
+            GLOBAL USING fulltext_relevance
+            ON (TextB)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+    ExecOk(db, R"sql(
+        ALTER TABLE `/Root/MultiDocs` ADD INDEX vec_a
+            GLOBAL USING vector_kmeans_tree
+            ON (EmbeddingA)
+            WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+    )sql");
+    ExecOk(db, R"sql(
+        ALTER TABLE `/Root/MultiDocs` ADD INDEX vec_b
+            GLOBAL USING vector_kmeans_tree
+            ON (EmbeddingB)
+            WITH (distance=cosine, vector_type="uint8", vector_dimension=2, levels=2, clusters=2);
+    )sql");
+}
+
 void RestartSchemeShard(TKikimrRunner& kikimr, const TString& path) {
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
     runtime.Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
         new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), TTestTxConfig::SchemeShard, false));
     Sleep(TDuration::Seconds(3));
     Tests::TClient::RefreshPathCache(&runtime, path);
+}
+
+// A real config-dispatcher update is delivered independently to the KQP proxy (which rebuilds the
+// optimizer configuration used by workers) and the compile service (which invalidates cached plans when
+// ShouldInvalidateCompileCache detects a relevant TableServiceConfig change). Deliver to both local
+// subscribers and wait for their acknowledgements, exactly as the dispatcher would, so a stale cached
+// HybridRank plan cannot mask the kill switch.
+void UpdateHybridSearchConfig(TKikimrRunner& kikimr, bool enabled) {
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    const auto edgeActor = runtime.AllocateEdgeActor();
+
+    NKikimrConfig::TAppConfig config;
+    config.MutableFeatureFlags()->SetEnableFulltextIndex(true);
+    auto* tableServiceConfig = config.MutableTableServiceConfig();
+    tableServiceConfig->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+    tableServiceConfig->SetEnableHybridSearch(enabled);
+
+    for (const auto& service : {
+            MakeKqpProxyID(runtime.GetNodeId()),
+            MakeKqpCompileServiceID(runtime.GetNodeId())}) {
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *request->Record.MutableConfig() = config;
+        runtime.Send(service, edgeActor, request.Release());
+        auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+            edgeActor, TDuration::Seconds(10));
+        UNIT_ASSERT_C(response, "KQP service must acknowledge the runtime TableServiceConfig update");
+    }
 }
 
 // The kmeans-tree search-probe pragma. Widens the probe to cover all clusters at every level
@@ -538,6 +612,55 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), weighted);
     }
 
+    // Branch classification and index resolution are per scoring expression, rather than restricted to
+    // one branch of each kind. Use distinct columns and indexes so this cannot accidentally pass by
+    // reading the same implementation twice. Documents 1 and 3 overlap the two text branches; the final
+    // union must still contain each primary key exactly once.
+    Y_UNIT_TEST(TwoDistinctFulltextBranches) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupMultiBranchDocs(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/MultiDocs`
+            ORDER BY HybridRank(
+                FullTextScore(TextA, "alpha"),
+                FullTextScore(TextB, "beta"),
+                Knn::CosineDistance(EmbeddingA, $target),
+                (4, 4, 4) AS Limits)
+            LIMIT 10;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(keys.size(), 4u,
+            "overlapping candidates from two distinct fulltext indexes must be deduplicated");
+        UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
+            "two fulltext branches and a vector branch must produce their complete candidate union");
+        UNIT_ASSERT_VALUES_EQUAL_C(keys.front(), 3u,
+            "the document present in both fulltext branches must lead the RRF result");
+    }
+
+    // Likewise, two vector branches may target different columns and therefore different kmeans-tree
+    // indexes. The text branch overlaps their candidate pools; assert the deduplicated union and avoid
+    // depending on approximate-vector tie order.
+    Y_UNIT_TEST(TwoDistinctVectorBranches) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupMultiBranchDocs(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/MultiDocs`
+            ORDER BY HybridRank(
+                FullTextScore(TextA, "alpha"),
+                Knn::CosineDistance(EmbeddingA, $target),
+                Knn::CosineDistance(EmbeddingB, $target),
+                (4, 4, 4) AS Limits)
+            LIMIT 10;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(keys.size(), 4u,
+            "overlapping candidates from two distinct vector indexes must be deduplicated");
+        UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u}),
+            "two vector branches and a fulltext branch must produce their complete candidate union");
+    }
+
     // Alternative fusion: weighted linear combination of scores instead of RRF, with and without min-max
     // normalization. A text-relevant doc must still lead under the (default) normalized variant.
     Y_UNIT_TEST(LinearModeFuses) {
@@ -683,6 +806,60 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             UNIT_ASSERT_C((std::set<ui64>{1u, 2u, 3u, 4u}.contains(k)),
                 TStringBuilder() << "returned key " << k << " must be one of the four candidate docs");
         }
+    }
+
+    // OFFSET is applied after the fused score order, and LIMIT+OFFSET must retain enough branch
+    // candidates to produce a full page. Explicit branch limits make the expected page independent of
+    // HybridSearchFactor and the approximate kmeans candidate-pool sizing.
+    Y_UNIT_TEST(RespectsOffsetAfterFusion) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto offsetOnly = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                (4, 4) AS Limits)
+            LIMIT 100 OFFSET 1;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{3u, 2u, 4u}), offsetOnly);
+
+        auto page = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                (4, 4) AS Limits)
+            LIMIT 2 OFFSET 1;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{3u, 2u}), page);
+    }
+
+    // Nullable indexed columns are absent from the corresponding index branch, but remain eligible via
+    // another non-NULL branch. Key 5 has only a vector value and key 6 only a fulltext value; both must
+    // survive fusion, while a row that is NULL in both branches contributes no candidate.
+    Y_UNIT_TEST(NullableScoredColumnsUseOtherBranch) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+        ExecOk(db, Sprintf(R"sql(
+            UPSERT INTO `/Root/Docs` (Key, Text, Embedding, Category) VALUES
+                (5u, NULL, %s, "nullable"),
+                (6u, "cats nullable", NULL, "nullable"),
+                (7u, NULL, NULL, "nullable");
+        )sql", Emb(2).c_str()));
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target),
+                (10, 10) AS Limits)
+            LIMIT 10;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(keys.size(), 6u,
+            "rows present in at least one nullable branch must occur once in the fused union");
+        UNIT_ASSERT_C((std::set<ui64>(keys.begin(), keys.end()) == std::set<ui64>{1u, 2u, 3u, 4u, 5u, 6u}),
+            "a NULL in one scored column must not hide a candidate supplied by another branch");
     }
 
     // A branch may legitimately have no candidates. The fusion result must then be exactly the other
@@ -1092,6 +1269,32 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
             ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
             LIMIT 4;
         )sql"), "hybrid search is disabled");
+    }
+
+    // Exercise the dynamic kill switch in one running cluster and through the same SDK client/query text.
+    // Execute twice before the update so the second execution can use the compile cache. The notification
+    // to the compile service must clear that cached successful plan: otherwise the disabled query would
+    // keep executing and bypass the optimizer-side flag check. Re-enabling must make a fresh compilation
+    // and restore the original result.
+    Y_UNIT_TEST(DynamicFlagInvalidatesCompileCache) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        const TString query = TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(FullTextScore(Text, "cats"), Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql";
+        const std::vector<ui64> expected{1u, 3u, 2u, 4u};
+        UNIT_ASSERT_VALUES_EQUAL(expected, RunKeys(db, query));
+        UNIT_ASSERT_VALUES_EQUAL(expected, RunKeys(db, query));
+
+        UpdateHybridSearchConfig(kikimr, /*enabled=*/false);
+        UNIT_ASSERT_STRING_CONTAINS(RunFailIssues(db, query), "hybrid search is disabled");
+
+        UpdateHybridSearchConfig(kikimr, /*enabled=*/true);
+        UNIT_ASSERT_VALUES_EQUAL(expected, RunKeys(db, query));
     }
 
     // HybridRank needs both a fulltext relevance index and a vector index; missing either is an error.

@@ -117,6 +117,7 @@ public:
     static TPathType NodeToPath(TExprContext& ctx, const NYT::TNode& node);
     static TSetType NodeToSet(TExprContext& ctx, const NYT::TNode& node);
     static TSetOfSetsType NodeToSetOfSets(TExprContext& ctx, const NYT::TNode& node);
+    static TPathType GetSimplePath(const TSetType& set);
 
 protected:
     virtual const TPartOfConstraintBase* DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const = 0;

@@ -167,6 +167,15 @@ TPartOfConstraintBase::TSetOfSetsType TPartOfConstraintBase::NodeToSetOfSets(TEx
     return sets;
 }
 
+TPartOfConstraintBase::TPathType TPartOfConstraintBase::GetSimplePath(const TPartOfConstraintBase::TSetType& set) {
+    for (const auto& p : set) {
+        if (p.size() == 1) {
+            return p;
+        }
+    }
+    return set.empty() ? TPathType{} : set.front();
+}
+
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const TConstraintNode* TConstraintSet::GetConstraint(std::string_view name) const {

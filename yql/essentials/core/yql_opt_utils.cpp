@@ -2254,14 +2254,14 @@ TExprNode::TPtr MakeSortConstraintImpl(TExprNode::TPtr node, const TSortedConstr
         return node;
     }
 
-    const auto& constent = sorted->GetContent();
+    const auto& content = sorted->GetContent();
     return ctx.Builder(node->Pos())
         .Callable(Assume ? "AssumeSorted" : "Sort")
             .Add(0, std::move(node))
             .List(1)
                 .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                     size_t index = 0;
-                    for (const auto& c : constent) {
+                    for (const auto& c : content) {
                         parent.Callable(index++, "Bool")
                             .Atom(0, ToString(c.second), TNodeFlags::Default)
                         .Seal();
@@ -2274,8 +2274,8 @@ TExprNode::TPtr MakeSortConstraintImpl(TExprNode::TPtr node, const TSortedConstr
                 .List()
                     .Do([&](TExprNodeBuilder& parent) -> TExprNodeBuilder& {
                         size_t index = 0;
-                        for (const auto& c : constent) {
-                            GetterBuilder(parent, index++, *rowType, c.first.front());
+                        for (const auto& c : content) {
+                            GetterBuilder(parent, index++, *rowType, TSortedConstraintNode::GetSimplePath(c.first));
                         }
                         return parent;
                     })

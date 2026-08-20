@@ -2,6 +2,9 @@
 
 #include "partition_direct_service.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
 #include <util/generic/vector.h>
@@ -24,6 +27,13 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         NThreading::TPromise<void> Promise;
     };
 
+    struct TUpdateDirtyMapStateRequest
+    {
+        ui32 VChunkIndex = 0;
+        TDirtyMapStateProto Proto;
+        NThreading::TPromise<void> Promise;
+    };
+
     explicit TPartitionDirectServiceMock(bool dropScheduledCallbacks = false)
         : DropScheduledCallbacks(dropScheduledCallbacks)
     {}
@@ -35,6 +45,7 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     size_t BlockedGenerationCount = 0;
     TString LastBlockedReason;
     TVector<TUpdateConfigRequest> UpdateConfigRequests;
+    TVector<TUpdateDirtyMapStateRequest> UpdateDirtyMapStateRequests;
 
     [[nodiscard]] TVolumeConfigPtr GetVolumeConfig() const override
     {
@@ -58,6 +69,17 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
     {
         UpdateConfigRequests.emplace_back(cfg, NThreading::NewPromise());
         return UpdateConfigRequests.back().Promise.GetFuture();
+    }
+
+    NThreading::TFuture<void> UpdateDirtyMapState(
+        ui32 vChunkIndex,
+        TDirtyMapStateProto state) override
+    {
+        UpdateDirtyMapStateRequests.emplace_back(TUpdateDirtyMapStateRequest{
+            .VChunkIndex = vChunkIndex,
+            .Proto = std::move(state),
+            .Promise = NThreading::NewPromise()});
+        return UpdateDirtyMapStateRequests.back().Promise.GetFuture();
     }
 
     void QueryAddHost(size_t directBlockGroupId, size_t newHostIndex) override

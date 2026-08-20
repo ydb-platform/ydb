@@ -379,3 +379,76 @@ def test_out_of_scope_path_nodes_gives_400(mon_base_url_with_extra_sids_control)
     for ep in ['/viewer/nodes', '/viewer/json/nodes']:
         path = _build_endpoint_path(ep, with_database_cgi=True, extra_params={'path': '/Other'})
         _assert_status(mon_base_url_with_extra_sids_control, path, 'database@builtin', 400)
+
+
+def test_viewer_sysinfo_tabletinfo_node_id_forbidden_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+    tenant_nodelist_ids,
+    foreign_node_id,
+):
+    assert tenant_nodelist_ids, 'tenant database must have at least one node'
+    tenant_node_id = tenant_nodelist_ids[0]
+    endpoints = [
+        '/viewer/sysinfo',
+        '/viewer/tabletinfo',
+    ]
+    for ep in endpoints:
+        foreign_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'node_id': str(foreign_node_id)},
+            database=tenant_database,
+        )
+        # Scope-param validation must block strict database level tokens.
+        _assert_status(mon_base_url_with_extra_sids_control, foreign_path, 'database@builtin', 403)
+        # Scope-param validation must NOT block tokens above strict database level.
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(mon_base_url_with_extra_sids_control, foreign_path, token, 200)
+
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'node_id': str(tenant_node_id)},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, allowed_path, 'database@builtin', 200)
+
+        # Requests with any foreign nodes in the list must be rejected.
+        mixed_list_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'node_id': f'{tenant_node_id},{foreign_node_id}'},
+            database=tenant_database,
+        )
+        _assert_status(mon_base_url_with_extra_sids_control, mixed_list_path, 'database@builtin', 403)
+
+
+# /viewer/tabletinfo may skip the node_id scope check in the base class,
+# so this handler handles the node_id scope check by itself.
+def test_viewer_tabletinfo_path_with_node_id_for_strict_database_token(
+    mon_base_url_with_extra_sids_control,
+    tenant_database,
+    tenant_nodelist_ids,
+    foreign_node_id,
+):
+    assert tenant_nodelist_ids, 'tenant database must have at least one node'
+    base = mon_base_url_with_extra_sids_control
+    for ep in ['/viewer/tabletinfo', '/viewer/json/tabletinfo']:
+        forbidden_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'path': tenant_database, 'node_id': str(foreign_node_id)},
+            database=tenant_database,
+        )
+        _assert_status(base, forbidden_path, 'database@builtin', 403)
+        for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
+            _assert_status(base, forbidden_path, token, 200)
+
+        allowed_path = _build_endpoint_path(
+            ep,
+            with_database_cgi=True,
+            extra_params={'path': tenant_database, 'node_id': str(tenant_nodelist_ids[0])},
+            database=tenant_database,
+        )
+        _assert_status(base, allowed_path, 'database@builtin', 200)

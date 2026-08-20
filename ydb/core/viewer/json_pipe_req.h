@@ -17,6 +17,9 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
+#include <span>
+#include <unordered_set>
+
 namespace NKikimr::NViewer {
 
 using namespace NKikimr;
@@ -339,12 +342,19 @@ protected:
     TRequestResponse<TEvStateStorage::TEvBoardInfo> MakeRequestStateStorageEndpointsLookup(const TString& path, ui64 cookie = 0);
     std::vector<TNodeId> GetNodesFromBoardReply(TEvStateStorage::TEvBoardInfo::TPtr& ev);
     std::vector<TNodeId> GetNodesFromBoardReply(const TEvStateStorage::TEvBoardInfo& ev);
+    // Returns real database nodes only when the database endpoints lookup has succeeded,
+    // otherwise it returns 0 - a sentinel for the current node.
     std::vector<TNodeId> GetDatabaseNodes();
     bool IsDatabaseRequest() const;
+    bool AreDatabaseNodesKnown() const;
 
     // Such a user is allowed to see the information about its own database only
     bool IsStrictDatabaseOnlyRequest();
     TString GetUserSID() const;
+
+    // Denies the request unless every given node belongs to the requested database. If the database
+    // nodes are unknown, the request is denied too. Returns true if "Access Denied" response has been already sent.
+    bool DenyRequestIfNodesAreOutOfDatabase(std::span<const TNodeId> nodeIds);
 
     void InitConfig(const TCgiParameters& params);
     void InitConfig(const TRequestSettings& settings);

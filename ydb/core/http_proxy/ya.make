@@ -13,6 +13,7 @@ SRCS(
     controller_base.h
     controller_registry.cpp
     custom_metrics.h
+    custom_metrics.cpp
     datastreams.cpp
     datastreams.h
     datastreams_serialization.cpp

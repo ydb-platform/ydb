@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/region_geometry.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
@@ -330,6 +331,8 @@ TString TVChunk::DebugPrintDirtyMap()
     sb << "CloneQueue: " << BlocksDirtyMap->DebugPrintReadyToClone() << "\n";
     sb << "FlushQueue: " << BlocksDirtyMap->DebugPrintReadyToFlush() << "\n";
     sb << "EraseQueue: " << BlocksDirtyMap->DebugPrintReadyToErase() << "\n";
+    sb << "AheadBehind:" << BlocksDirtyMap->DebugPrintAheadBehindBrief()
+       << "\n";
     sb << "Ahead:\n" << BlocksDirtyMap->DebugPrintAhead();
     sb << "Behind:\n" << BlocksDirtyMap->DebugPrintBehind();
     sb << "DDiskSyncs: " << BlocksDirtyMap->DebugPrintInflightSync() << "\n";
@@ -402,6 +405,7 @@ void TVChunk::OnBelatedWriteBlocksResponse(
     BlocksDirtyMap->UpdateBelatedEraseQueue(completedWrites, bundle->GetLsn());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
+    DoPersistDirtyMap();
     ScheduleCleaningUp();
 }
 
@@ -420,6 +424,7 @@ void TVChunk::UpdateDirtyMap(const TDBGRestoreResponse& response)
 
     DoFlush(false);
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
+    DoPersistDirtyMap();
 }
 
 void TVChunk::DoStart()
@@ -709,6 +714,7 @@ void TVChunk::OnFlushResponse(const TFlushRequestExecutor::TResponse& response)
     UpdatePendingCounters();
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Standard);
+    DoPersistDirtyMap();
     ScheduleCleaningUp();
 }
 
@@ -814,6 +820,58 @@ void TVChunk::OnEraseBelatedResponse(
     ScheduleCleaningUp();
 }
 
+void TVChunk::DoPersistDirtyMap()
+{
+    if (DirtyMapStatePersisting) {
+        return;
+    }
+    if (!BlocksDirtyMap->NeedPersist()) {
+        return;
+    }
+    DirtyMapStatePersisting = true;
+
+    auto state = BlocksDirtyMap->GetStateForPersist();
+    const ui32 stateGeneration = state.GetStateGeneration();
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Will persist dirty map. State generation %u",
+        LogTitle.GetWithTime().c_str(),
+        stateGeneration);
+
+    auto future = PartitionDirectService->UpdateDirtyMapState(
+        VChunkConfig.GetVChunkIndex(),
+        std::move(state));
+    future.Subscribe(
+        [weakSelf = weak_from_this(),
+         executor = Executor,
+         stateGeneration]   //
+        (const TFuture<void>& f)
+        {
+            Y_UNUSED(f);
+            executor->ExecuteSimple(
+                [weakSelf = std::move(weakSelf), stateGeneration]()
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnDirtyMapPersisted(stateGeneration);
+                    }
+                });
+        });
+}
+
+void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Dirty map persisted. State generation: %u",
+        LogTitle.GetWithTime().c_str(),
+        stateGeneration);
+
+    DirtyMapStatePersisting = false;
+    BlocksDirtyMap->StatePersisted(stateGeneration);
+}
+
 void TVChunk::ScheduleCleaningUp()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -868,6 +926,7 @@ void TVChunk::CleaningUp()
 
     DoFlush(true);
     DoErase(true, TBlocksDirtyMap::EEraseType::Standard);
+    DoPersistDirtyMap();
 }
 
 void TVChunk::UpdatePendingCounters()

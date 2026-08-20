@@ -274,25 +274,24 @@ namespace NKikimr::NYaml {
         }
     }
 
-    ui32 GetDefaultTabletCount(TString& type) {
-        const auto& defaults = DEFAULT_TABLETS;
-        for(const auto& [type_, cnt] : defaults) {
-            if (type == type_) {
-                return cnt;
+    const TDefaultTabletConfig& GetDefaultTabletConfig(const TString& type) {
+        for(const auto& cfg : DEFAULT_TABLETS) {
+            if (type == cfg.Type) {
+                return cfg;
             }
         }
         Y_ENSURE_BT(false, "unknown tablet " << type);
     }
 
-    bool isUnique(TString& type) {
-        return GetDefaultTabletCount(type) == 1;
+    bool isUnique(const TString& type) {
+        return GetDefaultTabletConfig(type).Count == 1;
     }
 
     std::vector<TString> GetTabletTypes() {
         const auto& defaults = DEFAULT_TABLETS;
         std::vector<TString> types;
-        for(const auto& [type, cnt] : defaults) {
-            types.push_back(TString(type));
+        for(const auto& [type, cnt, isOptional] : defaults) {
+            types.emplace_back(type);
         }
         return types;
     }
@@ -1394,7 +1393,7 @@ endDiskTypeCheck:   ;
         enumName = to_upper(enumName);
 
         if (!systemTabletsConfig->TabletsSize(type)) {
-            for(ui32 idx = 0; idx < GetDefaultTabletCount(type); ++idx) {
+            for(ui32 idx = 0; idx < GetDefaultTabletConfig(type).Count; ++idx) {
                 auto* tablet = systemTabletsConfig->AddTablets(type);
                 NKikimrConfig::TBootstrap_ETabletType res;
                 Y_ENSURE_BT(TryFromString<NKikimrConfig::TBootstrap_ETabletType>(enumName, res), "incorrect enum: " << enumName);
@@ -1409,7 +1408,7 @@ endDiskTypeCheck:   ;
             auto* tabletInfo = tablet.MutableInfo();
 
             if (!tabletInfo->HasTabletID()) {
-                Y_ENSURE_BT(idx <= GetDefaultTabletCount(type));
+                Y_ENSURE_BT(idx <= GetDefaultTabletConfig(type).Count);
                 tabletInfo->SetTabletID(GetNextTabletID(type, idx));
             }
         }
@@ -1509,6 +1508,10 @@ endDiskTypeCheck:   ;
     }
 
 
+    bool TabletsEnabledFor(const NKikimrConfig::TEphemeralInputFields& ephemeralConfig, const TString& type) {
+        return !GetDefaultTabletConfig(type).IsOptional || ephemeralConfig.GetSystemTablets().TabletsSize(type);
+    }
+
     const NProtoBuf::RepeatedPtrField<NKikimrConfig::TBootstrap::TTablet>& GetTabletsFor(NKikimrConfig::TEphemeralInputFields& ephemeralConfig, TString type) {
         auto* systemTabletsConfig = ephemeralConfig.MutableSystemTablets();
         TString enumName = type;
@@ -1516,7 +1519,7 @@ endDiskTypeCheck:   ;
         enumName = to_upper(enumName);
 
         if (!systemTabletsConfig->TabletsSize(type)) {
-            for(ui32 idx = 0; idx < GetDefaultTabletCount(type); ++idx) {
+            for(ui32 idx = 0; idx < GetDefaultTabletConfig(type).Count; ++idx) {
                 auto* tablet = systemTabletsConfig->AddTablets(type);
                 NKikimrConfig::TBootstrap_ETabletType res;
                 Y_ENSURE_BT(TryFromString<NKikimrConfig::TBootstrap_ETabletType>(enumName, res), "incorrect enum: " << enumName);
@@ -1543,7 +1546,7 @@ endDiskTypeCheck:   ;
             auto* tabletInfo = tablet.MutableInfo();
 
             if (!tabletInfo->HasTabletID()) {
-                Y_ENSURE_BT(idx <= GetDefaultTabletCount(type));
+                Y_ENSURE_BT(idx <= GetDefaultTabletConfig(type).Count);
                 tabletInfo->SetTabletID(GetNextTabletID(type, idx));
             }
 
@@ -1566,6 +1569,9 @@ endDiskTypeCheck:   ;
 
         auto* bootConfig = config.MutableBootstrapConfig();
         for(const auto& type : GetTabletTypes()) {
+            if (!TabletsEnabledFor(ephemeralConfig, type)) {
+                continue;
+            }
             for(const auto& tablet : GetTabletsFor(ephemeralConfig, type)) {
                 bootConfig->AddTablet()->CopyFrom(tablet);
             }

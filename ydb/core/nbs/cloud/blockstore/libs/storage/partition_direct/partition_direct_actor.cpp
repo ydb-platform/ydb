@@ -676,6 +676,27 @@ void TPartitionActor::HandleUpdateVChunkConfig(
             std::move(msg->UpdateCompleted)));
 }
 
+void TPartitionActor::HandleUpdateDirtyMapState(
+    const TEvPartitionDirectPrivate::TEvUpdateDirtyMapState::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    auto* msg = ev->Get();
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s Handle UpdateDirtyMapState vchunk %u",
+        LogTitle.GetWithTime().c_str(),
+        msg->VChunkIndex);
+
+    ExecuteTx(
+        ctx,
+        CreateTx<TUpdateDirtyMapState>(
+            msg->VChunkIndex,
+            std::move(msg->State),
+            std::move(msg->UpdateCompleted)));
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TPartitionActor::StateWork)
@@ -708,6 +729,9 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvUpdateVChunkConfig,
             HandleUpdateVChunkConfig);
+        HFunc(
+            TEvPartitionDirectPrivate::TEvUpdateDirtyMapState,
+            HandleUpdateDirtyMapState);
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);

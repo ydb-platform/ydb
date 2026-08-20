@@ -3,6 +3,7 @@
 #include "public.h"
 
 #include <ydb/core/nbs/cloud/blockstore/libs/service/public.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/scheduler.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/public.h>
@@ -33,6 +34,12 @@ struct IPartitionDirectService
     // local DB. Caller must ensure cfg.IsValid().
     virtual NThreading::TFuture<void> UpdateVChunkConfig(
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) = 0;
+
+    // Asynchronously persists the given TDirtyMapStateProto to the partition's
+    // local DB.
+    virtual NThreading::TFuture<void> UpdateDirtyMapState(
+        ui32 vChunkIndex,
+        TDirtyMapStateProto state) = 0;
 
     // Query the addition of a new host to the group. The request is idempotent
     // and can be repeated multiple times.

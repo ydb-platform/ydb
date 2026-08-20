@@ -12,6 +12,8 @@
 #include <util/generic/strbuf.h>
 #include <util/system/unaligned_mem.h>
 
+#include <cstring>
+
 namespace NKikimr {
 namespace NScheme {
 
@@ -297,6 +299,16 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+inline int LoadPackedI64(i64& value, const char* data, const char* end) {
+    AFL_ENSURE(data < end);
+    char buf[9] = {};
+    const size_t remain = static_cast<size_t>(end - data);
+    memcpy(buf, data, remain < sizeof(buf) ? remain : sizeof(buf));
+    const int bytes = in_long(value, buf);
+    AFL_ENSURE(bytes > 0 && static_cast<size_t>(bytes) <= remain);
+    return bytes;
+}
+
 template <typename TIntType>
 class TVarIntValueDecoder {
 public:
@@ -304,15 +316,13 @@ public:
 
     inline TType Peek(const char* data, const char* end) const {
         i64 value;
-        auto bytes = in_long(value, data);
-        AFL_ENSURE(data + bytes <= end);
+        LoadPackedI64(value, data, end);
         return value;
     }
 
     inline size_t Load(const char* data, const char* end, TType& value) const {
         i64 loaded = 0;
-        auto bytes = in_long(loaded, data);
-        AFL_ENSURE(data + bytes <= end);
+        const auto bytes = LoadPackedI64(loaded, data, end);
         value = loaded;
         return bytes;
     }
@@ -326,15 +336,13 @@ public:
 
     inline TType Peek(const char* data, const char* end) const {
         i64 value;
-        auto bytes = in_long(value, data);
-        AFL_ENSURE(data + bytes <= end);
+        LoadPackedI64(value, data, end);
         return ZigZagDecode(static_cast<TUnsigned>(value));
     }
 
     inline size_t Load(const char* data, const char* end, TType& value) const {
         i64 loaded = 0;
-        auto bytes = in_long(loaded, data);
-        AFL_ENSURE(data + bytes <= end);
+        const auto bytes = LoadPackedI64(loaded, data, end);
         value = ZigZagDecode(static_cast<TUnsigned>(loaded));
         return bytes;
     }

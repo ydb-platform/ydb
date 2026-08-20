@@ -2,6 +2,7 @@
 #include <ydb/core/scheme_types/scheme_types_defs.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/packedtypes/longs.h>
 
 #include <util/generic/vector.h>
 #include <util/random/fast.h>
@@ -334,6 +335,17 @@ Y_UNIT_TEST_SUITE(TTypeCodecsTest) {
         chunk->Seal();
         UNIT_ASSERT(estimated >= output.Size() || estimated > 0);
         UNIT_ASSERT(output.Size() > 0);
+    }
+
+    Y_UNIT_TEST(LoadPackedI64ReadsExactBuffer) {
+        char buf[9] = {};
+        const int written = out_long(i64{0}, buf);
+        UNIT_ASSERT(written > 0);
+
+        i64 value = -1;
+        const int read = NScheme::LoadPackedI64(value, buf, buf + written);
+        UNIT_ASSERT_VALUES_EQUAL(read, written);
+        UNIT_ASSERT_VALUES_EQUAL(value, 0);
     }
 
 }

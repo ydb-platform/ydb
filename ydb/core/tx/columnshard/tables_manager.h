@@ -549,62 +549,13 @@ public:
     const THashMap<TSchemeShardLocalPathId, THashSet<TInternalPathId>>& GetAll() const { return All; }
 };
 
-// Lightweight fence map shared by Move/Copy/Truncate schema operations.
-// Stores "SS-path → InternalPathId" for paths that are fenced during an in-flight
-// schema transaction. The fence blocks new writes (path resolves as unknown) until
-// the operation completes on the plan/progress step.
-class TPendingOpFence {
-private:
-    THashMap<TSchemeShardLocalPathId, TInternalPathId> Fenced;
-
-public:
-    // Record that @p ss is fenced with @p id.  Returns true on first insert;
-    // if already fenced, verifies the id matches and returns false (idempotent).
-    bool Propose(TSchemeShardLocalPathId ss, TInternalPathId id) {
-        auto [it, inserted] = Fenced.emplace(ss, id);
-        if (!inserted) {
-            AFL_VERIFY(it->second == id)("ss", ss)("expected", id)("actual", it->second);
-            return false;
-        }
-        return true;
-    }
-
-    // Return the fenced InternalPathId for @p ss, or std::nullopt if not fenced.
-    std::optional<TInternalPathId> Get(TSchemeShardLocalPathId ss) const {
-        const auto* p = Fenced.FindPtr(ss);
-        return p ? std::optional<TInternalPathId>(*p) : std::nullopt;
-    }
-
-    // Remove the fence entry on successful plan/progress.  Returns true if present.
-    bool Complete(TSchemeShardLocalPathId ss) {
-        return Fenced.erase(ss);
-    }
-
-    // Remove the fence entry on abort (same effect as Complete, but semantically distinct).
-    bool Abort(TSchemeShardLocalPathId ss) {
-        return Fenced.erase(ss);
-    }
-
-    // Direct map access (for AFL_VERIFY-based erase patterns in progress methods).
-    const TInternalPathId* FindPtr(TSchemeShardLocalPathId ss) const {
-        return Fenced.FindPtr(ss);
-    }
-
-    // Erase with AFL_VERIFY semantics (used by progress methods that expect the entry).
-    void Erase(TSchemeShardLocalPathId ss) {
-        AFL_VERIFY(Fenced.erase(ss));
-    }
-
-    bool empty() const { return Fenced.empty(); }
-};
-
 class TTablesManager: public NOlap::IPathIdTranslator {
 private:
     THashMap<TInternalPathId, TTableInfo> Tables;
     TGenerationIndex GenerationIndex;
-    TPendingOpFence Renaming;   // Fence for MoveTable (propose → progress)
-    TPendingOpFence Copying;    // Fence for CopyTable (propose → progress)
-    TPendingOpFence Truncating; // Fence for TruncateTable (propose → plan)
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> RenamingLocalToInternal;   // Paths that are being renamed
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> CopyingLocalToInternal;   // Paths that are being copied
+    THashMap<TSchemeShardLocalPathId, TInternalPathId> TruncatingLocalToInternal; // Paths that are being truncated
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<TInternalPathId>> PathsToDrop;

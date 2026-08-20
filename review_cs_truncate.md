@@ -3,7 +3,8 @@
 **Дата:** 2026-08-15 (ревизия структуры: 2026-08-17; ревью: 2026-08-20)
 **Область:** standalone columnshard-таблицы (не in-store)
 **Статус:** базовый TRUNCATE реализован; TRUNCATE источника копий (retention, §9) реализован;
-рефакторинг `tables_manager` (§11: `TGenerationIndex`, `TPendingOpFence`) выполнен;
+рефакторинг `tables_manager` (§11: `TGenerationIndex`) выполнен; ось B (`TPendingOpFence`) откачена —
+fence-карты используют сырые `THashMap`;
 осталось — наблюдаемость/раскатка (Ц5, M3). Целевая картина и разметка «сделано/осталось» — §3.
 
 ---
@@ -173,8 +174,10 @@ struct TPathInfo {
 
 - ✅ Инкапсуляция «live + история согласованы» в [`TGenerationIndex`](ydb/core/tx/columnshard/tables_manager.h:599) (§11):
   маппинги `Live`/`All` инкапсулированы, все `insert/erase` — через методы индекса.
-- ✅ Сведение fence-карт `Renaming`/`Copying`/`Truncating` к одному [`TPendingOpFence`](ydb/core/tx/columnshard/tables_manager.h:556) (§11):
-  три экземпляра одного типа с единым протоколом `Propose`/`Get`/`Complete`/`Abort`.
+- ⚠️ Fence-карты `Renaming`/`Copying`/`Truncating` используют сырые `THashMap` (§11, ось B откачена):
+  три независимых `THashMap<TSchemeShardLocalPathId, TInternalPathId>` с ручным протоколом
+  `emplace`/`FindPtr`/`erase`. Рефакторинг в `TPendingOpFence` был выполнен, но затем откачен
+  по решению команды (сохранение старой схемы для MoveTable/CopyTable и аналогичной для TruncateTable).
 - ✅ Документ приведён в соответствие с фактической реализацией.
 
 **Ц5. Наблюдаемость и раскатка** — 🟡 частично.
@@ -193,7 +196,7 @@ struct TPathInfo {
 | Plan-фаза `RunTruncateTable` | ✅ | [`columnshard_impl.cpp`](ydb/core/tx/columnshard/columnshard_impl.cpp) |
 | Lifecycle `TruncateTable` / `TruncateTablePropose` | ✅ | [`tables_manager.cpp`](ydb/core/tx/columnshard/tables_manager.cpp:550) |
 | `TGenerationIndex` (live + история поколений) | ✅ | [`tables_manager.h:599`](ydb/core/tx/columnshard/tables_manager.h:599) |
-| `TPendingOpFence` (fence для Move/Copy/Truncate) | ✅ | [`tables_manager.h:556`](ydb/core/tx/columnshard/tables_manager.h:556) |
+| Fence-карты `Renaming`/`Copying`/`Truncating` (сырые `THashMap`) | ✅ | [`tables_manager.h`](ydb/core/tx/columnshard/tables_manager.h) |
 | Выбор поколения `ResolveInternalPathIdForSnapshot` | ✅ | [`tables_manager.cpp:79`](ydb/core/tx/columnshard/tables_manager.cpp:79) |
 | Бит-в-бит перенос TTL `TtlProtos` | ✅ | [`tables_manager.h`](ydb/core/tx/columnshard/tables_manager.h) |
 | Recovery-fence в `DoOnTabletInit` | ✅ | [`schema.cpp:408`](ydb/core/tx/columnshard/transactions/operators/schema.cpp:408) |
@@ -637,7 +640,8 @@ TRUNCATE источника с одной или несколькими копи
 
 ### Этап 0 — краткосрочно (сделано ✅)
 - ✅ Базовая реализация TRUNCATE (без копий) — 17 тестов, compatibility + стресс.
-- ✅ Рефакторинг `tables_manager`: [`TGenerationIndex`](ydb/core/tx/columnshard/tables_manager.h:599) (§11), [`TPendingOpFence`](ydb/core/tx/columnshard/tables_manager.h:556) (ось B).
+- ✅ Рефакторинг `tables_manager`: [`TGenerationIndex`](ydb/core/tx/columnshard/tables_manager.h:599) (§11, ось A).
+- ⚠️ Ось B (`TPendingOpFence`) откачена: fence-карты используют сырые `THashMap`.
 - ✅ `ResolveInternalPathIdForSnapshot` перенесён в `TGenerationIndex::ResolveForSnapshot` (шаблон с callback'ами).
 
 ### Этап 1 — реализация retention (Вариант 5) — сделано ✅
@@ -719,10 +723,10 @@ public:
 (становится телом `SetLive`). `ResolveInternalPathIdForSnapshot` переезжает внутрь как метод, работающий
 с `Generations()`.
 
-#### Ось B → один шаблон/класс `TPendingOpFence` для трёх fence-карт
+#### Ось B → один шаблон/класс `TPendingOpFence` для трёх fence-карт (откачено)
 
 `Renaming`/`Copying`/`TruncatingLocalToInternal` — это один паттерн «имя → зафиксированное поколение на
-время in-flight schema tx». Свести к одному типу с единым протоколом:
+время in-flight schema tx». Было предложено свести к одному типу с единым протоколом:
 
 ```cpp
 class TPendingOpFence {                     // по экземпляру на Move/Copy/Truncate
@@ -735,6 +739,10 @@ public:
 };
 ```
 
+**Статус:** рефакторинг был выполнен, но затем откачен по решению команды.
+Текущее состояние: три независимых `THashMap` с ручным протоколом `emplace`/`FindPtr`/`erase`,
+аналогичным старой схеме для MoveTable/CopyTable. TruncateTable использует ту же схему.
+
 Тогда `*AbortPropose`-методы и conditional-insert логика (сейчас скопированы между Move/Copy/Truncate)
 становятся одной реализацией. Различается только момент вызова из `schema.cpp`.
 
@@ -742,23 +750,25 @@ public:
 
 - **Ось A** — это ровно материал §5.2–5.3 и Приложения C. Класс `TGenerationIndex` делает код
   соответствующим тексту: «индекс всех поколений» становится явной сущностью, а не парой полей.
-- **Ось B** — материал §4.2 (lifecycle propose/fence/plan/abort). `TPendingOpFence` делает «три fence
-  как один паттерн» из §5.2 явным в коде.
+- **Ось B** — материал §4.2 (lifecycle propose/fence/plan/abort). `TPendingOpFence` был реализован,
+  но затем откачен. Текущее состояние: три `THashMap` с ручным протоколом.
 - **Ось D** (`TTtlVersions`) — уже сделано так, как описано в Приложении B; служит образцом для A и B.
 
 ### 11.4 Порядок рефакторинга (безопасными шагами)
 
 1. **Ось A, чистый рефактор без смены поведения:** ввести `TGenerationIndex`, перенести оба маппинга и
    все ручные `insert/erase` в его методы; заменить обращения в 7 методах на вызовы. Покрыто существующими
-   тестами TRUNCATE/Move/Copy — поведение не меняется.
+   тестами TRUNCATE/Move/Copy — поведение не меняется. **Выполнено.**
 2. **Ось B:** ввести `TPendingOpFence`, свести три карты и `*AbortPropose` к одному типу.
+   **Откачено** — решено сохранить старую схему с сырыми `THashMap` для MoveTable/CopyTable
+   и использовать аналогичную для TruncateTable.
 3. Только после 1–2 — реализовывать retention (§9): новая ветка `TruncateTable` станет вызовом
    `GenerationIndex.ForgetLive(source, OLD)` + `SetLive(source, NEW)` без ручного трогания `All`, что
    резко снижает риск нарушить MVCC-инвариант (§7.2).
 
-**Выгода:** инвариант «Live и All всегда согласованы» и протокол fence проверяются в одном месте, а не
+**Выгода:** инвариант «Live и All всегда согласованы» проверяется в одном месте (`TGenerationIndex`), а не
 в 7; будущие операции (retention, будущие schema tx) переиспользуют готовые примитивы вместо копирования
-точечных вставок.
+точечных вставок. Ось B (fence) оставлена без рефакторинга.
 
 ---
 
@@ -937,11 +947,11 @@ insert/erase, N обычно 2–3. Линейный скан оптимален
   2 caller'а — [`tx_scan.cpp:113`](ydb/core/tx/columnshard/engines/reader/transaction/tx_scan.cpp:113) (изменённый overload) и
   [`tx_internal_scan.cpp:61`](ydb/core/tx/columnshard/engines/reader/transaction/tx_internal_scan.cpp:61) (неизменённый overload).
 
-#### M2 — рефакторинг tables_manager (см. §11) — **Обе оси завершены**
+#### M2 — рефакторинг tables_manager (см. §11) — **Ось A завершена, ось B откачена**
 - ✅ Ось A: ввести [`TGenerationIndex`](ydb/core/tx/columnshard/tables_manager.h:599), перенести `SchemeShardLocalToInternal` + `SchemeShardLocalToInternalAll`.
 - ✅ Ось A: заменить ручные `insert/erase` в 7 методах на вызовы `TGenerationIndex` (чистый рефактор).
 - ✅ Ось A: перенести `ResolveInternalPathIdForSnapshot` внутрь `TGenerationIndex` (как шаблонный метод [`ResolveForSnapshot`](ydb/core/tx/columnshard/tables_manager.h:648) с callback'ами).
-- ✅ Ось B: ввести [`TPendingOpFence`](ydb/core/tx/columnshard/tables_manager.h:556), свести `Renaming`/`Copying`/`Truncating` карты к одному типу.
+- ⚠️ Ось B: `TPendingOpFence` был реализован, но откачен. Fence-карты используют сырые `THashMap`.
 - ✅ Прогнать существующие тесты TRUNCATE/Move/Copy — поведение не должно измениться (105+ GOOD).
 
 #### M3 — наблюдаемость и раскатка
@@ -1020,11 +1030,12 @@ insert/erase, N обычно 2–3. Линейный скан оптимален
   `nullopt` — но тогда time-travel для sys-view чтений теряется. Breaking-изменение, все 2 caller'а
   обновлены (проверено). ✅.
 
-### D.6 `tables_manager.h` — `TGenerationIndex`, `TPendingOpFence`, `TtlProtos` — ✅
+### D.6 `tables_manager.h` — `TGenerationIndex`, fence-карты, `TtlProtos` — ✅
 - **`TGenerationIndex`** — инкапсулирует `Live`/`All`. **Зачем:** инвариант «Live и All согласованы» в одном
   месте (ось A). ✅.
-- **`TPendingOpFence`** — единый тип для `Renaming`/`Copying`/`Truncating`. **Зачем:** три одинаковых
-  `THashMap` с одинаковым протоколом (ось B). ✅.
+- **Fence-карты** — три сырых `THashMap<TSchemeShardLocalPathId, TInternalPathId>`:
+  `RenamingLocalToInternal`, `CopyingLocalToInternal`, `TruncatingLocalToInternal`.
+  Рефакторинг в `TPendingOpFence` был откачен. Протокол: `emplace`/`FindPtr`/`erase` с AFL_VERIFY. ✅.
 - **`TtlProtos`** — параллельный map сырых proto. **Зачем:** `TTiering` не имеет `SerializeToProto`,
   round-trip lossy; нужен бит-в-бит перенос на новое поколение. **Альтернатива:** `SerializeToProto` в
   `TTiering` (lossy), чтение из `TTableVersionInfo` (нет MVCC-истории), колонка в NiceDb (миграция).
@@ -1065,8 +1076,9 @@ insert/erase, N обычно 2–3. Линейный скан оптимален
   (`git diff origin/main` для этого файла пуст). Замечание снято.
 
 ### D.11 Итоговая консистентность
-- **В целом ветка консистентна:** retention, рефакторинг (`TGenerationIndex`/`TPendingOpFence`), recovery
+- **В целом ветка консистентна:** retention, рефакторинг (`TGenerationIndex`), recovery
   и тесты согласованы между собой и с дизайном §4–9.
+- Ось B (`TPendingOpFence`) откачена: fence-карты используют сырые `THashMap`, аналогично старой схеме.
 - **Замечание (1) снято:** `schema.cpp` seqno-switch теперь использует `FromProto(TTruncateTable)` (D.3, D.7).
 - **Замечание (2) снято:** избыточный дублирующий `#include` в `persqueue_v1/schema_actors.cpp` убран,
   файл приведён к `origin/main` (D.10).
@@ -1092,3 +1104,5 @@ insert/erase, N обычно 2–3. Линейный скан оптимален
 | 2026-08-20 | **Исправлено замечание (1) из Приложения D:** `schema.cpp` seqno-switch для `kTruncateTable` теперь использует `TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetTruncateTable()).GetRawValue()` вместо прямого `GetPathId()` — унифицировано с `kDropTable`. Обновлены D.3, D.7, D.11. Осталось одно замечание — несвязанный `#include` в `persqueue_v1/schema_actors.cpp` (D.10). |
 | 2026-08-20 | **Уточнено замечание (2) из Приложения D (D.10):** проверка показала, что `#include <ydb/core/ydb_convert/topic_description.h>`, добавленный веткой в `persqueue_v1/schema_actors.cpp`, — **избыточный дубликат**: этот же заголовок уже включён ниже в файле ([`schema_actors.cpp:10`](ydb/services/persqueue_v1/actors/schema_actors.cpp:10)) и в `origin/main`, и в ветке. Изменение не относится к TRUNCATE и функционально ничего не даёт. Рекомендация уточнена: **откатить** изменение целиком (убрать дублирующий include), а не выносить в отдельный коммит. Обновлены D.10, D.11. |
 | 2026-08-20 | **Замечание (2) из Приложения D закрыто:** дублирующий `#include <ydb/core/ydb_convert/topic_description.h>` убран из `persqueue_v1/schema_actors.cpp`; файл приведён к `origin/main` (`git diff origin/main` для него пуст). Обновлены D.10, D.11. **Все замечания ревью закрыты.** |
+| 2026-08-20 | **Откат оси B (`TPendingOpFence`).** Класс `TPendingOpFence` удалён из [`tables_manager.h`](ydb/core/tx/columnshard/tables_manager.h). Восстановлены сырые `THashMap`: `RenamingLocalToInternal`, `CopyingLocalToInternal`, `TruncatingLocalToInternal`. Все 11 точек использования в [`tables_manager.cpp`](ydb/core/tx/columnshard/tables_manager.cpp) обновлены: `emplace`/`FindPtr`/`erase` с AFL_VERIFY. Сборка OK. Обновлены §3.1, §3.2, §10, §11, M2-чеклист, D.6, D.11. |
+| 2026-08-20 | **Откат оси B (`TPendingOpFence`).** Класс `TPendingOpFence` удалён из [`tables_manager.h`](ydb/core/tx/columnshard/tables_manager.h). Восстановлены сырые `THashMap`: `RenamingLocalToInternal`, `CopyingLocalToInternal`, `TruncatingLocalToInternal`. Все 11 точек использования в [`tables_manager.cpp`](ydb/core/tx/columnshard/tables_manager.cpp) обновлены: `emplace`/`FindPtr`/`erase` с AFL_VERIFY. Сборка OK. Обновлены §3.1, §3.2, §10, §11, M2-чеклист, D.6, D.11. |

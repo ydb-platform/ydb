@@ -141,6 +141,18 @@ TApiMessage::TPtr SyncGroupError(EKafkaErrors error) {
 }
 
 
+TApiMessage::TPtr DescribeGroupsError(const TDescribeGroupsRequestData& request, EKafkaErrors error) {
+    auto response = std::make_shared<TDescribeGroupsResponseData>();
+    for (const auto& groupId : request.Groups) {
+        TDescribeGroupsResponseData::TDescribedGroup group;
+        group.ErrorCode = error;
+        group.GroupId = groupId;
+        response->Groups.push_back(std::move(group));
+    }
+    return response;
+}
+
+
 TApiMessage::TPtr CreateTopicsError(const TCreateTopicsRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TCreateTopicsResponseData>();
     for (const auto& topic : request.Topics) {
@@ -215,6 +227,8 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return TopLevelError<TLeaveGroupResponseData>(error);
         case SYNC_GROUP:
             return SyncGroupError(error);
+        case DESCRIBE_GROUPS:
+            return DescribeGroupsError(static_cast<const TDescribeGroupsRequestData&>(request), error);
         case LIST_GROUPS:
             return TopLevelError<TListGroupsResponseData>(error);
         case CREATE_TOPICS:

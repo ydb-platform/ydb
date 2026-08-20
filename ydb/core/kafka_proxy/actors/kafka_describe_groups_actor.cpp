@@ -283,8 +283,12 @@ void TKafkaDescribeGroupsActor::SendToKqpDescribeGroupsMetadataRequest(const TAc
 }
 
 void TKafkaDescribeGroupsActor::SendFailResponse(EKafkaErrors errorCode, const std::optional<TString>& errorMessage) {
+    TDescribeGroupsResponseData response;
     for (auto& groupId : DescribeGroupsRequestData->Groups) {
-        GroupIdToDescription[*groupId].ErrorCode = errorCode;
+        TDescribeGroupsResponseData::TDescribedGroup groupDescription;
+        groupDescription.ErrorCode = errorCode;
+        groupDescription.GroupId = groupId;
+        response.Groups.push_back(std::move(groupDescription));
     }
     if (errorMessage.has_value()) {
         YDB_LOG_WARN("Sending fail response with error",
@@ -298,7 +302,9 @@ void TKafkaDescribeGroupsActor::SendFailResponse(EKafkaErrors errorCode, const s
     }
 
     Send(Context->ConnectionId,
-        new TEvKafka::TEvResponse(CorrelationId, BuildResponse(), errorCode));
+        new TEvKafka::TEvResponse(CorrelationId,
+            std::make_shared<TDescribeGroupsResponseData>(std::move(response)),
+            errorCode));
 }
 
 TMaybe<TString> TKafkaDescribeGroupsActor::GetErrorFromYdbResponse(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev) {

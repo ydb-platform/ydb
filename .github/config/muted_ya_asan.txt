@@ -3,6 +3,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAll
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs unittest.[*/*] chunk
 ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/client/minikql_compile/ut unittest.sole chunk
+ydb/core/fq/libs/ydb/ut unittest.[*/*] chunk
 ydb/core/graph/shard/ut unittest.sole chunk
 ydb/core/http_proxy/ut/inside_ydb_ut TestKinesisHttpProxy.TestCounters
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestChangeMessageVisibilityBatch
@@ -49,6 +50,7 @@ ydb/core/kqp/ut/rbo KqpRboOlap.CountWhereColumnIsNull
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlockExecutionPerQuery
 ydb/core/kqp/ut/rbo KqpRboOlap.DisableBlocksOnColumnsLimit
 ydb/core/kqp/ut/rbo KqpRboOlap.DoubleOutOfRangeInJson
+ydb/core/kqp/ut/rbo KqpRboOlap.OlapFilterPeephole
 ydb/core/kqp/ut/rbo KqpRboOlap.PredicatePushdownCastErrors
 ydb/core/kqp/ut/rbo KqpRboYql.Aggregation-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.BasicHashJoin+UseBlockHashJoin
@@ -160,6 +162,7 @@ ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithManyPartitionAndData
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.TopicWithoutConsumer
 ydb/core/persqueue/public/mlp/ut TMLPPurgerTests.UnauthorizedPurger
 ydb/core/persqueue/public/mlp/ut unittest.sole chunk
+ydb/core/persqueue/public/nameresolver/ut unittest.sole chunk
 ydb/core/persqueue/public/schema/ut DescribeOperationActor.PoisonRepliesCancelled
 ydb/core/persqueue/public/schema/ut DescribeOperationActor.RetriesOnEmptyStatusResponse
 ydb/core/persqueue/public/schema/ut DescribeOperationActor.RetriesOnLocationDeliveryProblem

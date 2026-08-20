@@ -25,8 +25,9 @@ struct TClusterEndpoints {
         UNIT_ASSERT_C(cmPort, "CM_PORT is not set");
         UNIT_ASSERT_C(portA, "cluster_a_port is not set by federation_recipe");
         UNIT_ASSERT_C(portB, "cluster_b_port is not set by federation_recipe");
-        EndpointA = TStringBuilder() << "localhost:" << TString(portA);
-        EndpointB = TStringBuilder() << "localhost:" << TString(portB);
+        EndpointA = TStringBuilder() << "localhost:" << portA;
+        EndpointB = TStringBuilder() << "localhost:" << portB;
+        EndpointCM = TStringBuilder() << "localhost:" << cmPort;
     }
 
     TString EndpointA;
@@ -212,16 +213,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
     }
 
         Y_UNIT_TEST(CreateRemoteMirrorRuleWithGapsAutosplitTopic) {
-            const TString cmPort = std::getenv("CM_PORT");
-            const TString portA = std::getenv("cluster_a_port");
-            const TString portB = std::getenv("cluster_b_port");
-            UNIT_ASSERT_C(cmPort, "CM_PORT is not set");
-            UNIT_ASSERT_C(portA, "cluster_a_port is not set");
-            UNIT_ASSERT_C(portB, "cluster_b_port is not set");
-
-            const TString endpointA = TString("localhost:") + portA;
-            const TString endpointB = TString("localhost:") + portB;
-
+            TClusterEndpoints env;
             const TString srcTopicCmPath = "prod/ap-src-topic";
             const TString srcTopicYdbPath = "ap-src-topic";
             const TString dstTopicCmPath = "prod/ap-dst-topic";
@@ -229,7 +221,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
             Cerr << TInstant::Now() << " Starting test" << Endl;
 
             auto channel = grpc::CreateChannel(
-            TString("localhost:") + cmPort,
+            env.EndpointCM,
             grpc::InsecureChannelCredentials()
             );
             auto stub = NLogBroker::NAdmin::ConfigurationManagerAdminService::NewStub(channel);
@@ -246,7 +238,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
             rule->mutable_remote_mirror_rule()->mutable_topic()->set_path(dstTopicCmPath);
             rule->mutable_remote_mirror_rule()->mutable_cluster()->set_cluster("cluster_b");
 
-            rule->mutable_properties()->mutable_src_cluster_endpoint()->set_user_defined(endpointA);
+            rule->mutable_properties()->mutable_src_cluster_endpoint()->set_user_defined(env.EndpointA);
             rule->mutable_properties()->mutable_src_database()->set_user_defined(prodDatabasePath);
             rule->mutable_properties()->mutable_src_topic()->set_user_defined(srcTopicYdbPath);
             rule->mutable_properties()->mutable_src_consumer()->set_user_defined(consumerName);
@@ -256,19 +248,19 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
 
             Sleep(TDuration::Seconds(15));
 
-            const size_t kMessageCount = 60;
-            const size_t kMessageSize = 500 * 1024; // 500 KB
+            const size_t messageCount = 60;
+            const size_t messageSize = 500 * 1024; // 500 KB
             std::vector<TString> allWritten = WriteLoadMessages(
-                endpointA, prodDatabasePath, srcTopicYdbPath,
-                "ap-producer", kMessageCount, kMessageSize, kMessageSize);
+                env.EndpointA, prodDatabasePath, srcTopicYdbPath,
+                "ap-producer", messageCount, messageSize, messageSize);
 
-            GetActivePartitionCount(endpointA, prodDatabasePath, srcTopicYdbPath);
+            GetActivePartitionCount(env.EndpointA, prodDatabasePath, srcTopicYdbPath);
 
             size_t srcActivePartitions = 1;
             TInstant splitDeadline = TInstant::Now() + TDuration::Seconds(120);
             while (TInstant::Now() < splitDeadline && srcActivePartitions < 2) {
                 Sleep(TDuration::Seconds(3));
-                srcActivePartitions = GetActivePartitionCount(endpointA, prodDatabasePath, srcTopicYdbPath);
+                srcActivePartitions = GetActivePartitionCount(env.EndpointA, prodDatabasePath, srcTopicYdbPath);
                 Cerr << TInstant::Now() << " src active partitions: " << srcActivePartitions << Endl;
             }
             UNIT_ASSERT_C(srcActivePartitions >= 2, "src topic did not split after writing " + std::to_string(allWritten.size()) + " messages");
@@ -276,7 +268,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
             size_t dstActivePartitions = 0;
             TInstant dstSplitDeadline = TInstant::Now() + TDuration::Seconds(120);
             while (TInstant::Now() < dstSplitDeadline) {
-                dstActivePartitions = GetActivePartitionCount(endpointB, prodDatabasePath, dstTopicYdbPath);
+                dstActivePartitions = GetActivePartitionCount(env.EndpointB, prodDatabasePath, dstTopicYdbPath);
                 Cerr << TInstant::Now() << " dst active partitions: " << dstActivePartitions << Endl;
                 if (dstActivePartitions >= srcActivePartitions) {
                     break;
@@ -293,7 +285,7 @@ Y_UNIT_TEST_SUITE(TFederationWriteReadTest) {
 
             std::map<std::pair<ui64, ui64>, TString> dstMessages;
             {
-                TDriver driverB = MakeDriver(endpointB, prodDatabasePath);
+                TDriver driverB = MakeDriver(env.EndpointB, prodDatabasePath);
                 {
                     TTopicClient client(driverB);
                     auto session = client.CreateReadSession(

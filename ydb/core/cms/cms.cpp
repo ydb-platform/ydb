@@ -1987,6 +1987,7 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
     YDB_LOG_WARN_CTX(ctx, "BS Controller connection error");
 
     DDiskInfoRequestsInFlight = 0;
+    DDiskInfoRequestQueue = {};
 
     if (State->BSControllerPipe) {
         NTabletPipe::CloseClient(ctx, State->BSControllerPipe);
@@ -1997,7 +1998,10 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
         ctx.Send(State->Sentinel, new TEvSentinel::TEvBSCPipeDisconnected);
 
     // Recreate the pipe here as well as on CMS activation. Otherwise a transient
-    // BSC restart leaves DDisk synchronization without a pipe forever.
+    // BSC restart leaves DDisk synchronization without a pipe forever. The
+    // ListTablets request sent from here is buffered by the pipe client until
+    // the connection is (re-)established, so we must not send it again from
+    // Handle(TEvClientConnected) once the pipe actually connects.
     StartDDiskSync(ctx);
 }
 
@@ -2811,7 +2815,12 @@ void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
     if (msg->Status != NKikimrProto::OK) {
         OnBSCPipeDestroyed(ctx);
     } else {
-        StartDDiskSync(ctx);
+        // Do not call StartDDiskSync here: the pipe already exists (it was
+        // created either on CMS activation or in OnBSCPipeDestroyed) and the
+        // ListTablets request was already buffered by the pipe client and
+        // will be delivered now that the connection succeeded. Calling
+        // StartDDiskSync again would send a second, duplicate ListTablets
+        // request for every reconnect.
         SendQueuedDDiskInfoRequests(ctx);
     }
 }

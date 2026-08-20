@@ -2682,6 +2682,11 @@ public:
     void Handle(TEvBlobStorage::TEvControllerDDiskInfoListTablets::TPtr ev);
     void Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTablet::TPtr ev);
 
+    // Handles both the CMS notification pipe (CmsPipe) and forwards other
+    // client pipes (e.g. Console) to their respective owners.
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
+
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NODE WARDEN PIPE LIFETIME MANAGEMENT
 

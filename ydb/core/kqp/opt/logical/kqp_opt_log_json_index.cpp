@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt_impl.h>
+#include <ydb/core/kqp/opt/logical/kqp_opt_log_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
 #include <ydb/library/json_index/json_index.h>
@@ -807,7 +808,8 @@ std::optional<TPredicateCollectResult> VisitJsonPredicate(
 }   // namespace
 
 std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
-    const TExprBase& body, const TExprBase& node, TExprContext& ctx, const THashSet<TString>& indexedColumns) {
+    const TExprBase& body, const TExprBase& node, TExprContext& ctx, const THashSet<TString>& indexedColumns,
+    const TVector<TString>& prefixColumns, const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns) {
     auto result = VisitJsonPredicate(body, ctx, indexedColumns);
     if (!result.has_value()) {
         return std::unexpected(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << kErrorMessage << "nothing to extract"));
@@ -843,7 +845,51 @@ std::expected<TJsonIndexSettings, TIssue> CollectJsonIndexPredicate(
     settings.SetMinimumShouldMatch(Build<TCoString>(ctx, node.Pos()).Literal().Build("").Done().Ptr());
     settings.SetTokens(ctx.NewList(node.Pos(), std::move(tokenNodes)));
 
-    return TJsonIndexSettings{ .ColumnName = std::move(result->ColumnName), .Settings = std::move(settings) };
+    // Extract prefix column equality predicates from the predicate tree
+    if (!prefixColumns.empty()) {
+        TVector<std::pair<TString, TExprNode::TPtr>> capturedPrefixColumns = seedPrefixColumns;
+        const THashSet<TString> prefixColumnsSet{prefixColumns.begin(), prefixColumns.end()};
+        static const THashSet<TString> AllowedJsonExprs = {
+            "And", "OptionalIf", "Just", "AssumeStrict"
+        };
+        TExprVisitPtrFunc extract = [&](const TExprNode::TPtr& expr) {
+            TryExtractPrefixValues(expr, prefixColumnsSet, capturedPrefixColumns);
+            auto optionalIf = TExprBase(expr).Maybe<TCoOptionalIf>();
+            if (optionalIf) {
+                VisitExpr(optionalIf.Cast().Predicate().Ptr(), extract);
+                return false;
+            }
+            auto coalesce = TExprBase(expr).Maybe<TCoCoalesce>();
+            if (coalesce) {
+                auto boolOr = coalesce.Cast().Value().Maybe<TCoBool>();
+                if (!boolOr || boolOr.Cast().Literal().Value() != "false") {
+                    return false;
+                }
+                VisitExpr(coalesce.Cast().Predicate().Ptr(), extract);
+                return false;
+            }
+            return AllowedJsonExprs.contains(expr->Content());
+        };
+        VisitExpr(body.Ptr(), extract);
+
+        if (capturedPrefixColumns.size() < prefixColumns.size()) {
+            return std::unexpected(TIssue(ctx.GetPosition(node.Pos()),
+                "Prefixed JSON index requires an equality predicate (column = <value>) on every prefix column"));
+        }
+
+        THashMap<TString, TExprNode::TPtr> byName;
+        for (auto& [name, value] : capturedPrefixColumns) {
+            byName[name] = value;
+        }
+        for (const auto& col : prefixColumns) {
+            settings.PrefixColumns.emplace_back(col, byName.at(col));
+        }
+    }
+
+    return TJsonIndexSettings{
+        .ColumnName = std::move(result->ColumnName),
+        .Settings = std::move(settings),
+    };
 }
 
 }   // namespace NKikimr::NKqp::NOpt

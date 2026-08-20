@@ -383,7 +383,6 @@ private:
         }
     }
 
-private:
     TPartitionMap Partitions_;
     std::stack<TPartitionMap::iterator, std::deque<TPartitionMap::iterator, TMKQLAllocator<TPartitionMap::iterator>>> HasReadyOutput_;
     bool Terminating_ = false;

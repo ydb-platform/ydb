@@ -341,7 +341,6 @@ public:
 private:
     void* AllocSlow(size_t sz, EMemorySubPool pagePool);
 
-private:
     TAlignedPagePool* PagePool_;
     TAllocState::TCurrentPages CurrentPages_ = TAllocState::EmptyCurrentPages;
 };

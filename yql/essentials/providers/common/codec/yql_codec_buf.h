@@ -181,7 +181,6 @@ private:
     void ReadManySlow(char* buffer, size_t count);
     void SkipManySlow(size_t count);
 
-private:
     IBlockReader* Source_ = nullptr;
     NKikimr::NMiniKQL::TSamplingStatTimer* ReadTimer_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_ = nullptr;
@@ -273,7 +272,6 @@ private:
 
     void WriteManySlow(const char* buffer, size_t count);
 
-private:
     IBlockWriter& Target_;
     NKikimr::NMiniKQL::TStatTimer* WriteTimer_;
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_ = nullptr;

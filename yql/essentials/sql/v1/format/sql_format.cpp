@@ -3206,7 +3206,6 @@ private:
         CurrentIndent_ -= OneIndent;
     }
 
-private:
     const TStaticData& StaticData_;
     const TParsedTokenList& ParsedTokens_;
     const TParsedTokenList& Comments_;

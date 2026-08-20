@@ -16974,7 +16974,6 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
             return dataProvider.GetIntentDeterminationTransformer().Transform(input, output, ctx);
         }
 
-    private:
         const TTypeAnnotationContext& Types_;
     };
 

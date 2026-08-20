@@ -818,7 +818,7 @@ private:
         }
     }
 
-private:
+
     TExprContext& Ctx_;
     TTypeAnnotationContext& Types_;
     IArrowResolver::TUnsupportedTypeCallback OnUnsupportedTypeCallback_;

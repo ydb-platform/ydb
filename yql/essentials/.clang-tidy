@@ -393,7 +393,7 @@ Checks: >
   -readability-named-parameter,
   readability-non-const-parameter,
   -readability-qualified-auto,
-  -readability-redundant-access-specifiers,
+  readability-redundant-access-specifiers,
   -readability-redundant-casting,
   -readability-redundant-control-flow,
   readability-redundant-declaration,

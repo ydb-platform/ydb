@@ -307,7 +307,6 @@ private:
         return ReadValue_ = ItemPacker_.Unpack(TStringBuf(FileState_->Buffer.Data(), length), ctx.HolderFactory);
     }
 
-private:
     const NUdf::TLoggerPtr Logger_;
     const NUdf::TLogComponentId LogComponent_;
     const size_t Width_;
@@ -675,7 +674,6 @@ public:
             }
         }
 
-    private:
         const TSelf* const Self_;
         bool EatInput_;
         bool KeyHasNulls_;
@@ -1158,7 +1156,6 @@ public:
             }
         }
 
-    private:
         const TSelf* const Self_;
         TFetcher Fetcher_;
         bool EatInput_;
@@ -1682,7 +1679,6 @@ private:
         return ItemPacker_.Unpack(TStringBuf(FileState_->Buffer.Data(), length), Ctx_->HolderFactory);
     }
 
-private:
     const NUdf::TLoggerPtr Logger_;
     const NUdf::TLogComponentId LogComponent_;
     TValuePacker& ItemPacker_;
@@ -2074,7 +2070,6 @@ public:
             }
         }
 
-    private:
         NUdf::TUnboxedValue Stream_;
         TComputationContext& Ctx_;
         const TSelf* const Self_;

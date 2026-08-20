@@ -465,7 +465,6 @@ private:
         Dirty_.store(true);
     }
 
-private:
     const TFsPath StorageDir_;
     const TFsPath ProcessTempDir_;
     const TFsPath FileLocksDir_;

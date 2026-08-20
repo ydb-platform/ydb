@@ -86,7 +86,6 @@ private:
         }
     }
 
-private:
     T* Ptr_;
 };
 
@@ -123,7 +122,6 @@ public:
         STEAL_REF
     };
 
-public:
     // Implicit ownership capturing is okay for smart pointers
     // NOLINTNEXTLINE(google-explicit-constructor)
     inline TRefCountedPtr(T* ptr = nullptr)
@@ -233,7 +231,6 @@ private:
         }
     }
 
-private:
     T* Ptr_;
 };
 

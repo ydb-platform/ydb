@@ -1884,7 +1884,6 @@ private:
         return newBuf;
     }
 
-private:
     const TExprNode& Root_;
     TTypeAnnotationContext& Ctx_;
     TExprContext& ExprCtx_;

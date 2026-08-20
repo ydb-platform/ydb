@@ -524,7 +524,6 @@ protected:
         Source_->SetCompositeSelect(composite);
     }
 
-protected:
     void SetSource(ISource* source) {
         Source_ = source;
     }
@@ -582,7 +581,6 @@ protected:
         return result ? result : ISource::FindColumnMistype(name);
     }
 
-protected:
     TColumns Columns_;
 };
 
@@ -2622,7 +2620,6 @@ private:
         return Y("block", Q(L(block, Y("return", "core"))));
     }
 
-private:
     TSourcePtr Source_;
     TVector<TNodePtr> GroupByExpr_;
     TVector<TNodePtr> DistinctAggrExpr_;
@@ -2894,7 +2891,6 @@ private:
         return terms;
     }
 
-private:
     TSourcePtr Source_;
     TNodePtr With_;
     const bool WithExtFunction_;

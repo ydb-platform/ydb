@@ -254,7 +254,6 @@ private:
     TString GetOpName() const override;
     TNodePtr ProcessIntervalParam(const TNodePtr& val) const;
 
-private:
     TVector<TNodePtr> Args_;
     TSourcePtr FakeSource_;
     TNodePtr TimeExtractor_;

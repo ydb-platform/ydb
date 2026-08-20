@@ -1329,7 +1329,6 @@ private:
         return nullptr;
     }
 
-private:
     TStringBuf Str_;
     TIssues& Issues_;
     TPosition TokenBegin_, Position_;
@@ -1678,7 +1677,6 @@ private:
         Out_ << '>';
     }
 
-private:
     IOutputStream& Out_;
     bool TopLevel_ = true;
 };

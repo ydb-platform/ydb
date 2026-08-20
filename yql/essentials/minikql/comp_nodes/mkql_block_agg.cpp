@@ -334,7 +334,6 @@ private:
         U_.E.Ptr = ptr;
     }
 
-private:
     union {
         TExternal E;
         TInplace I;
@@ -617,17 +616,14 @@ private:
             }
         }
 
-    private:
         NUdf::TUnboxedValue State_;
         NUdf::TUnboxedValue Stream_;
     };
 
-private:
     void RegisterDependencies() const final {
         DependsOn(Stream_);
     }
 
-private:
     IComputationNode* const Stream_;
     const std::optional<ui32> FilterColumn_;
     const size_t Width_;
@@ -1343,7 +1339,6 @@ private:
         const NYql::EDatumValidationMode ValidationMode_;
     };
 
-private:
     void RegisterDependencies() const final {
         this->DependsOn(Stream_);
     }

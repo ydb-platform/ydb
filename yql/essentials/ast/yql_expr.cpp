@@ -3932,7 +3932,6 @@ private:
         }
     }
 
-private:
     SHA256_CTX Sha_;
     TNodeMap<ui64> Visited_;
 };

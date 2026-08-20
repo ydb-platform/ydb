@@ -467,7 +467,6 @@ private:
         return static_cast<TDeriv&>(*this);
     }
 
-private:
     ui64 Size_ = 0;
     ui64 Capacity_;
     ui64 CapacityShift_;

@@ -1087,7 +1087,6 @@ private:
         return EFetchResult::Finish;
     }
 
-private:
     EOperatingMode Mode_ = EOperatingMode::InMemory;
 
     IComputationWideFlowNode* const FlowLeft_;

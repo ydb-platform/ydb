@@ -47,7 +47,6 @@ protected:
         return buffer;
     }
 
-protected:
     arrow::MemoryPool* Pool_;
 };
 
@@ -205,7 +204,6 @@ protected:
     {
     }
 
-protected:
     std::vector<IBlockTrimmer::TPtr> Children_;
 };
 

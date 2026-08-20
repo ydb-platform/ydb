@@ -92,7 +92,6 @@ private:
         }
     }
 
-private:
     std::array<char, 1 << 20> Buf_;
     char* Current_;
     char* const End_;

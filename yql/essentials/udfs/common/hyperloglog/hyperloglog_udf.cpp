@@ -235,7 +235,6 @@ public:
     {
     }
 
-public:
     static const TStringRef& Name() {
         static auto Name = TStringRef::Of("Serialize");
         return Name;

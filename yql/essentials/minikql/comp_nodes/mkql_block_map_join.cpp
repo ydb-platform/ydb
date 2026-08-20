@@ -310,7 +310,6 @@ public:
         {
         }
 
-    private:
         size_t CurrentBlockOffset_ = 0;
         size_t CurrentItemOffset_ = 0;
 
@@ -505,7 +504,6 @@ private:
         DependsOn(List_);
     }
 
-private:
     TVector<TType*> Types_;
     size_t BlockLengthIndex_ = 0;
 
@@ -706,7 +704,6 @@ public:
         {
         }
 
-    private:
         EIteratorType Type_;
         const TBlockIndex* BlockIndex_ = nullptr;
 
@@ -721,7 +718,6 @@ public:
         TKeyItemsRef ItemsToLookup_;
     };
 
-public:
     TBlockIndex(
         TMemoryUsageInfo* memInfo,
         const TVector<ui32>& keyColumns,
@@ -907,7 +903,6 @@ private:
         return this;
     }
 
-private:
     const TVector<ui32>& KeyColumns_;
     NUdf::TUnboxedValue BlockStorage_;
 
@@ -949,7 +944,6 @@ private:
         DependsOn(BlockStorage_);
     }
 
-private:
     const TVector<ui32> KeyColumns_;
     IComputationNode* const BlockStorage_;
     const bool Any_;
@@ -1166,7 +1160,6 @@ private:
         this->DependsOn(RightBlockIndex_);
     }
 
-private:
     const TVector<TType*> ResultItemTypes_;
 
     const TVector<TType*> LeftItemTypes_;
@@ -1329,7 +1322,6 @@ private:
         this->DependsOn(RightBlockStorage_);
     }
 
-private:
     const TVector<TType*> ResultItemTypes_;
 
     const TVector<TType*> LeftItemTypes_;

@@ -1080,7 +1080,6 @@ private:
     ui32 GetFlags(ui32 typeId);
     ui64 GetPgExtensionsMask(ui32 typeId);
 
-private:
     ui32 TypeId_;
 };
 
@@ -1403,7 +1402,6 @@ private:
         return flags;
     }
 
-private:
     const TTypeAnnotationNode* ReturnType_;
     TVector<TArgumentInfo> Arguments_;
     const size_t OptionalArgumentsCount_;

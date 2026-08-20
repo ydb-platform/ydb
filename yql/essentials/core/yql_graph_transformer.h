@@ -179,7 +179,7 @@ public:
 
     TStatistics GetStatistics() const override { return Statistics_; }
 
-public:
+
     virtual TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;
     virtual NThreading::TFuture<void> DoGetAsyncFuture(const TExprNode& input) = 0;
     virtual TStatus DoApplyAsyncChanges(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) = 0;

@@ -156,7 +156,6 @@ struct TComputationContext: public TComputationContextLLVM {
 private:
     NUdf::ITypeInfoHelper::TPtr MakeTypeHelper(TMaybe<NUdf::TSourcePosition>& target);
 
-private:
     NYql::TRuntimeSettings::TConstPtr RuntimeSettingsPtr_;
     ui64 InitRss_ = 0ULL;
     ui64 LastRss_ = 0ULL;

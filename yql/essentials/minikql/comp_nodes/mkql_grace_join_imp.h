@@ -271,7 +271,6 @@ private:
     void ProcessBucketRestoration();
     void ProcessFinalizing();
 
-private:
     enum class EState {
         InMemory,
         Spilling,

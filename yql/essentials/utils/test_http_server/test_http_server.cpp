@@ -121,7 +121,6 @@ private:
         return RequestHandler_(request);
     }
 
-private:
     THttpServer HttpServer_;
     const int Port_;
     TRequestHandler RequestHandler_;

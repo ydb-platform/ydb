@@ -25,7 +25,6 @@ protected:
         NFs::Remove(Path_.GetPath() + ".idx.tmp");
     }
 
-protected:
     void WriteIndex(ui64 totalItems, ui64 totalBytes, ui64 checksum) const {
         TFileOutput indexFile(Path_.GetPath() + ".idx.tmp");
         indexFile.Write(&WrittenAt_, sizeof(WrittenAt_));
@@ -47,7 +46,6 @@ protected:
         totalBytes += length;
     }
 
-protected:
     const TFsPath Path_;
     const TInstant WrittenAt_;
 };
@@ -94,7 +92,6 @@ private:
         WriteIndex(totalItems, totalBytes, checksum);
     }
 
-private:
     const IQStoragePtr Storage_;
     const IQWriterPtr Writer_;
 };
@@ -272,7 +269,6 @@ private:
         }
     }
 
-private:
     TMaybe<TTempDir> TmpDir_;
     TFsPath Folder_;
     const TFileQStorageSettings Settings_;

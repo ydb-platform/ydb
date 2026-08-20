@@ -569,13 +569,11 @@ class TMultiConstraintNode final: public TConstraintNode {
 public:
     using TMapType = NSorted::TSimpleMap<ui32, TConstraintSet>;
 
-public:
     TMultiConstraintNode(TExprContext& ctx, TMapType&& items);
     TMultiConstraintNode(TExprContext& ctx, ui32 index, const TConstraintSet& constraints);
     TMultiConstraintNode(TExprContext& ctx, const NYT::TNode& serialized);
     TMultiConstraintNode(TMultiConstraintNode&& constr);
 
-public:
     static constexpr std::string_view Name() {
         return "Multi";
     }

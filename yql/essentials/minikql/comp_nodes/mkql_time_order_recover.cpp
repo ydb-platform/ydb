@@ -151,7 +151,6 @@ public:
             Terminating_ = false;
         }
 
-    private:
         const TSelf* const Self_;
         THeap Heap_;
         const TTimeinterval Delay_;

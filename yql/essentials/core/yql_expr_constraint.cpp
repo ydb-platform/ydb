@@ -3369,7 +3369,7 @@ private:
         return FromFirst<TEmptyConstraintNode, TUniqueConstraintNode, TDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode, TStreamingConstraintNode>(input, output, ctx);
     }
 
-private:
+
     template <class TConstraintContainer>
     static void CopyExcept(TConstraintContainer& dst, const TConstraintContainer& from, const TSet<TStringBuf>& except) {
         for (auto c: from.GetAllConstraints()) {
@@ -3447,7 +3447,7 @@ private:
         }
         return valueNode;
     }
-private:
+
     const bool SubGraph_;
     std::unordered_map<std::string_view, THandler> Functions_;
 };
@@ -3945,7 +3945,7 @@ private:
             }
         }
     }
-private:
+
     TAutoPtr<IGraphTransformer> CallableTransformer_;
     std::deque<TExprNode::TPtr> CallableInputs_;
     TNodeOnNodeOwnedMap Processed_;

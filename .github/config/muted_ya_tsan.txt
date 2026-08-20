@@ -1,7 +1,6 @@
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.CheckVChunksArePerTablet_Uring
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.ConnectionTokenAcrossRestart
 ydb/core/blobstorage/ddisk/ut TDDiskActorPDiskTest.EmptyRestart_Uring
-ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestEnabling
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestLoweringMemoryLimit
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadActiveOneDeadInactiveMirror3dcMemoryLimit10_KB
 ydb/core/blobstorage/ut_blobstorage/ut_phantom_blobs PhantomBlobs.TestOneDeadAllRestartMirror3of4MemoryLimit10_KB
@@ -111,7 +110,6 @@ ydb/library/actors/http/ut THttpProxyWithMTls.RequiredNoClientCertificate
 ydb/library/actors/http/ut unittest.sole chunk
 ydb/library/nmslib/test/run_test_integr exectest.run[test_integr]
 ydb/library/nmslib/test/run_test_integr exectest.sole chunk
-ydb/services/config/ut unittest.sole chunk
 ydb/tests/fq/http_api py3test.sole chunk
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_complex_results
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_integral_results
@@ -779,7 +777,6 @@ ydb/tests/olap/scenario py3test.[*/*] chunk
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
 ydb/tests/sql py3test.sole chunk
 ydb/tests/sql test_crud.py.TestYdbCrudOperations.test_crud_operations
-ydb/tests/stress/backup/tests py3test.sole chunk
 ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test
 ydb/tests/stress/compare_index_performance/tests test_compare.py.TestCompareIndexPerformance.test_vector
 ydb/tests/stress/ctas/tests test_workload.py.TestYdbWorkload.test

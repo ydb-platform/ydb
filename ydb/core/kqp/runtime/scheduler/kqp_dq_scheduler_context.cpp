@@ -1,6 +1,6 @@
 #include "kqp_dq_scheduler_context.h"
 
-#include "kqp_schedulable_actor.h"
+#include "kqp_schedulable_base.h"
 #include "tree/dynamic.h"
 
 namespace NKikimr::NKqp::NScheduler {
@@ -17,6 +17,7 @@ std::unique_ptr<NYql::NDq::IDqSchedulableWork> TDqSchedulerContext::CreateSchedu
     return std::make_unique<TSchedulableBase>(TSchedulableOptions{
         .Query = Query,
         .IsSchedulable = IsSchedulable,
+        .LazyDemand = true,
     });
 }
 

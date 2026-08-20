@@ -1,7 +1,7 @@
 #pragma once
 
 #include "fwd.h"
-#include "kqp_schedulable_actor.h"
+#include "kqp_schedulable_base.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 

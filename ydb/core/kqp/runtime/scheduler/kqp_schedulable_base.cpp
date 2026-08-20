@@ -1,4 +1,4 @@
-#include "kqp_schedulable_actor.h"
+#include "kqp_schedulable_base.h"
 
 #include "kqp_schedulable_task.h"
 
@@ -29,15 +29,17 @@ namespace {
 } // namespace
 
 TSchedulableBase::TSchedulableBase(const TOptions& options)
-    : Key(ExtractKey(options.Query))
+    : Query(options.Query)
+    , Key(ExtractKey(Query))
     , IsSchedulable(options.IsSchedulable)
+    , LazyDemand(options.LazyDemand)
     , LastExecutionTime(AverageExecutionTime)
 {
-    if (options.Query) {
-        SchedulableTask = std::make_shared<TSchedulableTask>(options.Query);
+    if (Query && !LazyDemand) {
+        SchedulableTask = std::make_shared<TSchedulableTask>(Query);
     }
 
-    Y_ENSURE(!IsSchedulable || IsAccountable());
+    Y_ENSURE(!IsSchedulable || Query);
 }
 
 TSchedulableBase::~TSchedulableBase() {
@@ -58,6 +60,9 @@ void TSchedulableBase::RegisterForResume(const NActors::TActorId& actorId) {
 }
 
 bool TSchedulableBase::StartExecution(TMonotonic now) {
+    if (!SchedulableTask && LazyDemand) {
+        SchedulableTask = std::make_shared<TSchedulableTask>(Query);
+    }
     Y_ASSERT(SchedulableTask);
     Y_ASSERT(!Executed);
 
@@ -114,6 +119,10 @@ void TSchedulableBase::StopExecution(bool& forcedResume) {
         // TODO: resume tasks for all queries from parent leaf pool
     } else if (Throttled) {
         Resume();
+    }
+
+    if (LazyDemand) {
+        SchedulableTask.reset();
     }
 }
 

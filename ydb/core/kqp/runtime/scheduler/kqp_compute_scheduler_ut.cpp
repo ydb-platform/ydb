@@ -1,6 +1,6 @@
 #include "kqp_compute_scheduler_service.h"
 
-#include "kqp_schedulable_actor.h"
+#include "kqp_schedulable_base.h"
 #include "kqp_schedulable_task.h"
 #include "tree/dynamic.h"
 #include "tree/snapshot.h"

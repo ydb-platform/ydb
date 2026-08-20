@@ -19,6 +19,7 @@ public:
     struct TOptions {
         NHdrf::NDynamic::TQueryPtr Query;
         bool IsSchedulable;
+        bool LazyDemand = false;
     };
 
     explicit TSchedulableBase(const TOptions& options);
@@ -47,9 +48,11 @@ protected:
 private:
     void Resume();
 
+    const NHdrf::NDynamic::TQueryPtr Query;
     TSchedulableTaskPtr SchedulableTask;
     const NYql::NDq::TPoolKey Key;
     const bool IsSchedulable;
+    const bool LazyDemand;
 
     THPTimer Timer;
     bool Executed = false;

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "kqp_dq_scheduler_context.h"
-#include "kqp_schedulable_actor.h"
+#include "kqp_schedulable_base.h"
 #include "kqp_schedulable_task.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>

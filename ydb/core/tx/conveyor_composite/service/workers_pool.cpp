@@ -276,6 +276,9 @@ void TWorkersPool::ApplyTopologyUpdate(
                 linkConfig.GetWeight(), categories[(ui64)category], Counters->GetCategorySignals(category));
         }
     }
+    for (auto& process : oldProcesses) {
+        process.GetCounters()->ValueWeight->Set(0);
+    }
     Processes = std::move(newProcesses);
 }
 

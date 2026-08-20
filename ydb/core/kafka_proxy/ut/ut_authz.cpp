@@ -98,7 +98,14 @@ TKafkaInt16 OffsetCommitPartitionError(TKafkaTestClient& client, const TString& 
     return msg->Topics[0].Partitions[0].ErrorCode;
 }
 
-void CreateTopic(NTopic::TTopicClient& pqClient, const TString& topicName, const TString& consumer = {}
+void CreateTopic(NTopic::TTopicClient& pqClient, const TString& topicName, const TString& consumer = {}, ui32 partitions = 1) {
+    auto settings = NTopic::TCreateTopicSettings().PartitioningSettings(partitions, 100);
+    if (consumer) {
+        settings.BeginAddConsumer(consumer).EndAddConsumer();
+    }
+    auto result = pqClient.CreateTopic(topicName, settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+}
 
 void AlterTopicPartitions(NTopic::TTopicClient& pqClient, const TString& topicName, ui64 minActivePartitions) {
     auto result = pqClient
@@ -109,6 +116,22 @@ void AlterTopicPartitions(NTopic::TTopicClient& pqClient, const TString& topicNa
 
 void DropTopic(NTopic::TTopicClient& pqClient, const TString& topicName) {
     auto result = pqClient.DropTopic(topicName).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+}
+
+void ModifyTopicPermissions(
+    TDriver& driver,
+    const TString& path,
+    const TString& user,
+    const std::vector<std::string>& names,
+    bool grant)
+{
+    NYdb::NScheme::TSchemeClient schemeClient(driver);
+    NYdb::NScheme::TPermissions permissions(user, names);
+    auto settings = grant
+        ? NYdb::NScheme::TModifyPermissionsSettings().AddGrantPermissions(permissions)
+        : NYdb::NScheme::TModifyPermissionsSettings().AddRevokePermissions(permissions);
+    auto result = schemeClient.ModifyPermissions(path, settings).ExtractValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
 }
 
@@ -127,6 +150,69 @@ void WaitUntil(TFn&& fn, TDuration timeout = TDuration::Seconds(20)) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
+    Y_UNIT_TEST(ProduceAndFetchFailAfterTopicAclRevoke) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+            .ACLRetryTimeoutSec = 300,
+        });
+
+        TString topicName = "/Root/topic-acl-revoke";
+        TString groupId = "authz-group";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, groupId);
+        ModifyTopicPermissions(
+            *testServer.Driver,
+            topicName,
+            "usernorights",
+            {"ydb.generic.read", "ydb.generic.write"},
+            true);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
+
+        UNIT_ASSERT_VALUES_EQUAL(ProduceError(client, topicName, "before-revoke"), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(FetchPartitionError(client, topicName), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(ListOffsetsPartitionError(client, topicName), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(OffsetFetchPartitionError(client, topicName, groupId), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(OffsetCommitPartitionError(client, topicName, groupId), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        ModifyTopicPermissions(
+            *testServer.Driver,
+            topicName,
+            "usernorights",
+            {"ydb.generic.read", "ydb.generic.write"},
+            false);
+
+        const auto revokeWaitStart = TInstant::Now();
+        WaitUntil([&] {
+            auto error = ProduceError(client, topicName, "after-revoke");
+            UNIT_ASSERT_VALUES_UNEQUAL(error, static_cast<TKafkaInt16>(EKafkaErrors::REQUEST_TIMED_OUT));
+            UNIT_ASSERT_VALUES_UNEQUAL(error, static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_SERVER_ERROR));
+            return error == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+        });
+        UNIT_ASSERT_C(
+            TInstant::Now() - revokeWaitStart < TDuration::Seconds(10),
+            "produce after ACL revoke must fail immediately, not after the 30s cookie timeout");
+        WaitUntil([&] {
+            return FetchPartitionError(client, topicName) == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+        });
+        // Scheme cache hides topics without DescribeSchema as PathErrorUnknown.
+        // ListOffsets must keep UNKNOWN_TOPIC_OR_PARTITION for missing topics (mixed-version / auto-create).
+        WaitUntil([&] {
+            return ListOffsetsPartitionError(client, topicName) == static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION);
+        });
+        WaitUntil([&] {
+            return OffsetFetchPartitionError(client, topicName, groupId) == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+        });
+        WaitUntil([&] {
+            return OffsetCommitPartitionError(client, topicName, groupId) == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+        });
+
+        auto apiVersions = client.ApiVersions();
+        UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    }
+
     Y_UNIT_TEST(ProduceAndFetchFailAfterTokenExpires) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
@@ -250,7 +336,7 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     }
 
-Y_UNIT_TEST(ListOffsetsUnknownTopicStaysUnknownAfterSasl) {
+    Y_UNIT_TEST(ListOffsetsUnknownTopicStaysUnknownAfterSasl) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
             .CheckACL = true,
@@ -264,8 +350,9 @@ Y_UNIT_TEST(ListOffsetsUnknownTopicStaysUnknownAfterSasl) {
             static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
     }
 
-
-Y_UNIT_TEST(OffsetFetchUnknownTopicIsNoneMinusOneAfterSasl) {
+    // Matches Apache Kafka OffsetFetch v1+: missing topic → NONE + committedOffset -1,
+    // no auto-create. See https://issues.apache.org/jira/browse/KAFKA-20165
+    Y_UNIT_TEST(OffsetFetchUnknownTopicIsNoneMinusOneAfterSasl) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
             .CheckACL = true,
@@ -286,8 +373,93 @@ Y_UNIT_TEST(OffsetFetchUnknownTopicIsNoneMinusOneAfterSasl) {
         UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
     }
 
+    Y_UNIT_TEST(AclRevokeThenGrantRestoresProduceAndFetch) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+            .ACLRetryTimeoutSec = 300,
+        });
 
-Y_UNIT_TEST(ReadOnlyUserCanFetchButNotProduce) {
+        TString topicName = "/Root/topic-acl-regrant";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName);
+        ModifyTopicPermissions(
+            *testServer.Driver,
+            topicName,
+            "usernorights",
+            {"ydb.generic.read", "ydb.generic.write"},
+            true);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
+        UNIT_ASSERT_VALUES_EQUAL(ProduceError(client, topicName, "before-revoke"), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        ModifyTopicPermissions(
+            *testServer.Driver,
+            topicName,
+            "usernorights",
+            {"ydb.generic.read", "ydb.generic.write"},
+            false);
+        WaitUntil([&] {
+            return ProduceError(client, topicName, "revoked") == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+        });
+
+        ModifyTopicPermissions(
+            *testServer.Driver,
+            topicName,
+            "usernorights",
+            {"ydb.generic.read", "ydb.generic.write"},
+            true);
+        WaitUntil([&] {
+            return ProduceError(client, topicName, "after-grant") == static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(FetchPartitionError(client, topicName), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        auto apiVersions = client.ApiVersions();
+        UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    }
+
+    Y_UNIT_TEST(AclRevokeOnOneTopicDoesNotAffectAnother) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+            .ACLRetryTimeoutSec = 300,
+        });
+
+        TString revokedTopic = "/Root/topic-acl-revoked";
+        TString keptTopic = "/Root/topic-acl-kept";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, revokedTopic);
+        CreateTopic(pqClient, keptTopic);
+        for (const auto& topicName : {revokedTopic, keptTopic}) {
+            ModifyTopicPermissions(
+                *testServer.Driver,
+                topicName,
+                "usernorights",
+                {"ydb.generic.read", "ydb.generic.write"},
+                true);
+        }
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka("usernorights@/Root", "dummyPass");
+        UNIT_ASSERT_VALUES_EQUAL(ProduceError(client, revokedTopic, "revoked-before"), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(ProduceError(client, keptTopic, "kept-before"), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
+        ModifyTopicPermissions(
+            *testServer.Driver,
+            revokedTopic,
+            "usernorights",
+            {"ydb.generic.read", "ydb.generic.write"},
+            false);
+
+        WaitUntil([&] {
+            return ProduceError(client, revokedTopic, "revoked-after") == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+        });
+        UNIT_ASSERT_VALUES_EQUAL(ProduceError(client, keptTopic, "kept-after"), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(FetchPartitionError(client, keptTopic), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+    }
+
+    Y_UNIT_TEST(ReadOnlyUserCanFetchButNotProduce) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
             .CheckACL = true,
@@ -310,8 +482,7 @@ Y_UNIT_TEST(ReadOnlyUserCanFetchButNotProduce) {
         UNIT_ASSERT_VALUES_EQUAL(FetchRecordValues(reader, topicName), std::vector<TString>{"readable"});
     }
 
-
-Y_UNIT_TEST(DroppedTopicFailsProduceWithoutDroppingConnection) {
+    Y_UNIT_TEST(DroppedTopicFailsProduceWithoutDroppingConnection) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
             .CheckACL = true,
@@ -340,8 +511,7 @@ Y_UNIT_TEST(DroppedTopicFailsProduceWithoutDroppingConnection) {
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     }
 
-
-Y_UNIT_TEST(LongSessionWithValidTokenKeepsProduceAndFetchWorking) {
+    Y_UNIT_TEST(LongSessionWithValidTokenKeepsProduceAndFetchWorking) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
             .CheckACL = true,
@@ -375,8 +545,7 @@ Y_UNIT_TEST(LongSessionWithValidTokenKeepsProduceAndFetchWorking) {
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     }
 
-
-Y_UNIT_TEST(TokenRecheckDisabledDoesNotDropConnection) {
+    Y_UNIT_TEST(TokenRecheckDisabledDoesNotDropConnection) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
             .CheckACL = true,
@@ -400,8 +569,7 @@ Y_UNIT_TEST(TokenRecheckDisabledDoesNotDropConnection) {
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     }
 
-
-Y_UNIT_TEST(ProduceToNewPartitionAfterAlterTopic) {
+    Y_UNIT_TEST(ProduceToNewPartitionAfterAlterTopic) {
         TInsecureTestServer testServer(TTestServerSettings{
             .KafkaApiMode = "2",
             .CheckACL = true,
@@ -424,5 +592,4 @@ Y_UNIT_TEST(ProduceToNewPartitionAfterAlterTopic) {
             return ProduceError(client, topicName, "p1-after-alter", 1) == static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR);
         }, TDuration::Seconds(20));
     }
-
 }

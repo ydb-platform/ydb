@@ -605,7 +605,6 @@ class TestViewer(object):
                                     'CreateTxId',
                                     'PathId',
                                     'PublicKeys',
-                                    'OriginalUserToken',
                                     'HashesInitParams',
                                     })
 

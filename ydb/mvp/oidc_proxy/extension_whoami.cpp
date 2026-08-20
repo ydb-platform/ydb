@@ -55,7 +55,7 @@ void TExtensionWhoamiWorker::PatchResponse(NJson::TJsonValue& json, NJson::TJson
     SetCORS(Context->Params.Request, Context->Params.HeadersOverride.Get());
     Context->Params.HeadersOverride->Set("Content-Type", "application/json; charset=utf-8");
 
-    if (json.Has(USER_SID) && json.Has(ORIGINAL_USER_TOKEN)) {
+    if (json.Has(USER_SID)) {
         statusOverride = "200";
         messageOverride = "OK";
         if (errorJson.Has(EXTENDED_ERRORS)) {
@@ -154,13 +154,6 @@ void TExtensionWhoamiWorker::ApplyExtension() {
         SetExtendedError(errorJson, "Iam", "ResponseStatus", error->Get()->Status);
         SetExtendedError(errorJson, "Iam", "ResponseMessage", error->Get()->Message);
         SetExtendedError(errorJson, "Iam", "ResponseDetails", error->Get()->Details);
-    }
-
-    if (!json.Has(ORIGINAL_USER_TOKEN)) {
-        TStringBuf tail;
-        if (TStringBuf(AuthHeader).AfterPrefix(IAM_TOKEN_SCHEME, tail)) {
-            json[ORIGINAL_USER_TOKEN] = tail;
-        }
     }
 
     PatchResponse(json, errorJson);

@@ -1424,17 +1424,16 @@ Y_UNIT_TEST_SUITE(Mvp) {
             return response;
         }
 
+        // Mirrors the real viewer, which stopped emitting OriginalUserToken in #34970.
         static TString GetViewerResponse200() {
             NJson::TJsonValue json(NJson::JSON_MAP);
             json["UserSID"] = VIEWER_USER_ACCOUNT_ID;
-            json["OriginalUserToken"] = TProfileServiceMock::VALID_USER_TOKEN;
             return MakeHttpResponse("200 OK", NJson::WriteJson(json, false), "application/json");
         }
 
         static TString GetViewerResponseService200() {
             NJson::TJsonValue json(NJson::JSON_MAP);
             json["UserSID"] = VIEWER_SERVICE_ACCOUNT_ID;
-            json["OriginalUserToken"] = TProfileServiceMock::VALID_SERVICE_TOKEN;
             return MakeHttpResponse("200 OK", NJson::WriteJson(json, false), "application/json");
         }
 
@@ -1510,7 +1509,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             TWhoamiContext(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse200(), "200"));
 
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_USER_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
     }
@@ -1520,7 +1519,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             TWhoamiContext(TProfileServiceMock::VALID_SERVICE_TOKEN, TWhoamiContext::GetViewerResponseService200(), "200"));
 
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_SERVICE_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_SERVICE_TOKEN);
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
     }
@@ -1530,7 +1529,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             TWhoamiContext(TProfileServiceMock::BAD_TOKEN, TWhoamiContext::GetViewerResponse200(), "200"));
 
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_USER_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
         UNIT_ASSERT(!json.Has(EXTENDED_INFO));
         UNIT_ASSERT(!json[EXTENDED_ERRORS].Has("Ydb"));
         UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Iam"));
@@ -1543,7 +1542,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             TWhoamiContext(TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse403(), "200"));
 
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TProfileServiceMock::USER_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
         UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseStatus"], "403");
@@ -1557,7 +1556,7 @@ Y_UNIT_TEST_SUITE(Mvp) {
             TWhoamiContext(TProfileServiceMock::VALID_SERVICE_TOKEN, TWhoamiContext::GetViewerResponse403(), "200"));
 
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TProfileServiceMock::SERVICE_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_SERVICE_TOKEN);
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
         UNIT_ASSERT(json.Has(EXTENDED_INFO));
         UNIT_ASSERT(json[EXTENDED_ERRORS].Has("Ydb"));
         UNIT_ASSERT_VALUES_EQUAL(json[EXTENDED_ERRORS]["Ydb"]["ResponseStatus"], "403");
@@ -1596,9 +1595,26 @@ Y_UNIT_TEST_SUITE(Mvp) {
         ctx.AccessServiceType = NMvp::yandex_v2;
         auto json = OidcWhoamiExtendedInfoTest(ctx);
         UNIT_ASSERT_VALUES_EQUAL(json[USER_SID], TWhoamiContext::VIEWER_USER_ACCOUNT_ID);
-        UNIT_ASSERT_VALUES_EQUAL(json[ORIGINAL_USER_TOKEN], TProfileServiceMock::VALID_USER_TOKEN);
+        UNIT_ASSERT(!json.Has(ORIGINAL_USER_TOKEN));
         UNIT_ASSERT(!json.Has(EXTENDED_INFO));
         UNIT_ASSERT(!json.Has(EXTENDED_ERRORS));
+    }
+
+    // The session cookie is httpOnly on purpose; the IAM token it is exchanged for must never
+    // reach JS through the whoami body - under any key, at any nesting depth.
+    Y_UNIT_TEST(OidcWhoamiNeverLeaksBearerToken) {
+        const std::pair<TStringBuf, TString> cases[] = {
+            {TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse200()},
+            {TProfileServiceMock::VALID_SERVICE_TOKEN, TWhoamiContext::GetViewerResponseService200()},
+            {TProfileServiceMock::VALID_USER_TOKEN, TWhoamiContext::GetViewerResponse403()},
+            {TProfileServiceMock::VALID_SERVICE_TOKEN, TWhoamiContext::GetViewerResponse403()},
+        };
+        for (const auto& [token, viewerResponse] : cases) {
+            auto json = OidcWhoamiExtendedInfoTest(TWhoamiContext(token, viewerResponse, "200"));
+            const TString body = NJson::WriteJson(json, false);
+            UNIT_ASSERT_C(!body.Contains(token),
+                          TStringBuilder() << "whoami body leaked the bearer token: " << body);
+        }
     }
 
     Y_UNIT_TEST(GetAddressWithoutPort) {

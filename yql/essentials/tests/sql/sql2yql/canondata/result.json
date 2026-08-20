@@ -3856,6 +3856,34 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_expr-current_tz_/sql.yql"
         }
     ],
+    "test_sql2yql.test[expr-decimal_arithmetic_common_type]": [
+        {
+            "checksum": "5d7894a50e6945abcbce6dcf2396b2e8",
+            "size": 3088,
+            "uri": "https://{canondata_backend}/1903280/e942b76347b06db802fca5f245924da2d48527db/resource.tar.gz#test_sql2yql.test_expr-decimal_arithmetic_common_type_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-decimal_arithmetic_common_type_fail]": [
+        {
+            "checksum": "68a9da7eab1b7c95a565bd6500fd7aff",
+            "size": 1921,
+            "uri": "https://{canondata_backend}/1900335/f205a9eb9cae2871508492f269cfcb64f9db8fdd/resource.tar.gz#test_sql2yql.test_expr-decimal_arithmetic_common_type_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-decimal_arithmetic_common_type_old_langver_fail]": [
+        {
+            "checksum": "6715880509b3a7deaa9cdb4915acefd9",
+            "size": 1165,
+            "uri": "https://{canondata_backend}/937458/e1a3cb1d311b8fb691aa3435e4aad231aa7ca32d/resource.tar.gz#test_sql2yql.test_expr-decimal_arithmetic_common_type_old_langver_fail_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[expr-decimal_arithmetic_common_type_without_fix_fail]": [
+        {
+            "checksum": "dda54420cf5efef23c805e0cee28be6a",
+            "size": 1050,
+            "uri": "https://{canondata_backend}/937458/e1a3cb1d311b8fb691aa3435e4aad231aa7ca32d/resource.tar.gz#test_sql2yql.test_expr-decimal_arithmetic_common_type_without_fix_fail_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[expr-decimal_bytes]": [
         {
             "checksum": "fa91b1c85d2e69446e78c0676ccfe0ed",
@@ -15765,6 +15793,26 @@
     "test_sql_format.test[expr-current_tz]": [
         {
             "uri": "file://test_sql_format.test_expr-current_tz_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-decimal_arithmetic_common_type]": [
+        {
+            "uri": "file://test_sql_format.test_expr-decimal_arithmetic_common_type_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-decimal_arithmetic_common_type_fail]": [
+        {
+            "uri": "file://test_sql_format.test_expr-decimal_arithmetic_common_type_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-decimal_arithmetic_common_type_old_langver_fail]": [
+        {
+            "uri": "file://test_sql_format.test_expr-decimal_arithmetic_common_type_old_langver_fail_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[expr-decimal_arithmetic_common_type_without_fix_fail]": [
+        {
+            "uri": "file://test_sql_format.test_expr-decimal_arithmetic_common_type_without_fix_fail_/formatted.sql"
         }
     ],
     "test_sql_format.test[expr-decimal_bytes]": [

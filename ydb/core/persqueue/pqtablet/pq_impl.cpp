@@ -838,6 +838,8 @@ void TPersQueue::EndReadConfig(const TActorContext& ctx)
     if (Partitions.empty()) {
         OnInitComplete(ctx);
     }
+
+    ProcessMLPQueue();
 }
 
 void TPersQueue::ReadState(const NKikimrClient::TKeyValueResponse::TReadResult& read, const TActorContext& ctx)
@@ -5845,6 +5847,13 @@ template<typename TEventHandle>
 bool TPersQueue::ForwardToPartition(ui32 partitionId, TAutoPtr<TEventHandle>& ev) {
     auto it = Partitions.find(TPartitionId{partitionId});
     if (it == Partitions.end()) {
+        if (!ConfigInited) {
+            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Queue MLP request until config is inited",
+                {"logPrefix", LogPrefix()},
+                {"partitionId", partitionId});
+            MLPRequests.emplace_back(std::move(ev));
+            return false;
+        }
         Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(partitionId, Ydb::StatusIds::SCHEME_ERROR,
             TStringBuilder() <<"Partition " << partitionId << " not found"), 0, ev->Cookie);
         return true;

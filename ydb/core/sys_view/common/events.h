@@ -18,6 +18,12 @@ public:
     virtual void FromProto(NKikimr::NSysView::TDbServiceCounters& counters) = 0;
 };
 
+class IDbDetailedCounters : public virtual TThrRefBase {
+public:
+    virtual void Pack(
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) = 0;
+};
+
 struct TEvSysView {
     enum EEv {
         EvSendPartitionStats = EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW),
@@ -77,6 +83,8 @@ struct TEvSysView {
         EvCalculateStorageStatsResponse,
 
         EvRosterUpdateFinished,
+
+        EvRegisterDbDetailedCounters,
 
         EvEnd,
     };
@@ -410,6 +418,23 @@ struct TEvSysView {
         EvGetTopPartitionsResponse>
     {};
 
+    struct TEvRegisterDbDetailedCounters : public TEventLocal<
+        TEvRegisterDbDetailedCounters,
+        EvRegisterDbDetailedCounters>
+    {
+        TString Database;
+        NKikimrSysView::EDbCountersService Service;
+        TIntrusivePtr<IDbDetailedCounters> Counters;
+
+        TEvRegisterDbDetailedCounters(
+            const TString& database,
+            NKikimrSysView::EDbCountersService service,
+            TIntrusivePtr<IDbDetailedCounters> counters)
+            : Database(database)
+            , Service(service)
+            , Counters(counters)
+        {}
+    };
 
     struct TEvInitPartitionStatsCollector : public TEventLocal<
         TEvInitPartitionStatsCollector,

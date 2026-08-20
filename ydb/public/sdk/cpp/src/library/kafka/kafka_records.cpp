@@ -355,7 +355,8 @@ private:
                 Header.MaxTimestamp = timestamp;
             }
         } else {
-            Header.LastOffsetDelta = offset - Header.BaseOffset;
+            Header.LastOffsetDelta = static_cast<TKafkaInt32>(
+                WrapSubI64(offset, Header.BaseOffset));
             if (Magic >= 1) {
                 Header.MaxTimestamp = Max(Header.MaxTimestamp, timestamp);
             }

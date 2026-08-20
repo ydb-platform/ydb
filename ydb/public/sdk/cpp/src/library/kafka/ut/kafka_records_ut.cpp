@@ -829,6 +829,20 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
             yexception,
             "Found invalid wrapper offset in compressed v1 message set");
     }
+
+    Y_UNIT_TEST(ReadLegacyHeaderWrapsLastOffsetDeltaLikeJavaInt) {
+        TOwnedLegacyRecord first(0, 1000, "k0", "v0");
+        TOwnedLegacyRecord second(3'000'000'000LL, 1001, "k1", "v1");
+        const TString bytes = WriteKafkaLegacyRecordBatchWrappers({first.Entry, second.Entry}, 1);
+
+        const auto header = ReadKafkaBatchHeader(bytes);
+        UNIT_ASSERT(header);
+        UNIT_ASSERT_VALUES_EQUAL(header->RecordsCount, 2);
+        UNIT_ASSERT_VALUES_EQUAL(header->BaseOffset, 0);
+        UNIT_ASSERT_VALUES_EQUAL(
+            header->LastOffsetDelta,
+            static_cast<i32>(static_cast<ui32>(3'000'000'000LL)));
+    }
 }
 
 } // namespace

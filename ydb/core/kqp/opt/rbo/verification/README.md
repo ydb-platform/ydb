@@ -193,14 +193,14 @@ TPCH q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12, q13, q14,
 q15, q16, q18, q19, q21, and q22 plus TPC-DS q2, q3, q4, q5, q6, q7, q8,
 q9, q10, q11,
 q12, q13, q15, q16, q18, q19, q20, q21, q22, q24, q25, q26, q28, q29, q31, q33, q34,
-q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q54, q55, q56, q58,
-q59, q60, q61, q62, q64, q65, q66, q68, q69, q71, q72, q73, q74, q75, q76,
+q35, q37, q38, q40, q42, q43, q45, q46, q48, q50, q52, q53, q54, q55, q56, q58,
+q59, q60, q61, q62, q63, q64, q65, q66, q68, q69, q71, q72, q73, q74, q75, q76,
 q77, q78, q79,
-q80, q82, q83, q84, q85, q87, q88, q90, q91, q93, q94, q95, q96, q97, q98,
-and q99: 96/121 workload queries (79.3%). Schema-v5 also carries the
-supplemental exact-pair-only list q49, q51, q53, q63, and q89. Unioning that
-list with every formula and explicit verifier-entry row gives effective exact
-Initial/Final pair floors of 20 TPCH plus 81 TPC-DS, 101 overall.
+q80, q82, q83, q84, q85, q87, q88, q89, q90, q91, q93, q94, q95, q96, q97,
+q98, and q99: 99/121 workload queries (81.8%). Schema-v5 now carries only
+q49 and q51 in the supplemental exact-pair-only list. Unioning that list with
+every formula and explicit verifier-entry row leaves the effective exact
+Initial/Final pair floors at 20 TPCH plus 81 TPC-DS, 101 overall.
 TPC-DS q8 is pinned at successful preparation, verifier entry, formula
 construction, and bounded proof. TPC-DS q72 is pinned at successful
 preparation plus formula construction; it is not in the proof floor. TPC-DS q9
@@ -282,6 +282,17 @@ pairs and all 96 formula-floor rows are present with no policy violation. The
 fresh proof reports verify all 32/32 obligations, or 32/121 workload queries
 (26.4%) and 32/96 formulas (33.3%). None of the three window queries joins that
 proof floor.
+
+Milestone 77 is implemented in semantic commit `3f9b9c8b2c6` and policy
+commit `adfe48088f5`. Focused q53/q63/q89 runs construct all three formulas,
+raising the checked-in formula floor to 99 while leaving the effective
+101-pair and 32-proof floors unchanged. q49/q51 are now the only supplemental
+pair-only rows. The post-M77 TPCH dashboard is authoritative at 20 / 0 / 2;
+the post-M77 TPC-DS dashboard is authoritative at 79 / 2 / 18. Combined M77
+formula coverage is 99/121 workload queries, 99/101 exact pairs, all 93
+preparation successes, and all 99 verifier entrants. Fresh post-M77 proof gates
+verify the unchanged 32/32 floor, or 32/121 workload queries (26.4%) and 32/99
+formula-covered queries (32.3%).
 
 Milestone 64 accepts only a direct visible `Optional<Date>` member under exact
 binary `+` or `-` with a reviewed literal `IntervalFromDays`. The Initial
@@ -923,6 +934,132 @@ and TPC-DS 19/19 after 15,865/125,293 ms (SHA-256
 Both proof policies are valid with no violation; proof mode does not enforce
 the formula dashboard's exact-pair floor.
 
+Milestone 77 semantic commit `3f9b9c8b2c6` admits one additional exact window
+leaf, not general window execution. It accepts a direct, option-free,
+five-child `YqlAggWin` whose factory is exactly `avg` and Unit-typed, and whose input,
+descriptor, and result are `Optional<Decimal(35,2)>`. The matching non-inherited
+five-child `YqlWindow` has no ordering, the exact ordered
+`type=rows, from=up, to=uf` whole-partition frame, and one through four ordered
+partition groups. Each group is a unary lambda over one canonical named
+four-child `YqlGroupRef`; source names and unsigned indices are unique, and
+the one-field descriptor/reference/type annotation agrees on exact
+`Optional<String>` or `Optional<Int64>`. Ordered rename history produces
+nonempty unique final names; source and expression safety trees are limited to
+128 nodes and depth 16. q53 uses nullable-Int64 `i_manufact_id` and q63 uses
+nullable-Int64 `i_manager_id`, each at Aggregate ordinal 0. q89 uses
+nullable-String `category`, `brand`, `store_name`, and `company_name` at
+ordinals 0, 2, 3, and 4; its additional `class` and `d_moy` Aggregate keys are
+not window partitions.
+
+Every partition is exactly one direct Aggregate key at the recorded ordinal
+and with the recorded nullable type. The AVG input selects exactly one output
+by name and that named output is one plain non-distinct/non-unwrap SUM of
+`Optional<Decimal(35,2)>`. Duplicate SUM traits are harmless only when they
+have other output names; the selected carrier remains unique. The Aggregate
+is phase `Undefined`, or exact phase `Final` directly over one
+phase-`Intermediate` Aggregate with identical ordered keys, one matching SUM
+state producer, and one final use. The existing private one-window
+Aggregate/Project, single-consumer, no-fanout, and no-subplan restrictions
+still apply.
+
+Transport in the optimizer is widened only to that closed one-through-four
+source-definition syntax. This syntactic prefilter checks spelling, descriptors,
+unique canonical indices, order, and frame; annotation agreement and
+index-to-Aggregate ordinal matching remain exporter checks. q51's ordered
+context-dependent definition remains unsafe and is not embedded, preserving
+its fail-closed exact pair. Each window Map
+still receives its own stage. A fully tracked single AVG hashes on its entire
+resolved partition vector; unsafe or unavailable metadata serially gathers.
+Window-aware movement guards continue to prevent Filter, Limit/TopSort,
+predicate, and pruning rewrites from crossing the relation-dependent boundary.
+
+Python represents `window_avg.partition_by` as an ordered unique tuple of one
+through four columns and independently validates its types, Aggregate dataflow,
+and topology. Evaluation is task-local. For each current row it includes each
+present row whose complete nullable key tuple is `IS NOT DISTINCT FROM`,
+ignores NULL inputs, and accumulates special-aware exact Decimal `AggrAdd` plus
+a `Uint64` count. Count zero returns NULL. A positive count uses exact runtime
+Decimal division, including nearest/ties-to-even rounding, followed by
+same-scale narrowing. Formula construction fails closed if finite SUM
+headroom reaches `10^35`, count may reach `2^64`, or relation-local
+`rows * rows` exceeds the existing pair cap.
+
+The companion scalar grammar accepts only unary `Abs` with exact
+`Optional<Decimal(35,2)>` argument and result. One shared checker guards both
+ordinary export and the opaque-expression positive list, including nested
+`DecimalDiv(Abs(Sub(...)), ...)`; this does not admit other Abs types. NULL
+propagates. The signed Decimal code is negated only when negative, so finite
+negatives and `-Inf` become positive while `+Inf` and the positive NaN sentinel
+are unchanged.
+
+The runtime contract was checked directly against
+`yql/essentials/mount/lib/yql/window.yqls`: its Optional wrapper ignores NULL,
+uses a widened Decimal SUM plus `Uint64` count, updates with `AggrAdd`/`Inc`,
+defaults to NULL, and finishes with `Cast(Div(sum,count), item type)`.
+`yql/essentials/public/decimal/yql_decimal.cpp` and `.h` provide the exact
+special and nearest/even division behavior for positive count; same-scale
+narrowing preserves or saturates the resulting code.
+`yql/essentials/minikql/invoke_builtins/mkql_builtins_abs.cpp` implements
+Decimal Abs as negative-raw-`TInt128` `SafeNeg`. The physical claim separately
+assumes HashV2 collocates equal ordered nullable tuples, including NULL
+components, and that the explicit window stage is preserved.
+
+Focused formula-only q53/q63/q89 evidence is 3/3 `FORMULA_EMITTED`, after
+275/2,383, 238/2,322, and 273/3,233 ms of preparation/verifier work.
+Each exact pair is captured before later physical preparation fails with
+`Missed callable: YqlAggWin`, so replay is unavailable.
+Formula sizes are 3,489,514, 3,436,841, and 5,757,911 bytes, with SHA-256 values
+`44b183e952114d322ba0f6656364da7e35027049eafbca22e59fc015773291c0`,
+`a78ca722fd57d0a3e9061e6a414f6152a3d391f7d47f3e75a4f18b4cf19b8c4c`,
+and
+`eb385ea6a522499fb76d7c1efc97281107bdf85a38e8a00e94ad949ce3851c12`.
+The combined formula report SHA-256 is
+`35bc96ab52ca2dc02ce4a8fea6a762bb3b7d434a27f4a5935a403081a38550d9`.
+
+Separate normal 60-second solver rows are all `UNKNOWN`: q53 after 62,781 ms,
+q63 after 62,842 ms, and q89 after 63,997 ms. Every row first exhausts the
+global deadline before branch 3/5 (`left_outcome_0_unmatched`). Combined report
+SHA-256 is
+`7b30313b096b9a314b52c56e0048601a267f391d4854e52fd80e7837a4914bfa`.
+This is formula evidence, not proof, counterexample, replay, or optimizer
+finding. Focused Python semantics/routing pass 11/11 in two suites: the routing
+proof plus wrong-routing counterexample takes 4.60 seconds, q89's four-key
+mutation 1.26 seconds, the `Abs(Sub(...))` self-proof 64 ms, and concrete
+NULL/tie cases 4 ms. Focused C++ exporter/production-shape tests pass 9/9,
+including Abs nested under `DecimalDiv` in the closed callable validator. Policy commit
+`adfe48088f5` raises the formula floor to 99 and leaves q49/q51 as the only
+supplemental exact-pair rows. The complete post-M77 TPCH dashboard is
+authoritative at 20 formulas / 0 unsupported / 2 no-pair failures after
+3,295/108,747 ms of summed preparation/verifier work. Preparation is 20/2;
+all required pair, formula, and entry floors pass with no violation. Report SHA-256
+is `23dcef98dc8eb5f7be6ca248b89f5d18c6469ad598d4102d764ba33790fd2398`;
+the test takes 114.13 seconds (130.97 seconds wall). The authoritative TPC-DS
+dashboard is 79 formulas / 2 unsupported / 18 no-pair failures after
+76,911/907,768 ms, with preparation 73/26, all 81/81 effective exact pairs,
+all 79/79 formulas, 79 verifier entrants, and a valid policy with no violation.
+Its report SHA-256 is
+`42849489e72f7408aa03c441453c7c48c82e5c24eb0b73f2d74d78fa8d605887`;
+the test takes 990.31 seconds (1,009.59 seconds wall). Combined coverage is
+therefore 99 formulas / 2 unsupported / 20 no-pair failures: 99/121 workload
+queries (81.8%), 99/101 exact pairs (98.0%), all 93/93 preparation successes,
+all 99/99 verifier entrants, and all 101/101 effective pairs.
+
+The fresh TPCH proof report verifies all 13/13 obligations after
+1,802/82,453 ms of preparation/verifier work, with 13 successful preparations,
+13 exact pairs, a valid policy, and no violation. Report SHA-256 is
+`6cd133426b494541647cbd7d618785a7bddab72cd56b01c33f874796171d6219`;
+the test takes 86.39 seconds (103.10 seconds wall). The fresh TPC-DS proof
+report verifies all 19/19 obligations after 16,306/114,124 ms, with 19
+successful preparations, 19 exact pairs, a valid policy, and no violation.
+Its report SHA-256 is
+`3a03efa79824900b7a5e4985294de39c290f0696eca253e27bd0d45c08c1e181`;
+the test takes 134.25 seconds (151.42 seconds wall). Together the proof gates
+verify 32/32 obligations, or 32/121 workload queries (26.4%) and 32/99
+formula-covered queries (32.3%), after 18,108/196,577 ms of summed
+preparation/verifier work. M77 finds no new defect; the qualified inventory
+remains eleven runtime-confirmed findings plus the bounded pre-physical q12
+routing finding.
+
 The preceding q66 complete TPCH dashboard spent 2,927/30,624 ms in
 preparation/verifier work and produced report SHA-256
 `97c0048b4bc31c8c02785bc3dea18c676b9ba6e2452411912c8984f06b376205`.
@@ -1140,11 +1277,12 @@ boundary; the remaining twenty workload entries need frontend or optimizer
 progress before verifier feature work can reach them. M75's focused and full
 formula evidence is complete and its preparation/formula policy gates are
 green. M76 subsequently removes q12/q20/q98 and raises the starting point to
-96 formulas, leaving five exact-pair exporter gaps: q49, q51, q53, q63, and
-q89. Schema-v5 now pins all five at exact-pair depth
-and both complete formula gates are green. Fresh proof gates also verify all
-32/32 obligations. These planning estimates are not coverage promises and
-assume deliberately workload-targeted gates.
+96 formulas. M77 removes q53/q63/q89 and raises the checked-in starting point
+to 99 formulas, leaving q49 and q51 as the two exact-pair exporter gaps.
+Schema-v5 pins both at exact-pair depth. The M77 TPCH formula gate is closed;
+TPC-DS and both proof gates are also closed. The fresh post-M77 proof checkpoint
+is 32/32. These planning estimates are not coverage promises and assume
+deliberately workload-targeted gates.
 
 The new correlated form has exactly two ordered, distinct outer dependencies.
 Each dependency occurs in its own predicate conjunct: exactly one conjunct is a
@@ -1437,14 +1575,15 @@ formula-covered queries). At M76 the latter is 33.3% of 96 formulas; no window
 row is added to this policy.
 
 The checked-in proof policy still contains 13 TPCH and 19 TPC-DS obligations,
-or 32/121 (26.4%) of the workload and 32/96 (33.3%) of M76's formula-covered
-queries. Fresh post-policy reports verify all 32/32 as `VERIFIED_BOUNDED`:
-TPCH passes 13/13 after 1,843/81,211 ms (SHA-256
-`33534f30a78bd392b7abd6206cfdd0ba94e8ef7bfb393966d4e88555fdd040b4`),
-and TPC-DS passes 19/19 after 15,865/125,293 ms (SHA-256
-`9b7ee8d66acec051d8f20b53e8e100c9d672d718fc07e830b3894477e0839dac`).
-Both policies are valid with no violations; proof mode does not enforce the
-dashboard-only exact-pair floor. TPC-DS q8 independently
+or 32/121 (26.4%) of the workload and 32/99 (32.3%) of M77's formula-covered
+queries. Fresh post-M77 reports verify all 32/32 as `VERIFIED_BOUNDED`: TPCH
+passes 13/13 after 1,802/82,453 ms (SHA-256
+`6cd133426b494541647cbd7d618785a7bddab72cd56b01c33f874796171d6219`),
+and TPC-DS passes 19/19 after 16,306/114,124 ms (SHA-256
+`3a03efa79824900b7a5e4985294de39c290f0696eca253e27bd0d45c08c1e181`).
+Both policies are valid with no violations; the combined summed
+preparation/verifier work is 18,108/196,577 ms, and proof mode does not enforce
+the dashboard-only exact-pair floor. TPC-DS q8 independently
 prepares in 695 ms and proves after 2,041 ms with the 60-second budget. The
 immediately preceding 30-obligation complete gate spent 1,633/56,327 ms for
 TPCH and produced report SHA-256

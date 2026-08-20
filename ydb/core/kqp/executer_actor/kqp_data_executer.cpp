@@ -1230,16 +1230,24 @@ private:
             counters = counters->GetSubgroup("host", "");
             counters = counters->GetSubgroup("path", context->StreamingQueryPath);
         }
+
+        NFq::TCheckpointCoordinatorSettings setting;
+        if (const auto& checkpointInterval = context->CheckpointInterval) {
+            setting.SetCheckpointingPeriod(*checkpointInterval);
+        }
+
         const auto& checkpointId = context->CheckpointId;
         CheckpointCoordinatorId = Register(MakeCheckpointCoordinator(
             ::NFq::TCoordinatorId(checkpointId, Generation),
             NYql::NDq::MakeCheckpointStorageID(),
             SelfId(),
-            {},
+            setting,
             counters,
             graphParams,
             stateLoadMode,
-            streamingDisposition).Release());
+            streamingDisposition
+        ).Release());
+
         YDB_LOG_DEBUG("Created new CheckpointCoordinator",
             {"marker", "KQPDATA"},
             {"actorId", SelfId()},

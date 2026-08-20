@@ -18,7 +18,6 @@ class TWorker: public NActors::TActorBootstrapped<TWorker> {
 private:
     using TBase = NActors::TActorBootstrapped<TWorker>;
     YDB_READONLY(double, CPULimit, 1);
-    ui64 CPULimitGeneration = 0;
     bool WaitWakeUp = false;
     bool StopRequested = false;
     std::optional<TDuration> ForwardDuration;

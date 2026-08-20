@@ -3418,9 +3418,11 @@ Y_UNIT_TEST(NoBulkUpsertOfRowIdForFulltextTable) {
         "__ydb_row_id is generated server-side for tables with fulltext indexes");
 }
 
-TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(bool isRelevance) {
+TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(TKikimrRunner& kikimr, bool isRelevance) {
+    const bool compact = kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.GetEnableCompactFulltextIndex();
     const char* indexType = isRelevance ? "relevance" : "plain";
-    const char* enumType = isRelevance ? "EIndexTypeGlobalFulltextRelevance" : "EIndexTypeGlobalFulltextPlain";
+    const char* enumType = compact ? (isRelevance ? "EIndexTypeGlobalFulltextCompactRelevance" : "EIndexTypeGlobalFulltextCompact")
+        : (isRelevance ? "EIndexTypeGlobalFulltextRelevance" : "EIndexTypeGlobalFulltextPlain");
     return {
         .IndexInCreateTable = std::format(
             "INDEX fulltext_idx GLOBAL USING fulltext_{} ON (Text) WITH (tokenizer=standard, use_filter_lowercase=true),",
@@ -3435,27 +3437,27 @@ TTtlNotAllowedIndexTestConfig MakeFulltextTtlNotAllowedConfig(bool isRelevance) 
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_Both, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedBoth(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedBoth(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtl, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterIndex, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterTtlIndex, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterTtlIndex(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 Y_UNIT_TEST_TWIN(TtlNotAllowed_AlterIndexTtl, IsRelevance) {
     auto kikimr = Kikimr();
-    TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(IsRelevance));
+    TestTtlNotAllowedAlterIndexTtl(kikimr.GetQueryClient(), MakeFulltextTtlNotAllowedConfig(kikimr, IsRelevance));
 }
 
 }

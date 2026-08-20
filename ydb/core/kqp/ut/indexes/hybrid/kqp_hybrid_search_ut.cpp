@@ -198,6 +198,109 @@ TString RunFailIssues(TQueryClient& db, const TString& sql) {
 
 Y_UNIT_TEST_SUITE(KqpHybridSearch) {
 
+    // Pin the HybridSearch UDF contracts independently of the HybridRank optimizer. In particular,
+    // weights are optional per branch: missing entries default to 1.0, while surplus entries are ignored.
+    Y_UNIT_TEST(RrfUdfNumericEdges) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"sql(
+            SELECT
+                HybridSearch::RRF(
+                    Cast([] AS List<Uint64>), Cast([] AS List<Double>), 60.0) AS Empty,
+                HybridSearch::RRF(
+                    Cast([1, 2] AS List<Uint64>), Cast([] AS List<Double>), 0.0) AS Defaults,
+                HybridSearch::RRF(
+                    Cast([1, 2] AS List<Uint64>), Cast([2.0] AS List<Double>), 0.0) AS ShortWeights,
+                HybridSearch::RRF(
+                    Cast([1, 2] AS List<Uint64>), Cast([2.0, 3.0, 100.0] AS List<Double>), 0.0) AS LongWeights,
+                HybridSearch::RRF(
+                    Cast([2, 3] AS List<Uint64>), Cast([] AS List<Double>), -1.0) AS NegativeK;
+        )sql", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("Empty").GetDouble(), 0.0, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("Defaults").GetDouble(), 1.5, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("ShortWeights").GetDouble(), 2.5, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("LongWeights").GetDouble(), 3.5, 1e-12);
+        // The UDF deliberately performs the formula as supplied; it does not validate K. Use ranks that
+        // avoid a zero denominator so this test records that contract without pinning infinity/NaN output.
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("NegativeK").GetDouble(), 1.5, 1e-12);
+    }
+
+    // Cover min-max normalization, raw fusion and all parallel-list length rules directly at the UDF
+    // boundary. A zero/negative span contributes zero; omitted weights/similarity flags use their defaults.
+    Y_UNIT_TEST(LinearFuseUdfNumericEdges) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"sql(
+            SELECT
+                HybridSearch::LinearFuse(
+                    Cast([] AS List<Double>), Cast([] AS List<Double>), Cast([] AS List<Double>),
+                    Cast([] AS List<Double>), Cast([] AS List<Bool>), true) AS Empty,
+                HybridSearch::LinearFuse(
+                    Cast([2.0, 2.0] AS List<Double>), Cast([0.0, 0.0] AS List<Double>),
+                    Cast([10.0, 10.0] AS List<Double>), Cast([] AS List<Double>),
+                    Cast([true, false] AS List<Bool>), true) AS SimilarityAndDistance,
+                HybridSearch::LinearFuse(
+                    Cast([5.0, 7.0] AS List<Double>), Cast([5.0, 9.0] AS List<Double>),
+                    Cast([5.0, 8.0] AS List<Double>), Cast([100.0, 100.0] AS List<Double>),
+                    Cast([true, false] AS List<Bool>), true) AS NonPositiveSpans,
+                HybridSearch::LinearFuse(
+                    Cast([2.0, 3.0] AS List<Double>), Cast([] AS List<Double>),
+                    Cast([] AS List<Double>), Cast([] AS List<Double>),
+                    Cast([] AS List<Bool>), false) AS RawDefaults,
+                HybridSearch::LinearFuse(
+                    Cast([2.0, 3.0] AS List<Double>), Cast([] AS List<Double>),
+                    Cast([] AS List<Double>), Cast([2.0] AS List<Double>),
+                    Cast([true, false] AS List<Bool>), false) AS ShortWeights,
+                HybridSearch::LinearFuse(
+                    Cast([2.0] AS List<Double>), Cast([] AS List<Double>),
+                    Cast([] AS List<Double>), Cast([3.0, 100.0] AS List<Double>),
+                    Cast([true, false] AS List<Bool>), false) AS LongParallelLists;
+        )sql", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("Empty").GetDouble(), 0.0, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("SimilarityAndDistance").GetDouble(), 1.0, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("NonPositiveSpans").GetDouble(), 0.0, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("RawDefaults").GetDouble(), 5.0, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("ShortWeights").GetDouble(), 1.0, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("LongParallelLists").GetDouble(), 6.0, 1e-12);
+    }
+
+    // ListMap produces computed lists rather than passing list literals directly. This exercises the UDFs'
+    // iterator path, which is separate from GetElements() used for compact literal lists.
+    Y_UNIT_TEST(UdfsAcceptIteratorBackedLists) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+
+        auto result = db.ExecuteQuery(R"sql(
+            $ranks = ListMap(Cast([1, 2] AS List<Uint64>), ($x) -> { RETURN $x; });
+            $weights = ListMap(Cast([2.0, 3.0] AS List<Double>), ($x) -> { RETURN $x; });
+            $scores = ListMap(Cast([2.0, 3.0] AS List<Double>), ($x) -> { RETURN $x; });
+            $mins = ListMap(Cast([0.0, 0.0] AS List<Double>), ($x) -> { RETURN $x; });
+            $maxs = ListMap(Cast([10.0, 10.0] AS List<Double>), ($x) -> { RETURN $x; });
+            $similarities = ListMap(Cast([true, true] AS List<Bool>), ($x) -> { RETURN $x; });
+
+            SELECT
+                HybridSearch::RRF($ranks, $weights, 0.0) AS Rrf,
+                HybridSearch::LinearFuse(
+                    $scores, $mins, $maxs, $weights, $similarities, true) AS Linear;
+        )sql", TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("Rrf").GetDouble(), 3.5, 1e-12);
+        UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("Linear").GetDouble(), 1.3, 1e-12);
+    }
+
     // Core RRF behaviour. Docs 1 and 3 contain "cats" => present in BOTH the fulltext and vector result
     // sets; docs 2 and 4 have no text match => present in the vector set only (penalised in fulltext) —
     // and doc 2 is even the exact (nearest) vector match. RRF must still rank the in-both docs {1,3}

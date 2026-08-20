@@ -69,7 +69,6 @@ void ValidateOneOfTwoIndexesSelected(TQueryClient& db, const std::string& predic
         "Expected exactly one of (" + idxA + ", " + idxB + ") to be auto-selected for: " + predicate + ", got " + std::to_string(count));
 }
 
-
 TString ExecuteAndAssertJsonPlan(TQueryClient& db, const TString& sql, size_t expectedIndexNodes, const TString& expectedYson,
     TParams params = TParamsBuilder().Build(), const TString& indexName = "json_idx")
 {
@@ -87,6 +86,41 @@ TString ExecuteAndAssertJsonPlan(TQueryClient& db, const TString& sql, size_t ex
     return actual;
 }
   
+TString ExecuteKeys(TQueryClient& db, const std::string& view = {}) {
+    const auto query = std::format(R"(
+        SELECT Key FROM TestTable{} WHERE JSON_EXISTS(Text, '$.tag') ORDER BY Key;
+    )", view);
+    auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    return FormatResultSetYson(result.GetResultSet(0));
+}
+
+void ValidateLifecycleResults(TQueryClient& db) {
+    const auto primary = ExecuteKeys(db, " VIEW PRIMARY KEY");
+    const auto automatic = ExecuteKeys(db);
+    CompareYson(R"([[[1u]];[[3u]]])", primary);
+    CompareYson(primary, automatic);
+}
+
+std::string GetSelectedJsonIndex(TQueryClient& db, const std::string& idxA, const std::string& idxB) {
+    const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+    auto result = db.ExecuteQuery(
+        R"(SELECT Key FROM TestTable WHERE JSON_EXISTS(Text, '$.tag') ORDER BY Key;)",
+        TTxControl::NoTx(), settings).ExtractValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+    NJson::TJsonValue planJson;
+    UNIT_ASSERT_C(result.GetStats() && result.GetStats()->GetPlan()
+        && NJson::ReadJsonTree(*result.GetStats()->GetPlan(), &planJson, true),
+        "Failed to parse explain plan");
+
+    const int countA = CountPlanNodesByKv(planJson, "Index", TString(idxA));
+    const int countB = CountPlanNodesByKv(planJson, "Index", TString(idxB));
+    UNIT_ASSERT_VALUES_EQUAL_C(countA + countB, 1,
+        "Expected exactly one JSON index read, got " << countA << " + " << countB);
+    return countA == 1 ? idxA : idxB;
+}
+
 void ValidateDifferentialResults(TQueryClient& db, const std::string& predicate,
     const std::string& declarations = {}, const TParams& params = TParamsBuilder().Build())
 {
@@ -396,6 +430,90 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         }
 
         ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.k1'))");
+    }
+
+    Y_UNIT_TEST(SchemaLifecycleInvalidatesCachedAutoSelectPlan) {
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1, JsonDocument('{"tag":"red"}')),
+                (2, JsonDocument('{"other":1}')),
+                (3, JsonDocument('{"tag":"blue"}'));
+        )");
+
+        // Execute the exact same text repeatedly through one client to warm the
+        // compiled-query cache before every schema transition.
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX json_idx GLOBAL USING json ON (Text);");
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx"));
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable DROP INDEX json_idx;");
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateNoAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX json_idx_recreated GLOBAL USING json ON (Text);");
+        ValidateLifecycleResults(db);
+        ValidateLifecycleResults(db);
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx_recreated");
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx_recreated"));
+    }
+
+    Y_UNIT_TEST(SameColumnIndexesLifecycleUsesSingleIndexRead) {
+        auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx_a GLOBAL USING json ON (Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1, JsonDocument('{"tag":"red"}')),
+                (2, JsonDocument('{"other":1}')),
+                (3, JsonDocument('{"tag":"blue"}'));
+        )");
+
+        ValidateLifecycleResults(db);
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx_a");
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX json_idx_b GLOBAL USING json ON (Text);");
+        const auto initiallySelected = GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b");
+        UNIT_ASSERT_VALUES_EQUAL(GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b"), initiallySelected);
+        UNIT_ASSERT_VALUES_EQUAL(GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b"), initiallySelected);
+        ValidateLifecycleResults(db);
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx_a"));
+        CompareYson(ExecuteKeys(db, " VIEW PRIMARY KEY"), ExecuteKeys(db, " VIEW json_idx_b"));
+
+        const std::string remaining = initiallySelected == "json_idx_a" ? "json_idx_b" : "json_idx_a";
+        ExecuteSuccess(db, "ALTER TABLE TestTable DROP INDEX " + initiallySelected + ";");
+        ValidateLifecycleResults(db);
+        ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", TString(remaining));
+        UNIT_ASSERT_VALUES_EQUAL(GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b"), remaining);
+
+        ExecuteSuccess(db, "ALTER TABLE TestTable ADD INDEX " + initiallySelected + " GLOBAL USING json ON (Text);");
+        ValidateLifecycleResults(db);
+        const auto selectedAfterRecreate = GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b");
+        UNIT_ASSERT_VALUES_EQUAL(GetSelectedJsonIndex(db, "json_idx_a", "json_idx_b"), selectedAfterRecreate);
     }
 
     Y_UNIT_TEST(Negation) {

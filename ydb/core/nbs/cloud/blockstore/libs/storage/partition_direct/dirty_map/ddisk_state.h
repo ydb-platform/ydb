@@ -1,7 +1,7 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/common/block_range_field.h>
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <util/generic/string.h>
 
@@ -52,9 +52,9 @@ public:
         ui64 operationalBlockCount);
 
     // Save ahead and behind maps to proto.
-    void Save(PartitionDirect::NProto::TDDiskState* proto) const;
+    void Save(TDDiskStateProto* proto) const;
     // Load ahead and behind maps from proto.
-    void Load(const PartitionDirect::NProto::TDDiskState& proto);
+    void Load(const TDDiskStateProto& proto);
 
     // Completely disables DDisk usage.
     void SwitchOffline();

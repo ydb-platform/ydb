@@ -1,6 +1,8 @@
 #pragma once
 
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/dirty_map.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <ydb/core/base/events.h>
 
@@ -27,6 +29,7 @@ struct TEvPartitionDirectPrivate
                   LocalEventsOffset,
 
         EvUpdateVChunkConfig,
+        EvUpdateDirtyMapState,
         EvFastPathServiceReady,
 
         EvFastPathServiceShutdown,
@@ -46,6 +49,20 @@ struct TEvPartitionDirectPrivate
 
         explicit TEvUpdateVChunkConfig(TVChunkConfig cfg)
             : VChunkConfig(std::move(cfg))
+        {}
+    };
+
+    struct TEvUpdateDirtyMapState
+        : public NActors::
+              TEventLocal<TEvUpdateDirtyMapState, EvUpdateDirtyMapState>
+    {
+        ui32 VChunkIndex;
+        TDirtyMapStateProto State;
+        NThreading::TPromise<void> UpdateCompleted = NThreading::NewPromise();
+
+        TEvUpdateDirtyMapState(ui32 vChunkIndex, TDirtyMapStateProto state)
+            : VChunkIndex(vChunkIndex)
+            , State(std::move(state))
         {}
     };
 

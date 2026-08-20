@@ -184,20 +184,9 @@ void TTablesManager::AddTableInfo(const TUnifiedPathId unifiedPathId, TTableInfo
     } else {
         it->second.Merge(std::move(tableInfo));
     }
-    // Always update the live mapping for non-dropped tables. For a dropped table,
-    // preserve the existing mapping only if it already points to the same InternalPathId
-    // (i.e., this is a merge, not a new generation replacing the old one).
-    const auto currentLive = GenerationIndex.ResolveLive(unifiedPathId.SchemeShardLocalPathId);
-    if (currentLive) {
-        if (!it->second.IsDropped()) {
-            // Live mapping will be updated below by SetLive().
-        } else if (*currentLive != unifiedPathId.InternalPathId) {
-            // A dropped generation still holds the mapping. This means the old generation
-            // has not been finalized yet. Do NOT overwrite — the live mapping should only
-            // change when the new generation is explicitly registered (e.g., after TruncateTable
-            // clears the fence via Truncating.Complete).
-        }
-    }
+    // SetLive handles the dropped case internally: uses emplace (no overwrite) for dropped
+    // generations, and direct assignment for live ones. This protects against loading a dropped
+    // generation over a live one during recovery.
     GenerationIndex.SetLive(unifiedPathId.SchemeShardLocalPathId, unifiedPathId.InternalPathId, it->second.IsDropped());
 }
 

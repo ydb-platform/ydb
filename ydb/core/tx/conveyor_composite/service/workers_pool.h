@@ -122,7 +122,7 @@ private:
 public:
     static constexpr double Eps = 1e-6;
 
-    TWorkersPool(const TString& poolName, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
+    TWorkersPool(const TString& poolName, const ui64 workersPoolId, const NActors::TActorId& distributorId, const NConfig::TWorkersPool& config,
         const std::shared_ptr<TWorkersPoolCounters>& counters, const std::vector<std::shared_ptr<TProcessCategory>>& categories);
 
     const std::shared_ptr<TWorkersPoolCounters>& GetCounters() const {
@@ -140,6 +140,7 @@ public:
     void ReleaseWorker(const ui64 workerIdx);
 
     bool StartWorkersUpdate(const std::vector<double>& desiredCPULimits);
+    bool StartWorkersRetirement();
     bool OnWorkerCPULimitUpdated(const TEvInternal::TEvWorkerCPULimitUpdated& ev);
     bool OnWorkerStopped(const TEvInternal::TEvWorkerStopped& ev);
 
@@ -161,6 +162,7 @@ public:
 
     void ApplyTopologyUpdate(const NConfig::TWorkersPool& config,
         const std::vector<std::shared_ptr<TProcessCategory>>& categories);
+    void ClearTopology();
 };
 
 }   // namespace NKikimr::NConveyorComposite

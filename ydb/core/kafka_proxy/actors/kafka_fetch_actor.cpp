@@ -178,6 +178,9 @@ void TKafkaFetchActor::HandleSuccessResponse(const NKikimr::TEvPQ::TEvFetchRespo
         partKafkaResponse.HighWatermark = partPQResponse.GetReadResult().GetMaxOffset();
         partKafkaResponse.LastStableOffset = partPQResponse.GetReadResult().GetMaxOffset();
         Response->ThrottleTimeMs = std::max(Response->ThrottleTimeMs, static_cast<i32>(partPQResponse.GetReadResult().GetWaitQuotaTimeMs()));
+        if (partPQResponse.GetReadResult().GetErrorCode() == NPersQueue::NErrorCode::EErrorCode::OK && topicResponse.Topic.has_value()) {
+            Context->RememberTopicAclOk(TString(topicResponse.Topic.value()));
+        }
         if (partPQResponse.GetReadResult().GetResult().size() == 0) {
             continue;
         }

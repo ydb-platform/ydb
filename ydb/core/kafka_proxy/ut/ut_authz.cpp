@@ -34,6 +34,13 @@ TKafkaInt16 ProduceError(TKafkaTestClient& client, const TString& topicName, TSt
     return msg->Responses[0].PartitionResponses[0].ErrorCode;
 }
 
+TKafkaInt16 FetchPartitionError(TKafkaTestClient& client, const TString& topicName) {
+    auto msg = client.Fetch({{topicName, {0}}});
+    UNIT_ASSERT_VALUES_EQUAL(msg->Responses.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Responses[0].Partitions.size(), 1);
+    return msg->Responses[0].Partitions[0].ErrorCode;
+}
+
 std::vector<TString> FetchRecordValues(TKafkaTestClient& client, const TString& topicName) {
     auto msg = client.Fetch({{topicName, {0}}});
     UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
@@ -112,13 +119,40 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
         client.PlainAuthenticateToKafka();
 
         UNIT_ASSERT_VALUES_EQUAL(ProduceError(client, topicName, "before-expire"), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(FetchPartitionError(client, topicName), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+
         WaitUntil([&] {
             return ProduceError(client, topicName, "after-expire") == static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
         }, TDuration::Seconds(20));
+        UNIT_ASSERT_VALUES_EQUAL(FetchPartitionError(client, topicName), static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
 
         auto apiVersions = client.ApiVersions();
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
     }
+
+Y_UNIT_TEST(ReadOnlyUserCanFetchButNotProduce) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TString topicName = "/Root/topic-read-only";
+        NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName);
+
+        {
+            TKafkaTestClient writer(testServer.Port);
+            writer.PlainAuthenticateToKafka();
+            UNIT_ASSERT_VALUES_EQUAL(ProduceError(writer, topicName, "readable"), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        }
+
+        TKafkaTestClient reader(testServer.Port);
+        reader.PlainAuthenticateToKafka("useronlyreadrights@/Root", "AbAcAbA");
+        UNIT_ASSERT_VALUES_EQUAL(ProduceError(reader, topicName, "forbidden"), static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        UNIT_ASSERT_VALUES_EQUAL(FetchPartitionError(reader, topicName), static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(FetchRecordValues(reader, topicName), std::vector<TString>{"readable"});
+    }
+
 
 Y_UNIT_TEST(DroppedTopicFailsProduceWithoutDroppingConnection) {
         TInsecureTestServer testServer(TTestServerSettings{

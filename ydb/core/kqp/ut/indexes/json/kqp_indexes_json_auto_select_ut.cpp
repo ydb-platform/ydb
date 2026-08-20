@@ -69,6 +69,7 @@ void ValidateOneOfTwoIndexesSelected(TQueryClient& db, const std::string& predic
         "Expected exactly one of (" + idxA + ", " + idxB + ") to be auto-selected for: " + predicate + ", got " + std::to_string(count));
 }
 
+
 TString ExecuteAndAssertJsonPlan(TQueryClient& db, const TString& sql, size_t expectedIndexNodes, const TString& expectedYson,
     TParams params = TParamsBuilder().Build(), const TString& indexName = "json_idx")
 {
@@ -84,6 +85,90 @@ TString ExecuteAndAssertJsonPlan(TQueryClient& db, const TString& sql, size_t ex
     const TString actual = FormatResultSetYson(result.GetResultSet(0));
     CompareYson(expectedYson, actual, sql);
     return actual;
+}
+  
+void ValidateDifferentialResults(TQueryClient& db, const std::string& predicate,
+    const std::string& declarations = {}, const TParams& params = TParamsBuilder().Build())
+{
+    const auto makeQuery = [&](const std::string& view) {
+        return declarations + std::format(
+            "\nSELECT Key FROM TestTable{} WHERE {} ORDER BY Key;",
+            view, predicate);
+    };
+
+    const auto execute = [&](const std::string& view) {
+        auto result = db.ExecuteQuery(makeQuery(view), TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(),
+            "Query failed for predicate [" + predicate + "] and view [" + view + "]: "
+                + result.GetIssues().ToString());
+        return FormatResultSetYson(result.GetResultSet(0));
+    };
+
+    const auto primary = execute(" VIEW PRIMARY KEY");
+    const auto explicitIndex = execute(" VIEW json_idx");
+    const auto autoSelected = execute("");
+
+    CompareYson(primary, explicitIndex);
+    CompareYson(primary, autoSelected);
+
+    const auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+    auto explain = db.ExecuteQuery(makeQuery(""), TTxControl::NoTx(), params, settings).ExtractValueSync();
+    UNIT_ASSERT_C(explain.IsSuccess(),
+        "Explain failed for predicate [" + predicate + "]: " + explain.GetIssues().ToString());
+    UNIT_ASSERT_C(explain.GetStats() && explain.GetStats()->GetPlan(),
+        "Explain plan is empty for predicate [" + predicate + "]");
+
+    NJson::TJsonValue planJson;
+    UNIT_ASSERT_C(NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &planJson, true),
+        "Failed to parse explain plan for predicate [" + predicate + "]");
+    UNIT_ASSERT_C(CountPlanNodesByKv(planJson, "Index", "json_idx") == 1,
+        "json_idx was not auto-selected for predicate [" + predicate + "]");
+}
+
+void TestDifferentialJsonCorrectness(const std::string& jsonType) {
+    auto kikimr = Kikimr(/* enableJsonIndex */ true, /* enableJsonIndexAutoSelect */ true);
+    auto db = kikimr.GetQueryClient();
+
+    ExecuteSuccess(db, std::format(R"(
+        CREATE TABLE TestTable (
+            Key Uint64,
+            Text {},
+            PRIMARY KEY (Key),
+            INDEX json_idx GLOBAL USING json ON (Text)
+        );
+    )", jsonType));
+
+    ExecuteSuccess(db, std::format(R"(
+        UPSERT INTO TestTable (Key, Text) VALUES
+            (1, {}('{{"kind":"plain","number":0,"nested":{{"items":[{{"name":"alpha","score":1}},{{"name":"beta","score":2}}]}}}}')),
+            (2, {}('{{"kind":"unicode","label":"Привет 🌍","number":2147483647,"nested":{{"items":[{{"name":"бета","score":-2}}]}}}}')),
+            (3, {}('{{"kind":"limits","number":-2147483648,"nested":{{"object":{{"enabled":true}}}}}}')),
+            (4, {}('{{"kind":"array","number":1.5,"nested":{{"items":[]}},"mixed":[null,false,{{"value":"x"}}]}}')),
+            (5, {}('{{}}')),
+            (6, NULL);
+    )", jsonType, jsonType, jsonType, jsonType, jsonType));
+
+    // This complements the generated JSON corpus: it verifies the optimizer-selected
+    // path as well as explicit index access, while retaining primary scan as oracle.
+    const std::vector<std::string> predicates = {
+        R"(JSON_EXISTS(Text, '$.kind'))",
+        R"(JSON_EXISTS(Text, '$.nested.items[*].name'))",
+        R"(JSON_EXISTS(Text, '$.mixed[*].value'))",
+        R"(JSON_VALUE(Text, '$.nested.object.enabled' RETURNING Bool))",
+        R"(JSON_VALUE(Text, '$.label' RETURNING Utf8) == "Привет 🌍"u)",
+        R"(JSON_VALUE(Text, '$.number' RETURNING Int64) == 2147483647)",
+        R"(JSON_VALUE(Text, '$.number' RETURNING Int64) == -2147483648)",
+        R"(JSON_VALUE(Text, '$.number' RETURNING Double) BETWEEN -2.0 AND 2.0)",
+    };
+
+    for (const auto& predicate : predicates) {
+        ValidateDifferentialResults(db, predicate);
+    }
+
+    ValidateDifferentialResults(db,
+        R"(JSON_EXISTS(Text, '$.nested.items[*] ? (@.score == $score)' PASSING $score AS score))",
+        "DECLARE $score AS Int64;",
+        TParamsBuilder().AddParam("$score").Int64(2).Build().Build());
 }
 
 } // namespace
@@ -109,6 +194,13 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
             UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Index", "json_idx"), 0);
             UNIT_ASSERT_VALUES_EQUAL(CountPlanNodesByKv(planJson, "Index", "json_idx_2"), 0);
         }, /* enableJsonIndexAutoSelect */ true);
+    }
+    Y_UNIT_TEST(DifferentialCorrectnessJson) {
+        TestDifferentialJsonCorrectness("Json");
+    }
+
+    Y_UNIT_TEST(DifferentialCorrectnessJsonDocument) {
+        TestDifferentialJsonCorrectness("JsonDocument");
     }
 
     Y_UNIT_TEST(JsonExists) {

@@ -13,6 +13,8 @@ SRCS(
 PEERDIR(
     ydb/core/kqp
     ydb/core/kqp/ut/common
+    ydb/library/yql/udfs/common/hybrid_search
+    ydb/library/yql/udfs/common/knn
     ydb/public/sdk/cpp/adapters/issue
     yql/essentials/sql/pg_dummy
 )

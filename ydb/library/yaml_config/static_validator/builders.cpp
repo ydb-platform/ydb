@@ -301,6 +301,8 @@ TMapBuilder ActorSystemConfigBuilder() {
         actorSystemContext.Expect(node["executor"].Exists(), "executor must exist when not using auto congfig");
         actorSystemContext.Expect(node["scheduler"].Exists(), "scheduler must exist when not using auto congfig");
 
+        actorSystemContext.Expect(!node["use_shared_threads"].Exists(),
+          "use_shared_threads must not exist when not using auto config");
         actorSystemContext.Expect(!node["node_type"].Exists(), "node_type must not exist when not using auto congfig");
         actorSystemContext.Expect(!node["cpu_count"].Exists(), "cpu_count must not exist when not using auto congfig");
       }

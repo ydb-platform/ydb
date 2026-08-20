@@ -19,7 +19,7 @@ CREATE TABLE [IF NOT EXISTS] <table_name> (
   [<column_name> <column_data_type>] [FAMILY <family_name>] [NULL | NOT NULL]
   [, ...],
     INDEX <index_name>
-      [GLOBAL]
+      GLOBAL
       [SYNC|ASYNC]
       [USING <index_type>]
       ON ( <index_columns> )

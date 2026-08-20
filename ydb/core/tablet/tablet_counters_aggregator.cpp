@@ -1245,6 +1245,12 @@ private:
 
         YDB_LOG_INFO_CTX(ctx, "Created the detailed metrics aggregator of the database",
             {"databasePath", db.DatabasePath});
+
+        ctx.Send(NSysView::MakeSysViewServiceID(ctx.SelfID.NodeId()),
+            new NSysView::TEvSysView::TEvRegisterDbDetailedCounters(
+                db.DatabasePath,
+                IsFollower ? NKikimrSysView::TABLETS_FOLLOWERS : NKikimrSysView::TABLETS,
+                db.Aggregator));
     }
 
     void ResetDetailedMetricsAggregator(TPathId pathId, TDetailedMetricsForDb& db, const TActorContext& ctx) {

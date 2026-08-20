@@ -18,6 +18,21 @@ public:
     virtual void FromProto(NKikimr::NSysView::TDbServiceCounters& counters) = 0;
 };
 
+/**
+ * Lets the registration event carry the node's detailed metrics aggregator
+ * without naming its type: ydb/core/tablet PEERDIRs ydb/core/sys_view/service,
+ * so the reverse dependency would cycle. Same reason IDbCounters exists above.
+ */
+class IDbDetailedCounters : public virtual TThrRefBase {
+public:
+    // Append this role's snapshot: Simple/MAX absolute, Cumulative/HIST deltas
+    // since the previous Pack. Call once per new request; transport retries
+    // reuse that request. Retired buckets emit their final delta once, then
+    // disappear from later reports. The caller stamps the role onto the envelope.
+    virtual void Pack(
+        NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out) = 0;
+};
+
 struct TEvSysView {
     enum EEv {
         EvSendPartitionStats = EventSpaceBegin(TKikimrEvents::ES_SYSTEM_VIEW),
@@ -77,6 +92,8 @@ struct TEvSysView {
         EvCalculateStorageStatsResponse,
 
         EvRosterUpdateFinished,
+
+        EvRegisterDbDetailedCounters,
 
         EvEnd,
     };
@@ -410,6 +427,23 @@ struct TEvSysView {
         EvGetTopPartitionsResponse>
     {};
 
+    struct TEvRegisterDbDetailedCounters : public TEventLocal<
+        TEvRegisterDbDetailedCounters,
+        EvRegisterDbDetailedCounters>
+    {
+        TString Database;
+        NKikimrSysView::EDbCountersService Service;
+        TIntrusivePtr<IDbDetailedCounters> Counters;
+
+        TEvRegisterDbDetailedCounters(
+            const TString& database,
+            NKikimrSysView::EDbCountersService service,
+            TIntrusivePtr<IDbDetailedCounters> counters)
+            : Database(database)
+            , Service(service)
+            , Counters(counters)
+        {}
+    };
 
     struct TEvInitPartitionStatsCollector : public TEventLocal<
         TEvInitPartitionStatsCollector,

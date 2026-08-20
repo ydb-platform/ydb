@@ -106,15 +106,6 @@ namespace NActors {
         LOG_DEBUG_IC_SESSION("ICS95", "v2 stub dropping forwarded event to %s", ev->Recipient.ToString().data());
     }
 
-    void TInterconnectSessionTCPv2::ForwardWithSubscribe(STATEFN_SIG) {
-        Proxy->ValidateEvent(ev, "ForwardWithSubscribe");
-        auto msg = ev->Release<TEvForwardSubscribeSession>();
-        Y_ABORT_UNLESS(msg->Event);
-        AddSubscriber(msg->Event->Sender, msg->Event->Cookie);
-        Send(msg->Event->Sender, MakeNodeConnectedEvent(), 0, msg->Event->Cookie);
-        // data-plane stub: the wrapped payload event is dropped for now
-    }
-
     void TInterconnectSessionTCPv2::HandleSubscribe(STATEFN_SIG) {
         LOG_DEBUG_IC_SESSION("ICS96", "subscribe for session state for %s", ev->Sender.ToString().data());
         AddSubscriber(ev->Sender, ev->Cookie);

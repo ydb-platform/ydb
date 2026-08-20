@@ -23,7 +23,6 @@
 
 #include <util/generic/queue.h>
 #include <util/generic/deque.h>
-#include <util/digest/multi.h>
 #include <util/datetime/cputimer.h>
 
 #include "events_local.h"
@@ -476,26 +475,7 @@ namespace NActors {
             return EActivityType::INTERCONNECT_SESSION_TCP;
         }
 
-        struct TSubscriberInfo {
-            ui64 Cookie = 0;
-            ui32 ActivityIndex = Max<ui32>();
-            TString EventTypeName;
-            TString StackTrace;
-        };
-
-        using TSubscriberHistoryKey = std::tuple<TString, ui32, TString>;
-
-        struct TSubscriberHistoryKeyHash {
-            size_t operator()(const TSubscriberHistoryKey& key) const noexcept {
-                return MultiHash(std::get<0>(key), std::get<1>(key), std::get<2>(key));
-            }
-        };
-
-        using TSubscriberHistory = std::unordered_map<TSubscriberHistoryKey, ui64, TSubscriberHistoryKeyHash>;
-        static constexpr ui64 MaxSubscriberHistoryEntries = 1000;
-
         explicit TInterconnectSessionTCP(TInterconnectProxyTCP* const proxy);
-
         ~TInterconnectSessionTCP();
 
         void Init(const TSessionParams& params) override;
@@ -533,14 +513,9 @@ namespace NActors {
 
         void Enqueue(STATEFN_SIG);
         void Forward(STATEFN_SIG);
-        void ForwardWithSubscribe(STATEFN_SIG);
         void ForwardDelayed();
         void Subscribe(STATEFN_SIG);
         void Unsubscribe(STATEFN_SIG);
-        void EnqueueForward(TAutoPtr<IEventHandle> ev);
-        void UpdateSubscriber(const TActorId& actorId, ui64 cookie, ui32 activityIndex = Max<ui32>(),
-            TString eventTypeName = {},
-            TString stackTrace = {});
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         std::optional<TTimeLimit> TimeLimit;
@@ -549,7 +524,6 @@ namespace NActors {
             TimeLimit.emplace(GetMaxCyclesPerEvent());
             STRICT_STFUNC_BODY(
                 fFunc(TEvInterconnect::EvForward, Forward)
-                fFunc(TEvForwardSubscribeSession::EventType, ForwardWithSubscribe)
                 cFunc(TEvInterconnect::EvForwardDelayed, ForwardDelayed)
                 cFunc(TEvents::TEvPoisonPill::EventType, HandlePoison)
                 fFunc(TEvInterconnect::TEvConnectNode::EventType, Subscribe)
@@ -737,9 +711,7 @@ namespace NActors {
         ui64 InflightDataAmount = 0;
         ui64 RdmaInflightDataAmount = 0;
 
-        std::unordered_map<TActorId, TSubscriberInfo, TActorId::THash> Subscribers;
-        TSubscriberHistory SubscriberHistory;
-        bool SubscriberHistoryOverflow = false;
+        std::unordered_map<TActorId, ui64, TActorId::THash> Subscribers;
 
         struct TDelayedEvent {
             TAutoPtr<IEventHandle> Event;

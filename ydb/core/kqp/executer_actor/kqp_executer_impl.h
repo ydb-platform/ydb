@@ -814,7 +814,7 @@ protected:
                     {"freeSpace", state.EstimatedFreeSpace},
                     {"traceId", TraceId()});
             }
-            if (state.EstimatedFreeSpace > 0) {
+            if (!state.IsPaused()) {
                 if (auto it = ResultInputBuffers.find(channelId); it != ResultInputBuffers.end()) {
                     ReadResultFromInputBuffer(channelId, it->second);
                 }

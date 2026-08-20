@@ -48,7 +48,7 @@ NKikimrConfig::TCompositeConveyorConfig BuildTopologyConfig(const std::vector<st
     const std::vector<double>& workersCounts = {}, const std::optional<ui64> maxBatchSize = std::nullopt) {
     NKikimrConfig::TCompositeConveyorConfig result;
     result.SetEnabled(true);
-    for (ui32 poolIdx = 0; poolIdx < pools.size(); ++poolIdx) {
+    for (ui64 poolIdx = 0; poolIdx < pools.size(); ++poolIdx) {
         AddPool(result, "pool-" + ::ToString(poolIdx + 1), pools[poolIdx],
             poolIdx < workersCounts.size() ? workersCounts[poolIdx] : 1, std::nullopt, maxBatchSize);
     }
@@ -398,7 +398,7 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         // updating an explicit pool must not update or stop synthetic default workers.
         auto initial = BuildTopologyConfig({{{ESpecialTaskCategory::Scan, 1}}}, {1});
         TRuntimeFixture fixture(initial);
-        ui32 defaultPoolEvents = 0;
+        ui64 defaultPoolEvents = 0;
         auto limitObserver = fixture.Runtime.AddObserver<TEvInternal::TEvWorkerCPULimitUpdated>([&](auto& ev) {
             defaultPoolEvents += ev->Get()->WorkersPoolId == 0;
         });
@@ -443,25 +443,6 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         fixture.Update(candidate);
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
 
-        // pool addition rejects the whole snapshot, including a valid CPU change.
-        candidate = initial;
-        candidate.MutableWorkerPools(0)->SetWorkersCount(2);
-        AddPool(candidate, "pool-3", {{ESpecialTaskCategory::Scan, 1}});
-        fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
-
-        // pool identity is immutable.
-        candidate = initial;
-        candidate.MutableWorkerPools(0)->SetName("renamed");
-        fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
-
-        // Reorder is rejected because position in repeated defines pool identity.
-        candidate = initial;
-        candidate.MutableWorkerPools()->SwapElements(0, 1);
-        fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
-
         // a parse failure is atomic and does not block the next valid revision.
         candidate = initial;
         candidate.MutableWorkerPools(0)->MutableLinks(0)->SetWeight(0);
@@ -481,8 +462,120 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 2);
     }
 
-    Y_UNIT_TEST(DerivedPoolNameRejectsLinkSetUpdate) {
-        // changing links changes an implicit pool name and is rejected as rename.
+    Y_UNIT_TEST(PoolReorderKeepsRuntimeIdentity) {
+        auto initial = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 1}, {ESpecialTaskCategory::Normalizer, 1}},
+                {{ESpecialTaskCategory::Insert, 1}}});
+        TRuntimeFixture fixture(initial);
+
+        auto candidate = initial;
+        candidate.MutableWorkerPools()->SwapElements(0, 1);
+        auto* pool1 = candidate.MutableWorkerPools(1);
+        pool1->ClearLinks();
+        auto* normalizerLink = pool1->AddLinks();
+        normalizerLink->SetCategory(::ToString(ESpecialTaskCategory::Normalizer));
+        normalizerLink->SetWeight(1);
+        auto* scanLink = candidate.MutableWorkerPools(0)->AddLinks();
+        scanLink->SetCategory(::ToString(ESpecialTaskCategory::Scan));
+        scanLink->SetWeight(1);
+
+        fixture.Update(candidate);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Normalizer), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 2);
+    }
+
+    Y_UNIT_TEST(RemovedPoolFinishesAssignedTaskBeforeSlotIsReleased) {
+        auto initial = BuildTopologyConfig(
+            {{{ESpecialTaskCategory::Scan, 1}}, {{ESpecialTaskCategory::Insert, 1}}});
+        TRuntimeFixture fixture(initial);
+
+        TAtomicCounter oldCounter;
+        TAutoPtr<NActors::IEventHandle> heldTask;
+        TAutoPtr<NActors::IEventHandle> heldRetire;
+        bool holdTask = true;
+        bool holdRetire = true;
+        auto previousObserver = fixture.Runtime.SetObserverFunc([&](TAutoPtr<NActors::IEventHandle>& ev) {
+            if (holdTask && ev->GetTypeRewrite() == TEvInternal::TEvNewTask::EventType) {
+                holdTask = false;
+                heldTask = ev.Release();
+                return NActors::TTestActorRuntime::EEventAction::DROP;
+            }
+            if (holdRetire && ev->GetTypeRewrite() == TEvInternal::TEvRetireWorker::EventType) {
+                holdRetire = false;
+                heldRetire = ev.Release();
+                return NActors::TTestActorRuntime::EEventAction::DROP;
+            }
+            return NActors::TTestActorRuntime::EEventAction::PROCESS;
+        });
+        fixture.Submit(oldCounter, ESpecialTaskCategory::Insert);
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(heldTask);
+
+        auto candidate = BuildTopologyConfig({{{ESpecialTaskCategory::Scan, 1}}});
+        ui32 responses = 0;
+        auto responseObserver = fixture.Runtime.AddObserver<NConsole::TEvConsole::TEvConfigNotificationResponse>([&](auto&) {
+            ++responses;
+        });
+        const auto [id, cookie] = fixture.SendUpdate(candidate);
+        fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        UNIT_ASSERT(heldRetire);
+        UNIT_ASSERT_VALUES_EQUAL(responses, 0);
+
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 0);
+
+        std::optional<ui64> oldResultPool;
+        auto resultObserver = fixture.Runtime.AddObserver<TEvInternal::TEvTaskProcessedResult>([&](auto& ev) {
+            for (const auto& result : ev->Get()->GetResults()) {
+                if (result.GetCategory() == ESpecialTaskCategory::Insert) {
+                    oldResultPool = ev->Get()->GetWorkersPoolId();
+                }
+            }
+        });
+        fixture.Runtime.EnableScheduleForActor(heldTask->Recipient, true);
+        fixture.Runtime.Send(heldTask.Release(), 0, true);
+        for (ui32 attempt = 0; attempt < 100 && oldCounter.Val() != 1; ++attempt) {
+            fixture.Runtime.SimulateSleep(TDuration::MilliSeconds(1));
+        }
+        UNIT_ASSERT_VALUES_EQUAL(oldCounter.Val(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(oldResultPool, 2);
+        UNIT_ASSERT_VALUES_EQUAL(responses, 0);
+
+        fixture.Runtime.SetObserverFunc(previousObserver);
+        fixture.Runtime.Send(heldRetire.Release(), 0, true);
+        fixture.WaitForUpdate(id, cookie);
+        UNIT_ASSERT(responses > 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 0);
+    }
+
+    Y_UNIT_TEST(AddedPoolReusesEmptySlotBeforeAppending) {
+        NKikimrConfig::TCompositeConveyorConfig initial;
+        initial.SetEnabled(true);
+        AddPool(initial, "pool-1", {{ESpecialTaskCategory::Scan, 1}});
+        AddPool(initial, "pool-2", {{ESpecialTaskCategory::Insert, 1}});
+        TRuntimeFixture fixture(initial);
+
+        NKikimrConfig::TCompositeConveyorConfig withoutPool1;
+        withoutPool1.SetEnabled(true);
+        AddPool(withoutPool1, "pool-2", {{ESpecialTaskCategory::Insert, 1}});
+        fixture.Update(withoutPool1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 0);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 2);
+
+        auto withReusedSlot = withoutPool1;
+        AddPool(withReusedSlot, "pool-3", {{ESpecialTaskCategory::Scan, 1}});
+        fixture.Update(withReusedSlot);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Insert), 2);
+
+        auto withAppendedPool = withReusedSlot;
+        AddPool(withAppendedPool, "pool-4", {{ESpecialTaskCategory::Normalizer, 1}});
+        fixture.Update(withAppendedPool);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Normalizer), 3);
+    }
+
+    Y_UNIT_TEST(DerivedPoolNameChangeRecreatesPool) {
+        // Changing links changes an implicit name, so this is remove plus add rather than an in-place rename.
         NKikimrConfig::TCompositeConveyorConfig initial;
         initial.SetEnabled(true);
         AddPool(initial, std::nullopt,
@@ -492,7 +585,8 @@ Y_UNIT_TEST_SUITE(TCompositeConveyorRuntimeUpdate) {
         auto candidate = initial;
         candidate.MutableWorkerPools(0)->MutableLinks()->RemoveLast();
         fixture.Update(candidate);
-        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Normalizer), 1);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Scan), 2);
+        UNIT_ASSERT_VALUES_EQUAL(fixture.Run(ESpecialTaskCategory::Normalizer), 0);
     }
 
     Y_UNIT_TEST(TopologyRoutingMatrix) {

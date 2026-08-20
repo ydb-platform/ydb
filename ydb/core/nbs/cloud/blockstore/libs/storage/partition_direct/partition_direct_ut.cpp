@@ -120,10 +120,10 @@ NKikimrBlockStore::TVolumeConfig CreateVolumeConfig(ui64 blockCount)
     return volumeConfig;
 }
 
-void WaitForTabletBoot(TEnvironmentSetup& env)
+TActorId WaitForTabletBoot(TEnvironmentSetup& env)
 {
     // Create tablet like in SetupTablet()
-    env.Runtime->CreateTestBootstrapper(
+    const TActorId bootstrapperId = env.Runtime->CreateTestBootstrapper(
         TTestActorSystem::CreateTestTabletInfo(
             PartitionTabletId,
             TTabletTypes::Unknown,
@@ -140,11 +140,19 @@ void WaitForTabletBoot(TEnvironmentSetup& env)
         [&] { return working; },
         [&](IEventHandle& event)
         { working = event.GetTypeRewrite() != TEvTablet::EvBoot; });
+
+    return bootstrapperId;
 }
 
-ui64 CreatePartitionTablet(TEnvironmentSetup& env, ui64 blockCount = 32768)
+ui64 CreatePartitionTablet(
+    TEnvironmentSetup& env,
+    ui64 blockCount = 32768,
+    TActorId* outBootstrapperId = nullptr)
 {
-    WaitForTabletBoot(env);
+    const TActorId createdBootstrapperId = WaitForTabletBoot(env);
+    if (outBootstrapperId) {
+        *outBootstrapperId = createdBootstrapperId;
+    }
 
     // Send volume config update
     auto volumeConfig = CreateVolumeConfig(blockCount);
@@ -1579,7 +1587,9 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         auto& runtime = env.Runtime;
 
         auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
-        const ui64 tabletId = CreatePartitionTablet(env);
+        TActorId bootstrapperId;
+        const ui64 tabletId =
+            CreatePartitionTablet(env, 32768, &bootstrapperId);
 
         const TActorId edge = runtime->AllocateEdgeActor(
             env.Settings.ControllerNodeId,
@@ -1587,13 +1597,35 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             __LINE__);
 
         // Observe the tablet death via TEvTabletDead.
-        bool tabletDead = false;
+        bool bootstrapperDeathObserved = false;
+        bool partitionDeathDelivered = false;
+        const auto isExpectedTabletDeath = [&](IEventHandle& ev)
+        {
+            if (ev.GetTypeRewrite() != TEvTablet::TEvTabletDead::EventType) {
+                return false;
+            }
+
+            const auto* msg = ev.Get<TEvTablet::TEvTabletDead>();
+            if (msg->TabletID != tabletId) {
+                return false;
+            }
+
+            UNIT_ASSERT_VALUES_EQUAL(
+                TEvTablet::TEvTabletDead::ReasonPill,
+                msg->Reason);
+            return true;
+        };
         runtime->FilterFunction =
             [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
         {
             Y_UNUSED(nodeId);
-            if (ev->GetTypeRewrite() == TEvTablet::TEvTabletDead::EventType) {
-                tabletDead = true;
+            if (isExpectedTabletDeath(*ev) &&
+                ev->GetRecipientRewrite() == bootstrapperId)
+            {
+                bootstrapperDeathObserved = true;
+                // Do not let the bootstrapper start a new tablet incarnation:
+                // this test only verifies that the current one dies.
+                return false;
             }
             if (ev->GetRecipientRewrite() == edge) {
                 return false;
@@ -1609,9 +1641,20 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             0,
             TTestActorSystem::GetPipeConfigWithRetries());
 
-        env.Sim(TDuration::Seconds(1));
+        runtime->Sim(
+            [&]
+            { return !bootstrapperDeathObserved || !partitionDeathDelivered; },
+            [&](IEventHandle& ev)
+            {
+                if (isExpectedTabletDeath(ev) &&
+                    ev.GetRecipientRewrite() != bootstrapperId)
+                {
+                    partitionDeathDelivered = true;
+                }
+            });
 
-        UNIT_ASSERT(tabletDead);
+        UNIT_ASSERT(bootstrapperDeathObserved);
+        UNIT_ASSERT(partitionDeathDelivered);
     }
 
     Y_UNIT_TEST(ShouldKeepOtherDBGConnectionsWhenAddingHosts)

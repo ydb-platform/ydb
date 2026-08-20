@@ -1724,6 +1724,7 @@ public:
     struct TSettings {
         NKikimrKqp::TStreamingQueryState InitialState;
         TPathId QueryPathId;
+        ui64 QueryPathVersion = 0;
         ui64 QueryTextRevision = 0;
         TString WatermarkLateEventsPolicy;
         std::shared_ptr<NYql::NPq::NProto::StreamingDisposition> StreamingDisposition;
@@ -1969,12 +1970,12 @@ private:
         }
 
         // Execution id for streaming queries:
-        // <GUID part>-<GUID part>-<GUID part>-<SS id>-<Path id in SS>
+        // <GUID part>-<GUID part>-<GUID part>-<SS id>-<Path id in SS>-<Path version in SS>
         // Checkpoint id for streaming queries:
         // <Execution id>-<Query path>
 
         const auto& pathId = Settings.QueryPathId;
-        State.SetCurrentExecutionId(TStringBuilder() << CreateGuidAsString() << '-' << pathId.OwnerId << '-' << pathId.LocalPathId);
+        State.SetCurrentExecutionId(TStringBuilder() << CreateGuidAsString() << '-' << pathId.OwnerId << '-' << pathId.LocalPathId << '-' << Settings.QueryPathVersion);
 
         if (!State.GetCheckpointId()) {
             State.SetCheckpointId(TStringBuilder() << State.GetCurrentExecutionId() << '-' << QueryPath);
@@ -2347,6 +2348,7 @@ private:
         const auto& startActorId = Register(new TStartStreamingQueryTableActor(Context, QueryPath, {
             .InitialState = State,
             .QueryPathId = SchemeInfo.PathId,
+            .QueryPathVersion = SchemeInfo.Version,
             .QueryTextRevision = QuerySettings.QueryTextRevision,
             .WatermarkLateEventsPolicy = QuerySettings.WatermarkLateEventsPolicy,
             .StreamingDisposition = QuerySettings.StreamingDisposition,

@@ -20,6 +20,11 @@ class TCheckpointCoordinatorConfig;
 
 } // namespace NConfig
 
+// Current checkpoint lifecycle assumptions:
+// - Checkpoint cleanup is performed only after a successful snapshot checkpoint.
+// So if a query has many aborted checkpoints / restarts before saving the first successful checkpoint,
+// checkpoint storage may leak until a successful checkpoint is performed.
+
 class TCheckpointCoordinatorSettings {
 public:
     inline static TDuration DefaultCheckpointingPeriod = TDuration::Seconds(30);

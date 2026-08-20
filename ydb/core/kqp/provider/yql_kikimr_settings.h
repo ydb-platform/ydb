@@ -89,6 +89,7 @@ public:
     NCommon::TConfSetting<ui64, Static> OptForceOlapPushdownDistinctLimit;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownProjections;
     NCommon::TConfSetting<bool, Static> OptEnableOlapPushdownRegexp;
+    NCommon::TConfSetting<bool, Static> OptEnableOlapFastAsciiIgnoreCase;
     NCommon::TConfSetting<bool, Static> OptEnableOlapProvideComputeSharding;
     NCommon::TConfSetting<bool, Static> OptUseFinalizeByKey;
     NCommon::TConfSetting<bool, Static> OptShuffleElimination;
@@ -250,6 +251,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     bool GetEnableParallelUnionAllConnectionsForExtend() const;
     bool GetEnableOlapPushdownAggregate() const;
     bool GetEnableOlapPushdownRegexp() const;
+    bool GetEnableOlapFastAsciiIgnoreCase() const;
     bool GetUseDqHashCombine() const;
     bool GetUseDqHashAggregate() const;
     bool GetDqHashOperatorsUseBlocks() const;

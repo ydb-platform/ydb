@@ -624,6 +624,7 @@ enum EDbCountersService {
     LABELED = 5;
     RESERVED_3 = 6;
     RESERVED_4 = 7;
+    TABLETS_FOLLOWERS = 8;
 }
 
 // node -> sysview processor tablet
@@ -633,9 +634,21 @@ message TEvSendDbCountersRequest {
         optional EDbCountersService Service = 1;
         optional TDbServiceCounters Counters = 2;
     }
+
+    // One entry per role stream of the reporting node. The role rides here and
+    // nowhere else: TDetailedTableCounters is role-blind by design (step 08), so a
+    // follower's entry is byte-identical in shape to a leader's. Two entries fit one
+    // message, which is what lets the detailed payload reuse this request's
+    // generation / ack / retry machinery instead of growing its own.
+    message TDetailedCounters {
+        optional EDbCountersService Service = 1;
+        repeated TDetailedTableCounters Tables = 2;
+    }
+
     repeated TServiceCounters ServiceCounters = 1;
     optional uint64 NodeId = 2;
     optional uint64 Generation = 3;
+    repeated TDetailedCounters DetailedCounters = 4;
 }
 
 message TEvSendDbCountersResponse {

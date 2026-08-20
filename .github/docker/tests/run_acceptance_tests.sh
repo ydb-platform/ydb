@@ -287,6 +287,14 @@ actual_architecture=$(docker image inspect --format '{{.Architecture}}' "$IMAGE"
 [[ "$actual_architecture" == "amd64" ]]
 docker run --rm --pull never --platform linux/amd64 --entrypoint bash "$IMAGE" \
     -c 'test -x /ydbd && test -x /ydb && test -x /local_ydb && test -r /initialize_local_ydb && test -r /health_check'
+CLI_VERSION_OUTPUT=$(
+    docker run --rm --pull never --platform linux/amd64 --network none --entrypoint /ydb "$IMAGE" version 2>&1
+)
+grep -Fq 'YDB CLI' <<<"$CLI_VERSION_OUTPUT"
+if grep -Fq "Couldn't get latest version" <<<"$CLI_VERSION_OUTPUT"; then
+    printf 'YDB CLI attempted to check for updates:\n%s\n' "$CLI_VERSION_OUTPUT" >&2
+    exit 1
+fi
 
 scenario "default startup, healthcheck, SQL, logs, config and backup fixtures"
 # Keep the image HEALTHCHECK enabled only in the scenario that verifies it.

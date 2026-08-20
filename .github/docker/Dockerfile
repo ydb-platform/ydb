@@ -53,6 +53,10 @@ COPY --from=builder \
     /ydbwork/out/ydb/public/tools/local_ydb/local_ydb \
     /
 
+# Persist the setting in the image so it also applies when /ydb is used
+# as an overridden entrypoint.
+RUN /ydb version --disable-checks
+
 # YDB grpc
 EXPOSE ${GRPC_TLS_PORT:-2135}
 EXPOSE ${GRPC_PORT:-2136}

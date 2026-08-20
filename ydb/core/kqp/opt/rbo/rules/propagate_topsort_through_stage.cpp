@@ -143,7 +143,7 @@ bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusiveP
 
     const auto& sortElements = sort->GetSortElements();
     std::for_each(sortElements.begin(), sortElements.end(), [&sortDirection](const TSortElement& sortElement) {
-        sortDirection = sortElement.Ascending ? static_cast<ui32>(ESortDir::Asc) : static_cast<ui32>(ESortDir::Desc);
+        sortDirection |= sortElement.Ascending ? static_cast<ui32>(ESortDir::Asc) : static_cast<ui32>(ESortDir::Desc);
     });
 
     // All keys should have the same sort direction.
@@ -163,11 +163,13 @@ bool CanPushSortToOlapRead(const TIntrusivePtr<TOpSort>& sort, const TIntrusiveP
         return false;
     }
 
-    // Only keys are allowed.
+    // Try to match pk prefix.
     const auto& keyColumns = metadataPtr->KeyColumnNames;
-    THashSet<TString> keys(keyColumns.begin(), keyColumns.end());
-    for (const auto& sortElement : sortElements) {
-        if (!keys.contains(sortElement.SortColumn.GetColumnName())) {
+    if (keyColumns.size() < sortElements.size()) {
+        return false;
+    }
+    for (ui32 i = 0, e = sortElements.size(); i < e; ++i) {
+        if (keyColumns[i] != sortElements[i].SortColumn.GetColumnName()) {
             return false;
         }
     }

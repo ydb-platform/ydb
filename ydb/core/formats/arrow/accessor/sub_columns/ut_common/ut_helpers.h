@@ -11,7 +11,6 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns::NTesting {
 
-// Reconstruct the JSON documents of a sub-columns array as text, for round-trip assertions.
 inline TString PrintBinaryJsons(const std::shared_ptr<arrow::ChunkedArray>& array) {
     TStringBuilder sb;
     sb << "[";

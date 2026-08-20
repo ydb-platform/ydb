@@ -7,6 +7,7 @@ REQUIREMENTS(cpu:2)
 
 SRCS(
     kqp_rbo_yql_ut.cpp
+    kqp_rbo_trace_ut.cpp
     kqp_rbo_olap_ut.cpp
 )
 

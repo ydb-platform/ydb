@@ -952,6 +952,93 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         }
     }
 
+    Y_UNIT_TEST(AutoProvision_DropAllFulltextIndexesAndRecreateReusesInfra) {
+        // Dropping fulltext indexes must not silently tear down the shared row-id infrastructure:
+        // a later build reuses the same column, sequence and Ready unique index.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        for (const auto& [name, relevance] : TVector<std::pair<TString, bool>>{
+                 {"fulltext_one", false}, {"fulltext_two", true}}) {
+            auto index = FulltextIndexConfig(relevance);
+            index.set_name(name);
+            const ui64 buildTx = ++txId;
+            TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard,
+                "/MyRoot", "/MyRoot/texts", index);
+            env.TestWaitNotification(runtime, buildTx);
+            const auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        for (const TStringBuf name : {TStringBuf("fulltext_one"), TStringBuf("fulltext_two")}) {
+            TestDropTableIndex(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "texts"
+                IndexName: "%s"
+            )", TString(name).c_str()));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_one"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_two"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"), {
+            NLs::CheckColumns("texts",
+                {"pk", "text", "data", NTableIndex::NFulltext::RowIdColumn},
+                {}, {"pk"}),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdSequenceName), {
+            NLs::PathExist,
+        });
+
+        {
+            const auto table = DescribePath(runtime, "/MyRoot/texts", true, true);
+            const auto& indexes = table.GetPathDescription().GetTable().GetTableIndexes();
+            UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexes.Get(0).GetName(),
+                NTableIndex::NFulltext::RowIdUniqueIndexName);
+        }
+
+        auto recreated = FulltextIndexConfig(/*relevance*/ true);
+        recreated.set_name("fulltext_one");
+        const ui64 recreateTx = ++txId;
+        TestBuildIndex(runtime, recreateTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", recreated);
+        env.TestWaitNotification(runtime, recreateTx);
+        const auto recreateOp = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", recreateTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(recreateOp.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, recreateOp.DebugString());
+
+        const auto table = DescribePath(runtime, "/MyRoot/texts", true, true);
+        THashSet<TString> indexNames;
+        for (const auto& index : table.GetPathDescription().GetTable().GetTableIndexes()) {
+            UNIT_ASSERT(indexNames.insert(index.GetName()).second);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(indexNames.size(), 2);
+        UNIT_ASSERT(indexNames.contains(NTableIndex::NFulltext::RowIdUniqueIndexName));
+        UNIT_ASSERT(indexNames.contains("fulltext_one"));
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_one/indexImplTable"), {
+            NLs::PathExist,
+            NLs::CheckColumns("indexImplTable",
+                {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn,
+                 NTableIndex::NFulltext::FreqColumn},
+                {},
+                {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn},
+                /*ensureNoOther=*/ true),
+        });
+    }
+
     Y_UNIT_TEST(AutoProvision_ConcurrentFulltextBuildsSerializeAndReuseInfra) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1191,6 +1278,77 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     TString RowIdSrcTablePath(const TString& indexPath) {
         return TStringBuilder() << indexPath << "/"
             << NTableIndex::ImplTable << NTableIndex::NFulltext::RowIdSrcBuildSuffix;
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_CancelCompactPrepassThenRestartAndRetryReusesInfra) {
+        // Cancel after provisioning has completed and the compact row-id source prepass has started.
+        // Cleanup removes the partial fulltext build, while the reusable row-id infrastructure remains
+        // valid across a SchemeShard restart and a same-name retry.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableCompactAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        TBlockEvents<TEvDataShard::TEvBuildIndexCreateRequest> prepassBlocker(runtime, [](const auto& ev) {
+            return ev->Get()->Record.GetTargetName().EndsWith(NTableIndex::NFulltext::RowIdSrcBuildSuffix);
+        });
+
+        auto index = FulltextIndexConfig(/*relevance*/ false);
+        const ui64 buildTx = ++txId;
+        TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", index);
+        runtime.WaitFor("row-id source prepass scan request", [&]{ return prepassBlocker.size() > 0; });
+
+        const auto runningOp = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(runningOp.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_TRANSFERING_DATA, runningOp.DebugString());
+
+        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+        prepassBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildTx);
+
+        const auto cancelledOp = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(cancelledOp.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_CANCELLED, cancelledOp.DebugString());
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/fulltext_idx")), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdSequenceName), {
+            NLs::PathExist,
+        });
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        const ui64 retryTx = ++txId;
+        TestBuildIndex(runtime, retryTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", index);
+        env.TestWaitNotification(runtime, retryTx);
+        const auto retryOp = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", retryTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(retryOp.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, retryOp.DebugString());
+
+        const auto table = DescribePath(runtime, "/MyRoot/texts", true, true);
+        THashSet<TString> indexNames;
+        for (const auto& tableIndex : table.GetPathDescription().GetTable().GetTableIndexes()) {
+            UNIT_ASSERT(indexNames.insert(tableIndex.GetName()).second);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(indexNames.size(), 2);
+        UNIT_ASSERT(indexNames.contains(NTableIndex::NFulltext::RowIdUniqueIndexName));
+        UNIT_ASSERT(indexNames.contains("fulltext_idx"));
+        TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/fulltext_idx")), {
+            NLs::PathNotExist,
+        });
     }
 
     Y_UNIT_TEST(RowIdOptIn_CompactBuildsOverCustomPkAndDropsRowIdSrc) {

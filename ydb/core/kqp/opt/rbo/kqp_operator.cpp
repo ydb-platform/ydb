@@ -396,12 +396,24 @@ TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
 
     TVector<TInfoUnit> result;
+    const auto& inputIUs = GetInput()->GetOutputIUs();
 
     for (const auto& mapElement : MapElements) {
         if (mapElement.IsRename()) {
             continue;
         }
-        auto usedIUs = mapElement.GetExpression().GetInputIUs(false, true);
+        const auto& expression = mapElement.GetExpression();
+        if (expression.HasWindowSemantics() &&
+            !expression.GetWindowMetadata())
+        {
+            for (const auto& inputIU : inputIUs) {
+                if (!ContainsInfoUnit(result, inputIU)) {
+                    result.push_back(inputIU);
+                }
+            }
+            continue;
+        }
+        auto usedIUs = expression.GetInputIUs(false, true);
         AddUnique<TInfoUnit>(usedIUs, result);
     }
 

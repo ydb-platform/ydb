@@ -50,6 +50,12 @@ bool ReferencesBottomElementOutput(const TMapElement& element, const TOpMap& bot
 }
 
 bool CanMoveToBottomInput(const TMapElement& element, const TVector<TInfoUnit>& bottomInputIUs, const TOpMap& bottomMap) {
+    const auto& expression = element.GetExpression();
+    if (expression.HasWindowSemantics() &&
+        !expression.GetWindowMetadata())
+    {
+        return false;
+    }
     if (!element.DependsOnlyOn(bottomInputIUs)) {
         return false;
     }

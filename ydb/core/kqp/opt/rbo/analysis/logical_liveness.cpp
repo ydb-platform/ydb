@@ -168,7 +168,14 @@ void TOpMap::PropagateLiveness(ILivenessContext& ctx) {
         }
         // Keep dependencies of every current map expression live so local pruning
         // cannot remove producer columns before the dead consumer expression is gone.
-        ctx.AddExpressionDeps(mapElement.GetExpression(), inputLive);
+        const auto& expression = mapElement.GetExpression();
+        if (expression.HasWindowSemantics() &&
+            !expression.GetWindowMetadata())
+        {
+            AddInfoUnits(inputLive, input->GetOutputIUs());
+        } else {
+            ctx.AddExpressionDeps(expression, inputLive);
+        }
     }
 
     for (const auto& iu : input->GetOutputIUs()) {

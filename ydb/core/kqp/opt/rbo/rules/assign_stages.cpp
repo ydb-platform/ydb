@@ -57,7 +57,14 @@ bool HasWindowSemantics(const TOpMap& map) {
         });
 }
 
-bool HasMatchingWindowCall(const TExpression& expression) {
+enum class EWindowDistribution {
+    Partitioned,
+    Global,
+};
+
+std::optional<EWindowDistribution> GetMatchingWindowDistribution(
+    const TExpression& expression)
+{
     const auto& metadata = expression.GetWindowMetadata();
     if (!metadata ||
         !metadata->Definition ||
@@ -66,10 +73,9 @@ bool HasMatchingWindowCall(const TExpression& expression) {
         !metadata->Definition->Child(0)->IsAtom() ||
         metadata->Definition->Child(0)->Content().empty() ||
         !metadata->Definition->Child(1)->IsAtom("") ||
-        !metadata->Definition->Child(2)->IsList() ||
-        metadata->Definition->Child(2)->ChildrenSize() == 0)
+        !metadata->Definition->Child(2)->IsList())
     {
-        return false;
+        return std::nullopt;
     }
 
     TInfoUnitSet sourcePartitionKeys;
@@ -77,7 +83,7 @@ bool HasMatchingWindowCall(const TExpression& expression) {
         if (!partition->IsCallable("YqlGroup") ||
             partition->ChildrenSize() != 2)
         {
-            return false;
+            return std::nullopt;
         }
         const auto* lambda = partition->Child(1);
         if (!lambda->IsLambda() ||
@@ -86,7 +92,7 @@ bool HasMatchingWindowCall(const TExpression& expression) {
             lambda->Child(0)->ChildrenSize() != 1 ||
             !lambda->Child(0)->Child(0)->IsArgument())
         {
-            return false;
+            return std::nullopt;
         }
         const auto* groupRef = lambda->Child(1);
         if (!groupRef->IsCallable("YqlGroupRef") ||
@@ -95,31 +101,61 @@ bool HasMatchingWindowCall(const TExpression& expression) {
             !groupRef->Child(3)->IsAtom() ||
             groupRef->Child(3)->Content().empty())
         {
-            return false;
+            return std::nullopt;
         }
         sourcePartitionKeys.insert(
             TInfoUnit(TString(groupRef->Child(3)->Content())));
     }
-    if (sourcePartitionKeys.empty() ||
-        expression.GetWindowPartitionBy().size() != sourcePartitionKeys.size())
-    {
-        return false;
-    }
-
     size_t count = 0;
     const TExprNode* window = nullptr;
     VisitExpr(*expression.GetExpressionBody(), [&](const TExprNode& node) {
-        if (node.IsCallable("YqlAggWin")) {
+        if (node.IsCallable({"YqlAggWin", "YqlWin"})) {
             ++count;
             window = &node;
         }
         return true;
     });
-    return count == 1 &&
-        window->ChildrenSize() == 5 &&
-        window->Child(1)->IsAtom() &&
-        window->Child(1)->Content() ==
-            metadata->Definition->Child(0)->Content();
+    if (count != 1 ||
+        window->ChildrenSize() < 2 ||
+        !window->Child(1)->IsAtom() ||
+        window->Child(1)->Content() !=
+            metadata->Definition->Child(0)->Content())
+    {
+        return std::nullopt;
+    }
+
+    if (window->IsCallable("YqlAggWin")) {
+        if (window->ChildrenSize() != 5 ||
+            sourcePartitionKeys.empty() ||
+            expression.GetWindowPartitionBy().size() !=
+                sourcePartitionKeys.size())
+        {
+            return std::nullopt;
+        }
+        return EWindowDistribution::Partitioned;
+    }
+
+    if (!window->IsCallable("YqlWin") ||
+        window->ChildrenSize() != 4 ||
+        !window->Child(0)->IsAtom("rank") ||
+        !window->Child(2)->IsList() ||
+        window->Child(2)->ChildrenSize() != 0)
+    {
+        return std::nullopt;
+    }
+    const auto& resultDescriptor = *window->Child(3);
+    if (!resultDescriptor.IsCallable("DataType") ||
+        resultDescriptor.ChildrenSize() != 1 ||
+        !resultDescriptor.Child(0)->IsAtom("Uint64") ||
+        !sourcePartitionKeys.empty() ||
+        !expression.GetWindowPartitionBy().empty() ||
+        !metadata->Definition->Child(3)->IsList() ||
+        metadata->Definition->Child(3)->ChildrenSize() != 1 ||
+        expression.GetWindowOrderBy().size() != 1)
+    {
+        return std::nullopt;
+    }
+    return EWindowDistribution::Global;
 }
 
 // Hashing on any non-empty common subset of the partition keys is sufficient:
@@ -138,7 +174,11 @@ std::optional<TVector<TInfoUnit>> GetWindowShuffleKeys(TOpMap& map) {
         if (!expression.HasWindowSemantics()) {
             continue;
         }
-        if (!HasMatchingWindowCall(expression)) {
+        const auto distribution = GetMatchingWindowDistribution(expression);
+        if (!distribution) {
+            return std::nullopt;
+        }
+        if (*distribution == EWindowDistribution::Global) {
             return std::nullopt;
         }
 

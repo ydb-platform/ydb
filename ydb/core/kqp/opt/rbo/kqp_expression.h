@@ -82,8 +82,8 @@ class TExpression {
     const TVector<TInfoUnit>& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
 
     // Optional source window metadata is carried beside the scalar lambda.
-    // The optimizer treats every YqlAggWin call as relation-dependent; the
-    // semantic snapshot exporter additionally audits this exact source
+    // The optimizer treats every YqlAggWin/YqlWin call as relation-dependent;
+    // the semantic snapshot exporter additionally audits this exact source
     // definition before assigning a modeled relational meaning.
     const std::optional<TWindowMetadata>& GetWindowMetadata() const;
 
@@ -96,6 +96,11 @@ class TExpression {
     // optimizer rename batch.  This mirrors RenameMembers: chains within one
     // batch are not followed transitively, while successive batches compose.
     TVector<TInfoUnit> GetWindowPartitionBy() const;
+
+    // Resolve direct source order-key names through the same rename history.
+    // Exact transported global Rank metadata has one such key; unordered
+    // aggregate windows have none.
+    TVector<TInfoUnit> GetWindowOrderBy() const;
 
     // Rebuild this expression around a replacement lambda while retaining
     // relational window metadata.  Consumers must still validate that the

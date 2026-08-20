@@ -277,6 +277,61 @@ TVector<TInfoUnit> ExtractWindowPartitionColumns(const TExprNode& definition) {
     return result;
 }
 
+TVector<TInfoUnit> ExtractWindowOrderColumns(const TExprNode& definition) {
+    TVector<TInfoUnit> result;
+    if (!definition.IsCallable("YqlWindow") || definition.ChildrenSize() != 5) {
+        return result;
+    }
+
+    const auto* order = definition.Child(3);
+    if (!order->IsList()) {
+        return result;
+    }
+    for (const auto& orderItem : order->Children()) {
+        if (!orderItem->IsCallable("YqlSort") ||
+            orderItem->ChildrenSize() != 4)
+        {
+            continue;
+        }
+        const auto* lambda = orderItem->Child(1);
+        if (!lambda->IsLambda() ||
+            lambda->ChildrenSize() != 2 ||
+            !lambda->Child(0)->IsArguments() ||
+            lambda->Child(0)->ChildrenSize() != 1 ||
+            !lambda->Child(0)->Child(0)->IsArgument())
+        {
+            continue;
+        }
+        const auto* member = lambda->Child(1);
+        if (!member->IsCallable("Member") ||
+            member->ChildrenSize() != 2 ||
+            member->Child(0) != lambda->Child(0)->Child(0) ||
+            !member->Child(1)->IsAtom())
+        {
+            continue;
+        }
+        AddUniqueInfoUnit(
+            result,
+            TInfoUnit(TString(member->Child(1)->Content())));
+    }
+    return result;
+}
+
+void ApplyWindowRenameHistory(
+    TVector<TInfoUnit>& columns,
+    const TVector<TExpression::TRenameMap>& renameHistory)
+{
+    for (const auto& renameMap : renameHistory) {
+        for (auto& column : columns) {
+            if (const auto it = renameMap.find(column);
+                it != renameMap.end())
+            {
+                column = it->second;
+            }
+        }
+    }
+}
+
 TExprNode::TPtr FindMemberArg(TExprNode::TPtr input) {
     if (input->IsCallable("Member")) {
         auto member = TCoMember(input);
@@ -710,6 +765,9 @@ const TVector<TInfoUnit>& TExpression::GetInputIUs(bool includeSubplanVars, bool
         for (const auto& partition : GetWindowPartitionBy()) {
             AddUniqueInfoUnit(IUs, partition);
         }
+        for (const auto& order : GetWindowOrderBy()) {
+            AddUniqueInfoUnit(IUs, order);
+        }
     }
     InputIUs[index] = std::move(IUs);
     return InputIUs[index].value();
@@ -724,7 +782,7 @@ bool TExpression::HasWindowSemantics() const {
     return WindowMetadata || (Node && FindNode(
         Node,
         [](const TExprNode::TPtr& node) {
-            return node->IsCallable("YqlAggWin");
+            return node->IsCallable({"YqlAggWin", "YqlWin"});
         }));
 }
 
@@ -732,17 +790,17 @@ TVector<TInfoUnit> TExpression::GetWindowPartitionBy() const {
     if (!WindowMetadata) {
         return {};
     }
-    auto result =
-        ExtractWindowPartitionColumns(*WindowMetadata->Definition);
-    for (const auto& renameMap : WindowMetadata->RenameHistory) {
-        for (auto& partition : result) {
-            if (const auto it = renameMap.find(partition);
-                it != renameMap.end())
-            {
-                partition = it->second;
-            }
-        }
+    auto result = ExtractWindowPartitionColumns(*WindowMetadata->Definition);
+    ApplyWindowRenameHistory(result, WindowMetadata->RenameHistory);
+    return result;
+}
+
+TVector<TInfoUnit> TExpression::GetWindowOrderBy() const {
+    if (!WindowMetadata) {
+        return {};
     }
+    auto result = ExtractWindowOrderColumns(*WindowMetadata->Definition);
+    ApplyWindowRenameHistory(result, WindowMetadata->RenameHistory);
     return result;
 }
 

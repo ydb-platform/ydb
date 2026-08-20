@@ -5,6 +5,7 @@ SRCS(
     limit_pushdown_rules_ut.cpp
     semantic_snapshot_exporter_ut.cpp
     stage_assignment_rules_ut.cpp
+    window_transport_ut.cpp
 )
 
 PEERDIR(

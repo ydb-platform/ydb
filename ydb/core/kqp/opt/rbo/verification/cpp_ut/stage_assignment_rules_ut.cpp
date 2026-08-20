@@ -14,6 +14,8 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 
+#include <algorithm>
+
 namespace {
 
 using namespace NKikimr;
@@ -176,6 +178,116 @@ TExpression MakeUntrackedWindowExpression(
         &ctx.PlanProps);
 }
 
+TExprNode::TPtr MakeGlobalRankDefinition(
+    TExprContext& ctx,
+    TPositionHandle pos,
+    TStringBuf name,
+    const TInfoUnit& orderBy)
+{
+    auto row = ctx.NewArgument(pos, "window_row");
+    auto decimalType = ctx.NewCallable(
+        pos,
+        "DataType",
+        {
+            ctx.NewAtom(pos, "Decimal"),
+            ctx.NewAtom(pos, "15"),
+            ctx.NewAtom(pos, "4"),
+        });
+    auto sort = ctx.NewCallable(
+        pos,
+        "YqlSort",
+        {
+            ctx.NewCallable(
+                pos,
+                "StructType",
+                {ctx.NewList(
+                    pos,
+                    {
+                        ctx.NewAtom(pos, orderBy.GetFullName()),
+                        decimalType,
+                    })}),
+            ctx.NewLambda(
+                pos,
+                ctx.NewArguments(pos, {row}),
+                ctx.NewCallable(
+                    pos,
+                    "Member",
+                    {row, ctx.NewAtom(pos, orderBy.GetFullName())})),
+            ctx.NewAtom(pos, "asc"),
+            ctx.NewAtom(pos, "first"),
+        });
+    return ctx.NewCallable(
+        pos,
+        "YqlWindow",
+        {
+            ctx.NewAtom(pos, name),
+            ctx.NewAtom(pos, ""),
+            ctx.NewList(pos, {}),
+            ctx.NewList(pos, {std::move(sort)}),
+            ctx.NewList(
+                pos,
+                {
+                    ctx.NewList(
+                        pos,
+                        {ctx.NewAtom(pos, "type"), ctx.NewAtom(pos, "rows")}),
+                    ctx.NewList(
+                        pos,
+                        {ctx.NewAtom(pos, "from"), ctx.NewAtom(pos, "up")}),
+                    ctx.NewList(
+                        pos,
+                        {ctx.NewAtom(pos, "to"), ctx.NewAtom(pos, "f")}),
+                    ctx.NewList(
+                        pos,
+                        {
+                            ctx.NewAtom(pos, "to_value"),
+                            ctx.NewCallable(
+                                pos,
+                                "Int32",
+                                {ctx.NewAtom(pos, "0")}),
+                        }),
+                }),
+        });
+}
+
+TExpression MakeGlobalRankExpression(
+    TRuleTestContext& ctx,
+    const TInfoUnit& orderBy,
+    TStringBuf name = "_rank_window")
+{
+    const auto pos = TPositionHandle();
+    auto row = ctx.ExprCtx.NewArgument(pos, "rank_row");
+    return TExpression(
+        ctx.ExprCtx.NewLambda(
+            pos,
+            ctx.ExprCtx.NewArguments(pos, {row}),
+            ctx.ExprCtx.NewCallable(
+                pos,
+                "YqlWin",
+                {
+                    ctx.ExprCtx.NewAtom(pos, "rank"),
+                    ctx.ExprCtx.NewAtom(pos, name),
+                    ctx.ExprCtx.NewList(pos, {}),
+                    ctx.ExprCtx.NewCallable(
+                        pos,
+                        "DataType",
+                        {ctx.ExprCtx.NewAtom(pos, "Uint64")}),
+                })),
+        &ctx.ExprCtx,
+        &ctx.PlanProps,
+        MakeGlobalRankDefinition(ctx.ExprCtx, pos, name, orderBy));
+}
+
+TExpression MakeUntrackedRankExpression(
+    TRuleTestContext& ctx,
+    const TInfoUnit& orderBy)
+{
+    const auto tracked = MakeGlobalRankExpression(ctx, orderBy);
+    return TExpression(
+        tracked.GetLambda(),
+        &ctx.ExprCtx,
+        &ctx.PlanProps);
+}
+
 int AssignSourceStage(
     TRuleTestContext& ctx,
     const TIntrusivePtr<TOpRead>& read)
@@ -322,6 +434,247 @@ Y_UNIT_TEST_SUITE(KqpRboStageAssignmentRules) {
             ctx.PlanProps,
             sourceStage,
             *map->Props.StageId);
+    }
+
+    Y_UNIT_TEST(ExactGlobalRankGathersSerially) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit ratio("currency_ratio");
+        auto read = MakeRead(pos, {ratio});
+        const auto sourceStage = AssignSourceStage(ctx, read);
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("currency_rank"),
+                MakeGlobalRankExpression(ctx, ratio))});
+
+        AssignStage(ctx, map);
+
+        UNIT_ASSERT(*map->Props.StageId != sourceStage);
+        AssertSerialWindowConnection(
+            ctx.PlanProps,
+            sourceStage,
+            *map->Props.StageId);
+    }
+
+    Y_UNIT_TEST(GlobalRankOrderDependencyComposesRenameBatches) {
+        TRuleTestContext ctx;
+        const TInfoUnit sourceRatio("source.currency_ratio");
+        const TInfoUnit middleRatio("middle.currency_ratio");
+        const TInfoUnit finalRatio("currency_ratio");
+        auto expression = MakeGlobalRankExpression(ctx, sourceRatio);
+
+        TExpression::TRenameMap firstBatch;
+        firstBatch.emplace(sourceRatio, middleRatio);
+        firstBatch.emplace(middleRatio, finalRatio);
+        expression = expression.ApplyRenames(firstBatch);
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetWindowOrderBy().size(), 1);
+        UNIT_ASSERT(expression.GetWindowOrderBy().front() == middleRatio);
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetInputIUs().size(), 1);
+        UNIT_ASSERT(expression.GetInputIUs().front() == middleRatio);
+
+        TExpression::TRenameMap secondBatch;
+        secondBatch.emplace(middleRatio, finalRatio);
+        expression = expression.ApplyRenames(secondBatch);
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetWindowOrderBy().size(), 1);
+        UNIT_ASSERT(expression.GetWindowOrderBy().front() == finalRatio);
+        UNIT_ASSERT_VALUES_EQUAL(expression.GetInputIUs().size(), 1);
+        UNIT_ASSERT(expression.GetInputIUs().front() == finalRatio);
+    }
+
+    Y_UNIT_TEST(UntrackedRawRankIsAConservativeSerialBarrier) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit ratio("currency_ratio");
+        auto read = MakeRead(pos, {ratio});
+        const auto sourceStage = AssignSourceStage(ctx, read);
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                TInfoUnit("currency_rank"),
+                MakeUntrackedRankExpression(ctx, ratio))});
+
+        UNIT_ASSERT(!map->MapElements.front()
+            .GetExpression()
+            .GetWindowMetadata());
+        UNIT_ASSERT(map->MapElements.front()
+            .GetExpression()
+            .HasWindowSemantics());
+        AssignStage(ctx, map);
+        AssertSerialWindowConnection(
+            ctx.PlanProps,
+            sourceStage,
+            *map->Props.StageId);
+    }
+
+    Y_UNIT_TEST(UntrackedRawRankKeepsEveryMapInputLive) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit ratio("currency_ratio");
+        const TInfoUnit hiddenOrderInput("hidden_order_input");
+        const TInfoUnit rank("currency_rank");
+        auto read = MakeRead(pos, {ratio, hiddenOrderInput});
+        auto map = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                rank,
+                MakeUntrackedRankExpression(ctx, ratio))});
+        TOpRoot root(map, pos, {rank.GetFullName()});
+
+        root.RecomputeOutputIUsSubtree();
+        root.ComputeParents();
+        ComputePlanLiveness(root);
+
+        const auto& live = GetLiveOut(read.Get());
+        UNIT_ASSERT_VALUES_EQUAL(live.size(), 2);
+        UNIT_ASSERT(live.contains(ratio));
+        UNIT_ASSERT(live.contains(hiddenOrderInput));
+        const auto used = map->GetUsedIUs(root.PlanProps);
+        UNIT_ASSERT_VALUES_EQUAL(used.size(), 2);
+        UNIT_ASSERT(std::find(used.begin(), used.end(), ratio) != used.end());
+        UNIT_ASSERT(
+            std::find(used.begin(), used.end(), hiddenOrderInput) !=
+            used.end());
+    }
+
+    Y_UNIT_TEST(UntrackedRawRankDoesNotMoveAcrossAnotherMap) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit source("source");
+        const TInfoUnit ratio("currency_ratio");
+        const TInfoUnit rank("currency_rank");
+        auto read = MakeRead(pos, {source});
+        auto ratios = MakeIntrusive<TOpMap>(
+            read,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                ratio,
+                MakeColumnAccess(
+                    source,
+                    pos,
+                    &ctx.ExprCtx,
+                    &ctx.PlanProps))});
+        auto ranks = MakeIntrusive<TOpMap>(
+            ratios,
+            pos,
+            TVector<TMapElement>{TMapElement(
+                rank,
+                MakeUntrackedRankExpression(ctx, ratio))});
+        TOpRoot root(ranks, pos, {rank.GetFullName()});
+        root.RecomputeOutputIUsSubtree();
+        root.ComputeParents();
+
+        TPushMapElementsIntoMapRule rule;
+        const auto result = rule.SimpleMatchAndApply(
+            ranks,
+            ctx.RboCtx,
+            root.PlanProps);
+
+        UNIT_ASSERT_VALUES_EQUAL(result.Get(), ranks.Get());
+        UNIT_ASSERT_VALUES_EQUAL(ranks->GetInput().Get(), ratios.Get());
+    }
+
+    Y_UNIT_TEST(GlobalRankDependenciesPreventRatioAndTraitPruning) {
+        TRuleTestContext ctx;
+        const auto pos = TPositionHandle();
+        const TInfoUnit item("item");
+        const TInfoUnit quantity1("quantity_1");
+        const TInfoUnit quantity2("quantity_2");
+        const TInfoUnit amount1("amount_1");
+        const TInfoUnit amount2("amount_2");
+        const TInfoUnit sumQuantity1("sum_quantity_1");
+        const TInfoUnit sumQuantity2("sum_quantity_2");
+        const TInfoUnit sumAmount1("sum_amount_1");
+        const TInfoUnit sumAmount2("sum_amount_2");
+        const TInfoUnit returnRatio("return_ratio");
+        const TInfoUnit currencyRatio("currency_ratio");
+        const TInfoUnit returnRank("return_rank");
+        const TInfoUnit currencyRank("currency_rank");
+
+        auto read = MakeRead(
+            pos,
+            {item, quantity1, quantity2, amount1, amount2});
+        auto aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            TVector<TOpAggregationTraits>{
+                TOpAggregationTraits(quantity1, "sum", sumQuantity1),
+                TOpAggregationTraits(quantity2, "sum", sumQuantity2),
+                TOpAggregationTraits(amount1, "sum", sumAmount1),
+                TOpAggregationTraits(amount2, "sum", sumAmount2),
+            },
+            TVector<TInfoUnit>{item},
+            EOpPhase::Final,
+            false,
+            pos);
+        auto ratios = MakeIntrusive<TOpMap>(
+            aggregate,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(
+                    returnRatio,
+                    MakeBinaryPredicate(
+                        "+",
+                        MakeColumnAccess(
+                            sumQuantity1,
+                            pos,
+                            &ctx.ExprCtx,
+                            &ctx.PlanProps),
+                        MakeColumnAccess(
+                            sumQuantity2,
+                            pos,
+                            &ctx.ExprCtx,
+                            &ctx.PlanProps))),
+                TMapElement(
+                    currencyRatio,
+                    MakeBinaryPredicate(
+                        "+",
+                        MakeColumnAccess(
+                            sumAmount1,
+                            pos,
+                            &ctx.ExprCtx,
+                            &ctx.PlanProps),
+                        MakeColumnAccess(
+                            sumAmount2,
+                            pos,
+                            &ctx.ExprCtx,
+                            &ctx.PlanProps))),
+            });
+        auto ranks = MakeIntrusive<TOpMap>(
+            ratios,
+            pos,
+            TVector<TMapElement>{
+                TMapElement(
+                    returnRank,
+                    MakeGlobalRankExpression(
+                        ctx, returnRatio, "_return_rank")),
+                TMapElement(
+                    currencyRank,
+                    MakeGlobalRankExpression(
+                        ctx, currencyRatio, "_currency_rank")),
+            });
+        TOpRoot root(
+            ranks,
+            pos,
+            {returnRank.GetFullName(), currencyRank.GetFullName()});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
+        TRuleBasedStage pruning(
+            "Focused global rank liveness",
+            std::move(rules));
+        pruning.RunStage(root, ctx.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL(root.GetInput().Get(), ranks.Get());
+        UNIT_ASSERT_VALUES_EQUAL(ranks->GetInput().Get(), ratios.Get());
+        UNIT_ASSERT_VALUES_EQUAL(ratios->MapElements.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(
+            aggregate->AggregationTraitsList.size(),
+            4);
     }
 
     Y_UNIT_TEST(RenamedPartitionUsesCurrentInputHash) {

@@ -1,9 +1,12 @@
 #include "kqp_rbo_transformer.h"
+#include "kqp_window_transport.h"
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/utils/log/log.h>
+
+#include <initializer_list>
 
 namespace NKikimr::NKqp {
 
@@ -71,7 +74,7 @@ bool IsWholePartitionFrameSetting(
         node.Child(1)->IsAtom(value);
 }
 
-bool IsTransportSafeWindowDefinition(
+bool IsTransportSafeWholePartitionWindowDefinition(
     const TExprNode& definition,
     TStringBuf windowName)
 {
@@ -156,7 +159,120 @@ bool IsTransportSafeWindowDefinition(
         IsWholePartitionFrameSetting(*frame.Child(2), "to", "uf");
 }
 
-TExprNode::TPtr FindWindowDefinition(
+bool IsExactDataTypeDescriptor(
+    const TExprNode& node,
+    std::initializer_list<TStringBuf> parameters)
+{
+    if (!node.IsCallable("DataType") ||
+        node.ChildrenSize() != parameters.size())
+    {
+        return false;
+    }
+
+    size_t index = 0;
+    for (const auto parameter : parameters) {
+        if (!node.Child(index++)->IsAtom(parameter)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool IsTransportSafeRankWindowCall(const TExprNode& call) {
+    return call.IsCallable("YqlWin") &&
+        call.ChildrenSize() == 4 &&
+        call.Child(0)->IsAtom("rank") &&
+        call.Child(1)->IsAtom() &&
+        !call.Child(1)->Content().empty() &&
+        call.Child(2)->IsList() &&
+        call.Child(2)->ChildrenSize() == 0 &&
+        IsExactDataTypeDescriptor(*call.Child(3), {"Uint64"});
+}
+
+bool IsRankCurrentRowFrameSetting(const TExprNode& node) {
+    return node.IsList() &&
+        node.ChildrenSize() == 2 &&
+        node.Child(0)->IsAtom("to_value") &&
+        node.Child(1)->IsCallable("Int32") &&
+        node.Child(1)->ChildrenSize() == 1 &&
+        node.Child(1)->Child(0)->IsAtom("0");
+}
+
+bool IsTransportSafeRankWindowDefinition(
+    const TExprNode& definition,
+    TStringBuf windowName)
+{
+    if (windowName.empty() ||
+        !definition.IsCallable("YqlWindow") ||
+        definition.ChildrenSize() != 5 ||
+        !definition.Child(0)->IsAtom(windowName) ||
+        !definition.Child(1)->IsAtom("") ||
+        !definition.Child(2)->IsList() ||
+        definition.Child(2)->ChildrenSize() != 0)
+    {
+        return false;
+    }
+
+    const auto& order = *definition.Child(3);
+    if (!order.IsList() || order.ChildrenSize() != 1) {
+        return false;
+    }
+    const auto& sort = *order.Child(0);
+    if (!sort.IsCallable("YqlSort") || sort.ChildrenSize() != 4 ||
+        !sort.Child(2)->IsAtom("asc") ||
+        !sort.Child(3)->IsAtom("first"))
+    {
+        return false;
+    }
+
+    const auto& rowDescriptor = *sort.Child(0);
+    if (!rowDescriptor.IsCallable("StructType") ||
+        rowDescriptor.ChildrenSize() != 1)
+    {
+        return false;
+    }
+    const auto& field = *rowDescriptor.Child(0);
+    if (!field.IsList() ||
+        field.ChildrenSize() != 2 ||
+        !field.Child(0)->IsAtom() ||
+        field.Child(0)->Content().empty() ||
+        !IsExactDataTypeDescriptor(
+            *field.Child(1), {"Decimal", "15", "4"}))
+    {
+        return false;
+    }
+
+    const auto& lambda = *sort.Child(1);
+    if (!lambda.IsLambda() ||
+        lambda.ChildrenSize() != 2 ||
+        !lambda.Child(0)->IsArguments() ||
+        lambda.Child(0)->ChildrenSize() != 1 ||
+        !lambda.Child(0)->Child(0)->IsArgument())
+    {
+        return false;
+    }
+    const auto* argument = lambda.Child(0)->Child(0);
+    const auto& member = *lambda.Child(1);
+    if (!member.IsCallable("Member") ||
+        member.ChildrenSize() != 2 ||
+        member.Child(0) != argument ||
+        !member.Child(1)->IsAtom(field.Child(0)->Content()))
+    {
+        return false;
+    }
+
+    const auto& frame = *definition.Child(4);
+    return frame.IsList() &&
+        frame.ChildrenSize() == 4 &&
+        IsWholePartitionFrameSetting(*frame.Child(0), "type", "rows") &&
+        IsWholePartitionFrameSetting(*frame.Child(1), "from", "up") &&
+        IsWholePartitionFrameSetting(*frame.Child(2), "to", "f") &&
+        IsRankCurrentRowFrameSetting(*frame.Child(3));
+}
+
+} // anonymous namespace
+
+TExprNode::TPtr NWindowTransport::FindTransportSafeWindowDefinition(
     const TExprNode::TPtr& expression,
     const TExprNode::TPtr& windowSetting)
 {
@@ -170,18 +286,27 @@ TExprNode::TPtr FindWindowDefinition(
     VisitExpr(
         *expression,
         [&](const TExprNode& node) {
-            if (node.IsCallable("YqlAggWin")) {
+            if (node.IsCallable({"YqlAggWin", "YqlWin"})) {
                 calls.push_back(&node);
             }
             return true;
         });
-    if (calls.size() != 1 || calls.front()->ChildrenSize() != 5 ||
+    if (calls.size() != 1 ||
+        calls.front()->ChildrenSize() < 2 ||
         !calls.front()->Child(1)->IsAtom())
     {
         return nullptr;
     }
 
-    const TStringBuf name = calls.front()->Child(1)->Content();
+    const auto& call = *calls.front();
+    const bool aggregateWindow = call.IsCallable("YqlAggWin");
+    if ((aggregateWindow && call.ChildrenSize() != 5) ||
+        (!aggregateWindow && !IsTransportSafeRankWindowCall(call)))
+    {
+        return nullptr;
+    }
+
+    const TStringBuf name = call.Child(1)->Content();
     TExprNode::TPtr result;
     for (const auto& definition : windowSetting->Child(1)->ChildrenList()) {
         if (!definition->IsCallable("YqlWindow") ||
@@ -195,10 +320,16 @@ TExprNode::TPtr FindWindowDefinition(
         }
         result = definition;
     }
-    return result && IsTransportSafeWindowDefinition(*result, name)
-        ? result
-        : nullptr;
+    if (!result) {
+        return nullptr;
+    }
+    const bool transportSafe = aggregateWindow
+        ? IsTransportSafeWholePartitionWindowDefinition(*result, name)
+        : IsTransportSafeRankWindowDefinition(*result, name);
+    return transportSafe ? result : nullptr;
 }
+
+namespace {
 
 bool IsAggregation(TExprNode::TPtr node) { return node->IsCallable("YqlAgg"); }
 
@@ -372,7 +503,8 @@ TExprNode::TPtr BuildAggregateExpressionMap(TExprNode::TPtr resultExpr,
         // clang-format on
 
         if (auto windowDefinition =
-                FindWindowDefinition(expr, windowSetting))
+                NWindowTransport::FindTransportSafeWindowDefinition(
+                    expr, windowSetting))
         {
             elementBuilder.WindowDefinition(TExprBase(windowDefinition));
         }
@@ -1716,7 +1848,8 @@ TExprNode::TPtr RewriteSelect(const TExprNode::TPtr& input, TExprContext& ctx, c
             // clang-format on
 
             if (auto windowDefinition =
-                    FindWindowDefinition(lambda.Body().Ptr(), windowSetting))
+                    NWindowTransport::FindTransportSafeWindowDefinition(
+                        lambda.Body().Ptr(), windowSetting))
             {
                 elementBuilder.WindowDefinition(TExprBase(windowDefinition));
             }

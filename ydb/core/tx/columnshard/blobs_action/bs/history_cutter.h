@@ -94,6 +94,15 @@ public:
 
     static constexpr TDuration DisprovedRetryCooldown = TDuration::Minutes(5);
     static constexpr TDuration DisprovedRetryMaxCooldown = TDuration::Hours(6);
+
+    // Pure function of the attempt count (shift clamped, then capped), public so the
+    // backoff formula is testable without an instance.
+    static TDuration GetDisprovedCooldown(const ui32 attempts) {
+        const ui64 shift = Min<ui32>(attempts, 12);
+        const TDuration cooldown = DisprovedRetryCooldown * (1ull << shift);
+        return Min(cooldown, DisprovedRetryMaxCooldown);
+    }
+
     static constexpr TDuration NominateCadence = TDuration::Minutes(1);
     // Hard cap on IsDrained() queue scans per nomination round: with the cadence this
     // bounds tablet-thread scan work to MaxDrainChecksPerNomination scans per minute
@@ -116,6 +125,24 @@ protected:
         const auto* state = CutState.FindPtr(key);
         return state ? *state : ECutState::None;
     }
+
+    ui32 GetDisprovalAttemptsForTest(const TEntryKey& key) const {
+        const auto* state = DisprovedAt.FindPtr(key);
+        return state ? state->Attempts : 0;
+    }
+
+    bool IsChannelPoisonedForTest(const ui32 channel) const {
+        return PoisonedChannels.contains(channel);
+    }
+
+    ui64 GetCounterForTest(const TEntryKey& key) const {
+        const auto* count = Counters.FindPtr(key);
+        return count ? *count : 0;
+    }
+
+    // Protected rather than private so unit tests can force the underflow branch
+    // (no public call sequence reaches it: OnPortionRemoved is fenced by PortionKeys).
+    void DecrementCounter(const TEntryKey& key);
 
 public:
     // Sets the snapshot of all engine portion IDs that tier-2 will scan.
@@ -175,7 +202,6 @@ private:
     bool GetEntryKey(const TLogoBlobID& blobId, TEntryKey& out) const;
 
     void IncrementCounter(const TEntryKey& key);
-    void DecrementCounter(const TEntryKey& key);
 
     // Publishes the level sensors as deltas (see OnLevelsDelta). Call after any
     // change to PoisonedChannels or DisprovedAt; an omitted sweepCandidates
@@ -226,12 +252,6 @@ private:
     };
 
     THashMap<TEntryKey, TDisprovalState> DisprovedAt;
-
-    TDuration GetDisprovedCooldown(const ui32 attempts) const {
-        const ui64 shift = Min<ui32>(attempts, 12);
-        const TDuration cooldown = DisprovedRetryCooldown * (1ull << shift);
-        return Min(cooldown, DisprovedRetryMaxCooldown);
-    }
 
     // Last full candidate evaluation; see NominateCadence in TryNominate.
     TInstant LastNominateAt;

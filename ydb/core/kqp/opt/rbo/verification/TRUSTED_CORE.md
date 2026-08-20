@@ -99,16 +99,16 @@ A defect in these files can turn inequivalent supported plans into
 | File | Trusted responsibility |
 |---|---|
 | `semantic_snapshot.h` | Version-one catalog, snapshot, boundary, and fail-closed exporter contract. |
-| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates, including reviewed generic/pushed compiled LIKE, exact pushed Boolean coalesce, exact literal-only String `Concat` folding, restricted stored-String `Concat` provenance and total/checked-result selection, the restricted nullable String-to-Utf8 `Unicode.ToUpper` bridge, exact checked nullable-String `Unwrap` projection metadata, exact whole-partition nullable-Decimal window grammar and Aggregate/Project topology, the passive-Double constructor, strict direct and staged Decimal-AVG admission with certified physical-pad normalization, nullable Decimal and grouped fixed-width integer count-distinct admission, and independently tracked completed integral-AVG ordering provenance; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, both checked-projection demand topologies, correlated outer-binding, StageGraph, topology, task, and resource validation; exact read-range integration; deterministic JSON serialization. |
+| `semantic_snapshot.cpp` | Mechanical catalog and plan export; scalar normalization and safety gates, including reviewed generic/pushed compiled LIKE, exact pushed Boolean coalesce, exact literal-only String `Concat` folding, restricted stored-String `Concat` provenance and total/checked-result selection, the restricted nullable String-to-Utf8 `Unicode.ToUpper` bridge, exact checked nullable-String `Unwrap` projection metadata, exact whole-partition nullable-Decimal SUM/AVG window grammar and Aggregate/Project topology, exact nullable Decimal Abs, the passive-Double constructor, strict direct and staged Decimal-AVG admission with certified physical-pad normalization, nullable Decimal and grouped fixed-width integer count-distinct admission, and independently tracked completed integral-AVG ordering provenance; operator, exact scalar- and one-level `IN`-inside-`IN` nesting, subplan, both checked-projection demand topologies, correlated outer-binding, StageGraph, topology, task, and resource validation; exact read-range integration; deterministic JSON serialization. |
 | `read_range_predicate_impl.h` | Closed q9/q45 point and finite point-set `RangeInfo::ComputeNode` grammar, physical-key/catalog binding, extractor-cap and node-identity validation, and lowering to existing equality/static-`IN` predicate IR. Included exactly once inside `semantic_snapshot.cpp`'s anonymous namespace. |
-| `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, independently checked nullable-String projection-error and checked-Concat source/result/demand topology, exact `window_sum` types and private grouped Aggregate/Project dataflow, tagged aggregate-state contracts including direct/staged Decimal AVG, its carrier topology/dataflow/routing checks, phase-linked integral AVG, and fixed-width/nullable-Decimal count-distinct, independently derived integral-AVG rank provenance, passive-Double use confinement, all-plan-root virtual-binding confinement, exact scalar- and one-level `IN`-inside-`IN` plus correlated-subplan shape checks, and operator/StageGraph invariants. |
+| `rbo_verifier/ir.py` | Strict JSON decoding, version/schema validation, normalized IR, expression typing, independently checked nullable-String projection-error and checked-Concat source/result/demand topology, exact `window_sum`/`window_avg` partition types and private grouped Aggregate/Project dataflow, exact nullable Decimal Abs typing, tagged aggregate-state contracts including direct/staged Decimal AVG, its carrier topology/dataflow/routing checks, phase-linked integral AVG, and fixed-width/nullable-Decimal count-distinct, independently derived integral-AVG rank provenance, passive-Double use confinement, all-plan-root virtual-binding confinement, exact scalar- and one-level `IN`-inside-`IN` plus correlated-subplan shape checks, and operator/StageGraph invariants. |
 | `rbo_verifier/types.py` | Supported scalar identities, exact domains, opaque-carrier family, and compatibility predicates. |
 | `rbo_verifier/smt.py` | Typed immutable SMT terms, identity-scoped concrete String-atom equality, script-owned one-constructor product datatypes, closed quantifier-free exact function definitions, quantifier-safe sharing, stack-safe occurrence/level/output rendering, deterministic canonical bytes, exact marked-obligation substitution, and solver-output parsing primitives. |
 | `rbo_verifier/string_order.py` | Finite exact bounded quotient for String/Utf8 equality and unsigned byte ordering. |
-| `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic, extrema, specials, and proof bounds. |
-| `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates including exact early concrete String/Utf8 equality, exact scalar evaluation and relation-supplied `window_sum` lookup, raw aggregate-code equality for Decimal count-distinct, conservative Decimal finite-coefficient propagation, tagged `AverageMetadata`, the shared cardinality-certified integral-AVG carrier, typed opaque functions, the checked-Concat failure function, and the domain-free passive carrier encoding. |
+| `rbo_verifier/decimal.py` | Decimal representation, domains, comparison, arithmetic including exact raw-code Abs, extrema, specials, rounding, and proof bounds. |
+| `rbo_verifier/scalar.py` | Nullable values, SQL three-valued predicates including exact early concrete String/Utf8 equality, exact nullable Decimal Abs, exact scalar evaluation and relation-supplied `window_sum`/`window_avg` lookup, raw aggregate-code equality for Decimal count-distinct, conservative Decimal finite-coefficient propagation, tagged `AverageMetadata`, the shared cardinality-certified integral-AVG carrier, typed opaque functions, the checked-Concat failure function, and the domain-free passive carrier encoding. |
 | `rbo_verifier/sort_network.py` | Audited power-of-two bitonic compare-exchange topology and exact construction cost. |
-| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators including exact task-local whole-partition Decimal SUM and checked nullable-String/checked-Concat projection-error outcomes, fail-closed direct unique-RHS join compaction, literal-false join-slot erasure, narrowly gated delayed unique-RHS Filter/Cross scheduling with exact factor-local static rejection, certified innermost unique-seed rebasing, and original-column restoration, exact fixed-sequence singleton-`Limit` compaction, exact fixed-width integral extrema and fixed-width/nullable-Decimal count-distinct, aggregate ghost state and producer-local integral-AVG certificates, certified integral-AVG abstract rank ordering, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport with concrete or symbolic producer order, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
+| `rbo_verifier/relation.py` | Symbolic database, unique-key constraints, logical operators including exact task-local whole-partition Decimal SUM/AVG and checked nullable-String/checked-Concat projection-error outcomes, fail-closed direct unique-RHS join compaction, literal-false join-slot erasure, narrowly gated delayed unique-RHS Filter/Cross scheduling with exact factor-local static rejection, certified innermost unique-seed rebasing, and original-column restoration, exact fixed-sequence singleton-`Limit` compaction, exact fixed-width integral extrema and fixed-width/nullable-Decimal count-distinct, aggregate ghost state and producer-local integral-AVG certificates, certified integral-AVG abstract rank ordering, per-row scalar subplans, bags/sequences, packed exact Sort/Merge transport with concrete or symbolic producer order, exact present-prefix equality, errors, choices, result-family equality, and the exact mismatch cover. |
 | `rbo_verifier/stages.py` | Two-task StageGraph execution, routing, connection semantics including tagged integral-AVG Merge ordering, occurrence/fact-gated task-copy compaction, Broadcast pre-fan-out selection, HashShuffle cell-gated selection, per-task evaluation, and root gathering. |
 | `rbo_verifier/verify.py` | Boundary/catalog/schema checks, shared model construction, checked-Concat producer-cardinality demand proof, producer-local integral-AVG observation, mandatory model-domain precheck, canonical/branch solver portfolio, one-deadline status interpretation, and witness decoding. |
 
@@ -1167,6 +1167,139 @@ A separate synthetic full-group-key case is `COUNTEREXAMPLE` and its synthetic
 partition-key-only repair is `VERIFIED_BOUNDED`; production q12 remains
 `UNKNOWN` after the routing fix.
 
+Milestone 77 semantic commit `3f9b9c8b2c6` broadens the trusted window seam
+only to the exact q53/q63/q89 whole-partition AVG shapes. C++ requires a direct
+five-child `YqlAggWin` with exact option-free Unit-typed
+`YqlWinFactory("avg")`, nonempty
+name, and `Optional<Decimal(35,2)>` input, descriptor, and result. Its matching
+source is an exact non-inherited five-child `YqlWindow`, with no ordering and
+the ordered whole-partition ROWS frame
+`("type","rows"), ("from","up"), ("to","uf")`. The partition list has one
+through four ordered `YqlGroup` children. Each has a one-field Struct
+descriptor, unary lambda, and direct named four-child `YqlGroupRef`; the
+canonical unsigned index, name, descriptor, reference, and annotations agree.
+Indices and names are independently unique. Partition fields are restricted
+to exact `Optional<String>` or `Optional<Int64>`, and ordered rename history
+must leave nonempty unique names. Source-definition and expression safety
+trees are each capped at 128 nodes and depth 16.
+
+The raw partition ordinal is semantically checked against the ordered grouped
+Aggregate key vector, not merely used as descriptive metadata. q53 uses
+nullable Int64 `i_manufact_id` and q63 uses nullable Int64 `i_manager_id`, each
+at ordinal 0. q89 uses nullable String `category`, `brand`, `store_name`, and
+`company_name` at ordinals 0, 2, 3, and 4 of a six-key Aggregate. Each resolved key occurs
+exactly once and has the same nullable type. The window input selects exactly
+one Aggregate trait by result name; that trait is one plain
+non-distinct/non-unwrap SUM of exact `Optional<Decimal(35,2)>`. Additional SUM
+traits are permitted only under other output names, so the named carrier is
+unambiguous. A phase-`Final` Aggregate directly consumes one matching
+phase-`Intermediate` Aggregate with identical ordered keys, exactly one named
+SUM-state producer, and exactly one final use. The M76 private
+Aggregate/Project single-consumer, no-fanout, one-window, and no-subplan gates
+remain intact.
+
+The serialized `window_avg` uses an ordered unique one-through-four-element
+partition array. The raw GroupRef index is deliberately not transported: C++
+alone checks it against the Aggregate ordinal before export. `ir.py`
+independently checks the ordered names, types, direct-key membership, phase
+link, named SUM carrier, and topology.
+`relation.py` evaluates the leaf once per present Project row against the
+relation visible in that StageGraph consumer task. Every partition component
+uses SQL `IS NOT DISTINCT FROM`; NULL inputs do not contribute. It carries an
+exact special-aware Decimal `AggrAdd` sum and `Uint64` count, returns NULL for
+count zero, and otherwise divides by the positive count with exact Decimal
+nearest/ties-to-even rounding and same-scale narrowing. The finite-sum bound
+must be below `10^35`, count below `2^64`, and relation-local `rows^2` within
+the unchanged pair cap. Exceeding any bound is `UNSUPPORTED`, never an
+approximate formula.
+
+Exact Decimal Abs is a second small trusted branch. Both export and the
+closed-world callable validator require one exact
+`Optional<Decimal(35,2)>` child and the same result type. Python rechecks that
+schema and emits `value < 0 ? -value : value` on the raw Decimal code while
+propagating NULL. Thus finite negatives and `-Inf` become positive; `+Inf` and
+the positive NaN code remain unchanged. The shared C++ checker is also used
+when Abs is nested inside an otherwise admitted opaque expression, fixing the
+initial narrow seam in `DecimalDiv(Abs(Sub(...)), ...)` without admitting
+other Abs types or arities.
+
+Production metadata transport mirrors the closed one-through-four-key source
+syntax as a prefilter. It checks descriptor/name/type spelling, canonical
+unique indices, frame, and order, but not annotations or index-to-Aggregate
+ordinal agreement; the exporter checks those later. q51's
+ordered/context-dependent definition still fails the transport gate, so the
+earlier missing-member regression remains closed. The M76
+stage-assignment boundary is unchanged: a fully tracked single window hashes
+on the complete resolved partition tuple; untracked, malformed, unavailable,
+or unsafe metadata gathers serially. The movement-rule barriers remain part of
+the external production contract rather than the Python proof core.
+
+The semantic correspondence was audited against runtime sources.
+`yql/essentials/mount/lib/yql/window.yqls` wraps Optional inputs, uses Decimal
+`WidenIntegral` plus `Uint64` count state, updates with `AggrAdd` and `Inc`,
+uses NULL as the empty default, and computes
+`Cast(Div(sum,count), item type)`. The positive count makes
+`yql/essentials/public/decimal/yql_decimal.cpp`'s division branch round to
+nearest with even ties; `.h` supplies the matching divisor/narrowing contract.
+`yql/essentials/minikql/invoke_builtins/mkql_builtins_abs.cpp` negates only a
+negative raw Decimal `TInt128` with `SafeNeg`. Runtime HashV2 equality for the
+complete ordered nullable partition tuple, including NULL components, and
+preservation of the explicit stage boundary remain external assumptions.
+
+Focused q53/q63/q89 formula construction is 3/3. Preparation/verifier times
+are 275/2,383, 238/2,322, and 273/3,233 ms. Each exact pair is captured before
+later physical preparation fails with `Missed callable: YqlAggWin`; replay is
+therefore unavailable. The formulas are 3,489,514,
+3,436,841, and 5,757,911 bytes with SHA-256 values
+`44b183e952114d322ba0f6656364da7e35027049eafbca22e59fc015773291c0`,
+`a78ca722fd57d0a3e9061e6a414f6152a3d391f7d47f3e75a4f18b4cf19b8c4c`,
+and
+`eb385ea6a522499fb76d7c1efc97281107bdf85a38e8a00e94ad949ce3851c12`;
+the combined report SHA-256 is
+`35bc96ab52ca2dc02ce4a8fea6a762bb3b7d434a27f4a5935a403081a38550d9`.
+Separate 60-second solver rows are all `UNKNOWN` after 62,781, 62,842, and
+63,997 ms. Each first exhausts the global deadline before branch 3/5
+(`left_outcome_0_unmatched`); combined report SHA-256 is
+`7b30313b096b9a314b52c56e0048601a267f391d4854e52fd80e7837a4914bfa`.
+They add no proof or finding.
+
+Focused Python AVG/Abs/routing validation passes 11/11 in two suites. Correct
+plus wrong routing takes 4.60 seconds, q89's four-key mutation 1.26 seconds,
+the `Abs(Sub(...))` self-proof 64 ms, and concrete NULL/tie/multi-key evaluation
+4 ms. Focused C++ exporter/production-shape validation passes 9/9, including
+Abs nested under `DecimalDiv` in the shared closed callable validator. Policy
+commit `adfe48088f5` promotes
+q53/q63/q89 to the formula floor and leaves only q49/q51 supplemental, for
+checked-in floors of 99 formulas, 101 effective pairs, and 32 proofs. The
+complete post-M77 TPCH dashboard is authoritative: 20 formulas / 0 unsupported
+/ 2 no-pair failures after 3,295/108,747 ms, preparation 20/2, and all required
+pair, formula, and entry floors with no policy violation. Its report SHA-256 is
+`23dcef98dc8eb5f7be6ca248b89f5d18c6469ad598d4102d764ba33790fd2398`;
+the test takes 114.13 seconds (130.97 seconds wall). The complete TPC-DS
+dashboard is also authoritative: 79 formulas / 2 unsupported / 18 no-pair
+failures after 76,911/907,768 ms, preparation 73/26, 81/81 effective pairs,
+79/79 formulas, 79 verifier entrants, and a valid policy with no violation.
+Its report SHA-256 is
+`42849489e72f7408aa03c441453c7c48c82e5c24eb0b73f2d74d78fa8d605887`;
+the test takes 990.31 seconds (1,009.59 seconds wall). Thus 99/121 workload
+queries, 99/101 exact pairs, all 93 preparation successes, and all 99 verifier
+entrants construct formulas; all 101 effective pairs are present.
+
+The fresh TPCH proof gate verifies 13/13 after 1,802/82,453 ms, with 13
+successful preparations, 13 exact pairs, a valid policy, and no violation.
+Its report SHA-256 is
+`6cd133426b494541647cbd7d618785a7bddab72cd56b01c33f874796171d6219`;
+the test takes 86.39 seconds (103.10 seconds wall). The fresh TPC-DS proof gate
+verifies 19/19 after 16,306/114,124 ms, with 19 successful preparations, 19
+exact pairs, a valid policy, and no violation. Its report SHA-256 is
+`3a03efa79824900b7a5e4985294de39c290f0696eca253e27bd0d45c08c1e181`;
+the test takes 134.25 seconds (151.42 seconds wall). Together the proof gates
+verify 32/32 obligations, 32/121 workload queries (26.4%), and 32/99
+formula-covered queries (32.3%) after 18,108/196,577 ms of summed
+preparation/verifier work. M77 adds no qualified defect, leaving eleven
+runtime-confirmed findings plus the one bounded pre-physical q12 routing
+finding.
+
 The packed-row declaration substrate remains deliberately narrower than a
 general SMT datatype or macro facility. A product has exactly one constructor,
 contains only the verifier's existing `Bool` and `Int` lane sorts, and can be
@@ -2191,6 +2324,31 @@ schema-v5 pair-floor coverage, less one line from test-lifetime cleanup in
 `78e255b5e1f`. Their assumptions and independent tests are stated separately
 above and below.
 
+The post-M77 physical-line audit uses semantic implementation commit
+`3f9b9c8b2c6`, policy commit `adfe48088f5`, and this documentation closeout.
+Its focused and complete evidence is recorded above; physical size is not a
+substitute for those semantic gates.
+
+| Area | Physical lines |
+|---|---:|
+| Ten trusted Python semantic modules | 15,530 |
+| C++ exporter (`semantic_snapshot.cpp`, `.h`, and `read_range_predicate_impl.h`) | 14,926 |
+| **Proof-producing code total** | **30,456** |
+| Tests, outside the TCB | 76,999 |
+| Diagnostic/orchestration tools, outside the TCB | 5,359 |
+| Documentation, outside the TCB | 13,933 |
+
+Relative to the completed post-M76 audit, M77 adds 166 trusted Python lines,
+243 C++ exporter lines, and 1,881 test lines. The net 409-line proof-producing
+increase is approximately 1.36% of the post-M76 core. Diagnostic tooling adds
+27 lines, while documentation adds 639 net lines by recursive Markdown count.
+The trusted increase is localized to ordered one-through-four-key `window_avg`
+export, decoding, and validation, task-local exact Decimal AVG state/finish
+semantics, and exact nullable Decimal Abs. The
+production metadata-transport widening and movement/routing barriers remain
+outside the proof-producing count; the larger mutation, real-host, and workload
+evidence remains outside the TCB.
+
 ## External assumptions
 
 The production optimizer claim additionally relies on facts not established by
@@ -2312,11 +2470,17 @@ the SMT obligation itself:
   exclusive; a Broadcast gather occurs before runtime replication, while
   HashShuffle gathers producer tasks and then routes each reconstructed
   present row once, preserving the modeled connection multiplicity;
-- the accepted `YqlAggWin(sum)` spelling evaluates over the rows visible in
-  its current runtime task, groups nullable partition keys with SQL
-  `IS NOT DISTINCT FROM`, ignores NULL Decimal inputs, returns NULL for an
-  all-NULL partition, and otherwise implements the exact Decimal SUM used by
-  the logical aggregate model;
+- each accepted `YqlAggWin(sum|avg)` spelling evaluates over the rows visible
+  in its current runtime task, groups the complete ordered nullable partition
+  tuple with SQL `IS NOT DISTINCT FROM`, and ignores NULL Decimal inputs. SUM
+  returns NULL for an all-NULL partition and otherwise uses the exact Decimal
+  aggregate addition. AVG additionally carries exact widened Decimal SUM and
+  `Uint64` count state, returns NULL for count zero, and for positive count uses
+  runtime Decimal division with nearest/even rounding plus same-scale
+  narrowing;
+- each accepted Decimal `Abs` propagates NULL and applies the MiniKQL Decimal
+  builtin's raw signed-`TInt128` rule: `SafeNeg` exactly for a negative code,
+  leaving positive infinity and the positive NaN sentinel unchanged;
 - runtime HashV2 routes equal nullable keys, including two NULL keys, to the
   same task; a nonparallel `UnionAll` consumer has one task, and no later
   physical rule erases or bypasses the explicit Aggregate-to-window stage
@@ -2417,9 +2581,9 @@ each slice. It is an audit checklist, not a claim that tests are exhaustive.
 | Slice | Trusted path to review | Primary independent evidence |
 |---|---|---|
 | Capture, catalog, root schema | host hook assumption; `semantic_snapshot.*`; `ir.py`; `verify.py` | `cpp_ut/semantic_snapshot_exporter_ut.cpp`; `integration_ut/optimizer_snapshot_pair_ut.cpp`; schema-mutation tests |
-| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_checked_concat.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; `test_project_error.py`; `test_window_sum.py`; concrete same/different/cross-Script/symbolic String-atom equality and exhaustive ordinary/null-safe NULL matrices; canonical literal-only and restricted stored-String `Concat`, String-predicate, generic/pushed compiled-LIKE, pushed Boolean-coalesce, Date-year, dynamic Date-shift, nullable String-to-Utf8 `Unicode.ToUpper`, proven-total Date-`Unwrap`, checked nullable-String `Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, exact whole-partition Decimal-window leaf, passive-Double carrier, and exact literal-wrapper mutations; checked-Concat type/root-fingerprint/direct-argument mutations and shared value/failure identities; compiled-LIKE cross-dialect fingerprint/NOT/descriptor mutations and exhaustive compact-coalesce truth table; q24 exact JSON, 32 isolated Map/cast/lambda/UDF mutations, and 63/64 binding-depth boundary; checked-projection source/result/type/topology/error-composition mutations and direct-root plus empty-left-semi runtime boundaries; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
+| Types, NULLs, scalar functions | `semantic_snapshot.cpp`; `ir.py`; `types.py`; `scalar.py`; `decimal.py`; `string_order.py` | `ut/test_scalar.py`; `test_checked_concat.py`; `test_decimal.py`; `test_string_order.py`; `test_string_proof.py`; `test_sql_in.py`; `test_project_error.py`; `test_window_sum.py`; `test_window_avg.py`; concrete same/different/cross-Script/symbolic String-atom equality and exhaustive ordinary/null-safe NULL matrices; canonical literal-only and restricted stored-String `Concat`, String-predicate, generic/pushed compiled-LIKE, pushed Boolean-coalesce, Date-year, dynamic Date-shift, nullable String-to-Utf8 `Unicode.ToUpper`, proven-total Date-`Unwrap`, checked nullable-String `Unwrap`, direct-Uint64-`Just`, exact Decimal weak-`SafeCast`, exact nullable Decimal Abs including specials, proven-present raw-tuple Date-`SafeCast`, restricted whole-floating-predicate, exact whole-partition Decimal-window leaves, passive-Double carrier, and exact literal-wrapper mutations; checked-Concat type/root-fingerprint/direct-argument mutations and shared value/failure identities; compiled-LIKE cross-dialect fingerprint/NOT/descriptor mutations and exhaustive compact-coalesce truth table; q24 exact JSON, 32 isolated Map/cast/lambda/UDF mutations, and 63/64 binding-depth boundary; checked-projection source/result/type/topology/error-composition mutations and direct-root plus empty-left-semi runtime boundaries; integral-right Decimal finite-bound boundary/special and two-row aggregate tests; passive-carrier identity/mutation and non-key Sort/Merge passenger proofs; `source_type`, NULL, overflow, widening-special, and fail-closed references; synthetic real-host proofs; exporter near-miss mutations |
 | Logical bags, order, limits, errors | `semantic_snapshot.cpp`; `ir.py`; `smt.py`; `sort_network.py`; `relation.py`; `verify.py` | `ut/test_logical_reference.py`; `test_limit.py`; `test_sort.py`; `test_checked_concat.py`; checked-Concat present-row error composition, discarded-row eagerness, exact corridor, forbidden consumers, staged-root demand, producer-spine rejection, 2/3-row cardinality boundary, shared-stage proof, and dropped-error counterexample; exhaustive network topology/prefix/nullable/mixed-order/Merge-hole/AVG-state tests; completed-integral-AVG rank identity/order/mutation and provenance-forgery tests; fixed-sequence singleton-`Limit` permutations/presence masks, nullable payloads, tied-ordinal fallback, dead padding, metadata rejection, Decimal bounds, audit cap, and StageGraph Merge compaction; packed-layout, declaration-structure, present-prefix equality, and cap tests; deep stack-safe rendering plus 3,000-DAG byte differential; focused concrete differential tests |
-| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `verify.py` | exact whole-partition Decimal-window source grammar, private Aggregate/Project topology, NULL partition/input behavior, multiplicity, split-state lineage, overflow headroom, and malformed/fanout/subplan mutations; aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; nullable Decimal count-distinct NULL/duplicate/NaN/raw-code references and type/nullability mutations; direct and staged Decimal-AVG topology, one-producer/pad/alias/fanout/exposure/descriptor mutations and weighted-state differentials; integral-AVG strict contract, one/two/three-row semantics, split-state mutation, central producer-observe/parent-strip lifecycle, model-domain SAT/UNKNOWN/UNSAT protocol, and projected/sorted/limited/staged observation tests; fixed-width signed/unsigned integral-extrema boundary, NULL/group/split, odd-width exhaustive, and solver-mutation checks; exhaustive scalar/grouped fixed-width count-distinct duplicates, nullable grouping keys, `DistinctAll(group,value) -> count` differential, and full candidate-group triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
+| Aggregates and subplans | `semantic_snapshot.cpp`; `ir.py`; `decimal.py`; `scalar.py`; `relation.py`; `verify.py` | exact whole-partition Decimal SUM/AVG source grammar, AVG-only ordered one-through-four nullable String/Int64 partition keys (SUM retains one nullable String key), private Aggregate/Project topology, named duplicate-SUM carrier selection, NULL partition/input behavior, multiplicity, split-state lineage, SUM/count overflow headroom, task locality, exact positive-count tie rounding, and malformed/fanout/subplan mutations; aggregate/DistinctAll/count-distinct/unwrap exporter and IR mutations; nullable Decimal count-distinct NULL/duplicate/NaN/raw-code references and type/nullability mutations; direct and staged Decimal-AVG topology, one-producer/pad/alias/fanout/exposure/descriptor mutations and weighted-state differentials; integral-AVG strict contract, one/two/three-row semantics, split-state mutation, central producer-observe/parent-strip lifecycle, model-domain SAT/UNKNOWN/UNSAT protocol, and projected/sorted/limited/staged observation tests; fixed-width signed/unsigned integral-extrema boundary, NULL/group/split, odd-width exhaustive, and solver-mutation checks; exhaustive scalar/grouped fixed-width count-distinct duplicates, nullable grouping keys, `DistinctAll(group,value) -> count` differential, and full candidate-group triangular cap; scalar-final unwrap empty/all-NULL/present references; Decimal-extrema raw-code differential, routing, and solver-mutation checks; nullable composite-key differential and staged-routing checks; `ut/test_subplans.py`; cardinality, demand, NULL, duplicate, error, exact scalar- and one-level `IN`-inside-`IN` ownership/nesting/cache/choice checks, nested finite references and sequential-semi solver differentials, correlated outer-binding, one- and exact two-dependency `EXISTS` ordering/shape/semi/anti checks, dynamic-`IN` mapping/cache/pair-cap and positive-nullable integral/Date-context checks, real-host Decimal-AVG and correlated-`EXISTS`, and non-null/nullable `IN`-to-`left_semi` cases |
 | StageGraph, reads, joins, and routing | `semantic_snapshot.cpp`; `read_range_predicate_impl.h`; `ir.py`; `scalar.py`; `stages.py`; `relation.py` | exact q9 point and q45 finite-set `ComputeNode` references; exhaustive range-grammar/key/annotation/pointer-identity mutations; pushed-range-plus-OLAP conjunction; `OriginalPredicate` irrelevance and `ComputeNode` sensitivity; synthetic window full-group-key `COUNTEREXAMPLE` and synthetic partition-only `VERIFIED_BOUNDED`, with production q12 post-fix `UNKNOWN`; nullable-key routing, global/disjoint/untracked/malformed gather, rename-history/current-input checks, and `cpp_ut/stage_assignment_rules_ut.cpp`; staged Decimal-AVG carrier payload transport plus HashShuffle-key/Merge-order rejection; tagged integral-AVG Merge propagation/mismatch tests; `ut/test_stagegraph_reference.py`; `test_stage_compaction.py`; same-occurrence/opposite-fact gating, ordinary eight-row threshold, forced eligible Broadcast compaction, HashShuffle eight-cell/ten-cell boundary, conditional hash-key ITE and opposite new routing facts, NULL/Decimal/integral-AVG state preservation, and overlapping Broadcast multiplicity; shared-IU semi/anti exhaustive execution; JoinKey budget/mutation checks; direct unique-RHS exhaustive bags, composite/extra keys, cross-type coercion rejection, provenance/schema/predicate/Project/limit/metadata mutations, row/pair caps, and Broadcast/gather equivalence; delayed Filter/Cross single, reversed, composite, residual, factor-local rejection/NULL/order/outcome/work-cap, deferred-factor scheduling, certified seed rebase and three-factor continuation, explicit reordered-inner equivalence, mutation, exact column-restoration, cap, override, shared-producer, subplan, choice, and StageGraph-gate tests; literal-false Join inputs across all kinds, poisoned payloads, symbolic-presence retention, sequence-metadata erasure, and exact cap accounting; C++ topology/task mutations; real-host integration |
 | SMT construction and verdict | `smt.py`; `verify.py` | `ut/test_smt.py`; `test_verify.py`; product ownership, closed-definition, free-symbol, nullary-capture, and foreign-declaration rejections; emitted-SMT inspection; identity and semantic-mutation obligations |
 | Workload reach and regressions | no additional trusted code | `benchmark_ut/`, coverage policy, TPCH/TPC-DS reports, inspector and replay for candidates |

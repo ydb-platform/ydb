@@ -166,8 +166,8 @@ Y_UNIT_TEST_SUITE(DataShardReplication) {
             });
 
         TTestActorRuntime::TEventObserverHolder rebootObserver;
+        bool rebooted = false;
         if (RebootSrc) {
-            bool rebooted = false;
             // Reboot src during offset fetch.
             rebootObserver = runtime.AddObserver<TEvDataShard::TEvGetReplicationSourceOffsets>(
                 [&](TEvDataShard::TEvGetReplicationSourceOffsets::TPtr& /*ev*/) {

@@ -1224,7 +1224,19 @@ namespace Tests {
 
         TTenantPoolConfig::TPtr tenantPoolConfig = new TTenantPoolConfig(localConfig);
         tenantPoolConfig->AddStaticSlot(domainName);
-        appData.TenantName = CanonizePath(domainName);
+
+        // The node's tenant name must be set only once and never mutated after the actor
+        // system has started.
+        // A node is permanently bound to the tenant it is first activated for, so reactivating
+        // an already-bound node with a different tenant is a contract violation.
+        const TString canonizedDomainName = CanonizePath(domainName);
+        if (appData.TenantName.empty()) {
+            appData.TenantName = canonizedDomainName;
+        } else {
+            Y_ABORT_UNLESS(appData.TenantName == canonizedDomainName,
+                "Attempt to change tenant '%s' for already-activated node %" PRIu32 " to '%s'",
+                appData.TenantName.c_str(), nodeIdx, canonizedDomainName.c_str());
+        }
 
         auto poolId = Runtime->Register(CreateTenantPool(tenantPoolConfig), nodeIdx, appData.SystemPoolId,
                                         TMailboxType::Revolving, 0);

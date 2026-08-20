@@ -155,6 +155,11 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
         UNIT_ASSERT_VALUES_EQUAL(ListOffsetsPartitionError(client, topicName), static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
         UNIT_ASSERT_VALUES_EQUAL(OffsetFetchPartitionError(client, topicName, groupId), static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
         UNIT_ASSERT_VALUES_EQUAL(OffsetCommitPartitionError(client, topicName, groupId), static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        {
+            auto metadata = client.Metadata({topicName}, false);
+            UNIT_ASSERT_VALUES_EQUAL(metadata->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(metadata->Topics[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        }
 
         auto apiVersions = client.ApiVersions();
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));

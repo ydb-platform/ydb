@@ -54,6 +54,17 @@ TApiMessage::TPtr ListOffsetsError(const TListOffsetsRequestData& request, EKafk
 }
 
 
+TApiMessage::TPtr MetadataError(const TMetadataRequestData& request, EKafkaErrors error) {
+    auto response = std::make_shared<TMetadataResponseData>();
+    response->Topics.resize(request.Topics.size());
+    for (size_t i = 0; i < request.Topics.size(); ++i) {
+        response->Topics[i].Name = request.Topics[i].Name;
+        response->Topics[i].ErrorCode = error;
+    }
+    return response;
+}
+
+
 TApiMessage::TPtr OffsetCommitError(const TOffsetCommitRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TOffsetCommitResponseData>();
     for (const auto& topic : request.Topics) {
@@ -122,6 +133,8 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return FetchError(static_cast<const TFetchRequestData&>(request), error);
         case LIST_OFFSETS:
             return ListOffsetsError(static_cast<const TListOffsetsRequestData&>(request), error);
+        case METADATA:
+            return MetadataError(static_cast<const TMetadataRequestData&>(request), error);
         case OFFSET_COMMIT:
             return OffsetCommitError(static_cast<const TOffsetCommitRequestData&>(request), error);
         case OFFSET_FETCH:

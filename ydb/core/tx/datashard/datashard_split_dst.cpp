@@ -551,7 +551,8 @@ public:
                 LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD, Self->TabletID()
                     << " Source " << EscapeC(sourceName)
                     << " has no split key predecessor for range from '"
-                    << EscapeC(range.From.GetBuffer()) << "', skipping left split key");
+                    << EscapeC(range.From.GetBuffer())
+                    << "', skipping left split key, MaxOffset stays -1 (dedup reset for this range)");
             }
 
             // Dump final split keys and offsets for debugging

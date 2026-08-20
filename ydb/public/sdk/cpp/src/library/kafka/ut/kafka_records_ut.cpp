@@ -4,6 +4,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/ylimits.h>
+
 namespace NKafka {
 namespace {
 
@@ -696,6 +698,15 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
 
         UNIT_ASSERT_VALUES_EQUAL(parsed.BatchLength, expectedBatchLength);
         UNIT_ASSERT_VALUES_EQUAL(parsed.Records.size(), batch.Records.size());
+    }
+
+    Y_UNIT_TEST(GetRecordTimestampWrapsLikeJavaLong) {
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(100, 5), 105);
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(Max<i64>(), 0), Max<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(Min<i64>(), 0), Min<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(100, -100), 0);
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(Max<i64>(), 1), Min<i64>());
+        UNIT_ASSERT_VALUES_EQUAL(GetRecordTimestamp(Min<i64>(), -1), Max<i64>());
     }
 }
 

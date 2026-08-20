@@ -687,5 +687,7 @@ TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion vers
 std::pair<EKafkaErrors, ui64> GetBatchBaseSeqNo(const TKafkaBatchHeader& header);
 std::pair<EKafkaErrors, ui64> GetBatchMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo);
 ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record);
+// Java `long` wrap: baseTimestamp + timestampDelta (C++20 two's-complement).
+i64 GetRecordTimestamp(i64 baseTimestamp, i64 timestampDelta);
 
 } // namespace NKafka

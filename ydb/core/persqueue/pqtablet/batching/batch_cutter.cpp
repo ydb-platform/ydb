@@ -117,7 +117,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
         if (record.Key) {
             item.SetPartitionKey(TString(record.Key->data(), record.Key->size()));
         }
-        const i64 timestamp = batch.BaseTimestamp + record.TimestampDelta;
+        const i64 timestamp = NKafka::GetRecordTimestamp(batch.BaseTimestamp, record.TimestampDelta);
         if (timestamp > 0) {
             item.SetCreateTimestampMS(timestamp);
         }

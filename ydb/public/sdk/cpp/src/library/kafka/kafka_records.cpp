@@ -24,6 +24,11 @@ static constexpr size_t RecordBatchCrcOffset =
 static constexpr size_t RecordBatchCrcBodyOffset =
     RecordBatchCrcOffset + sizeof(TKafkaRecordBatch::CrcMeta::Type);
 
+// Same bit pattern as Java `long` + / - (two's complement wrap).
+i64 WrapAddI64(i64 a, i64 b) {
+    return static_cast<i64>(static_cast<ui64>(a) + static_cast<ui64>(b));
+}
+
 TBuffer TakeRecordBatchBody(TKafkaReadable& readable, TKafkaInt32 batchLength) {
     if (batchLength < 0) {
         ythrow yexception() << "invalid Kafka record batch length " << batchLength;
@@ -1087,6 +1092,10 @@ ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TK
             % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1);
     }
     return static_cast<ui64>(batch.BaseOffset) + record.OffsetDelta;
+}
+
+i64 GetRecordTimestamp(i64 baseTimestamp, i64 timestampDelta) {
+    return WrapAddI64(baseTimestamp, timestampDelta);
 }
 
 } // namespace NKafka

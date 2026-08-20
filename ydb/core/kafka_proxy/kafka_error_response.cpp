@@ -155,6 +155,20 @@ TApiMessage::TPtr CreatePartitionsError(const TCreatePartitionsRequestData& requ
     return response;
 }
 
+
+TApiMessage::TPtr DescribeConfigsError(const TDescribeConfigsRequestData& request, EKafkaErrors error) {
+    auto response = std::make_shared<TDescribeConfigsResponseData>();
+    for (const auto& resource : request.Resources) {
+        TDescribeConfigsResponseData::TDescribeConfigsResult result;
+        result.ResourceType = resource.ResourceType;
+        result.ResourceName = resource.ResourceName;
+        result.ErrorCode = error;
+        result.ErrorMessage = "token is invalid or unavailable";
+        response->Results.push_back(std::move(result));
+    }
+    return response;
+}
+
 } // namespace
 
 TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors error) {
@@ -175,6 +189,8 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return CreateTopicsError(static_cast<const TCreateTopicsRequestData&>(request), error);
         case INIT_PRODUCER_ID:
             return TopLevelError<TInitProducerIdResponseData>(error);
+        case DESCRIBE_CONFIGS:
+            return DescribeConfigsError(static_cast<const TDescribeConfigsRequestData&>(request), error);
         case CREATE_PARTITIONS:
             return CreatePartitionsError(static_cast<const TCreatePartitionsRequestData&>(request), error);
         default:

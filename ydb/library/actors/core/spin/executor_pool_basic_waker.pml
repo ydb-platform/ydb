@@ -25,12 +25,17 @@
 #define IS_SPIN(s) ((s) == SPIN)
 #define IS_SLEEP(s) ((s) == SLEEP || (s) == NEED_FROM_SLEEP)
 #define IS_BLOCKING(s) ((s) == BLOCKING || (s) == NEED_FROM_BLOCKING)
+#define IS_PARKED(s) ((s) == SLEEP || (s) == BLOCKING)
+#define ALL_WORKERS_PARKED \
+    (worker_parked[0] && IS_PARKED(worker_state[0]) && \
+        worker_parked[1] && IS_PARKED(worker_state[1]))
 
 #define INVALID_WAKER N
 #define REDUCTION_WAKER_BIT 4
 #define REDUCTION_COUNT_MASK (REDUCTION_WAKER_BIT - 1)
 
 byte worker_state[N];
+bool worker_parked[N];
 byte activation_credits = 0;
 byte queued_activations = 0;
 byte sleeping_count = 0;
@@ -48,6 +53,8 @@ byte waker_worker_id = INVALID_WAKER;
 bool waker_pending = false;
 bool producer_epoch = false;
 bool controller_epoch = false;
+bool producer_done = false;
+bool controller_done = false;
 
 /* Single persistent waker scratch space. */
 byte waker_i = 0;
@@ -425,21 +432,6 @@ check_blocking:
     };
         worker_state[id] = BLOCKING
         if
-        :: atomic {reductions & REDUCTION_WAKER_BIT ->
-            reductions = reductions & REDUCTION_COUNT_MASK
-        }
-            atomic {
-                if
-                :: worker_state[id] == BLOCKING -> worker_state[id] = NEED_FROM_BLOCKING
-                :: worker_state[id] == SLEEP -> worker_state[id] = NEED_FROM_SLEEP
-                :: worker_state[id] == NONE -> worker_state[id] = NEED
-                :: else -> skip
-                fi
-                goto settle_waker_state
-            }
-        :: else -> skip
-        fi
-        if
         :: atomic { !waker_pending ->
             waker_pending = true;
         }
@@ -476,10 +468,12 @@ pop_activation:
     /* A producer publishes the credit before the queue item. */
     
     if
-    :: atomic { activation_credits > 0 -> 
-        queued_activations != 0 || reductions != 0 // endless loop with activation_credits > 0 && queued_activations == 0 && reductions == 0 
+    :: activation_credits > 0 ->
+        if
+        :: queued_activations != 0 || reductions != 0 -> skip // endless loop with activation_credits > 0 && queued_activations == 0 && reductions == 0
+        :: activation_credits == 0 -> skip
+        fi
         goto worker_iteration
-    }
     :: activation_credits == 0 ->
         worker_state[id] = SPIN;
         if
@@ -539,7 +533,10 @@ settle_waker_state:
     :: worker_state[id] == SLEEP || worker_state[id] == BLOCKING ->
         /* Park until the waker changes the public state. */
         sleep_state_label:
+        worker_parked[id] = true;
+        end_worker_parked:
         worker_state[id] != SLEEP && worker_state[id] != BLOCKING;
+        worker_parked[id] = false;
         goto settle_waker_state
     :: worker_state[id] == NONE -> skip
     fi;
@@ -552,7 +549,7 @@ proctype Producer() {
     bool done;
     produser_iteration:
     do
-    :: true -> break
+    :: atomic { true -> producer_done = true }; break
     :: true ->
         atomic { activation_credits < MAX_QUEUE ->
             activation_credits++
@@ -613,7 +610,7 @@ proctype Controller() {
     bool bit_setted = false;
     controller_iteration:
     do
-    :: true -> break
+    :: atomic { true -> controller_done = true }; break
     :: suggested_thread_count == thread_count || !waker_pending ->
         atomic {
             if
@@ -685,6 +682,16 @@ proctype Controller() {
     od
 }
 
+/* Once external changes stop, a globally parked pool is a valid end state
+ * only when neither a queued activation nor its published credit remains. */
+proctype FinalStateChecker() {
+    producer_done && controller_done && ALL_WORKERS_PARKED;
+    atomic {
+        assert(queued_activations == 0);
+        assert(activation_credits == 0)
+    }
+}
+
 #define RESIZE_RECONCILES_WITH_EPOCHS(p, c) \
     ([] ((suggested_thread_count != thread_count && \
             producer_epoch == p && controller_epoch == c) -> \
@@ -741,6 +748,7 @@ init {
             i++
         :: else -> break
         od;
-        run Controller()
+        run Controller();
+        run FinalStateChecker()
     }
 }

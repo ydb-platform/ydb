@@ -17,8 +17,6 @@ State Storage SelfHeal is available only with [configuration V2](../../devops/co
 
 [CMS](../../concepts/glossary.md#cms) (the Sentinel component) continuously monitors [PDisk](../../concepts/glossary.md#pdisk) and node health. If a fault lasts long enough (about one hour by default), CMS starts moving the affected [VDisks](../../concepts/glossary.md#vdisk) to healthy hardware so the [failure model](../../concepts/topology.md#cluster-config) is restored.
 
-If the node or disk recovers within that window, SelfHeal does not start: it is meant for prolonged failures, not brief outages. Fast manual recovery does not make SelfHeal useless; relocation simply never begins.
-
 The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The move itself can take from minutes to a day, depending on data volume and hardware. Once the command is accepted, CMS treats the task as issued; distributed storage is responsible for finishing replication.
 
 Storage SelfHeal is enabled by default for [dynamic groups](../../concepts/glossary.md#dynamic-group). On clusters with configuration V2, you can also enable [static group SelfHeal](../../devops/configuration-management/configuration-v2/static-group-self-heal.md). With configuration V1, static group SelfHeal cannot be enabled.
@@ -45,16 +43,20 @@ ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 
 ### When to disable SelfHeal {#when-to-disable}
 
-Leave SelfHeal enabled in normal operation. Temporarily disable it only in situations such as:
+Leave SelfHeal enabled in normal operation. Temporarily disable it only when automatic relocation is riskier than waiting, for example if:
 
-* a SelfHeal bug is making data worse instead of recovering it;
-* many nodes failed at once, the cluster is overloaded, recovery will take longer than an hour, and extra background replication from SelfHeal would only add load.
+* a SelfHeal bug makes relocation create a risk of data loss;
+* many nodes failed at once, the cluster is overloaded, and extra background replication would add load and interfere with restoring cluster availability.
 
-Re-enable SelfHeal after the cluster stabilizes.
+{% note warning %}
+
+While SelfHeal is disabled, VDisks are not moved automatically from faulty PDisks. Monitor storage health and re-enable SelfHeal as soon as the cluster stabilizes.
+
+{% endnote %}
 
 ## SelfHeal settings {#settings}
 
-The parameters below control how often CMS polls disks and after how many observation cycles it changes the PDisk status in the [Blob Storage Controller](../../concepts/glossary.md#ds-controller). The poll interval multiplied by the number of cycles is the delay before a status change (and then before relocation starts), including the familiar “about one hour” with the defaults.
+The parameters below control different stages of Sentinel: polling PDisk state, confirming a persistent state, and retries when sending a new status to the [Blob Storage Controller](../../concepts/glossary.md#ds-controller). For each state, the time to confirm it is the product of **State update interval** and the cycle limit for that state. For example, for most failure states the defaults are 60 seconds and 60 cycles, so the transition to `FAULTY` starts after about one hour. Configuration update intervals and status-change retries are not part of that product.
 
 {% note warning %}
 

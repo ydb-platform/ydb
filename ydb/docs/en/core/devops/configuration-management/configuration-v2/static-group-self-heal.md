@@ -63,4 +63,4 @@ config:
     - 3
 ```
 
-An empty list means that no restrictions apply. The allowed nodes must have suitable PDisks. Estimate how much space the static group VDisk occupies on the source disk, and make sure the target PDisk has room for a comparable volume plus free-space headroom so monitoring does not raise capacity warnings (yellow flags). The move must also fit the [failure model](../../../concepts/topology.md#cluster-config).
+An empty list means that no restrictions apply. For each allowed node, choose a suitable PDisk and check that its free capacity is at least the space occupied by the VDisk on the source PDisk, plus operational headroom up to the capacity warning threshold. There is no single numeric headroom value: use the warning threshold configured in your cluster monitoring. Placement after the move must satisfy the [failure model](../../../concepts/topology.md#cluster-config).

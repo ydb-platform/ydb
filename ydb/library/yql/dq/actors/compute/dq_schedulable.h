@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/events.h>
 #include <library/cpp/time_provider/monotonic.h>
 
 #include <util/datetime/base.h>
@@ -8,10 +9,6 @@
 #include <util/generic/string.h>
 
 #include <memory>
-
-namespace NActors::TEvents {
-    struct TEvWakeup;
-}
 
 namespace NYql::NDq {
 

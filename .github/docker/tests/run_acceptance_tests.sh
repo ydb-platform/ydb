@@ -110,6 +110,58 @@ wait_for_healthy() {
     return 1
 }
 
+wait_for_ready() {
+    # Docker HEALTHCHECK is disabled for callers, so readiness probes cannot overlap each other.
+    local container=$1
+    local timeout=${2:-180}
+    local deadline=$((SECONDS + timeout))
+    local state
+
+    while ((SECONDS < deadline)); do
+        if state=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null); then
+            if [[ "$state" == "exited" || "$state" == "dead" ]]; then
+                printf 'Container %s exited before YDB became ready\n' "$container" >&2
+                capture_container "$container"
+                return 1
+            fi
+            if docker exec "$container" /health_check >/dev/null 2>&1; then
+                return 0
+            fi
+        fi
+        sleep 2
+    done
+
+    printf 'YDB in container %s did not become ready in %s seconds\n' "$container" "$timeout" >&2
+    capture_container "$container"
+    return 1
+}
+
+wait_for_file() {
+    local container=$1
+    local path=$2
+    local timeout=${3:-180}
+    local deadline=$((SECONDS + timeout))
+    local state
+
+    while ((SECONDS < deadline)); do
+        if state=$(docker inspect --format '{{.State.Status}}' "$container" 2>/dev/null); then
+            if [[ "$state" == "exited" || "$state" == "dead" ]]; then
+                printf 'Container %s exited before %s was created\n' "$container" "$path" >&2
+                capture_container "$container"
+                return 1
+            fi
+            if docker exec "$container" test -f "$path"; then
+                return 0
+            fi
+        fi
+        sleep 1
+    done
+
+    printf '%s was not created in container %s in %s seconds\n' "$path" "$container" "$timeout" >&2
+    capture_container "$container"
+    return 1
+}
+
 wait_for_exit() {
     local container=$1
     local timeout=${2:-120}
@@ -171,26 +223,6 @@ assert_sql_row_count() {
     fi
 }
 
-assert_eventually_sql_contains() {
-    local container=$1
-    local query=$2
-    local expected=$3
-    local timeout=${4:-90}
-    local deadline=$((SECONDS + timeout))
-    local output="${TEST_ROOT}/${container}.eventual-query.out"
-
-    while ((SECONDS < deadline)); do
-        if run_sql "$container" "$query" >"$output" 2>&1 && grep -Fq -- "$expected" "$output"; then
-            return 0
-        fi
-        sleep 1
-    done
-
-    printf 'Query result from %s did not contain %q in %s seconds:\n' "$container" "$expected" "$timeout" >&2
-    sed -n '1,200p' "$output" >&2
-    return 1
-}
-
 assert_logs_contain() {
     local container=$1
     local expected=$2
@@ -215,9 +247,15 @@ assert_logs_not_contain() {
     fi
 }
 
-stop_container() {
+stop_and_remove_container() {
     local container=$1
     docker stop --time 30 "$container" >/dev/null
+    docker rm "$container" >/dev/null
+}
+
+remove_container() {
+    local container=$1
+    docker rm "$container" >/dev/null
 }
 
 published_port() {
@@ -251,6 +289,7 @@ docker run --rm --pull never --platform linux/amd64 --entrypoint bash "$IMAGE" \
     -c 'test -x /ydbd && test -x /ydb && test -x /local_ydb && test -r /initialize_local_ydb && test -r /health_check'
 
 scenario "default startup, healthcheck, SQL, logs, config and backup fixtures"
+# Keep the image HEALTHCHECK enabled only in the scenario that verifies it.
 DEFAULT_CONTAINER="${NAME_PREFIX}-default"
 BACKUP_ROOT="${TEST_ROOT}/backup"
 GENERATED_CONFIG="${TEST_ROOT}/config.yaml"
@@ -262,7 +301,6 @@ start_detached "$DEFAULT_CONTAINER" \
     --publish 127.0.0.1::8765 \
     --volume "${BACKUP_ROOT}:/backup"
 wait_for_healthy "$DEFAULT_CONTAINER"
-docker exec "$DEFAULT_CONTAINER" /health_check
 DEFAULT_GRPC_PORT=$(published_port "$DEFAULT_CONTAINER" 2136)
 DEFAULT_MON_PORT=$(published_port "$DEFAULT_CONTAINER" 8765)
 docker run --rm --pull never --platform linux/amd64 --network host --entrypoint /ydb "$IMAGE" \
@@ -291,7 +329,7 @@ run_sql "$DEFAULT_CONTAINER" '
 docker exec "$DEFAULT_CONTAINER" \
     /ydb --endpoint grpc://localhost:2136 --database /local --no-discovery \
     tools dump -p acceptance_backup -o /backup/dump
-stop_container "$DEFAULT_CONTAINER"
+stop_and_remove_container "$DEFAULT_CONTAINER"
 
 scenario "read-only custom config keeps the local tenant usable"
 python3 - "$GENERATED_CONFIG" <<'PY'
@@ -318,8 +356,9 @@ PY
 CONFIG_HASH=$(sha256sum "$GENERATED_CONFIG")
 CONFIG_CONTAINER="${NAME_PREFIX}-config"
 start_detached "$CONFIG_CONTAINER" \
+    --no-healthcheck \
     --volume "${GENERATED_CONFIG}:/ydb_data/cluster/kikimr_configs/config.yaml:ro"
-wait_for_healthy "$CONFIG_CONTAINER"
+wait_for_ready "$CONFIG_CONTAINER"
 docker exec "$CONFIG_CONTAINER" grep -A 1 -F '_ResultRowsLimit' /ydb_data/cluster/kikimr_configs/config.yaml | grep -Fq '2'
 run_sql "$CONFIG_CONTAINER" '
     CREATE TABLE acceptance_config (id Uint64, value Utf8, PRIMARY KEY (id));
@@ -331,19 +370,19 @@ run_sql "$CONFIG_CONTAINER" '
 assert_sql_row_count "$CONFIG_CONTAINER" \
     'SELECT id FROM acceptance_config ORDER BY id;' \
     2
-docker exec "$CONFIG_CONTAINER" /health_check
-stop_container "$CONFIG_CONTAINER"
+stop_and_remove_container "$CONFIG_CONTAINER"
 [[ "$(sha256sum "$GENERATED_CONFIG")" == "$CONFIG_HASH" ]]
 
 scenario "pre-generated certificates in a custom read-only path"
 CERTIFICATE_HASH=$(hash_certificate_bundle "$GENERATED_CERTS")
 TLS_CONTAINER="${NAME_PREFIX}-tls"
 start_detached "$TLS_CONTAINER" \
+    --no-healthcheck \
     --env YDB_GRPC_ENABLE_TLS=1 \
     --env YDB_GRPC_TLS_DATA_PATH=/custom-certs \
     --publish 127.0.0.1::2135 \
     --volume "${GENERATED_CERTS}:/custom-certs:ro"
-wait_for_healthy "$TLS_CONTAINER"
+wait_for_ready "$TLS_CONTAINER"
 TLS_HOST_PORT=$(published_port "$TLS_CONTAINER" 2135)
 docker run --rm --pull never --platform linux/amd64 --network host \
     --env YDB_SSL_ROOT_CERTIFICATES_FILE=/custom-certs/ca.pem \
@@ -352,7 +391,7 @@ docker run --rm --pull never --platform linux/amd64 --network host \
     "$IMAGE" \
     --endpoint "grpcs://localhost:${TLS_HOST_PORT}" --database /local --no-discovery \
     sql -s 'SELECT 1;'
-stop_container "$TLS_CONTAINER"
+stop_and_remove_container "$TLS_CONTAINER"
 [[ "$(hash_certificate_bundle "$GENERATED_CERTS")" == "$CERTIFICATE_HASH" ]]
 
 scenario "partial certificate bundle is rejected"
@@ -361,23 +400,25 @@ mkdir -p "$PARTIAL_CERTS"
 cp "${GENERATED_CERTS}/ca.pem" "${PARTIAL_CERTS}/ca.pem"
 PARTIAL_TLS_CONTAINER="${NAME_PREFIX}-partial-tls"
 start_detached "$PARTIAL_TLS_CONTAINER" \
+    --no-healthcheck \
     --env YDB_GRPC_ENABLE_TLS=1 \
     --env YDB_GRPC_TLS_DATA_PATH=/partial-certs \
     --volume "${PARTIAL_CERTS}:/partial-certs:ro"
 wait_for_exit "$PARTIAL_TLS_CONTAINER"
 [[ "$(docker inspect --format '{{.State.ExitCode}}' "$PARTIAL_TLS_CONTAINER")" != "0" ]]
+remove_container "$PARTIAL_TLS_CONTAINER"
 
 scenario "TLS can be disabled with the documented numeric value"
 DISABLED_TLS_CERTS="${TEST_ROOT}/disabled-tls-certs"
 mkdir -p "$DISABLED_TLS_CERTS"
 DISABLED_TLS_CONTAINER="${NAME_PREFIX}-disabled-tls"
 start_detached "$DISABLED_TLS_CONTAINER" \
+    --no-healthcheck \
     --env YDB_GRPC_ENABLE_TLS=0 \
     --volume "${DISABLED_TLS_CERTS}:/ydb_certs:ro"
-wait_for_healthy "$DISABLED_TLS_CONTAINER"
-docker exec "$DISABLED_TLS_CONTAINER" /health_check
+wait_for_ready "$DISABLED_TLS_CONTAINER"
 [[ -z "$(ls -A "$DISABLED_TLS_CERTS")" ]]
-stop_container "$DISABLED_TLS_CONTAINER"
+stop_and_remove_container "$DISABLED_TLS_CONTAINER"
 
 scenario "SQL, compressed SQL and shell init scripts run once"
 INIT_DIR="${TEST_ROOT}/init.d"
@@ -402,10 +443,11 @@ INIT_VOLUME="${NAME_PREFIX}-init-volume"
 create_volume "$INIT_VOLUME"
 INIT_CONTAINER="${NAME_PREFIX}-init-first"
 start_detached "$INIT_CONTAINER" \
+    --no-healthcheck \
     --volume "${INIT_VOLUME}:/ydb_data" \
     --volume "${INIT_DIR}:/init.d:ro"
-wait_for_healthy "$INIT_CONTAINER"
-assert_eventually_sql_contains "$INIT_CONTAINER" \
+wait_for_file "$INIT_CONTAINER" /ydb_data/.user_scripts_initialized
+assert_sql_contains "$INIT_CONTAINER" \
     'SELECT value FROM acceptance_init WHERE id = 1;' \
     'sql-ok'
 assert_sql_contains "$INIT_CONTAINER" \
@@ -418,19 +460,20 @@ docker exec "$INIT_CONTAINER" test -f /ydb_data/.user_scripts_initialized
 assert_logs_contain "$INIT_CONTAINER" 'Executing queries from /init.d/01-create.sql'
 assert_logs_contain "$INIT_CONTAINER" 'Executing compressed queries from /init.d/02-compressed.sql.gz'
 assert_logs_contain "$INIT_CONTAINER" 'Running /init.d/03-shell.sh'
-stop_container "$INIT_CONTAINER"
+stop_and_remove_container "$INIT_CONTAINER"
 
 INIT_RESTART_CONTAINER="${NAME_PREFIX}-init-restart"
 start_detached "$INIT_RESTART_CONTAINER" \
+    --no-healthcheck \
     --volume "${INIT_VOLUME}:/ydb_data" \
     --volume "${INIT_DIR}:/init.d:ro"
-wait_for_healthy "$INIT_RESTART_CONTAINER"
+wait_for_ready "$INIT_RESTART_CONTAINER"
 assert_sql_contains "$INIT_RESTART_CONTAINER" \
     'SELECT value FROM acceptance_init WHERE id = 3;' \
     'shell-ok'
 docker exec "$INIT_RESTART_CONTAINER" test -f /ydb_data/.user_scripts_initialized
 assert_logs_not_contain "$INIT_RESTART_CONTAINER" 'Executing queries from /init.d/01-create.sql'
-stop_container "$INIT_RESTART_CONTAINER"
+stop_and_remove_container "$INIT_RESTART_CONTAINER"
 
 scenario "backup is restored by a mounted init script"
 RESTORE_INIT_DIR="${TEST_ROOT}/restore-init.d"
@@ -444,14 +487,15 @@ SH
 chmod +x "${RESTORE_INIT_DIR}/01-restore-backup.sh"
 RESTORE_CONTAINER="${NAME_PREFIX}-restore"
 start_detached "$RESTORE_CONTAINER" \
+    --no-healthcheck \
     --volume "${BACKUP_ROOT}:/backup:ro" \
     --volume "${RESTORE_INIT_DIR}:/init.d:ro"
-wait_for_healthy "$RESTORE_CONTAINER"
-assert_eventually_sql_contains "$RESTORE_CONTAINER" \
+wait_for_file "$RESTORE_CONTAINER" /ydb_data/.user_scripts_initialized
+assert_sql_contains "$RESTORE_CONTAINER" \
     'SELECT value FROM acceptance_backup WHERE id = 7;' \
     'restored-ok'
 assert_logs_contain "$RESTORE_CONTAINER" 'Running /init.d/01-restore-backup.sh'
-stop_container "$RESTORE_CONTAINER"
+stop_and_remove_container "$RESTORE_CONTAINER"
 
 scenario "a failing init script stops the container"
 FAILING_INIT_DIR="${TEST_ROOT}/failing-init.d"
@@ -459,10 +503,12 @@ mkdir -p "$FAILING_INIT_DIR"
 printf '%s\n' 'THIS IS NOT VALID YQL;' >"${FAILING_INIT_DIR}/01-invalid.sql"
 FAILING_INIT_CONTAINER="${NAME_PREFIX}-failing-init"
 start_detached "$FAILING_INIT_CONTAINER" \
+    --no-healthcheck \
     --volume "${FAILING_INIT_DIR}:/init.d:ro"
 wait_for_exit "$FAILING_INIT_CONTAINER"
 [[ "$(docker inspect --format '{{.State.ExitCode}}' "$FAILING_INIT_CONTAINER")" != "0" ]]
 assert_logs_contain "$FAILING_INIT_CONTAINER" 'ERROR: Init scripts failed, marker file not created'
+remove_container "$FAILING_INIT_CONTAINER"
 
 scenario "docker run -i survives stdin EOF and stops on SIGTERM"
 INTERACTIVE_CONTAINER="${NAME_PREFIX}-interactive"
@@ -471,17 +517,18 @@ docker run \
     --interactive \
     --pull never \
     --platform linux/amd64 \
+    --no-healthcheck \
     --hostname localhost \
     --name "$INTERACTIVE_CONTAINER" \
     "$IMAGE" \
     </dev/null >"${ARTIFACTS_DIR}/${INTERACTIVE_CONTAINER}.attached.log" 2>&1 &
 FOREGROUND_DOCKER_PID=$!
-wait_for_healthy "$INTERACTIVE_CONTAINER"
-docker exec "$INTERACTIVE_CONTAINER" /health_check
-stop_container "$INTERACTIVE_CONTAINER"
+wait_for_ready "$INTERACTIVE_CONTAINER"
+docker stop --time 30 "$INTERACTIVE_CONTAINER" >/dev/null
 wait "$FOREGROUND_DOCKER_PID" >/dev/null 2>&1 || true
 FOREGROUND_DOCKER_PID=""
 [[ "$(docker inspect --format '{{.State.Status}}' "$INTERACTIVE_CONTAINER")" == "exited" ]]
 [[ "$(docker inspect --format '{{.State.ExitCode}}' "$INTERACTIVE_CONTAINER")" != "137" ]]
+remove_container "$INTERACTIVE_CONTAINER"
 
 printf '\nAll Docker image acceptance scenarios passed.\n'

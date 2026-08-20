@@ -2124,7 +2124,7 @@ protected:
         i64 EstimatedFreeSpace = Max<i64>();
 
         bool IsPaused() const {
-            return EstimatedFreeSpace <= 0;
+            return EstimatedFreeSpace < 0;
         }
     };
     THashMap<ui32, TResultChannelFlowState> ResultChannelFlow;

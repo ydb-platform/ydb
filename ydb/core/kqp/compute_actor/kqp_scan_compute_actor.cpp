@@ -56,7 +56,7 @@ void TKqpScanComputeActor::LogWasmResidentStringStats() {
 
     const auto stats = WasmQueryCompartment_->GetPreferWasmSnapshot();
     TStringBuilder columns;
-    for (const auto& name : GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns()) {
+    for (const auto& name : WasmUdfStringColumns_) {
         if (!columns.empty()) {
             columns << ",";
         }
@@ -306,6 +306,12 @@ void TKqpScanComputeActor::DoBootstrap() {
         }
     }
 
+    if (const auto it = taskParams.find(TString(NUdfStore::NWasm::WasmUdfStringColumnsTaskParam)); it != taskParams.end()) {
+        for (const auto& name : NUdfStore::NWasm::ParseWasmUdfStringColumnsTaskParam(it->second)) {
+            WasmUdfStringColumns_.insert(name);
+        }
+    }
+
     std::optional<NUdfStore::NWasm::TCurrentQueryCompartmentGuard> wasmGuard;
     if (WasmQueryCompartment_ && WasmQueryCompartment_->HasHandle()) {
         wasmGuard.emplace(WasmQueryCompartment_->MakeTlsGuard());
@@ -364,14 +370,12 @@ void TKqpScanComputeActor::DoBootstrap() {
     TBase::PrepareTaskRunner(TKqpTaskRunnerExecutionContext(std::get<ui64>(TxId), RuntimeSettings.UseSpilling, MemoryLimits.ArrayBufferMinFillPercentage, std::move(wakeupCallback), std::move(errorCallback)));
 
     ComputeCtx.AddTableScan(0, Meta, GetStatsMode(), &TaskRunner->GetTypeEnv(),
-        THashSet<TString>(
-            GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns().begin(),
-            GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns().end()));
+        WasmUdfStringColumns_);
     ScanData = &ComputeCtx.GetTableScan(0);
 
-    if (GetTask().GetProgram().GetSettings().WasmUdfStringColumnsSize() > 0) {
+    if (!WasmUdfStringColumns_.empty()) {
         TStringBuilder columns;
-        for (const auto& name : GetTask().GetProgram().GetSettings().GetWasmUdfStringColumns()) {
+        for (const auto& name : WasmUdfStringColumns_) {
             if (!columns.empty()) {
                 columns << ",";
             }

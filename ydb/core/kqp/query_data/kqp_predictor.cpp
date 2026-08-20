@@ -131,12 +131,7 @@ void TStagePredictor::SerializeToKqpSettings(NYql::NDqProto::TProgram::TSettings
     kqpProto.SetOutputDataPrediction(OutputDataPrediction);
     kqpProto.SetStageLevel(StageLevel);
     kqpProto.SetLevelDataPrediction(LevelDataPrediction.value_or(1));
-    kqpProto.ClearWasmUdfModules();
-    for (const auto& module : GetWasmUdfModules()) {
-        kqpProto.AddWasmUdfModules(module);
-    }
-    // WasmUdfStringColumns are filled by the query compiler: resolving them needs
-    // the stage inputs, which the predictor does not see.
+    // WasmUdfModules / WasmUdfStringColumns live on TKqpPhyStage, not TProgram.TSettings.
 }
 
 bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram::TSettings& kqpProto) {
@@ -161,10 +156,8 @@ bool TStagePredictor::DeserializeFromKqpSettings(const NYql::NDqProto::TProgram:
     OutputDataPrediction = kqpProto.GetOutputDataPrediction();
     StageLevel = kqpProto.GetStageLevel();
     LevelDataPrediction = kqpProto.GetLevelDataPrediction();
-    WasmUdfModules_.clear();
-    for (const auto& module : kqpProto.GetWasmUdfModules()) {
-        WasmUdfModules_.insert(module);
-    }
+    // WasmUdfModules are not stored in TProgram.TSettings; leave WasmUdfModules_ as-is
+    // (filled by Scan, or empty when deserializing settings for LLVM heuristics).
     return true;
 }
 

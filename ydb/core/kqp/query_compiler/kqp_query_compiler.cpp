@@ -964,8 +964,8 @@ private:
     //! memory. It pays off only when the read and the wasm UDF run in one task:
     //! data crossing a channel between stages is repacked, so the resident buffer
     //! is lost. Mark columns only for a stage that owns both.
-    void FillWasmUdfStringColumns(const TDqPhyStage& stage, NYql::NDqProto::TProgram::TSettings& settings) {
-        settings.ClearWasmUdfStringColumns();
+    void FillWasmUdfStringColumns(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto) {
+        stageProto.ClearWasmUdfStringColumns();
         if (!Config->GetEnableWasmUdfResidentStringColumns()) {
             return;
         }
@@ -976,13 +976,13 @@ private:
             TVector<TString> columns(wasmColumns.Columns.begin(), wasmColumns.Columns.end());
             Sort(columns);
             for (const auto& column : columns) {
-                settings.AddWasmUdfStringColumns(column);
+                stageProto.AddWasmUdfStringColumns(column);
             }
         }
 
         if (wasmColumns.HasUdfCall) {
             TStringBuilder columns;
-            for (const auto& column : settings.GetWasmUdfStringColumns()) {
+            for (const auto& column : stageProto.GetWasmUdfStringColumns()) {
                 if (columns) {
                     columns << ",";
                 }
@@ -1210,7 +1210,7 @@ private:
             stageProto.AddWasmUdfModules(module);
         }
 
-        FillWasmUdfStringColumns(stage, *programProto.MutableSettings());
+        FillWasmUdfStringColumns(stage, stageProto);
 
         for (auto member : paramsType->GetItems()) {
             auto paramName = TString(member->GetName());

@@ -14,6 +14,9 @@ from library.python import resource
 import ydb
 
 
+SOURCE_TOPIC_PARTITIONS = 10
+
+
 SOURCE_SECONDS = 10
 SOURCE_MESSAGE_RATE = 100
 SOURCE_MESSAGE_COUNT = SOURCE_SECONDS * SOURCE_MESSAGE_RATE
@@ -150,6 +153,7 @@ class Workload(unittest.TestCase):
         self.target_topic_path = target_topic_path
         self.workload_consumer_name = workload_consumer_name
         self.driver = ydb.Driver(ydb.DriverConfig(endpoint, database))
+        self.driver.wait(timeout=30)
         self.num_workers = num_workers
         self.duration = duration
         self.source_writer = source_writer
@@ -212,11 +216,14 @@ class Workload(unittest.TestCase):
                 ("0", "0", False),
             ]
         checkerConsumer = "targetCheckerConsumer"
+        stream_consumers = [f"workload-consumer-{i}" for i in range(len(testOptions))]
         self.create_topic(
             self.test_topic_path,
-            [workloadConsumerName, checkerConsumer] + [
-                f"{checkerConsumer}-{i}" for i in range(len(testOptions))
-            ],
+            list(dict.fromkeys(
+                [workloadConsumerName, checkerConsumer] + stream_consumers + [
+                    f"{checkerConsumer}-{i}" for i in range(len(testOptions))
+                ]
+            )),
         )
 
         processes = []
@@ -232,6 +239,7 @@ class Workload(unittest.TestCase):
             target_topic_names.append(targetTopicName)
 
         try:
+            bootstrap = self.kafka_bootstrap()
             for i, parameters in enumerate(testOptions):
                 use_transactions, use_idempotence, _ = parameters
                 targetTopicName = target_topic_names[i]
@@ -244,7 +252,7 @@ class Workload(unittest.TestCase):
                         java_path,
                         "-jar",
                         jar_file_path,
-                        self.bootstrap,
+                        bootstrap,
                         f"streams-store-{i * self.num_workers + j}",
                         self.test_topic_path,
                         targetTopicName,
@@ -252,6 +260,9 @@ class Workload(unittest.TestCase):
                         use_transactions,
                         use_idempotence,
                     ], start_new_session=True)))
+                    # Let the first worker join the group before the second one triggers a rebalance.
+                    if j + 1 < self.num_workers:
+                        time.sleep(2)
 
             print("Waiting for Kafka Streams startup")
             time.sleep(10)
@@ -750,7 +761,25 @@ class Workload(unittest.TestCase):
         except ydb.SchemeError:
             pass
 
-        self.driver.topic_client.create_topic(topic, consumers=consumers, min_active_partitions=10)
+        self.driver.topic_client.create_topic(
+            topic,
+            consumers=consumers,
+            min_active_partitions=SOURCE_TOPIC_PARTITIONS,
+        )
+        self.wait_topic_ready(topic, SOURCE_TOPIC_PARTITIONS)
+
+    def wait_topic_ready(self, topic: str, min_partitions: int, timeout=30):
+        deadline = time.time() + timeout
+        last_count = 0
+        while time.time() < deadline:
+            description = self.driver.topic_client.describe_topic(topic)
+            last_count = len(description.partitions)
+            if last_count >= min_partitions:
+                return
+            time.sleep(0.2)
+        raise AssertionError(
+            f"{topic} did not expose {min_partitions} partitions: got {last_count}"
+        )
 
     def __enter__(self):
         return self

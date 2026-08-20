@@ -59,6 +59,9 @@ Y_UNIT_TEST(CreateSharedConsumer) {
     auto setup = CreateSetup("CoreCreateShared");
     auto& runtime = setup->GetRuntime();
     const TString path = "/Root/topic_shared";
+    const TString dlqPath = "/Root/dlq";
+
+    AssertStatus(DoCreate(runtime, MakeCreateTopicRequest(dlqPath)), Ydb::StatusIds::SUCCESS);
 
     auto request = MakeCreateTopicRequest(path);
     request.clear_consumers();
@@ -83,6 +86,22 @@ Y_UNIT_TEST(CreateSharedConsumer) {
     UNIT_ASSERT_VALUES_EQUAL(c->GetDefaultProcessingTimeoutSeconds(), 3);
     UNIT_ASSERT_VALUES_EQUAL(c->GetMaxProcessingAttempts(), 11);
     UNIT_ASSERT_VALUES_EQUAL(c->GetDeadLetterQueue(), "dlq");
+}
+
+Y_UNIT_TEST(CreateSharedConsumerEmptyDlqRejected) {
+    auto setup = CreateSetup("CoreCreateSharedEmptyDlq");
+    auto& runtime = setup->GetRuntime();
+    const TString path = "/Root/topic_shared_empty_dlq";
+
+    auto request = MakeCreateTopicRequest(path);
+    request.clear_consumers();
+    auto* consumer = request.add_consumers();
+    consumer->set_name("shared_c1");
+    auto* type = consumer->mutable_shared_consumer_type();
+    type->mutable_dead_letter_policy()->set_enabled(true);
+    type->mutable_dead_letter_policy()->mutable_move_action();
+
+    AssertStatus(DoCreate(runtime, request), Ydb::StatusIds::BAD_REQUEST, "Dead letter queue cannot be empty");
 }
 
 Y_UNIT_TEST(SharedConsumersDisabledRejected) {

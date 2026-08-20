@@ -542,8 +542,8 @@ private:
 
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
-    // Per-path SeqNo tracking for path-specific schema operations (DropTable, CopyTable). In-memory only (not persisted)
-    THashMap<ui64, TMessageSeqNo> LastSchemaSeqNoByPath;
+    // Per-path SeqNo tracking for path-specific schema operations (DropTable, CopyTable, MoveTable). In-memory only (not persisted)
+    THashMap<TSchemeShardLocalPathId, TMessageSeqNo> LastSchemaSeqNoByPath;
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;

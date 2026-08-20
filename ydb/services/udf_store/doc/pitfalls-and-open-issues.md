@@ -30,7 +30,8 @@ Acquire падает до `SetTaskRunner` → `FillStats` без Tasks →
 
 `IWebAssemblyCompartment::AllocateBytes` зовёт `malloc` на `RuntimeLibraryInstance_` (после AddSdk).  
 Пустой `(module)` как sdk → SIGSEGV на AllocateBytes.  
-Тестовый stub обязан экспортировать bump-`malloc`/`free` (`data/wasm/sdk_stub.wat`).
+Тестовый stub обязан экспортировать bump-`malloc`/`free` (`data/wasm/sdk_stub.wat`).  
+Bump-heap base — **65536** (и в `DefaultRegistrySdkWast`): ниже — зона для data segments UDF; иначе первый `AllocateBytes` для result затирает `.rodata` (см. `udf_rodata_cookie` / `0x30000`).
 
 ### 6. `TSdkImageCache` static dtor
 
@@ -60,9 +61,8 @@ Throw-only модули могут обойтись; string/result path — не
 
 ### B. Сбор `WasmUdfModules` в predictor
 
-Сейчас в `WasmUdfModules_` попадает **любой** `TCoUdf` module name, не только WASM.  
-Лишние имена → `ResolveModules` / Acquire могут упасть или no-op некорректно.  
-Имеет смысл фильтровать по типу регистрации (`wasm:` path / каталог).
+В `TKqpPhyStage.WasmUdfModules` попадает **любой** `TCoUdf` module name, не только WASM.  
+На Acquire `FilterLoadedWasmUdfModules` оставляет только модули из каталога — native (`String`, `Knn`, …) отбрасываются.
 
 ### C. Порядок и дедуп библиотек при нескольких модулях в одном запросе
 

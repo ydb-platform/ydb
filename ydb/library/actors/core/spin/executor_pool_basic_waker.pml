@@ -57,35 +57,6 @@ byte waker_delta = 0;
 byte waker_converted = 0;
 byte waker_remaining_reductions = 0;
 
-inline check_safety() {
-    atomic {
-        assert(waker_worker_id <= INVALID_WAKER);
-        assert(worker_state[0] <= WAKER);
-        assert(worker_state[1] <= WAKER);
-        assert(sleeping_count <= N);
-        assert(awake_workers <= N);
-        assert(sleep_workers <= N);
-        assert(awake_workers + sleep_workers == N);
-        assert(thread_count >= 1 && thread_count <= N);
-        assert(suggested_thread_count >= 1 && suggested_thread_count <= N);
-        assert((reductions & REDUCTION_COUNT_MASK) <= N);
-        assert(reductions < 2 * REDUCTION_WAKER_BIT);
-        assert(previous_reductions <= N);
-        assert(taken_tokens_to_sleep <= N);
-        assert(taken_tokens_to_wakeup <= N);
-        assert(taken_tokens_to_sleep + taken_tokens_to_wakeup <= N);
-        assert(waker_previous_sleeping <= N);
-        assert(activation_credits <= MAX_QUEUE);
-        assert(queued_activations <= activation_credits);
-        if
-        :: waker_worker_id < N ->
-            assert(worker_state[waker_worker_id] == WAKER ||
-                IS_NEED(worker_state[waker_worker_id]))
-        :: else -> skip
-        fi
-    }
-}
-
 /* One non-blocking attempt to notify or select a waker. */
 inline try_request_waker(candidate, notified, require_sleepers) {
     if
@@ -198,7 +169,7 @@ inline reconcile_workers(id, resume_state) {
                 (waker_i == id && (resume_state == NEED || resume_state == NONE)) ->
             if 
             :: waker_i != id -> worker_state[waker_i] = NONE;
-            :: else -> resume_state == NONE
+            :: else -> resume_state = NONE
             fi
             if
             :: waker_budget > 0 -> waker_budget--
@@ -274,7 +245,7 @@ inline reconcile_workers(id, resume_state) {
         :: else -> skip
         fi
         if
-        :: waker_i < N ->
+        :: waker_i < N - 1 ->
             waker_i++;
         :: else ->
             waker_i = 0;
@@ -286,7 +257,7 @@ inline reconcile_workers(id, resume_state) {
 
 inline wake_sleeping_workers(id, resume_state) {
     do
-    :: atomic { true ->
+    :: atomic { waker_budget > 0 ->
         waker_i = 0;
         do
         :: waker_i < N ->
@@ -311,9 +282,11 @@ inline wake_sleeping_workers(id, resume_state) {
         if
         :: waker_budget == 0 || waker_previous_sleeping == 0 ->
             waker_budget = 0;
+            break
         :: else -> skip
         fi
     }
+    :: else -> break
     od
 }
 
@@ -343,17 +316,17 @@ inline run_waker_pass(id, resume_state) {
         previous_reductions = 0
     };
     reconcile_thread_count();
+    atomic {
+        waker_previous_activations = activation_credits;
+        waker_budget = waker_previous_activations;
+    }
+    reconcile_workers(id, resume_state);
     atomic { // cas reductions
         assert((reductions & REDUCTION_COUNT_MASK) == 0);
         reductions = waker_remaining_reductions; // reset REDUCTION_WAKER_BIT (because we have waker_pending)
         previous_reductions = waker_remaining_reductions;
         waker_remaining_reductions = 0
     };
-    atomic {
-        waker_previous_activations = activation_credits;
-        waker_budget = waker_previous_activations;
-    }
-    reconcile_workers(id, resume_state);
     wake_sleeping_workers(id, resume_state);
     atomic {
         sleeping_count = waker_previous_sleeping;
@@ -378,8 +351,8 @@ inline run_waker(id, resume_state) {
     :: atomic { waker_worker_id == INVALID_WAKER ->
         waker_worker_id = id;
     }
+        run_waker_acquire_save_state_label:
         atomic {
-            run_waker_acquire_save_state_label:
             if
             :: IS_SLEEP(worker_state[id]) -> resume_state = SLEEP
             :: IS_BLOCKING(worker_state[id]) -> resume_state = BLOCKING
@@ -415,8 +388,12 @@ inline run_waker(id, resume_state) {
             if
             :: !IS_NEED(worker_state[id]) ->
                 break
-            :: else ->
-                worker_state[id] = resume_state;
+            :: worker_state[id] == NEED_FROM_SLEEP ->
+                worker_state[id] = SLEEP;
+            :: worker_state[id] == NEED_FROM_BLOCKING ->
+                worker_state[id] = BLOCKING
+            :: worker_state[id] == NEED ->
+                worker_state[id] = NONE
             fi
         }
     od;
@@ -490,7 +467,7 @@ pop_activation:
     if
     :: atomic { activation_credits > 0 -> goto worker_iteration }
     :: activation_credits == 0 ->
-        resume_state = SPIN;
+        worker_state[id] = SPIN;
         if
         :: atomic { !waker_pending ->
             waker_pending = true;
@@ -648,8 +625,7 @@ proctype Controller() {
         atomic {
             i = 0;
             notified = false;
-            notify = false;
-            round++
+            notify = false
         }
     od
 }

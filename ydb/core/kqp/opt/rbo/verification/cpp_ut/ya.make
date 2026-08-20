@@ -4,6 +4,7 @@ SRCS(
     correlated_scalar_rules_ut.cpp
     limit_pushdown_rules_ut.cpp
     semantic_snapshot_exporter_ut.cpp
+    stage_assignment_rules_ut.cpp
 )
 
 PEERDIR(

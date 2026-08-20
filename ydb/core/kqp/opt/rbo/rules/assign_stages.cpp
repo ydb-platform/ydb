@@ -1,6 +1,9 @@
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_rules.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <yql/essentials/core/yql_expr_optimize.h>
+
+#include <algorithm>
 
 namespace NKikimr::NKqp {
 
@@ -43,6 +46,135 @@ void ProcessSource(TIntrusivePtr<IOperator> op, TIntrusivePtr<TOpRead> read, TPl
     } else {
         op->Props.StageId = readStageId;
     }
+}
+
+bool HasWindowSemantics(const TOpMap& map) {
+    return std::any_of(
+        map.MapElements.begin(),
+        map.MapElements.end(),
+        [](const TMapElement& element) {
+            return element.GetExpression().HasWindowSemantics();
+        });
+}
+
+bool HasMatchingWindowCall(const TExpression& expression) {
+    const auto& metadata = expression.GetWindowMetadata();
+    if (!metadata ||
+        !metadata->Definition ||
+        !metadata->Definition->IsCallable("YqlWindow") ||
+        metadata->Definition->ChildrenSize() != 5 ||
+        !metadata->Definition->Child(0)->IsAtom() ||
+        metadata->Definition->Child(0)->Content().empty() ||
+        !metadata->Definition->Child(1)->IsAtom("") ||
+        !metadata->Definition->Child(2)->IsList() ||
+        metadata->Definition->Child(2)->ChildrenSize() == 0)
+    {
+        return false;
+    }
+
+    TInfoUnitSet sourcePartitionKeys;
+    for (const auto& partition : metadata->Definition->Child(2)->Children()) {
+        if (!partition->IsCallable("YqlGroup") ||
+            partition->ChildrenSize() != 2)
+        {
+            return false;
+        }
+        const auto* lambda = partition->Child(1);
+        if (!lambda->IsLambda() ||
+            lambda->ChildrenSize() != 2 ||
+            !lambda->Child(0)->IsArguments() ||
+            lambda->Child(0)->ChildrenSize() != 1 ||
+            !lambda->Child(0)->Child(0)->IsArgument())
+        {
+            return false;
+        }
+        const auto* groupRef = lambda->Child(1);
+        if (!groupRef->IsCallable("YqlGroupRef") ||
+            groupRef->ChildrenSize() != 4 ||
+            groupRef->Child(0) != lambda->Child(0)->Child(0) ||
+            !groupRef->Child(3)->IsAtom() ||
+            groupRef->Child(3)->Content().empty())
+        {
+            return false;
+        }
+        sourcePartitionKeys.insert(
+            TInfoUnit(TString(groupRef->Child(3)->Content())));
+    }
+    if (sourcePartitionKeys.empty() ||
+        expression.GetWindowPartitionBy().size() != sourcePartitionKeys.size())
+    {
+        return false;
+    }
+
+    size_t count = 0;
+    const TExprNode* window = nullptr;
+    VisitExpr(*expression.GetExpressionBody(), [&](const TExprNode& node) {
+        if (node.IsCallable("YqlAggWin")) {
+            ++count;
+            window = &node;
+        }
+        return true;
+    });
+    return count == 1 &&
+        window->ChildrenSize() == 5 &&
+        window->Child(1)->IsAtom() &&
+        window->Child(1)->Content() ==
+            metadata->Definition->Child(0)->Content();
+}
+
+// Hashing on any non-empty common subset of the partition keys is sufficient:
+// rows in the same partition agree on every key in that subset.  An untracked
+// window, a global window, or windows without a common available key must run
+// behind a serial connection instead.
+std::optional<TVector<TInfoUnit>> GetWindowShuffleKeys(TOpMap& map) {
+    TInfoUnitSet available;
+    for (const auto& iu : map.GetInput()->GetOutputIUs()) {
+        available.insert(iu);
+    }
+
+    std::optional<TVector<TInfoUnit>> commonKeys;
+    for (const auto& element : map.MapElements) {
+        const auto& expression = element.GetExpression();
+        if (!expression.HasWindowSemantics()) {
+            continue;
+        }
+        if (!HasMatchingWindowCall(expression)) {
+            return std::nullopt;
+        }
+
+        const auto resolvedPartitionKeys = expression.GetWindowPartitionBy();
+        TInfoUnitSet partitionKeys;
+        for (const auto& key : resolvedPartitionKeys) {
+            if (!available.contains(key)) {
+                return std::nullopt;
+            }
+            partitionKeys.insert(key);
+        }
+        if (partitionKeys.empty()) {
+            return std::nullopt;
+        }
+
+        if (!commonKeys) {
+            commonKeys.emplace();
+            commonKeys->reserve(partitionKeys.size());
+            for (const auto& key : resolvedPartitionKeys) {
+                if (partitionKeys.contains(key) &&
+                    std::find(commonKeys->begin(), commonKeys->end(), key) == commonKeys->end())
+                {
+                    commonKeys->push_back(key);
+                }
+            }
+        } else {
+            std::erase_if(*commonKeys, [&](const TInfoUnit& key) {
+                return !partitionKeys.contains(key);
+            });
+            if (commonKeys->empty()) {
+                return std::nullopt;
+            }
+        }
+    }
+
+    return commonKeys;
 }
 
 } // anonymous namespace
@@ -149,7 +281,23 @@ bool TAssignStagesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOConte
         auto childOp = CastOperator<IUnaryOperator>(input)->GetInput();
         const auto prevStageId = *(childOp->Props.StageId);
 
-        if (childOp->GetKind() == EOperator::Source) {
+        if (input->Kind == EOperator::Map && HasWindowSemantics(*CastOperator<TOpMap>(input))) {
+            const auto newStageId = props.StageGraph.AddStage();
+            input->Props.StageId = newStageId;
+            const auto outputIndex = props.StageGraph.GetOutputIndex(prevStageId);
+            const auto shuffleKeys = GetWindowShuffleKeys(*CastOperator<TOpMap>(input));
+            if (shuffleKeys) {
+                props.StageGraph.Connect(
+                    prevStageId,
+                    newStageId,
+                    MakeIntrusive<TShuffleConnection>(*shuffleKeys, outputIndex));
+            } else {
+                props.StageGraph.Connect(
+                    prevStageId,
+                    newStageId,
+                    MakeIntrusive<TUnionAllConnection>(outputIndex));
+            }
+        } else if (childOp->GetKind() == EOperator::Source) {
             ProcessSource(input, CastOperator<TOpRead>(childOp), props);
         } else if (!childOp->IsSingleConsumer()) {
             auto newStageId = props.StageGraph.AddStage();

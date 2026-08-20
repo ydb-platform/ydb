@@ -5,7 +5,7 @@
 1. **Storage SelfHeal** (this article) — for disks and [storage groups](../../concepts/glossary.md#storage-group) that hold data.
 2. **State Storage SelfHeal** — for [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas. See [{#T}](selfheal_statestorage.md).
 
-Both keep the cluster available and fault-tolerant when nodes or disks fail.
+Both restore cluster fault tolerance after prolonged node or disk failures. If the fault is fixed before the timeout (about one hour by default for disks), SelfHeal does not start: it does not react to short-lived [failure model](../../concepts/topology.md#cluster-config) violations.
 
 {% note info %}
 

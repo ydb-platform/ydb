@@ -5,7 +5,7 @@
 1. **SelfHeal хранилища** (эта статья) — для дисков и [групп хранения](../../concepts/glossary.md#storage-group) с данными.
 2. **SelfHeal State Storage** — для реплик [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board) и [SchemeBoard](../../concepts/glossary.md#scheme-board). См. [{#T}](selfheal_statestorage.md).
 
-Оба механизма сохраняют работоспособность и отказоустойчивость кластера при отказах узлов и дисков.
+Оба механизма восстанавливают отказоустойчивость кластера после длительных отказов узлов и дисков. Если неисправность устранена раньше таймаута (для дисков по умолчанию около часа), SelfHeal не запускается: кратковременные нарушения [модели отказа](../../concepts/topology.md#cluster-config) он не затрагивает.
 
 {% note info %}
 

@@ -1258,7 +1258,7 @@ public:
                 GroupsByGroupId.clear();
             }
             NeedFilter = (With != EWith::Everything) ||
-                !Filter.empty() || !FilterStoragePools.empty() || !FilterGroup.empty()
+                !Filter.empty() || !FilterStoragePools.empty() || !FilterGroup.empty() ||
                 !FilterNodeIds.ToApply.empty() || !FilterPDiskIds.ToApply.empty() || !FilterGroupIds.ToApply.empty();
             FoundGroups = GroupView.size();
         }

@@ -54,6 +54,23 @@ TApiMessage::TPtr ListOffsetsError(const TListOffsetsRequestData& request, EKafk
 }
 
 
+TApiMessage::TPtr OffsetCommitError(const TOffsetCommitRequestData& request, EKafkaErrors error) {
+    auto response = std::make_shared<TOffsetCommitResponseData>();
+    for (const auto& topic : request.Topics) {
+        TOffsetCommitResponseData::TOffsetCommitResponseTopic topicResponse;
+        topicResponse.Name = topic.Name;
+        for (const auto& partition : topic.Partitions) {
+            TOffsetCommitResponseData::TOffsetCommitResponseTopic::TOffsetCommitResponsePartition partitionResponse;
+            partitionResponse.PartitionIndex = partition.PartitionIndex;
+            partitionResponse.ErrorCode = error;
+            topicResponse.Partitions.push_back(partitionResponse);
+        }
+        response->Topics.push_back(std::move(topicResponse));
+    }
+    return response;
+}
+
+
 TApiMessage::TPtr OffsetFetchError(const TOffsetFetchRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TOffsetFetchResponseData>();
     response->ErrorCode = error;
@@ -105,6 +122,8 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return FetchError(static_cast<const TFetchRequestData&>(request), error);
         case LIST_OFFSETS:
             return ListOffsetsError(static_cast<const TListOffsetsRequestData&>(request), error);
+        case OFFSET_COMMIT:
+            return OffsetCommitError(static_cast<const TOffsetCommitRequestData&>(request), error);
         case OFFSET_FETCH:
             return OffsetFetchError(static_cast<const TOffsetFetchRequestData&>(request), error);
         default:

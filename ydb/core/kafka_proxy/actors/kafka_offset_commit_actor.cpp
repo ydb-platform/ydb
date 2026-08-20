@@ -100,7 +100,7 @@ void TKafkaOffsetCommitActor::SendFailedForAllPartitions(EKafkaErrors error, con
         }
         Response->Topics.push_back(topic);
     }
-    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, Error));
+    Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, Response, error));
     Die(ctx);
 }
 

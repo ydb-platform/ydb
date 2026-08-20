@@ -378,8 +378,8 @@ bool IsAlreadyDistinct(const TExprNode& node, const THashSet<TString>& columns) 
 
 bool IsOrdered(const TExprNode& node, const THashSet<TString>& columns) {
     if (auto sorted = node.GetConstraint<TSortedConstraintNode>()) {
+        size_t foundItemNamesCount = 0;
         for (const auto& item : sorted->GetContent()) {
-            size_t foundItemNamesCount = 0;
             bool found = false;
             for (const auto& path : item.first) {
                 if (path.size() == 1 && columns.contains(path.front())) {

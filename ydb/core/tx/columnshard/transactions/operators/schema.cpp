@@ -112,13 +112,13 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     std::optional<ui64> targetPathId;
     switch (SchemaTxBody.TxBody_case()) {
         case NKikimrTxColumnShard::TSchemaTxBody::kDropTable:
-            targetPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetDropTable());
+            targetPathId = TSchemeShardLocalPathId::FromProto(SchemaTxBody.GetDropTable()).GetRawValue();
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kCopyTable:
-            targetPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetCopyTable().GetDstPathId());
+            targetPathId = SchemaTxBody.GetCopyTable().GetDstPathId();
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kMoveTable:
-            targetPathId = TSchemeShardLocalPathId::FromRawValue(SchemaTxBody.GetMoveTable().GetDstPathId());
+            targetPathId = SchemaTxBody.GetMoveTable().GetDstPathId();
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kTruncateTable:
             targetPathId = SchemaTxBody.GetTruncateTable().GetPathId();
@@ -129,7 +129,8 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
 
     if (targetPathId) {
         // For path-specific operations, check SeqNo against the per-path SeqNo
-        auto pathSeqNoIt = owner.LastSchemaSeqNoByPath.find(*targetPathId);
+        TSchemeShardLocalPathId targetPathIdObj = TSchemeShardLocalPathId::FromRawValue(*targetPathId);
+        auto pathSeqNoIt = owner.LastSchemaSeqNoByPath.find(targetPathIdObj);
         if (pathSeqNoIt != owner.LastSchemaSeqNoByPath.end() && seqNo < pathSeqNoIt->second) {
             auto errorMessage = TStringBuilder() << "Ignoring outdated schema tx proposal at tablet " << owner.TabletID() << " txId "
                                                  << GetTxId() << " ssId " << owner.CurrentSchemeShardId << " seqNo " << seqNo << " lastSeqNo "
@@ -287,7 +288,8 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
     owner.UpdateSchemaSeqNo(seqNo, txc);
     // Update per-path SeqNo for path-specific operations
     if (targetPathId) {
-        owner.LastSchemaSeqNoByPath[*targetPathId] = seqNo;
+        TSchemeShardLocalPathId targetPathIdObj = TSchemeShardLocalPathId::FromRawValue(*targetPathId);
+        owner.LastSchemaSeqNoByPath[targetPathIdObj] = seqNo;
     }
     return TProposeResult();
 }

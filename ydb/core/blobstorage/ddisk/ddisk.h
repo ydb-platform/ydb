@@ -862,6 +862,10 @@ struct TPersistentBufferFormat {
             ui32 LsnsCount;
             ui64 Size;
             ui32 FastErasesCount;
+            // Direct block group number this info entry belongs to. See TPersistentBufferId for
+            // rationale; defaults to 0 to preserve the pre-existing single-namespace-per-tablet
+            // behavior.
+            ui8 DirectBlockGroupIndex = 0;
         };
 
         struct TOpStats {
@@ -886,7 +890,8 @@ struct TPersistentBufferFormat {
         ui32 PendingEvents;
         ui64 PerTabletStorageLimit;
         std::vector<TTabletInfo> TabletInfos;
-        std::unordered_map<ui64, ui64> EraseBarriers;
+        // Keyed by (TabletId, DirectBlockGroupIndex), matching TPersistentBufferBarriersManager::GetBarriers().
+        std::map<std::pair<ui64, ui8>, ui64> EraseBarriers;
         std::vector<std::vector<std::tuple<ui32, ui32>>> FreeSpace;
         std::vector<TOpStats> OpStats;
     };

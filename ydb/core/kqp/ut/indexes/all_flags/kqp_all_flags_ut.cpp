@@ -10,18 +10,30 @@ using namespace NYdb::NTable;
 
 namespace {
 
-TKikimrRunner KikimrWithAllExperimentalIndexes() {
+enum class EDisabledFeature {
+    None,
+    FulltextPrefix,
+    FulltextRowId,
+    CompactFulltext,
+    JsonIndex,
+    JsonIndexAutoSelect,
+    AddUniqueIndex,
+    HybridSearch,
+};
+
+TKikimrRunner KikimrWithAllExperimentalIndexes(EDisabledFeature disabled = EDisabledFeature::None) {
     NKikimrConfig::TFeatureFlags featureFlags;
     // Keep this list in sync with the documented all-flags deployment configuration.
-    featureFlags.SetEnableFulltextIndexPrefix(true);
-    featureFlags.SetEnableFulltextIndexRowId(true);
-    featureFlags.SetEnableCompactFulltextIndex(true);
-    featureFlags.SetEnableJsonIndex(true);
-    featureFlags.SetEnableJsonIndexAutoSelect(true);
-    featureFlags.SetEnableAddUniqueIndex(true);
+    featureFlags.SetEnableFulltextIndexPrefix(disabled != EDisabledFeature::FulltextPrefix);
+    featureFlags.SetEnableFulltextIndexRowId(disabled != EDisabledFeature::FulltextRowId);
+    featureFlags.SetEnableCompactFulltextIndex(disabled != EDisabledFeature::CompactFulltext);
+    featureFlags.SetEnableJsonIndex(disabled != EDisabledFeature::JsonIndex);
+    featureFlags.SetEnableJsonIndexAutoSelect(disabled != EDisabledFeature::JsonIndexAutoSelect);
+    featureFlags.SetEnableAddUniqueIndex(disabled != EDisabledFeature::AddUniqueIndex);
 
     auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
-    settings.AppConfig.MutableTableServiceConfig()->SetEnableHybridSearch(true);
+    settings.AppConfig.MutableTableServiceConfig()->SetEnableHybridSearch(
+        disabled != EDisabledFeature::HybridSearch);
 
     // Compact indexes are maintained through stream writes. BackportMode=All makes the test cluster
     // expose the same write path as a current production configuration; neither is a feature under test.
@@ -41,6 +53,16 @@ TString SelectYson(TQueryClient& db, const TString& query) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
     return FormatResultSetYson(result.GetResultSet(0));
+}
+
+TString ExecuteFail(TQueryClient& db, const TString& query) {
+    auto result = db.ExecuteQuery(query, NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_C(!result.IsSuccess(), "Query unexpectedly succeeded: " << query);
+    return result.GetIssues().ToString();
+}
+
+void AssertFailsWith(TQueryClient& db, const TString& query, const TString& expectedIssue) {
+    UNIT_ASSERT_STRING_CONTAINS(ExecuteFail(db, query), expectedIssue);
 }
 
 void AssertIndexTypes(TKikimrRunner& kikimr, const TString& table,
@@ -64,6 +86,150 @@ void AssertIndexTypes(TKikimrRunner& kikimr, const TString& table,
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KqpAllExperimentalIndexes) {
+
+Y_UNIT_TEST(FeatureGateFulltextPrefix) {
+    auto kikimr = KikimrWithAllExperimentalIndexes(EDisabledFeature::FulltextPrefix);
+    auto db = kikimr.GetQueryClient();
+
+    Execute(db, R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64, Tenant Utf8, Text Utf8, PRIMARY KEY (Key)
+        );
+    )sql");
+    AssertFailsWith(db, R"sql(
+        ALTER TABLE `/Root/Docs` ADD INDEX ft_idx
+            GLOBAL USING fulltext_plain ON (Tenant, Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql", "Prefixed fulltext/json index support is disabled");
+}
+
+Y_UNIT_TEST(FeatureGateFulltextRowId) {
+    auto kikimr = KikimrWithAllExperimentalIndexes(EDisabledFeature::FulltextRowId);
+    auto db = kikimr.GetQueryClient();
+
+    Execute(db, R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Utf8 NOT NULL, Text Utf8, PRIMARY KEY (Key)
+        );
+    )sql");
+    AssertFailsWith(db, R"sql(
+        ALTER TABLE `/Root/Docs` ADD INDEX ft_idx
+            GLOBAL USING fulltext_plain ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql", "requires the __ydb_row_id doc_id feature, which is disabled");
+}
+
+Y_UNIT_TEST(FeatureGateCompactFulltextFallsBackToLegacy) {
+    auto kikimr = KikimrWithAllExperimentalIndexes(EDisabledFeature::CompactFulltext);
+    auto db = kikimr.GetQueryClient();
+
+    Execute(db, R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64, Text Utf8, PRIMARY KEY (Key)
+        );
+    )sql");
+    Execute(db, R"sql(
+        UPSERT INTO `/Root/Docs` (Key, Text) VALUES (1, "cats play"u);
+    )sql");
+    Execute(db, R"sql(
+        ALTER TABLE `/Root/Docs` ADD INDEX ft_idx
+            GLOBAL USING fulltext_plain ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+    CompareYson("[[[1u]]]", SelectYson(db, R"sql(
+        SELECT Key FROM `/Root/Docs` VIEW ft_idx WHERE FulltextMatch(Text, "cats");
+    )sql"));
+
+    // __ydb_generation is part of the compact posting key and does not exist in the legacy layout.
+    AssertFailsWith(db, R"sql(
+        SELECT __ydb_generation FROM `/Root/Docs/ft_idx/indexImplTable`;
+    )sql", "__ydb_generation");
+}
+
+Y_UNIT_TEST(FeatureGateJsonIndex) {
+    auto kikimr = KikimrWithAllExperimentalIndexes(EDisabledFeature::JsonIndex);
+    auto db = kikimr.GetQueryClient();
+
+    Execute(db, R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64, Payload JsonDocument, PRIMARY KEY (Key)
+        );
+    )sql");
+    AssertFailsWith(db, R"sql(
+        ALTER TABLE `/Root/Docs` ADD INDEX json_idx GLOBAL USING json ON (Payload);
+    )sql", "JSON index support is disabled");
+}
+
+Y_UNIT_TEST(FeatureGateJsonIndexAutoSelect) {
+    auto kikimr = KikimrWithAllExperimentalIndexes(EDisabledFeature::JsonIndexAutoSelect);
+    auto db = kikimr.GetQueryClient();
+
+    Execute(db, R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64, Payload JsonDocument, PRIMARY KEY (Key)
+        );
+    )sql");
+    Execute(db, R"sql(
+        UPSERT INTO `/Root/Docs` (Key, Payload) VALUES
+            (1, JsonDocument('{"kind":"animal"}')),
+            (2, JsonDocument('{"kind":"plant"}'));
+    )sql");
+    Execute(db, R"sql(
+        ALTER TABLE `/Root/Docs` ADD INDEX json_idx GLOBAL USING json ON (Payload);
+    )sql");
+
+    const TString query = R"sql(
+        SELECT Key FROM `/Root/Docs`
+        WHERE JSON_VALUE(Payload, '$.kind' RETURNING Utf8) = "animal"
+        ORDER BY Key;
+    )sql";
+    auto explain = db.ExecuteQuery(query, NQuery::TTxControl::NoTx(),
+        TExecuteQuerySettings().ExecMode(EExecMode::Explain)).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(explain.GetStatus(), EStatus::SUCCESS, explain.GetIssues().ToString());
+    UNIT_ASSERT_C(explain.GetStats() && explain.GetStats()->GetPlan(), "EXPLAIN returned no plan");
+    UNIT_ASSERT_C(explain.GetStats()->GetPlan()->find("json_idx") == std::string::npos,
+        "JSON index was selected while EnableJsonIndexAutoSelect=false: "
+            << *explain.GetStats()->GetPlan());
+
+    // The optimizer switch must not disable the index itself: explicit VIEW remains usable.
+    CompareYson("[[[1u]]]", SelectYson(db, R"sql(
+        SELECT Key FROM `/Root/Docs` VIEW json_idx
+        WHERE JSON_VALUE(Payload, '$.kind' RETURNING Utf8) = "animal";
+    )sql"));
+}
+
+Y_UNIT_TEST(FeatureGateAddUniqueIndex) {
+    auto kikimr = KikimrWithAllExperimentalIndexes(EDisabledFeature::AddUniqueIndex);
+    auto db = kikimr.GetQueryClient();
+
+    Execute(db, R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64, ExternalId Utf8, PRIMARY KEY (Key)
+        );
+    )sql");
+    AssertFailsWith(db, R"sql(
+        ALTER TABLE `/Root/Docs` ADD INDEX external_id_uidx
+            GLOBAL UNIQUE ON (ExternalId);
+    )sql", "Adding a unique index to an existing table is disabled");
+}
+
+Y_UNIT_TEST(FeatureGateHybridSearch) {
+    auto kikimr = KikimrWithAllExperimentalIndexes(EDisabledFeature::HybridSearch);
+    auto db = kikimr.GetQueryClient();
+
+    Execute(db, R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Uint64, Text Utf8, Embedding String, PRIMARY KEY (Key)
+        );
+    )sql");
+    AssertFailsWith(db, R"sql(
+        $target = Untag(Knn::ToBinaryStringUint8(Cast([1, 2] AS List<Uint8>)), "Uint8Vector");
+        SELECT Key FROM `/Root/Docs`
+        ORDER BY HybridRank(FullTextScore(Text, "cats"),
+            Knn::CosineDistance(Embedding, $target))
+        LIMIT 1;
+    )sql", "hybrid search is disabled");
+}
 
 Y_UNIT_TEST(CompactFulltextJsonAndUniqueCoexist) {
     auto kikimr = KikimrWithAllExperimentalIndexes();

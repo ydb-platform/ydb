@@ -952,6 +952,125 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         }
     }
 
+    Y_UNIT_TEST(AutoProvision_ConcurrentFulltextBuildsSerializeAndReuseInfra) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "tenant" Type: "Utf8" NotNull: true }
+            Columns { Name: "external_id" Type: "Uint64" NotNull: true }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: ["tenant", "external_id"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        Ydb::Table::TableIndex firstIndex = FulltextIndexConfig(/*relevance*/ false);
+        firstIndex.set_name("fulltext_one");
+        Ydb::Table::TableIndex secondIndex = FulltextIndexConfig(/*relevance*/ true);
+        secondIndex.set_name("fulltext_two");
+
+        // Start the second build after the first request has been accepted, but before waiting for its
+        // completion. It therefore classifies the same composite-PK table while the first build is still
+        // provisioning __ydb_row_id, its sequence and unique index.
+        const ui64 firstBuildTx = ++txId;
+        const ui64 secondBuildTx = ++txId;
+        AsyncBuildIndex(runtime, firstBuildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", firstIndex);
+
+        THashMap<ui64, NKikimrIndexBuilder::TEvCreateResponse> responses;
+        auto grabCreateResponse = [&] {
+            TAutoPtr<IEventHandle> handle;
+            auto* event = runtime.GrabEdgeEvent<TEvIndexBuilder::TEvCreateResponse>(handle);
+            UNIT_ASSERT(event);
+            Cerr << "CONCURRENT BUILD RESPONSE: " << event->Record.DebugString() << Endl;
+            UNIT_ASSERT_C(event->Record.GetTxId() == firstBuildTx || event->Record.GetTxId() == secondBuildTx,
+                "response for unexpected build: " << event->Record.DebugString());
+            UNIT_ASSERT_C(responses.emplace(event->Record.GetTxId(), event->Record).second,
+                "duplicate response for build " << event->Record.GetTxId());
+        };
+        grabCreateResponse();
+        UNIT_ASSERT_VALUES_EQUAL_C(responses.at(firstBuildTx).GetStatus(), Ydb::StatusIds::SUCCESS,
+            responses.at(firstBuildTx).GetIssues());
+
+        AsyncBuildIndex(runtime, secondBuildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", secondIndex);
+        grabCreateResponse();
+
+        UNIT_ASSERT_VALUES_EQUAL(responses.size(), 2);
+        const auto& firstResponse = responses.at(firstBuildTx);
+        const auto& secondResponse = responses.at(secondBuildTx);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(firstResponse.GetStatus(), Ydb::StatusIds::SUCCESS,
+            firstResponse.GetIssues());
+
+        const auto secondStatus = secondResponse.GetStatus();
+        UNIT_ASSERT_VALUES_EQUAL_C(secondStatus, Ydb::StatusIds::OVERLOADED,
+            secondResponse.GetIssues());
+        UNIT_ASSERT_STRING_CONTAINS(secondResponse.DebugString(), "StatusMultipleModifications");
+
+        env.TestWaitNotification(runtime, firstBuildTx);
+        auto firstOp = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", firstBuildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(firstOp.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, firstOp.DebugString());
+
+        // A concurrent schema modification is a retryable serialization outcome. Once the winner has
+        // provisioned row-id infrastructure, a fresh request must reuse it and complete normally.
+        const ui64 retryBuildTx = ++txId;
+        TestBuildIndex(runtime, retryBuildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", secondIndex);
+        env.TestWaitNotification(runtime, retryBuildTx);
+        auto retryOp = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", retryBuildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(retryOp.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, retryOp.DebugString());
+
+        // The fixed infrastructure names resolve to one Ready unique index and one backing sequence.
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdSequenceName), {
+            NLs::PathExist,
+        });
+
+        const auto tableDescription = DescribePath(runtime, "/MyRoot/texts", true, true);
+        THashSet<TString> indexNames;
+        for (const auto& index : tableDescription.GetPathDescription().GetTable().GetTableIndexes()) {
+            UNIT_ASSERT_C(indexNames.insert(index.GetName()).second,
+                "duplicate index in table description: " << index.GetName());
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(indexNames.size(), 3,
+            "expected exactly the row-id unique index and two fulltext indexes");
+        UNIT_ASSERT(indexNames.contains(NTableIndex::NFulltext::RowIdUniqueIndexName));
+        UNIT_ASSERT(indexNames.contains("fulltext_one"));
+        UNIT_ASSERT(indexNames.contains("fulltext_two"));
+
+        // Both successful builds use the single synthetic document id.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_one/indexImplTable"), {
+            NLs::PathExist,
+            NLs::CheckColumns("indexImplTable",
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*ensureNoOther=*/ true),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_two/indexImplTable"), {
+            NLs::PathExist,
+            NLs::CheckColumns("indexImplTable",
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn,
+                  NTableIndex::NFulltext::FreqColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*ensureNoOther=*/ true),
+        });
+    }
+
     Y_UNIT_TEST(AutoProvision_SingleIntegerPkUnaffected) {
         // A single integer PK keeps the legacy doc_id=PK behaviour: no __ydb_row_id / unique index added.
         TTestBasicRuntime runtime;

@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/tx/tx.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 
@@ -123,6 +125,14 @@ void SetupDocs(TQueryClient& db) {
     UpsertDocs(db);
     AddFulltextIndex(db);
     AddVectorIndex(db);
+}
+
+void RestartSchemeShard(TKikimrRunner& kikimr, const TString& path) {
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    runtime.Send(MakePipePerNodeCacheID(false), NActors::TActorId(),
+        new TEvPipeCache::TEvForward(new TEvents::TEvPoisonPill(), TTestTxConfig::SchemeShard, false));
+    Sleep(TDuration::Seconds(3));
+    Tests::TClient::RefreshPathCache(&runtime, path);
 }
 
 // The kmeans-tree search-probe pragma. Widens the probe to cover all clusters at every level
@@ -679,6 +689,78 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
                 TStringBuilder() << "a text-relevant doc must lead with an explicit compact relevance index ("
                     << mode << ")");
         }
+    }
+
+    // Custom rank fusion must receive ranks produced by a compact relevance branch in exactly the same
+    // slots as a legacy relevance branch. Reproducing the built-in RRF formula pins the complete result,
+    // rather than merely checking that the compact index can be resolved.
+    Y_UNIT_TEST(CompactRelevanceRankLambda) {
+        auto kikimr = MakeRunner(/*enableHybridSearch=*/true, /*enableCompactFulltextIndex=*/true);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),
+                Knn::CosineDistance(Embedding, $target),
+                ($ranks) -> {
+                    RETURN 1.0 / (60 + COALESCE($ranks[0], 100000))
+                         + 1.0 / (60 + COALESCE($ranks[1], 100000));
+                } AS RankLambda)
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
+    }
+
+    // ScoreLambda gets raw BM25 values from the compact relevance implementation. Selecting the text
+    // score alone makes the observable result independent of vector-score magnitudes: doc 1 (three
+    // occurrences) must lead doc 3 (one), and both must precede documents absent from the text branch.
+    Y_UNIT_TEST(CompactRelevanceScoreLambda) {
+        auto kikimr = MakeRunner(/*enableHybridSearch=*/true, /*enableCompactFulltextIndex=*/true);
+        auto db = kikimr.GetQueryClient();
+        SetupDocs(db);
+
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),
+                Knn::CosineDistance(Embedding, $target),
+                ($scores) -> {
+                    RETURN COALESCE($scores[0], -1.0);
+                } AS ScoreLambda)
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL_C(keys[0], 1u,
+            "compact BM25 score must put the document with three occurrences first");
+        UNIT_ASSERT_VALUES_EQUAL_C(keys[1], 3u,
+            "the other compact fulltext match must precede documents absent from the text branch");
+        UNIT_ASSERT_C((std::set<ui64>{keys[2], keys[3]} == std::set<ui64>{2u, 4u}),
+            "documents absent from the compact fulltext branch must occupy the final positions");
+    }
+
+    // SchemeShard owns the index metadata used by hybrid index resolution. Restart it after both compact
+    // relevance and vector indexes are ready, refresh the scheme cache, and compile the HybridRank query
+    // through a fresh SDK client. This guards recovery of the compact index type and implementation-table
+    // metadata rather than relying on metadata retained by the client that created the indexes.
+    Y_UNIT_TEST(CompactRelevanceAfterSchemeShardRestart) {
+        auto kikimr = MakeRunner(/*enableHybridSearch=*/true, /*enableCompactFulltextIndex=*/true);
+        {
+            auto setupDb = kikimr.GetQueryClient();
+            SetupDocs(setupDb);
+        }
+
+        RestartSchemeShard(kikimr, "/Root/Docs");
+
+        auto db = kikimr.GetQueryClient();
+        auto keys = RunKeys(db, TargetDecl + R"sql(
+            SELECT Key FROM `/Root/Docs`
+            ORDER BY HybridRank(
+                FullTextScore(Text, "cats"),
+                Knn::CosineDistance(Embedding, $target))
+            LIMIT 4;
+        )sql");
+        UNIT_ASSERT_VALUES_EQUAL((std::vector<ui64>{1u, 3u, 2u, 4u}), keys);
     }
 
     Y_UNIT_TEST_TWIN(NamedIndexesDisambiguate, Compact) {

@@ -19,10 +19,15 @@ YDB_LOG_CTX_COMP(CTX, PRIO, COMP, T, ...)
 ```
 
 В аргументах вызова макроса указываются следующие параметры:
+
 - `CTX` - контекст исполнения актора (необходим для отправки сообщения актору логирования);
+
 - `PRIO`- уровень логирования сообщения (соответствует [уровням логирования](../reference/configuration/log_config.md#log-levels));
+
 - `COMP`- идентификатор компоненты;
+
 - `T`- текстовое сообщение;
+
 - `...`- несколько опциональных параметров (могут отсутствовать вовсе), которые содержат прикрепляемые параметры сообщения и их значения.
 
 {% cut "Примеры записи сообщения в журнал" %}
@@ -197,12 +202,12 @@ void MyFunction(const std::string& filename) {
         {"path", filename});
     ...
     if (err != 0 ) {
-		    YDB_LOG_ERROR("MyFunction failed",
-			      context,
-			      {"errorCode", err});
-		    return l
+        YDB_LOG_ERROR("MyFunction failed",
+            context,
+            {"errorCode", err});
+        return;
     }
-	  ...
+    ...
     YDB_LOG_NOTICE("MyFunction successed",
         context);
 }

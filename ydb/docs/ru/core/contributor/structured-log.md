@@ -52,7 +52,7 @@ YDB_LOG_CTX_COMP(env, PRI_ERROR, 1, "Unable to open file",
 
 {% endcut %}
 
-{% note warn %}
+{% note warning %}
 
 Обычно при использовании макроса логирования выполняются следующие условия:
 
@@ -118,7 +118,7 @@ YDB_LOG_ERROR_CTX_COMP(env, 1, "Unable to open file",
 
 {% endlist %}
 
-{% note warn %}
+{% note warning %}
 
 Если уровень сообщения известен заранее, то рекомендуется вместо базового макроса `YDB_LOG_CTX_COMP` использовать соответствующий макрос из таблицы.
 

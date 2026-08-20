@@ -1,9 +1,11 @@
 #include <ydb/core/testlib/actor_helpers.h>
 #include <ydb/core/tx/columnshard/blobs_action/bs/blob_manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
+#include <ydb/core/tx/columnshard/engines/scheme/objects_cache.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/move/move.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/tx/columnshard/test_helper/portion_test_helper.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -66,6 +68,21 @@ public:
     using NOlap::NActualizer::TMoveDataActualizer::IsInPortionsToMove;
     using NOlap::NActualizer::TMoveDataActualizer::SimulateTaskSubmissionForTest;
     using NOlap::NActualizer::TMoveDataActualizer::TMoveDataActualizer;
+};
+
+class TSoftMemoryLimitController: public NYDBTest::ICSController {
+private:
+    const ui64 SoftMemoryLimit;
+
+public:
+    TSoftMemoryLimitController(const ui64 softMemoryLimit)
+        : SoftMemoryLimit(softMemoryLimit)
+    {
+    }
+
+    ui64 DoGetMetadataRequestSoftMemoryLimit(const ui64 /*defaultValue*/) const override {
+        return SoftMemoryLimit;
+    }
 };
 
 Y_UNIT_TEST_SUITE(TMoveDataTest) {
@@ -292,6 +309,83 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
         UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 1, 0 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
         UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 0, 1 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
+    }
+
+    Y_UNIT_TEST(MoveDataMetadataRequestsBatching) {
+        static constexpr ui64 PortionsCount = 7;
+        const auto pathId = NOlap::TInternalPathId::FromRawValue(1);
+        const THashSet<ui32> targetGroups = { 100 };
+
+        auto cache = std::make_shared<NOlap::TSchemaObjectsCache>();
+        NOlap::TVersionedIndex versionedIndex;
+        versionedIndex.AddIndex(NOlap::TSnapshot(1, 1), cache->UpsertIndexInfo(NOlap::NTest::MakePortionTestIndexInfo()));
+
+        THashMap<ui64, NOlap::TPortionInfo::TPtr> portions;
+        for (ui64 portionId = 1; portionId <= PortionsCount; ++portionId) {
+            portions.emplace(
+                portionId, NOlap::NTest::MakeTestCompactedPortion(pathId, portionId, 10, 19, 10, NOlap::TSnapshot(1, 1), std::nullopt));
+        }
+        const ui64 portionMemory = portions.at(1)->PredictAccessorsMemory(portions.at(1)->GetSchema(versionedIndex));
+        UNIT_ASSERT_GT(portionMemory, 0);
+
+        auto buildWithLimit = [&](const ui64 softLimit, const THashMap<ui64, NOlap::TPortionInfo::TPtr>& knownPortions) {
+            auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(softLimit);
+            auto actualizer = std::make_shared<TMoveDataActualizerTestable>(targetGroups, versionedIndex);
+            for (ui64 portionId = 1; portionId <= PortionsCount; ++portionId) {
+                actualizer->AddToInitialAndPendingForTest(portionId);
+            }
+            return actualizer->BuildMoveDataMetadataRequests(knownPortions, actualizer);
+        };
+
+        auto batchSizes = [](const std::vector<NOlap::TCSMetadataRequest>& requests) {
+            std::vector<ui32> result;
+            for (auto&& request : requests) {
+                result.emplace_back(request.GetRequest()->GetSize());
+            }
+            Sort(result.begin(), result.end(), std::greater<ui32>());
+            return result;
+        };
+
+        auto portionIds = [](const std::vector<NOlap::TCSMetadataRequest>& requests) {
+            THashSet<ui64> result;
+            for (auto&& request : requests) {
+                for (auto&& portionId : request.GetRequest()->GetPortionIds()) {
+                    UNIT_ASSERT_C(result.emplace(portionId).second, "a portion must not be requested twice");
+                }
+            }
+            return result;
+        };
+
+        {
+            const auto requests = buildWithLimit(3 * portionMemory, portions);
+            UNIT_ASSERT_VALUES_EQUAL(requests.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(batchSizes(requests), (std::vector<ui32>{ 3, 3, 1 }));
+            UNIT_ASSERT_VALUES_EQUAL(portionIds(requests).size(), PortionsCount);
+        }
+        {
+            const auto requests = buildWithLimit(PortionsCount * portionMemory + 1, portions);
+            UNIT_ASSERT_VALUES_EQUAL(requests.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(requests.front().GetRequest()->GetSize(), PortionsCount);
+        }
+        {
+            // The testing default of 0 makes every portion its own request.
+            const auto requests = buildWithLimit(0, portions);
+            UNIT_ASSERT_VALUES_EQUAL(requests.size(), PortionsCount);
+            UNIT_ASSERT_VALUES_EQUAL(batchSizes(requests), (std::vector<ui32>(PortionsCount, 1)));
+        }
+        {
+            auto knownPortions = portions;
+            knownPortions.erase(PortionsCount);
+            const auto requests = buildWithLimit(3 * portionMemory, knownPortions);
+            const auto ids = portionIds(requests);
+            UNIT_ASSERT_VALUES_EQUAL(ids.size(), PortionsCount - 1);
+            UNIT_ASSERT_C(!ids.contains(PortionsCount), "a portion the engine no longer knows must not be requested");
+        }
+        {
+            auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TSoftMemoryLimitController>(3 * portionMemory);
+            auto actualizer = std::make_shared<TMoveDataActualizerTestable>(targetGroups, versionedIndex);
+            UNIT_ASSERT(actualizer->BuildMoveDataMetadataRequests(portions, actualizer).empty());
+        }
     }
 
 }   // Y_UNIT_TEST_SUITE

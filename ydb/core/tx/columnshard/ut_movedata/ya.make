@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/storage/actualizer/move
     ydb/core/tx/columnshard/hooks/abstract
     ydb/core/tx/columnshard/hooks/testing
+    ydb/core/tx/columnshard/test_helper
 )
 
 YQL_LAST_ABI_VERSION()

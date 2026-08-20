@@ -299,15 +299,16 @@ fi
 scenario "default startup, healthcheck, SQL, logs, config and backup fixtures"
 # Keep the image HEALTHCHECK enabled only in the scenario that verifies it.
 DEFAULT_CONTAINER="${NAME_PREFIX}-default"
-BACKUP_ROOT="${TEST_ROOT}/backup"
+BACKUP_VOLUME="${NAME_PREFIX}-backup-volume"
 GENERATED_CONFIG="${TEST_ROOT}/config.yaml"
 GENERATED_CERTS="${TEST_ROOT}/generated-certs"
-mkdir -p "$BACKUP_ROOT" "$GENERATED_CERTS"
+create_volume "$BACKUP_VOLUME"
+mkdir -p "$GENERATED_CERTS"
 
 start_detached "$DEFAULT_CONTAINER" \
     --publish 127.0.0.1::2136 \
     --publish 127.0.0.1::8765 \
-    --volume "${BACKUP_ROOT}:/backup"
+    --volume "${BACKUP_VOLUME}:/backup"
 wait_for_healthy "$DEFAULT_CONTAINER"
 DEFAULT_GRPC_PORT=$(published_port "$DEFAULT_CONTAINER" 2136)
 DEFAULT_MON_PORT=$(published_port "$DEFAULT_CONTAINER" 8765)
@@ -339,35 +340,60 @@ docker exec "$DEFAULT_CONTAINER" \
     tools dump -p acceptance_backup -o /backup/dump
 stop_and_remove_container "$DEFAULT_CONTAINER"
 
-scenario "read-only custom config keeps the local tenant usable"
-python3 - "$GENERATED_CONFIG" <<'PY'
+scenario "read-only custom log config is applied and keeps the local tenant usable"
+CONFIG_LOG_LEVEL=6
+python3 - "$GENERATED_CONFIG" "$CONFIG_LOG_LEVEL" <<'PY'
 import pathlib
 import re
 import sys
 
 path = pathlib.Path(sys.argv[1])
+new_level = int(sys.argv[2])
 content = path.read_text()
-marker = content.find('_ResultRowsLimit')
-if marker < 0:
-    raise SystemExit('_ResultRowsLimit is absent from the generated config')
+section_match = re.search(r'(?m)^log_config:\s*$', content)
+if section_match is None:
+    raise SystemExit('log_config is absent from the generated config')
 
-tail = content[marker:marker + 500]
-match = re.search(r'(?i)(value\s*:\s*)(["\']?)1000\2', tail)
-if match is None:
-    raise SystemExit('The default _ResultRowsLimit value is not 1000')
+next_section = re.search(r'(?m)^[^\s#][^\n]*:\s*$', content[section_match.end():])
+section_end = section_match.end() + next_section.start() if next_section else len(content)
+section = content[section_match.end():section_end]
+level_match = re.search(r'(?m)^([ \t]+default_level:[ \t]*)([0-9]+)([ \t]*(?:#.*)?)$', section)
+if level_match is None:
+    raise SystemExit('log_config.default_level is absent from the generated config')
+if int(level_match.group(2)) == new_level:
+    raise SystemExit(f'log_config.default_level is already {new_level}')
 
-start = marker + match.start()
-end = marker + match.end()
-replacement = match.group(1) + match.group(2) + '2' + match.group(2)
-path.write_text(content[:start] + replacement + content[end:])
+section = section[:level_match.start()] + (
+    level_match.group(1) + str(new_level) + level_match.group(3)
+) + section[level_match.end():]
+path.write_text(content[:section_match.end()] + section + content[section_end:])
 PY
 CONFIG_HASH=$(sha256sum "$GENERATED_CONFIG")
 CONFIG_CONTAINER="${NAME_PREFIX}-config"
 start_detached "$CONFIG_CONTAINER" \
     --no-healthcheck \
+    --publish 127.0.0.1::8765 \
     --volume "${GENERATED_CONFIG}:/ydb_data/cluster/kikimr_configs/config.yaml:ro"
 wait_for_ready "$CONFIG_CONTAINER"
-docker exec "$CONFIG_CONTAINER" grep -A 1 -F '_ResultRowsLimit' /ydb_data/cluster/kikimr_configs/config.yaml | grep -Fq '2'
+CONFIG_MON_PORT=$(published_port "$CONFIG_CONTAINER" 8765)
+CONFIG_DISPATCHER_JSON="${ARTIFACTS_DIR}/${CONFIG_CONTAINER}.configs-dispatcher.json"
+curl --fail --location --silent --show-error --max-time 10 \
+    --header 'Content-Type: application/json' \
+    "http://127.0.0.1:${CONFIG_MON_PORT}/actors/configs_dispatcher" >"$CONFIG_DISPATCHER_JSON"
+python3 - "$CONFIG_DISPATCHER_JSON" "$CONFIG_LOG_LEVEL" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+expected = int(sys.argv[2])
+payload = json.loads(path.read_text())
+actual = payload.get('current_json_config', {}).get('log_config', {}).get('default_level')
+if actual != expected:
+    raise SystemExit(
+        f'configs_dispatcher reports log_config.default_level={actual!r}, expected {expected}'
+    )
+PY
 run_sql "$CONFIG_CONTAINER" \
     'CREATE TABLE acceptance_config (id Uint64, value Utf8, PRIMARY KEY (id));'
 run_sql "$CONFIG_CONTAINER" '
@@ -378,7 +404,7 @@ run_sql "$CONFIG_CONTAINER" '
 '
 assert_sql_row_count "$CONFIG_CONTAINER" \
     'SELECT id FROM acceptance_config ORDER BY id;' \
-    2
+    3
 stop_and_remove_container "$CONFIG_CONTAINER"
 [[ "$(sha256sum "$GENERATED_CONFIG")" == "$CONFIG_HASH" ]]
 
@@ -500,7 +526,7 @@ chmod +x "${RESTORE_INIT_DIR}/01-restore-backup.sh"
 RESTORE_CONTAINER="${NAME_PREFIX}-restore"
 start_detached "$RESTORE_CONTAINER" \
     --no-healthcheck \
-    --volume "${BACKUP_ROOT}:/backup:ro" \
+    --volume "${BACKUP_VOLUME}:/backup:ro" \
     --volume "${RESTORE_INIT_DIR}:/init.d:ro"
 wait_for_file "$RESTORE_CONTAINER" /ydb_data/.user_scripts_initialized
 assert_sql_contains "$RESTORE_CONTAINER" \

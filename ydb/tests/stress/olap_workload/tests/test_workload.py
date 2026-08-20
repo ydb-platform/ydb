@@ -29,10 +29,8 @@ class TestYdbWorkload(StressFixture):
                 "allow_nullable_columns_in_pk": True,
                 "generate_internal_path_id": True,
             },
-            # Hive's gate needs both sides: the type must be absent from the deny
-            # list (ColumnShard is on it by default) AND present in the allow list
-            # (which defaults to DataShard only) — with either half missing Hive
-            # refuses the TEvCutTabletHistory this test ultimately waits for.
+            # Hive's gate needs the type off the deny list AND on the allow list;
+            # either half missing and Hive refuses the cut this test waits for.
             hive_config={
                 "cut_history_deny_list": "KeyValue,PersQueue,BlobDepot",
                 "cut_history_allow_list": "DataShard,ColumnShard",
@@ -74,16 +72,8 @@ class TestYdbWorkload(StressFixture):
         return {}
 
     def _mon_post(self, path):
-        """Returns (error, body): error is None on HTTP success.
-
-        POST, because Hive's mutating monitoring pages (ReassignTablet) reject GET
-        with 400 "Must use POST request". The body is returned for diagnostics —
-        the ReassignTablet page answers 200 with its operations list, so an empty
-        list or an embedded error is only visible there.
-        """
-        # The tablet monitoring proxy takes params from the BODY (not the URL) for
-        # form-urlencoded POSTs — and urllib always stamps that content type when
-        # data is given. So the query must ride in the body or it is invisible.
+        """POST with params in the BODY: the tablet mon proxy ignores the query string
+        for form-urlencoded POSTs, and mutating Hive pages reject GET."""
         base, _, query = path.partition("?")
         errors = []
         for node in self.cluster.nodes.values():
@@ -98,18 +88,12 @@ class TestYdbWorkload(StressFixture):
     def _prepare_cut_history_candidate(self, pool):
         """Make one deterministically cuttable history entry and return the probe path.
 
-        Channel history grows only on a Hive channel (re)assignment
-        (TTxUpdateTabletGroups) — plain tablet restarts never add entries, which is
-        why gating on the workload's restarts alone cannot work. And an entry is
-        nominated only when its generation range holds no blobs. Hence the order
-        here: create an EMPTY column table, force-reassign its data channel (the
-        pre-reassign entry then covers a range with no blobs at all), and only then
-        write rows — the new blobs belong to the active entry, and the writes give
-        the tablet the GC completions on which TryNominate runs.
+        History grows only on a Hive channel reassignment, never on restarts, and an
+        entry is nominated only when its range holds no blobs — hence: empty table,
+        reassign, and only then writes (they feed the GC ticks TryNominate runs on).
         """
         path = f"{self.database}/cut_history_probe"
-        # Compilation can time out while the host digests the workload run's load;
-        # that is environment, not subject matter — retry for up to two minutes.
+        # Compile timeouts under host load are environment, not subject — retry.
         deadline = time.time() + 120
         while True:
             try:
@@ -132,15 +116,6 @@ class TestYdbWorkload(StressFixture):
         tablets = self._mon_json("/viewer/json/tabletinfo?filter=(Type=Hive)")
         hives = [t.get("TabletId") for t in tablets.get("TabletStateInfo", []) if t.get("TabletId")]
         hive_id = hives[0] if hives else 72057594037968897
-        # forcedGroup is REQUIRED here, with the channel's own current group: a manual
-        # reassign (HIVE_REASSIGN_REASON_NO) excludes the current group from selection
-        # (FindFreeAllocationUnit filters newGroup.Id != currentGroup->Id), so on this
-        # single-group cluster an unforced reassign is silently a no-op — the tablet
-        # never restarts and no history entry appears. A forced group bypasses the
-        # selection and is applied verbatim, appending the entry even for the same
-        # group (MaySkipChannelReassign only skips same-group for BALANCE).
-        # Hive's TabletInfo page is the authoritative source for the channel's
-        # current group (whiteboard's ChannelGroupIDs can lag on young tablets).
 
         def channel2_history():
             info = self._mon_json(
@@ -155,14 +130,14 @@ class TestYdbWorkload(StressFixture):
         assert history, f"no channel 2 history in Hive TabletInfo for tablet {shards[0]}"
         force_group = history[-1]["GroupID"]
         history_before = len(history)
-        # wait=0: fire-and-return — the sensor poll below is the real confirmation.
+        # Manual reassign excludes the current group from selection, so only a forced
+        # same-group reassign appends a history entry here.
         err, body = self._mon_post(
             f"/tablets/app?TabletID={hive_id}&page=ReassignTablet"
             f"&tablet={shards[0]}&channel=2&forcedGroup={force_group}&wait=0"
         )
         assert err is None, f"Hive ReassignTablet monitoring call failed: {err}"
-        # The reassignment restarts the tablet; wait until Hive's history actually
-        # grew — the crisp intermediate signal that the entry to cut now exists.
+        # The reassignment restarts the tablet; the entry to cut exists once history grew.
         deadline = time.time() + 60
         while time.time() < deadline and len(channel2_history()) <= history_before:
             time.sleep(3)
@@ -179,12 +154,9 @@ class TestYdbWorkload(StressFixture):
             "--database", self.database,
             "--duration", self.base_duration,
         ])
-        # A run in which the cutter never engaged proves nothing about CutHistory,
-        # so manufacture a guaranteed-cuttable entry and require the full pipeline:
-        # nomination, sweep, hard barrier, TEvCutTabletHistory — i.e. Entries/Cut
-        # must grow, not merely "no errors". The polling window is sized to the
-        # one-minute nomination cadence plus barrier round-trip; the suite is
-        # SIZE(MEDIUM), so the whole run must still fit in ten minutes under asan.
+        # Manufacture a guaranteed-cuttable entry and require the full pipeline:
+        # Entries/Cut must grow, not merely "no errors". Window: one nomination
+        # cadence plus barrier round-trip; SIZE(MEDIUM) budget holds under asan.
         pool = ydb.QuerySessionPool(self.driver)
         try:
             probe = self._prepare_cut_history_candidate(pool)
@@ -192,10 +164,8 @@ class TestYdbWorkload(StressFixture):
             sensors = {}
             row = 0
             while time.time() < deadline:
-                # Each write is a fresh chance for a GC completion, which is the
-                # only place TryNominate is evaluated. The write is a means, not an
-                # assertion target — a compile timeout under host load is not a
-                # verdict on the cutter, so tolerate it and keep polling.
+                # Writes feed GC completions (the only TryNominate trigger); their
+                # own failures are not the subject — tolerate and keep polling.
                 try:
                     pool.execute_with_retries(f"UPSERT INTO `{probe}` (k, v) VALUES ({row}, {row})")
                     row += 1

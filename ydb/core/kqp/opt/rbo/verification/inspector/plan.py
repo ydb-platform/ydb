@@ -74,7 +74,15 @@ def render_expression(expression: ir.Expr) -> str:
         return f"null(type={_quote(scalar_type)})"
     if kind == "window_sum":
         window_input = str(_required(expression.window_input, "input"))
-        partition_by = str(_required(expression.partition_by, "partition_by"))
+        partition_columns = _required(expression.partition_by, "partition_by")
+        if (
+            not isinstance(partition_columns, tuple)
+            or len(partition_columns) != 1
+            or not isinstance(partition_columns[0], str)
+            or not partition_columns[0]
+        ):
+            raise InspectionError("window_sum must have exactly one partition column")
+        partition_by = partition_columns[0]
         scalar_type = str(_required(expression.result_type, "type"))
         nullable = _required(expression.nullable, "nullable")
         if not isinstance(nullable, bool):
@@ -83,6 +91,25 @@ def render_expression(expression: ir.Expr) -> str:
             f"window_sum(input={_quote(window_input)}, "
             f"partition_by={_quote(partition_by)}, type={_quote(scalar_type)}, "
             f"nullable={_boolean(nullable)})"
+        )
+    if kind == "window_avg":
+        window_input = str(_required(expression.window_input, "input"))
+        partition_by = _required(expression.partition_by, "partition_by")
+        if (
+            not isinstance(partition_by, tuple)
+            or not 1 <= len(partition_by) <= 4
+            or any(not isinstance(column, str) or not column for column in partition_by)
+            or len(set(partition_by)) != len(partition_by)
+        ):
+            raise InspectionError("window_avg must have between one and four partition columns")
+        scalar_type = str(_required(expression.result_type, "type"))
+        nullable = _required(expression.nullable, "nullable")
+        if not isinstance(nullable, bool):
+            raise InspectionError("expression field 'nullable' is not Boolean")
+        return (
+            f"window_avg(input={_quote(window_input)}, "
+            f"partition_by={_list(partition_by, _quote)}, "
+            f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
     if kind in {"and", "or"}:
         return f"{kind}(args={_list(expression.args, render_expression)})"
@@ -125,7 +152,7 @@ def render_expression(expression: ir.Expr) -> str:
             f"right={render_expression(expression.args[1])}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
-    if kind in {"cast_decimal", "cast_integral"}:
+    if kind in {"cast_decimal", "cast_integral", "decimal_abs"}:
         if len(expression.args) != 1:
             raise InspectionError(f"{kind} expression does not have exactly one argument")
         scalar_type = str(_required(expression.result_type, "type"))

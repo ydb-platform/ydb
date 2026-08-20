@@ -270,6 +270,30 @@ Y_UNIT_TEST_SUITE(TMoveDataTest) {
         UNIT_ASSERT_C(!TActualizer::HasBlobInGroups({ inTarget }, {}), "an empty target set selects nothing");
     }
 
+    Y_UNIT_TEST(MoveDataCompletionGateClassifier) {
+        using NOlap::NActualizer::ClassifyMoveDataGate;
+        using NOlap::NActualizer::EMoveDataGate;
+        using NOlap::NActualizer::TMoveDataQueueSizes;
+
+        static constexpr bool VacuumDone = true;
+        static constexpr bool HasBlobs = true;
+        const TMoveDataQueueSizes empty;
+
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, !HasBlobs) == EMoveDataGate::Ready);
+
+        // Vacuum dominates everything, portions dominate GC — the order picks the sensor.
+        UNIT_ASSERT(ClassifyMoveDataGate(!VacuumDone, empty, !HasBlobs) == EMoveDataGate::BlockedByVacuum);
+        UNIT_ASSERT(ClassifyMoveDataGate(!VacuumDone, TMoveDataQueueSizes{ 1, 1, 1 }, HasBlobs) == EMoveDataGate::BlockedByVacuum);
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, HasBlobs) == EMoveDataGate::BlockedByPortions);
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, empty, HasBlobs) == EMoveDataGate::BlockedByGC);
+
+        // Each queue component alone must block: InFlight in particular, or a submitted
+        // rewrite whose old blobs are not yet in the delete queues slips past the gate.
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 1, 0, 0 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 1, 0 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
+        UNIT_ASSERT(ClassifyMoveDataGate(VacuumDone, TMoveDataQueueSizes{ 0, 0, 1 }, !HasBlobs) == EMoveDataGate::BlockedByPortions);
+    }
+
 }   // Y_UNIT_TEST_SUITE
 
 }   // namespace NKikimr

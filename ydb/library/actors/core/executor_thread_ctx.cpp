@@ -87,8 +87,7 @@ namespace NActors {
         return Sleep(stopFlag);
     }
 
-    bool TExecutorThreadCtx::WaitForWaker(ui64 spinThresholdCycles, std::atomic<bool>* stopFlag, std::atomic<i64>* activationCredits) {
-        Y_UNUSED(spinThresholdCycles);
+    bool TExecutorThreadCtx::WaitForWaker(std::atomic<bool>* stopFlag, std::atomic<i64>* activationCredits) {
         EThreadState state = GetState<EThreadState>();
         while (state == EThreadState::Spin && !stopFlag->load(std::memory_order_relaxed)) {
             if (activationCredits->load(std::memory_order_acquire) > 0) {
@@ -136,6 +135,8 @@ namespace NActors {
                     break;
                 case EThreadState::Blocking:
                 case EThreadState::NeedToBeWaker:
+                case EThreadState::NeedToBeWakerFromSleep:
+                case EThreadState::NeedToBeWakerFromBlocking:
                 case EThreadState::Waker:
                     return false;
                 default:

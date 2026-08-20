@@ -301,7 +301,7 @@ namespace NActors {
         bool TryRequestWaker(bool requireSleepingWorkers);
         void RequestWaker(bool persistent);
         void RunWaker(TWorkerId workerId);
-        void WakerLoop(TWorkerId workerId);
+        void WakerLoop(TWorkerId workerId, EThreadState* resumeState);
 
     };
 }

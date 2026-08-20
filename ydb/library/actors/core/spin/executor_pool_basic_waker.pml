@@ -490,7 +490,11 @@ pop_activation:
                 if
                 :: worker_state[id] == SPIN ->
                     worker_state[id] = NEED
-                :: else -> skip
+                :: worker_state[id] == SLEEP ->
+                    worker_state[id] = NEED_FROM_SLEEP
+                :: worker_state[id] == NONE ->
+                    worker_state[id] = NEED
+                :: IS_NEED(worker_state[id]) -> skip
                 fi
             }
         :: else -> skip;
@@ -548,6 +552,7 @@ proctype Producer() {
     bool done;
     produser_iteration:
     do
+    :: true -> break
     :: true ->
         atomic { activation_credits < MAX_QUEUE ->
             activation_credits++
@@ -605,10 +610,11 @@ proctype Producer() {
 proctype Controller() {
     byte i;
     bool notified;
-    bool notify;
+    bool bit_setted = false;
     controller_iteration:
     do
-    :: true ->
+    :: true -> break
+    :: suggested_thread_count == thread_count || !waker_pending ->
         atomic {
             if
             :: suggested_thread_count == N ->
@@ -642,12 +648,16 @@ proctype Controller() {
         atomic {
             if
             :: reductions & REDUCTION_WAKER_BIT -> goto controller_iteration
-            :: else -> reductions = reductions | REDUCTION_WAKER_BIT
+            :: else ->
+                reductions = reductions | REDUCTION_WAKER_BIT
+                bit_setted = true
             fi
         }
         atomic {
             if
-            :: sleeping_count == 0 -> goto controller_iteration
+            :: sleeping_count == 0 ->
+                bit_setted = false
+                goto controller_iteration
             :: else -> goto controller_wake_up
             fi
         }
@@ -655,11 +665,23 @@ proctype Controller() {
         controller_wake_up:
         try_request_waker(i, notified, false);
 
-        atomic {
+        if
+        :: atomic { !notified && !bit_setted ->
             i = 0;
             notified = false;
-            notify = false
+            bit_setted = false;
+            if
+            :: reductions & REDUCTION_WAKER_BIT ->
+                goto controller_iteration
+            :: else -> reductions = reductions | REDUCTION_WAKER_BIT
+            fi
         }
+        :: atomic { else ->
+            i = 0;
+            notified = false;
+            bit_setted = false;
+        }
+        fi
     od
 }
 
@@ -674,6 +696,10 @@ proctype Controller() {
             producer_epoch == p && controller_epoch == c) -> \
         <> (queued_activations < q || \
             producer_epoch != p || controller_epoch != c)))
+
+#define WAKER_PENDING_CLEARS_WITH_PRODUCER_EPOCH(p) \
+    ([] ((waker_pending && producer_epoch == p) -> \
+        <> (!waker_pending || producer_epoch != p)))
 
 ltl live_resize_reconciles {
     RESIZE_RECONCILES_WITH_EPOCHS(false, false) &&
@@ -691,6 +717,11 @@ ltl live_queue_changes {
     QUEUE_DECREASES_WITH_EPOCHS(2, false, true) &&
     QUEUE_DECREASES_WITH_EPOCHS(2, true, false) &&
     QUEUE_DECREASES_WITH_EPOCHS(2, true, true)
+}
+
+ltl live_waker_pending_clears {
+    WAKER_PENDING_CLEARS_WITH_PRODUCER_EPOCH(false) &&
+    WAKER_PENDING_CLEARS_WITH_PRODUCER_EPOCH(true)
 }
 
 init {

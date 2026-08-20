@@ -1,32 +1,47 @@
 Model: executor_pool_basic_waker.pml
-Model SHA-256: 49df29e5e9e5fdfb431fa106dc2e40136fc65aa62a3aa7a7939f151556b509ee
+Committed model SHA-256:
+  99035a3b16cc3363159e4e3a97dd21be7670670c6b8413e1fcb3377cb81c6330
+Verified source model SHA-256:
+  325548bb2179349843aa0b59549cb8e608c0ab91358424842ec1394acf7b9aeb
+Whitespace-normalized SHA-256 for both files:
+  eb0da4f2238db7383252414c30ec8d9001d384e383c4b3bb2e9dba798db22a1c
 
-The model uses producer_epoch and controller_epoch to scope liveness
-obligations to intervals without new producer or controller events.
+After the runs, two trailing spaces were removed from the model. This changes
+the file SHA-256 but no Promela tokens or transitions; the normalized files
+are identical.
+
+All runs used a one-hour timeout and completed before the timeout.
 Fairness was disabled for all runs.
 
-Safety verification
+Safety verification (no LTL claim)
 
 Spin: Spin Version 6.5.2 -- 6 December 2019
 Commands:
   spin -a executor_pool_basic_waker.pml
-  cc -O3 -DSAFETY -DNOCLAIM -o pan pan.c
-  ./pan -m1000000000 -w30
+  cc -O3 -DSAFETY -DNOCLAIM -DMEMLIM=220000 -o pan pan.c
+  timeout --signal=INT --kill-after=30s 3600 \
+      ./pan -m1000000000 -w30
 
-Result: HOLDS (full state-space search completed with errors: 0)
+Result: VIOLATED (invalid end state, errors: 1)
 
-State-vector 68 byte, depth reached 36617377, errors: 0
-2.3948236e+08 states, stored
-3.92915e+08 states, matched
-6.3239735e+08 transitions (= stored+matched)
-2.4393238e+08 atomic steps
-78283.113 MB total actual memory usage
-pan: elapsed time 229 seconds
-wall clock time 4:16.73
-maximum resident set size 80166384 kbytes
+State-vector 68 byte, depth reached 586, errors: 1
+438 states, stored
+14 states, matched
+452 transitions (= stored+matched)
+152 atomic steps
+61598.055 MB total actual memory usage
+pan: elapsed time 0 seconds
+wall clock time 0:25.97
+maximum resident set size 63078152 kbytes
+
+The trail ends in a quiescent state after Producer and Controller stop:
+the queue and activation credits are empty, waker_pending is false,
+waker_worker_id is invalid, and both workers are in SLEEP. Spin reports this
+as an invalid end state because the parked Worker processes are not marked as
+valid end states in the model.
 
 Run directory:
-  build-host-002:/tmp/waker-hour-safety-49df29.4tyFN5
+  build-host-002:/tmp/waker-hour-safety-325548-v1
 
 -------------------------------------------------------------------------------
 
@@ -34,35 +49,39 @@ Claim: live_resize_reconciles
 
 Spin: Spin Version 6.4.9 -- 17 December 2018
 
-Spin 6.4.9 aborted while expanding both embedded LTL claims. The verified
-temporary resize_model.pml differs only by removal of the unused
-live_queue_changes block. The transition system and live_resize_reconciles
-claim are unchanged.
+Spin 6.4.9 cannot expand all embedded LTL claims in this model. The verified
+temporary model.pml differs only by removal of the unused live_queue_changes
+and live_waker_pending_clears blocks. The transition system and
+live_resize_reconciles claim are unchanged.
 
+Verified source model SHA-256:
+  325548bb2179349843aa0b59549cb8e608c0ab91358424842ec1394acf7b9aeb
 Derived model SHA-256:
-  20bbe205f97bd249cfe9f2400778c40276a2d77cf59d811bab2cc501dd2c2a67
+  b2035a837de9ec41039a9d1c96acd72f956d880516ac05025bf5d62091883499
 
 Commands:
-  sed '/^ltl live_queue_changes {$/,/^}$/d' \
-      executor_pool_basic_waker.pml > resize_model.pml
-  spin -a resize_model.pml
-  cc -O3 -o pan pan.c
-  ./pan -a -m1000000000 -w31
+  sed -e '/^ltl live_queue_changes {$/,/^}$/d' \
+      -e '/^ltl live_waker_pending_clears {$/,/^}$/d' \
+      executor_pool_basic_waker.pml > model.pml
+  spin -a model.pml
+  cc -O3 -DMEMLIM=220000 -o pan pan.c
+  timeout --signal=INT --kill-after=30s 3600 \
+      ./pan -a -m1000000000 -w31
 
 Result: HOLDS (full state-space search completed with errors: 0)
 
-State-vector 76 byte, depth reached 63745162, errors: 0
-3.4296727e+08 states, stored (4.44681e+08 visited)
-9.1690385e+08 states, matched
-1.3615853e+09 transitions (= visited+matched)
-4.8041475e+08 atomic steps
-93586.246 MB total actual memory usage
-pan: elapsed time 442 seconds
-wall clock time 7:53.36
-maximum resident set size 95837940 kbytes
+State-vector 76 byte, depth reached 68073091, errors: 0
+5.4910992e+08 states, stored (6.89582e+08 visited)
+1.5536961e+09 states, matched
+2.2432776e+09 transitions (= visited+matched)
+8.1757716e+08 atomic steps
+107759.195 MB total actual memory usage
+pan: elapsed time 671 seconds
+wall clock time 11:40.39
+maximum resident set size 110353324 kbytes
 
 Run directory:
-  build-host-003:/tmp/waker-hour-resize-49df29-only.k3DhsR
+  build-host-003:/tmp/waker-hour-resize-325548-v1
 
 -------------------------------------------------------------------------------
 
@@ -71,20 +90,54 @@ Claim: live_queue_changes
 Spin: Spin Version 6.5.2 -- 6 December 2019
 Commands:
   spin -a executor_pool_basic_waker.pml
-  cc -O3 -o pan pan.c
-  ./pan -a -N live_queue_changes -m1000000000 -w31
+  cc -O3 -DMEMLIM=220000 -o pan pan.c
+  timeout --signal=INT --kill-after=30s 3600 \
+      ./pan -a -N live_queue_changes -m1000000000 -w31
+
+Result: VIOLATED (acceptance cycle, errors: 1)
+
+State-vector 76 byte, depth reached 629246, errors: 1
+12424846 states, stored (1.77702e+07 visited)
+30698199 states, matched
+48468412 transitions (= visited+matched)
+12379405 atomic steps
+70727.262 MB total actual memory usage
+pan: elapsed time 12.4 seconds
+wall clock time 0:42.17
+maximum resident set size 72426640 kbytes
+
+The trail ends with one queued activation and one activation credit. One
+worker is in SLEEP and the other is in BLOCKING, waker_worker_id is invalid,
+and waker_pending is false. The blocking worker consumed the persistent
+waker bit while another worker still owned the waker role. It then restored
+BLOCKING without transferring the request to the current owner. After that
+owner released the role, no request remained to process the queued activation.
+
+Run directory:
+  build-host-002:/tmp/waker-hour-queue-325548-v1
+
+-------------------------------------------------------------------------------
+
+Claim: live_waker_pending_clears
+
+Spin: Spin Version 6.5.2 -- 6 December 2019
+Commands:
+  spin -a executor_pool_basic_waker.pml
+  cc -O3 -DMEMLIM=220000 -o pan pan.c
+  timeout --signal=INT --kill-after=30s 3600 \
+      ./pan -a -N live_waker_pending_clears -m1000000000 -w31
 
 Result: HOLDS (full state-space search completed with errors: 0)
 
-State-vector 76 byte, depth reached 63745162, errors: 0
-4.4512455e+08 states, stored (6.48952e+08 visited)
-1.3541268e+09 states, matched
-2.0030785e+09 transitions (= visited+matched)
-7.1283045e+08 atomic steps
-103997.184 MB total actual memory usage
-pan: elapsed time 636 seconds
-wall clock time 11:08.63
-maximum resident set size 106500436 kbytes
+State-vector 76 byte, depth reached 68073091, errors: 0
+6.9149223e+08 states, stored (9.74426e+08 visited)
+2.4768724e+09 states, matched
+3.4512985e+09 transitions (= visited+matched)
+1.2624514e+09 atomic steps
+122763.785 MB total actual memory usage
+pan: elapsed time 1.04e+03 seconds
+wall clock time 17:50.93
+maximum resident set size 125720512 kbytes
 
 Run directory:
-  build-host-004:/tmp/waker-hour-queue-49df29.nDfslj
+  build-host-004:/tmp/waker-hour-pending-325548-v1

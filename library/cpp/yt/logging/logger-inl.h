@@ -492,16 +492,9 @@ public:
 
     ~TTaggedLoggingGuard()
     {
-        if (!Enabled_) {
-            return;
+        if (Enabled_) {
+            Emit(EffectiveLevel_, Writer_.Finish());
         }
-        LogEventImpl(
-            LoggingContext_,
-            Logger_,
-            EffectiveLevel_,
-            SourceLocation_,
-            Anchor_,
-            Writer_.Finish());
     }
 
 protected:
@@ -513,6 +506,13 @@ protected:
     ELogLevel EffectiveLevel_ = ELogLevel::Minimum;
     TLoggingContext LoggingContext_;
     TTaggedPayloadWriter Writer_;
+
+    //! Emits #payload, disarming the destructor so the event is logged exactly once.
+    void Emit(ELogLevel level, TTaggedLogEventPayload&& payload)
+    {
+        Enabled_ = false;
+        LogEventImpl(LoggingContext_, Logger_, level, SourceLocation_, Anchor_, std::move(payload));
+    }
 
     //! Shared constructor. When #alwaysBuildMessage is set the payload message is built
     //! even if the level is disabled (so a terminal guard can still recover it); #Enabled_
@@ -611,8 +611,7 @@ public:
     //! Emits the event at |Fatal| level; the log manager aborts the process.
     [[noreturn]] void Commit() &
     {
-        Enabled_ = false; // The event is emitted here, not from the base destructor.
-        LogEventImpl(LoggingContext_, Logger_, ELogLevel::Fatal, SourceLocation_, Anchor_, Writer_.Finish());
+        Emit(ELogLevel::Fatal, Writer_.Finish());
         Y_UNREACHABLE();
     }
 };
@@ -649,8 +648,7 @@ public:
         auto payload = Writer_.Finish();
         auto message = FormatTaggedPayload(payload);
         if (Enabled_) {
-            Enabled_ = false; // The event is emitted here, not from the base destructor.
-            LogEventImpl(LoggingContext_, Logger_, EffectiveLevel_, SourceLocation_, Anchor_, std::move(payload));
+            Emit(EffectiveLevel_, std::move(payload));
         }
         return message;
     }

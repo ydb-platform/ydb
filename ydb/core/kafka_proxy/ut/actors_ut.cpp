@@ -637,5 +637,14 @@ namespace NKafka::NTests {
             UNIT_ASSERT_VALUES_EQUAL(serialized, ctx->UserToken->SerializeAsString());
         }
 
+        Y_UNIT_TEST(RememberTopicAclOkIsNotCopied) {
+            NKikimrConfig::TKafkaProxyConfig config;
+            TContext original(config);
+            original.RememberTopicAclOk("/Root/topic");
+            UNIT_ASSERT(original.HadTopicAclOk("/Root/topic"));
+
+            TContext copy(original);
+            UNIT_ASSERT(!copy.HadTopicAclOk("/Root/topic"));
+        }
     }
 }

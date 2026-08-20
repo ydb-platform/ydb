@@ -53,6 +53,48 @@ TApiMessage::TPtr ListOffsetsError(const TListOffsetsRequestData& request, EKafk
     return response;
 }
 
+
+TApiMessage::TPtr OffsetFetchError(const TOffsetFetchRequestData& request, EKafkaErrors error) {
+    auto response = std::make_shared<TOffsetFetchResponseData>();
+    response->ErrorCode = error;
+
+    auto appendGroup = [&](const TOffsetFetchRequestData::TOffsetFetchRequestGroup& group) {
+        TOffsetFetchResponseData::TOffsetFetchResponseGroup groupResponse;
+        groupResponse.GroupId = group.GroupId;
+        groupResponse.ErrorCode = error;
+        for (const auto& topic : group.Topics) {
+            TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics topicResponse;
+            topicResponse.Name = topic.Name;
+            for (auto partitionIndex : topic.PartitionIndexes) {
+                TOffsetFetchResponseData::TOffsetFetchResponseGroup::TOffsetFetchResponseTopics::TOffsetFetchResponsePartitions partition;
+                partition.PartitionIndex = partitionIndex;
+                partition.ErrorCode = error;
+                topicResponse.Partitions.push_back(partition);
+            }
+            groupResponse.Topics.push_back(std::move(topicResponse));
+        }
+        response->Groups.push_back(std::move(groupResponse));
+    };
+
+    if (!request.Groups.empty()) {
+        for (const auto& group : request.Groups) {
+            appendGroup(group);
+        }
+        return response;
+    }
+
+    TOffsetFetchRequestData::TOffsetFetchRequestGroup group;
+    group.GroupId = request.GroupId;
+    for (const auto& topic : request.Topics) {
+        TOffsetFetchRequestData::TOffsetFetchRequestGroup::TOffsetFetchRequestTopics topicRequest;
+        topicRequest.Name = topic.Name;
+        topicRequest.PartitionIndexes = topic.PartitionIndexes;
+        group.Topics.push_back(std::move(topicRequest));
+    }
+    appendGroup(group);
+    return response;
+}
+
 } // namespace
 
 TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors error) {
@@ -63,6 +105,8 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return FetchError(static_cast<const TFetchRequestData&>(request), error);
         case LIST_OFFSETS:
             return ListOffsetsError(static_cast<const TListOffsetsRequestData&>(request), error);
+        case OFFSET_FETCH:
+            return OffsetFetchError(static_cast<const TOffsetFetchRequestData&>(request), error);
         default:
             return nullptr;
     }

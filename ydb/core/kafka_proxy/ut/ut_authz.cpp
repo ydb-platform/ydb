@@ -79,6 +79,16 @@ TKafkaInt16 ListOffsetsPartitionError(TKafkaTestClient& client, const TString& t
     return msg->Topics[0].Partitions[0].ErrorCode;
 }
 
+TKafkaInt16 OffsetFetchPartitionError(TKafkaTestClient& client, const TString& topicName, const TString& groupId) {
+    std::map<TString, std::vector<i32>> topicsToPartitions;
+    topicsToPartitions[topicName] = {0};
+    auto msg = client.OffsetFetch(groupId, topicsToPartitions);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
+    return msg->Groups[0].Topics[0].Partitions[0].ErrorCode;
+}
+
 void CreateTopic(NTopic::TTopicClient& pqClient, const TString& topicName, const TString& consumer = {}
 
 void AlterTopicPartitions(NTopic::TTopicClient& pqClient, const TString& topicName, ui64 minActivePartitions) {
@@ -134,6 +144,7 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
         }, TDuration::Seconds(20));
         UNIT_ASSERT_VALUES_EQUAL(FetchPartitionError(client, topicName), static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
         UNIT_ASSERT_VALUES_EQUAL(ListOffsetsPartitionError(client, topicName), static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        UNIT_ASSERT_VALUES_EQUAL(OffsetFetchPartitionError(client, topicName, groupId), static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
 
         auto apiVersions = client.ApiVersions();
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
@@ -151,6 +162,28 @@ Y_UNIT_TEST(ListOffsetsUnknownTopicStaysUnknownAfterSasl) {
         UNIT_ASSERT_VALUES_EQUAL(
             ListOffsetsPartitionError(client, "/Root/topic-does-not-exist"),
             static_cast<TKafkaInt16>(EKafkaErrors::UNKNOWN_TOPIC_OR_PARTITION));
+    }
+
+
+Y_UNIT_TEST(OffsetFetchUnknownTopicIsNoneMinusOneAfterSasl) {
+        TInsecureTestServer testServer(TTestServerSettings{
+            .KafkaApiMode = "2",
+            .CheckACL = true,
+        });
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        std::map<TString, std::vector<i32>> topicsToPartitions;
+        topicsToPartitions["/Root/topic-does-not-exist"] = {0};
+        auto msg = client.OffsetFetch("unknown-group", topicsToPartitions);
+        UNIT_ASSERT_VALUES_EQUAL(msg->Groups.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(
+            msg->Groups[0].Topics[0].Partitions[0].ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));
+        UNIT_ASSERT_VALUES_EQUAL(msg->Groups[0].Topics[0].Partitions[0].CommittedOffset, -1);
     }
 
 

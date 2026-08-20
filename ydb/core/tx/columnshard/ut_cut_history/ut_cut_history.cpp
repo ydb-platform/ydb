@@ -116,9 +116,7 @@ public:
     using THistoryCutterWrapper::THistoryCutterWrapper;
 };
 
-// Runs callbacks under a real actor context inside TTestBasicRuntime, so cutter
-// methods that Send/Register (TryNominate, OnBatchComplete) exercise their
-// production paths against edge actors instead of being stubbed out.
+// Runs callbacks under a real actor context so Send/Register paths execute for real.
 struct TEvRunInActor: public NActors::TEventLocal<TEvRunInActor, EventSpaceBegin(NActors::TEvents::ES_PRIVATE)> {
     std::function<void(const NActors::TActorContext&)> Fn;
 
@@ -155,137 +153,111 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
      */
 
     Y_UNIT_TEST(IncrementOnPortionAdded) {
-        // Tablet: 3 channels, 2 history entries each.
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 111;
-        static constexpr ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, nullptr, TActorId());
-        auto* cutter = bm->GetHistoryCutter();
-        UNIT_ASSERT(cutter);
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, 5, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
 
-        NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
-
-        // A blob on channel 2 at generation 3 falls in entry {ch=2, fromGen=0}.
-        const TLogoBlobID blob = MakeBlob(TabletId, /*ch=*/2, /*gen=*/3);
-        // TPortionDataAccessor is not easily constructible here; test counter
-        // logic via OnBootComplete which calls IncrementCounter internally.
-        const NOlap::TUnifiedBlobId ub = MakeUnifiedBlob(blob);
+        // TPortionDataAccessor is not constructible here; OnBootComplete drives the
+        // same IncrementCounter path.
         THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
-        portionBlobs[/*portionId=*/42].push_back(ub);
-
-        cutter->OnBootComplete(portionBlobs);
-
-        // The entry {ch=2, fromGen=0} should have counter=1 now.
-        // Verify indirectly: cutter must NOT nominate it (counter != 0).
-        // GetSweepCandidates() is non-empty only after TryNominate; since we have no actor
-        // context here, just check IsSweepInFlight() is false and no candidates.
-        UNIT_ASSERT(!cutter->IsSweepInFlight());
-        UNIT_ASSERT(cutter->GetSweepCandidates()->empty());
+        portionBlobs[42].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 3)));
+        cutter.OnBootComplete(portionBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(TEntryKey{ 2, 0 }), 1);
     }
 
     Y_UNIT_TEST(DecrementToZeroOnPortionRemoved) {
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 222;
-        static constexpr ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, nullptr, TActorId());
-        auto* cutter = bm->GetHistoryCutter();
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, 5, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
+        const TEntryKey key{ 2, 0 };
 
-        NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
-
-        const NOlap::TUnifiedBlobId ub = MakeUnifiedBlob(MakeBlob(TabletId, 2, 3));
         THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
-        portionBlobs[42].push_back(ub);
-        cutter->OnBootComplete(portionBlobs);
+        portionBlobs[42].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 3)));
+        cutter.OnBootComplete(portionBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 1);
 
-        cutter->OnPortionRemoved(42);
-
-        // Now counter=0 and BlobsToKeep/Delete empty → IsDrained true → entry is nominatable.
-        // We cannot call TryNominate without actor context, but we can verify GetSweepCandidates
-        // is still empty (TryNominate not yet called).
-        UNIT_ASSERT(!cutter->IsSweepInFlight());
+        cutter.OnPortionRemoved(42);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 0);
+        UNIT_ASSERT(!cutter.IsChannelPoisonedForTest(2));
     }
 
     Y_UNIT_TEST(ForeignBlobIgnored) {
-        // Blob from a different tablet should be ignored.
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 333;
-        static constexpr ui64 OtherTablet = 999;
-        static constexpr ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, nullptr, TActorId());
-        auto* cutter = bm->GetHistoryCutter();
-        NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, 5, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
 
-        const NOlap::TUnifiedBlobId ub = MakeUnifiedBlob(MakeBlob(OtherTablet, 2, 3));
         THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
-        portionBlobs[55].push_back(ub);
-        cutter->OnBootComplete(portionBlobs);
+        portionBlobs[55].push_back(MakeUnifiedBlob(MakeBlob(/*foreign*/ 999, 2, 3)));
+        cutter.OnBootComplete(portionBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(TEntryKey{ 2, 0 }), 0);
 
-        // Foreign blob must not increment any counter.
-        // Entry {ch=2, fromGen=0} counter remains 0.
-        // If we remove portion 55 nothing should be poisoned.
-        cutter->OnPortionRemoved(55);
-        // No crash = test passes (no underflow → no poison).
-        UNIT_ASSERT(!cutter->IsSweepInFlight());
+        cutter.OnPortionRemoved(55);
+        UNIT_ASSERT(!cutter.IsChannelPoisonedForTest(2));
     }
 
     Y_UNIT_TEST(ActiveEntryBlobIgnored) {
-        // Blob at current generation should map to active entry and be ignored.
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 444;
         static constexpr ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { CurrentGen, 200 } });
         auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, nullptr, TActorId());
-        auto* cutter = bm->GetHistoryCutter();
-        NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, CurrentGen, bm, shared, TActorId(), TestSignals());
 
-        // Blob at generation==CurrentGen → active entry → ignored.
-        const NOlap::TUnifiedBlobId ub = MakeUnifiedBlob(MakeBlob(TabletId, 2, CurrentGen));
         THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
-        portionBlobs[77].push_back(ub);
-        cutter->OnBootComplete(portionBlobs);
-        // No assertion other than no crash.
-        UNIT_ASSERT(!cutter->IsSweepInFlight());
+        portionBlobs[77].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, CurrentGen)));
+        cutter.OnBootComplete(portionBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(TEntryKey{ 2, 0 }), 0);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(TEntryKey{ 2, CurrentGen }), 0);
     }
 
     Y_UNIT_TEST(BootCompleteWithEmptyMap) {
-        // Boot with no portions is valid; cutter starts with zero counters.
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 555;
-        static constexpr ui32 CurrentGen = 3;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 3, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, nullptr, TActorId());
-        auto* cutter = bm->GetHistoryCutter();
-        NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, 3, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, 3, bm, shared, TActorId(), TestSignals());
 
-        // Empty boot — all counters zero; entry {ch=2, fromGen=0} is drained.
-        cutter->OnBootComplete({});
-        UNIT_ASSERT(!cutter->IsSweepInFlight());
-        UNIT_ASSERT(cutter->GetSweepCandidates()->empty());
+        cutter.OnBootComplete({});
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(TEntryKey{ 2, 0 }), 0);
+        UNIT_ASSERT(!cutter.IsSweepInFlight());
+        UNIT_ASSERT(cutter.GetSweepCandidates()->empty());
     }
 
     Y_UNIT_TEST(DoubleBlobPerPortionDeduplicates) {
-        // Two blobs in the same portion mapping to the same entry → counter incremented only once.
+        auto guard = NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
         static constexpr ui64 TabletId = 666;
-        static constexpr ui32 CurrentGen = 5;
         auto info = MakeTabletInfo(TabletId, 3, { { 0, 100 }, { 5, 200 } });
-        auto bm = std::make_shared<NOlap::TBlobManager>(info, CurrentGen, NOlap::TTabletId(TabletId));
-        bm->InitHistoryCutter(bm, nullptr, TActorId());
-        auto* cutter = bm->GetHistoryCutter();
-        NYDBTest::TControllers::RegisterCSControllerGuard<TCutHistoryController>();
+        auto bm = std::make_shared<NOlap::TBlobManager>(info, 5, NOlap::TTabletId(TabletId));
+        auto shared = std::make_shared<NOlap::NDataSharing::TStorageSharedBlobsManager>(
+            NOlap::NBlobOperations::TGlobal::DefaultStorageId, NOlap::TTabletId(TabletId));
+        TTestableHistoryCutter cutter(info, 5, bm, shared, TActorId(), TestSignals());
+        const TEntryKey key{ 2, 0 };
 
-        // Two blobs on the same channel/entry in one portion.
         THashMap<ui64, std::vector<NOlap::TUnifiedBlobId>> portionBlobs;
         portionBlobs[88].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 1, 1, 1)));
         portionBlobs[88].push_back(MakeUnifiedBlob(MakeBlob(TabletId, 2, 2, 1, 2)));
-        cutter->OnBootComplete(portionBlobs);
+        cutter.OnBootComplete(portionBlobs);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 1);
 
-        // Remove the portion → counter should go to 0 (was 1, not 2).
-        cutter->OnPortionRemoved(88);
-        // No poison → removal was clean.
-        UNIT_ASSERT(!cutter->IsSweepInFlight());
+        cutter.OnPortionRemoved(88);
+        UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(key), 0);
+        UNIT_ASSERT(!cutter.IsChannelPoisonedForTest(2));
     }
 
     Y_UNIT_TEST(SeenGroupsCheck) {
@@ -429,9 +401,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_C(cutterOtherChannel.IsDrained(key), "a blob on another channel must not pin the entry");
     }
 
-    // Item 5 of the test plan: a counter underflow marks the whole channel poisoned,
-    // and a poisoned channel is excluded from nomination even when its entry passes
-    // every other gate.
+    // Underflow poisons the channel; nomination then skips it though every other gate is open.
     Y_UNIT_TEST(UnderflowPoisonsChannelAndBlocksNomination) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -463,10 +433,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT(!cutter.IsSweepInFlight());
     }
 
-    // Item 9 of the test plan: OnBootComplete must clear every piece of ephemeral
-    // state. Each dirtied field is asserted through its own observer; a leak of any
-    // of them (stale CutState hides an entry, stale DisprovedAt means eternal
-    // backoff, stale poison mutes a channel) would keep this test red.
+    // OnBootComplete must clear every piece of ephemeral state; each field is asserted.
     Y_UNIT_TEST(BootCompleteResetsEphemeralState) {
         TActorSystemStub actorSystemStub;
         actorSystemStub.AppData.Counters = MakeIntrusive<NMonitoring::TDynamicCounters>();
@@ -521,8 +488,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_VALUES_EQUAL(cutter.GetCounterForTest(keyMid), 1);
     }
 
-    // Item 8 of the test plan, formula part: base 5m doubling per attempt, shift
-    // clamped at 12, capped at 6h — no overflow for absurd attempt counts.
+    // Backoff formula: 5m doubling per attempt, shift clamped at 12, capped at 6h.
     Y_UNIT_TEST(DisprovedCooldownFormula) {
         UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(0), TDuration::Minutes(5));
         UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(1), TDuration::Minutes(10));
@@ -533,10 +499,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_VALUES_EQUAL(THistoryCutterWrapper::GetDisprovedCooldown(Max<ui32>()), THistoryCutterWrapper::DisprovedRetryMaxCooldown);
     }
 
-    // Item 6 of the test plan: the full happy path against real actors — nomination
-    // sends the sweep event, a clean exhausted sweep registers the barrier actor,
-    // the barrier is a HARD collect at nextFromGen-1 for the entry's own group, and
-    // an OK result produces TEvCutTabletHistory + TEvCutHistoryBarrierDone(ok).
+    // Happy path against real actors: nominate, sweep, hard barrier at nextFromGen-1, cut.
     Y_UNIT_TEST(SweepHappyPathSendsHardBarrier) {
         TTestBasicRuntime runtime;
         TAppPrepare app;
@@ -613,10 +576,7 @@ Y_UNIT_TEST_SUITE(TCutHistoryCutterCounters) {
         UNIT_ASSERT_VALUES_EQUAL(guard->GetCut().size(), 1);
     }
 
-    // Item 8 of the test plan, behavior part: each disproving sweep increments
-    // Attempts exactly once, the cooldown blocks renomination for exactly
-    // 5m * 2^attempts of mock time, and a sweep that finally survives to the
-    // barrier erases the backoff record entirely.
+    // One Attempts increment per disproving sweep; cooldown gates renomination in mock time.
     Y_UNIT_TEST(DisprovalBackoffGatesRenomination) {
         TTestBasicRuntime runtime;
         TAppPrepare app;

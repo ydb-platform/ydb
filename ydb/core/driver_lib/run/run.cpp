@@ -1770,8 +1770,8 @@ void TKikimrRunner::InitializeLogSettings(const TKikimrRunConfig& runConfig)
         LogSettings->SetAllowDrop(logConfig.GetAllowDropEntries());
     }
 
-    if (logConfig.HasJsonTextMessageWithoutValues()) {
-        LogSettings->SetJsonTextMessageWithoutValues(logConfig.GetJsonTextMessageWithoutValues());
+    if (logConfig.HasEnableStructuredLogInJson()) {
+        LogSettings->SetEnableStructuredLogInJson(logConfig.GetEnableStructuredLogInJson());
     }
 
     if (logConfig.HasUseLocalTimestamps()) {

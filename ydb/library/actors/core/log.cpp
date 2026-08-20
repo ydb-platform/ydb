@@ -654,7 +654,7 @@ namespace NActors {
                     }
                 } else {
                     if (structuredMessage.Defined()) {
-                        if (Settings->JsonTextMessageWithoutValues) {
+                        if (Settings->EnableStructuredLogInJson) {
                             j.WriteKey("message").WriteString(formatted);
                             StructuredJsonWriter.Write(j, structuredMessage.GetRef(), true);
                         } else {
@@ -673,7 +673,7 @@ namespace NActors {
                 j.EndObject();
                 auto logRecord = j.Str();
                 LogBackend->WriteData(
-                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), Settings->JsonTextMessageWithoutValues ? metaFlags : TLogRecord::TMetaFlags{}));
+                    TLogRecord(logPrio, logRecord.data(), logRecord.size(), Settings->EnableStructuredLogInJson ? metaFlags : TLogRecord::TMetaFlags{}));
             } break;
         }
 

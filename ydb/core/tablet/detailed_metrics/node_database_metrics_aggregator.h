@@ -4,6 +4,7 @@
 #include <ydb/core/protos/sys_view.pb.h>
 #include <ydb/core/protos/table_metrics_settings.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/tablet/tablet_counters.h>
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -72,7 +73,7 @@ struct TDetailedMetricsTableInfo {
  * the very same layout as the node wide "tablets" group.
  *
  */
-class TNodeDatabaseMetricsAggregator : public TThrRefBase {
+class TNodeDatabaseMetricsAggregator : public NSysView::IDbDetailedCounters {
 public:
     /**
      * @param[in] now Used to differentiate the cumulative counters into per second rates
@@ -112,42 +113,8 @@ public:
 
     virtual void RecalculateAllCounters() = 0;
 
-    /**
-     * Pack this instance's own role's view of every table into the wire shape
-     * the SysView Service ships to the SysView Processor (step 11/12).
-     *
-     * Encoding, uniform for a TABLE table's collapse bucket and for every
-     * PARTITION leaf (S2): Simple/GAUGE counters are absolute stateful (the
-     * full current value, `SwapStatefulCounters` convention — because the
-     * receiver clears its per-node Simple state on every message, a gauge
-     * dropping to 0 is represented for free). Cumulative/HIST counters are the
-     * delta since the previous call for the SAME generation
-     * (`AggregateIncrementalCounters` convention), tracked per table partial
-     * and per leaf.
-     *
-     * One TDetailedTableCounters entry is emitted per table this instance
-     * still holds a bucket or a leaf for: a TABLE level table fills
-     * TableCounters, a PARTITION level table fills one Leaves entry per
-     * (tablet_id, follower_id) this instance hosts. The role is NOT part of
-     * the payload — nothing here distinguishes a leader instance's message
-     * from a follower instance's: the caller (step 12) is the one who knows
-     * which role's aggregator it is packing, and stamps that onto the
-     * envelope as EDbCountersService (TABLETS / TABLETS_FOLLOWERS).
-     *
-     * @param[out] out Filled with one entry per table this instance still
-     *             holds something for. Not cleared: the caller may be packing
-     *             more than one aggregator into the same field.
-     * @param[in] generation The SysView Service's current send generation. The
-     *            contract is the very same the existing funnel already has
-     *            (see SendCounters(), sysview_service.cpp): the SysView
-     *            Service only advances the generation once the processor has
-     *            confirmed the previous one, so the delta baseline for a new
-     *            generation is exactly what was packed as "current" under the
-     *            previous generation. Calling Pack() again with the SAME
-     *            generation (a retry before confirmation) reproduces the very
-     *            same payload byte for byte and does NOT move the baseline.
-     */
-    virtual void Pack(NProtoBuf::RepeatedPtrField<NKikimrSysView::TDetailedTableCounters>& out, ui64 generation) = 0;
+    // Pack() is inherited from NSysView::IDbDetailedCounters; see its doc comment
+    // there (ydb/core/sys_view/common/events.h) for the wire shape contract.
 };
 
 using TNodeDatabaseMetricsAggregatorPtr = TIntrusivePtr<TNodeDatabaseMetricsAggregator>;

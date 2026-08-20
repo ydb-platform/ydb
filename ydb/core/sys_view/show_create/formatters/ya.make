@@ -9,6 +9,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     library/cpp/json
     ydb/core/base
     ydb/core/tx/columnshard/engines/storage/indexes/helper
@@ -17,6 +18,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/core/tx/sequenceproxy
     ydb/core/ydb_convert
+    ydb/library/formats/arrow/protos
     ydb/public/api/protos
     ydb/public/lib/json_value
     ydb/public/lib/ydb_cli/dump/util

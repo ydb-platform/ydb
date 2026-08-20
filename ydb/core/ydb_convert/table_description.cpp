@@ -1956,7 +1956,7 @@ template <typename TSettings, typename TIndex>
 void FillGlobalIndexSettingsIfPresent(
     TSettings& settings,
     const TIndex& tableIndex,
-    ui32 implementationTablePosition)
+    int implementationTablePosition)
 {
     if (implementationTablePosition < tableIndex.GetIndexImplTableDescriptions().size()) {
         FillGlobalIndexSettings(
@@ -1965,8 +1965,8 @@ void FillGlobalIndexSettingsIfPresent(
     }
 }
 
-template <typename TIndex>
-void FillIndexDescriptionImpl(Ydb::Table::TableIndex& index, const TIndex& tableIndex) {
+template <typename TYdbIndex, typename TIndex>
+void FillIndexDescriptionImpl(TYdbIndex& index, const TIndex& tableIndex) {
     index.set_name(tableIndex.GetName());
 
     *index.mutable_index_columns() = {

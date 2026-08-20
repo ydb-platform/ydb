@@ -1,17 +1,23 @@
 #include "create_table_formatter.h"
 #include "formatters_common.h"
 
+#include <ydb/core/base/path.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_parameters.h>
 #include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/serializer/parsing.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/ydb_convert/table_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
+
+#include <ydb/library/formats/arrow/protos/accessor.pb.h>
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
 #include <yql/essentials/minikql/mkql_type_ops.h>
+
+#include <arrow/type_fwd.h>
 
 #include <library/cpp/json/json_writer.h>
 #include <library/cpp/protobuf/json/proto2json.h>

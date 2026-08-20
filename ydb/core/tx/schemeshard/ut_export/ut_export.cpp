@@ -1663,6 +1663,101 @@ partitioning_settings {
         block.Stop();
     }
 
+    Y_UNIT_TEST(GeneratedTableCreateQueryUsesConsistentCopyPartitioning) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
+
+        ui64 txId = 100;
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "a" Type: "Int32" }
+            Columns {
+              Name: "stored"
+              Type: "Int32"
+              DefaultFromExpression {
+                ExprText: "a + 1"
+                Stored: true
+                DependencyColumnNames: ["a"]
+              }
+            }
+            KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 10 } } } }
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        bool copyTablesProposed = false;
+        THolder<IEventHandle> copyTablesCompletion;
+        auto previousObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvSchemeShard::EvModifySchemeTransaction: {
+                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+                copyTablesProposed |= record.TransactionSize() == 1
+                    && record.GetTransaction(0).GetOperationType()
+                        == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables;
+                break;
+            }
+            case TEvSchemeShard::EvNotifyTxCompletionResult:
+                if (copyTablesProposed) {
+                    copyTablesCompletion.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                break;
+            default:
+                break;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TBlockEvents<TEvDataShard::TEvProposeTransaction> backupBlocker(Runtime(), [](auto& ev) {
+            NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
+            return schemeTx.ParseFromString(ev->Get()->Record.GetTxBody()) && schemeTx.HasBackup();
+        });
+
+        const ui64 exportId = ++txId;
+        TestExport(Runtime(), exportId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+
+        Runtime().WaitFor("consistent copy completion", [&] {
+            return bool(copyTablesCompletion);
+        });
+        Runtime().SetObserverFunc(previousObserver);
+
+        const auto sourceDescription = DescribePath(Runtime(), "/MyRoot/Table", true);
+        const ui64 rightShard = sourceDescription.GetPathDescription()
+            .GetTablePartitions(1).GetDatashardId();
+        TestSplitTable(Runtime(), ++txId, "/MyRoot/Table", Sprintf(R"(
+            SourceTabletId: %)" PRIu64 R"(
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 20 } } } }
+        )", rightShard));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        Runtime().Send(copyTablesCompletion.Release(), 0, true);
+        Runtime().WaitFor("backup task is sent to datashards", [&] {
+            return !backupBlocker.empty();
+        });
+
+        NKikimrTxDataShard::TFlatSchemeTransaction backupSchemeTx;
+        UNIT_ASSERT(backupSchemeTx.ParseFromString(
+            backupBlocker.front()->Get()->Record.GetTxBody()));
+        const auto& createTableQuery = backupSchemeTx.GetBackup().GetCreateTableQuery();
+        UNIT_ASSERT_STRING_CONTAINS(createTableQuery, "PARTITION_AT_KEYS = ((10))");
+        UNIT_ASSERT_C(!createTableQuery.Contains("(20)"), createTableQuery);
+
+        backupBlocker.Stop().Unblock();
+        Env().TestWaitNotification(Runtime(), exportId);
+        TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
     Y_UNIT_TEST(ShouldCarryCreateTableQueryForGeneratedColumnWithGlobalIndex) {
         Env();
         Runtime().GetAppData().FeatureFlags.SetEnableGeneratedStored(true);
@@ -1927,9 +2022,9 @@ partitioning_settings {
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
+              destination_prefix: "generated-export"
               items {
                 source_path: "/MyRoot/GeneratedTable"
-                destination_prefix: ""
               }
               encryption_settings {
                 encryption_algorithm: "AES-128-GCM"
@@ -1940,12 +2035,12 @@ partitioning_settings {
             }
         )", S3Port()));
 
-        UNIT_ASSERT(HasS3File("/create_table.sql.enc"));
-        UNIT_ASSERT(!HasS3File("/create_table.sql"));
-        UNIT_ASSERT(!HasS3File("/scheme.pb"));
-        UNIT_ASSERT(!HasS3File("/scheme.pb.enc"));
+        UNIT_ASSERT(HasS3File("/generated-export/001/create_table.sql.enc"));
+        UNIT_ASSERT(!HasS3File("/generated-export/001/create_table.sql"));
+        UNIT_ASSERT(!HasS3File("/generated-export/001/scheme.pb"));
+        UNIT_ASSERT(!HasS3File("/generated-export/001/scheme.pb.enc"));
 
-        const auto encryptedQuery = GetS3FileContent("/create_table.sql.enc");
+        const auto encryptedQuery = GetS3FileContent("/generated-export/001/create_table.sql.enc");
         TBuffer decryptedData;
         NBackup::TEncryptionIV iv;
         UNIT_ASSERT_NO_EXCEPTION(std::tie(decryptedData, iv) =

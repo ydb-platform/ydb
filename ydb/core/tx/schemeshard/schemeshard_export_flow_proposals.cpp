@@ -202,6 +202,10 @@ bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, 
     }
 
     auto sourceDescription = GetDescription(ss, sourcePath.Base()->PathId);
+    if (sourceDescription.HasTable()) {
+        FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
+    }
+
     TString createTableQuery;
     if (!BuildCreateTableQuery(sourcePath.PathString(), sourceDescription, createTableQuery, error)) {
         return false;
@@ -213,7 +217,6 @@ bool FillTableDescription(TSchemeShard* ss, NKikimrSchemeOp::TBackupTask& task, 
     if (sourceDescription.HasTable()) {
         FillSetValForSequences(
             ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
-        FillPartitioning(ss, *sourceDescription.MutableTable(), exportItemPath.Base()->PathId);
         for (const auto& cdcStream : sourceDescription.GetTable().GetCdcStreams()) {
             auto cdcPathDesc =  GetDescription(ss, TPathId::FromProto(cdcStream.GetPathId()));
             for (const auto& child : cdcPathDesc.GetChildren()) {

@@ -4269,6 +4269,70 @@ Y_UNIT_TEST_SUITE(TImportTests) {
             NYdb::FormatResultSetYson(select.GetResponse().GetYdbResults(0)));
     }
 
+    Y_UNIT_TEST(LegacyCreationQueryWithoutPathTypeResumesAfterSchemeShardRestart) {
+        TTestBasicRuntime runtime;
+        auto options = TTestEnvOptions()
+            .RunFakeConfigDispatcher(true)
+            .SetupKqpProxy(true);
+        TTestEnv env(runtime, options);
+        runtime.GetAppData().FeatureFlags.SetEnableViews(true);
+
+        TTestDataWithScheme data;
+        data.Metadata = R"({"version": 1})";
+        data.Type = EPathTypeView;
+        data.CreationQuery = R"(
+            -- backup root: "/OldRoot"
+            CREATE VIEW IF NOT EXISTS `view` WITH security_invoker = TRUE AS SELECT 1;
+        )";
+
+        TPortManager portManager;
+        const ui16 port = portManager.GetPort();
+        TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
+        UNIT_ASSERT(s3Mock.Start());
+
+        TBlockEvents<NKqp::TEvKqp::TEvCompileRequest> compileBlocker(runtime, [](auto& ev) {
+            return ev->Get()->Query
+                && ev->Get()->Query->Text.Contains("CREATE VIEW");
+        });
+
+        const ui64 importId = 101;
+        TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
+            ImportFromS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_prefix: ""
+                destination_path: "/MyRoot/Restored"
+              }
+            }
+        )", port));
+
+        runtime.WaitFor("view creation query is awaiting KQP preparation", [&] {
+            return !compileBlocker.empty();
+        });
+
+        LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let key '('('ImportId (Uint64 '%)" PRIu64 R"()) '('Index (Uint32 '0))))
+                (let update '('('CreationQueryPathType)))
+                (return (AsList (UpdateRow 'ImportItems key update)))
+            )
+        )", importId));
+
+        compileBlocker.Stop();
+        compileBlocker.clear();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, importId);
+        TestGetImport(runtime, importId, "/MyRoot");
+
+        const auto describe = DescribePath(runtime, "/MyRoot/Restored");
+        TestDescribeResult(describe, {
+            NLs::Finished,
+            NLs::IsView,
+        });
+    }
+
     Y_UNIT_TEST(GeneratedCreateTableQueryWithIndexRestoresDataBeforeBuildingIndex) {
         TTestBasicRuntime runtime;
         auto options = TTestEnvOptions()
@@ -4458,10 +4522,11 @@ CREATE TABLE `/OldRoot/Original` (
         TTestDataWithScheme data;
         data.Metadata = R"({"version": 1})";
         data.CreationQuery = R"(
+            -- CREATE VIEW marker must not override the persisted table path type.
             CREATE TABLE `/OldRoot/Original` (
                 key Uint32 NOT NULL,
                 a Int32,
-                `CREATE VIEW marker` Int32
+                g Int32
                     GENERATED ALWAYS AS (a + 1) STORED,
                 PRIMARY KEY (key)
             );
@@ -4472,6 +4537,11 @@ CREATE TABLE `/OldRoot/Original` (
         const ui16 port = portManager.GetPort();
         TS3Mock s3Mock(ConvertTestData(data), TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
+
+        TBlockEvents<NKqp::TEvKqp::TEvCompileRequest> compileBlocker(runtime, [](auto& ev) {
+            return ev->Get()->Query
+                && ev->Get()->Query->Text.Contains("CREATE VIEW marker");
+        });
 
         const ui64 importId = 101;
         TestImport(runtime, importId, "/MyRoot", Sprintf(R"(
@@ -4485,6 +4555,55 @@ CREATE TABLE `/OldRoot/Original` (
             }
         )", port));
 
+        runtime.WaitFor("table creation query with CREATE VIEW marker", [&] {
+            return !compileBlocker.empty();
+        });
+
+        const TActorId queryExecutor = compileBlocker.front()->Sender;
+        const TActorId compileService = compileBlocker.front()->GetRecipientRewrite();
+        compileBlocker.Stop();
+        compileBlocker.clear();
+
+        NKikimrSchemeOp::TModifyScheme modifyScheme;
+        modifyScheme.SetOperationType(ESchemeOpCreateTable);
+        modifyScheme.SetWorkingDir("/MyRoot");
+        auto& table = *modifyScheme.MutableCreateTable();
+        table.SetName("Restored");
+
+        auto& key = *table.AddColumns();
+        key.SetName("key");
+        key.SetType("Uint32");
+        key.SetNotNull(true);
+
+        auto& dependency = *table.AddColumns();
+        dependency.SetName("a");
+        dependency.SetType("Int32");
+
+        auto& generatedColumn = *table.AddColumns();
+        generatedColumn.SetName("g");
+        generatedColumn.SetType("Int32");
+        auto& expression = *generatedColumn.MutableDefaultFromExpression();
+        expression.SetExprText("a + 1");
+        expression.SetStored(true);
+        expression.AddDependencyColumnNames("a");
+        table.AddKeyColumnNames("key");
+
+        auto* preparedQuery = new NKikimrKqp::TPreparedQuery();
+        auto& transaction = *preparedQuery->MutablePhysicalQuery()->AddTransactions();
+        transaction.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+        transaction.MutableSchemeOperation()->MutableCreateTable()->CopyFrom(modifyScheme);
+
+        auto compileResult = NKqp::TKqpCompileResult::Make(
+            "", Ydb::StatusIds::SUCCESS, {}, NKqp::ETableReadType::Other);
+        compileResult->PreparedQuery = std::make_shared<NKqp::TPreparedQueryHolder>(
+            preparedQuery, nullptr, true);
+        runtime.Send(new IEventHandle(
+            queryExecutor,
+            compileService,
+            new NKqp::TEvKqp::TEvCompileResponse(compileResult)),
+            0,
+            true);
+
         env.TestWaitNotification(runtime, importId);
         TestGetImport(runtime, importId, "/MyRoot");
 
@@ -4497,7 +4616,7 @@ CREATE TABLE `/OldRoot/Original` (
         const auto& columns = describe.GetPathDescription().GetTable().GetColumns();
         const NKikimrSchemeOp::TColumnDescription* generated = nullptr;
         for (const auto& column : columns) {
-            if (column.GetName() == "CREATE VIEW marker") {
+            if (column.GetName() == "g") {
                 generated = &column;
                 break;
             }

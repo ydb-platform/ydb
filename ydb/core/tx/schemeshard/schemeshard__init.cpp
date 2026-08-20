@@ -21,6 +21,36 @@ namespace NSchemeShard {
 
 using namespace NTabletFlatExecutor;
 
+namespace {
+
+NKikimrSchemeOp::EPathType InferLegacyCreationQueryPathType(TStringBuf query) {
+    // CreationQueryPathType was added after CreationQuery. Preserve the same
+    // query classification used before the type was persisted so old imports
+    // can resume after an upgrade.
+    if (query.Contains("CREATE VIEW")) {
+        return NKikimrSchemeOp::EPathTypeView;
+    }
+    if (query.Contains("CREATE ASYNC REPLICATION")) {
+        return NKikimrSchemeOp::EPathTypeReplication;
+    }
+    if (query.Contains("CREATE TRANSFER")) {
+        return NKikimrSchemeOp::EPathTypeTransfer;
+    }
+    if (query.Contains("CREATE EXTERNAL DATA SOURCE")) {
+        return NKikimrSchemeOp::EPathTypeExternalDataSource;
+    }
+    if (query.Contains("CREATE EXTERNAL TABLE")) {
+        return NKikimrSchemeOp::EPathTypeExternalTable;
+    }
+    if (query.Contains("CREATE TABLE `")) {
+        return NKikimrSchemeOp::EPathTypeTable;
+    }
+
+    return NKikimrSchemeOp::EPathTypeInvalid;
+}
+
+} // anonymous namespace
+
 struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TSideEffects OnComplete;
     TMemoryChanges MemChanges;
@@ -5275,8 +5305,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     if (rowset.HaveValue<Schema::ImportItems::CreationQuery>()) {
                         item.CreationQuery = rowset.GetValue<Schema::ImportItems::CreationQuery>();
-                        item.CreationQueryPathType = rowset.GetValueOrDefault<Schema::ImportItems::CreationQueryPathType>(
-                            NKikimrSchemeOp::EPathTypeInvalid);
+                        item.CreationQueryPathType = rowset.HaveValue<Schema::ImportItems::CreationQueryPathType>()
+                            ? rowset.GetValue<Schema::ImportItems::CreationQueryPathType>()
+                            : InferLegacyCreationQueryPathType(item.CreationQuery);
                     }
 
                     if (rowset.HaveValue<Schema::ImportItems::PreparedCreationQuery>()) {

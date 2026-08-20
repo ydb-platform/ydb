@@ -175,6 +175,29 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
             UNIT_ASSERT_VALUES_EQUAL(createPartitions->Results.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(createPartitions->Results[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
         }
+
+        const TProducerInstanceId producerInstanceId{1, 0};
+        {
+            auto addPartitions = client.AddPartitionsToTxn("txn-after-expire", producerInstanceId, {{topicName, {0}}});
+            UNIT_ASSERT_VALUES_EQUAL(addPartitions->Results.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(addPartitions->Results[0].Results.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(addPartitions->Results[0].Results[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        }
+        {
+            auto addOffsets = client.AddOffsetsToTxn("txn-after-expire", producerInstanceId, groupId);
+            UNIT_ASSERT_VALUES_EQUAL(addOffsets->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        }
+        {
+            auto txnOffsetCommit = client.TxnOffsetCommit(
+                "txn-after-expire", producerInstanceId, groupId, 0, {{topicName, {{0, 0}}}});
+            UNIT_ASSERT_VALUES_EQUAL(txnOffsetCommit->Topics.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(txnOffsetCommit->Topics[0].Partitions.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(txnOffsetCommit->Topics[0].Partitions[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        }
+        {
+            auto endTxn = client.EndTxn("txn-after-expire", producerInstanceId, true);
+            UNIT_ASSERT_VALUES_EQUAL(endTxn->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        }
         {
             TString joinGroupId = groupId;
             std::vector<TString> topics{topicName};

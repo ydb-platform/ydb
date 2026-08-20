@@ -11,7 +11,6 @@ TApiMessage::TPtr TopLevelError(EKafkaErrors error) {
     return response;
 }
 
-
 TApiMessage::TPtr ProduceError(const TProduceRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TProduceResponseData>();
     response->Responses.resize(request.TopicData.size());
@@ -26,7 +25,6 @@ TApiMessage::TPtr ProduceError(const TProduceRequestData& request, EKafkaErrors 
     }
     return response;
 }
-
 
 TApiMessage::TPtr FetchError(const TFetchRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TFetchResponseData>();
@@ -44,7 +42,6 @@ TApiMessage::TPtr FetchError(const TFetchRequestData& request, EKafkaErrors erro
     return response;
 }
 
-
 TApiMessage::TPtr ListOffsetsError(const TListOffsetsRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TListOffsetsResponseData>();
     response->Topics.resize(request.Topics.size());
@@ -61,7 +58,6 @@ TApiMessage::TPtr ListOffsetsError(const TListOffsetsRequestData& request, EKafk
     return response;
 }
 
-
 TApiMessage::TPtr MetadataError(const TMetadataRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TMetadataResponseData>();
     response->Topics.resize(request.Topics.size());
@@ -71,7 +67,6 @@ TApiMessage::TPtr MetadataError(const TMetadataRequestData& request, EKafkaError
     }
     return response;
 }
-
 
 TApiMessage::TPtr OffsetCommitError(const TOffsetCommitRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TOffsetCommitResponseData>();
@@ -88,7 +83,6 @@ TApiMessage::TPtr OffsetCommitError(const TOffsetCommitRequestData& request, EKa
     }
     return response;
 }
-
 
 TApiMessage::TPtr OffsetFetchError(const TOffsetFetchRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TOffsetFetchResponseData>();
@@ -131,7 +125,6 @@ TApiMessage::TPtr OffsetFetchError(const TOffsetFetchRequestData& request, EKafk
     return response;
 }
 
-
 TApiMessage::TPtr FindCoordinatorError(const TFindCoordinatorRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TFindCoordinatorResponseData>();
     response->ErrorCode = error;
@@ -144,7 +137,6 @@ TApiMessage::TPtr FindCoordinatorError(const TFindCoordinatorRequestData& reques
     return response;
 }
 
-
 TApiMessage::TPtr SyncGroupError(EKafkaErrors error) {
     auto response = std::make_shared<TSyncGroupResponseData>();
     response->ErrorCode = error;
@@ -152,7 +144,6 @@ TApiMessage::TPtr SyncGroupError(EKafkaErrors error) {
     response->Assignment = "";
     return response;
 }
-
 
 TApiMessage::TPtr DescribeGroupsError(const TDescribeGroupsRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TDescribeGroupsResponseData>();
@@ -165,7 +156,6 @@ TApiMessage::TPtr DescribeGroupsError(const TDescribeGroupsRequestData& request,
     return response;
 }
 
-
 TApiMessage::TPtr CreateTopicsError(const TCreateTopicsRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TCreateTopicsResponseData>();
     for (const auto& topic : request.Topics) {
@@ -177,7 +167,6 @@ TApiMessage::TPtr CreateTopicsError(const TCreateTopicsRequestData& request, EKa
     return response;
 }
 
-
 TApiMessage::TPtr CreatePartitionsError(const TCreatePartitionsRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TCreatePartitionsResponseData>();
     for (const auto& topic : request.Topics) {
@@ -188,7 +177,6 @@ TApiMessage::TPtr CreatePartitionsError(const TCreatePartitionsRequestData& requ
     }
     return response;
 }
-
 
 TApiMessage::TPtr DescribeConfigsError(const TDescribeConfigsRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TDescribeConfigsResponseData>();
@@ -203,7 +191,6 @@ TApiMessage::TPtr DescribeConfigsError(const TDescribeConfigsRequestData& reques
     return response;
 }
 
-
 TApiMessage::TPtr AlterConfigsError(const TAlterConfigsRequestData& request, EKafkaErrors error) {
     auto response = std::make_shared<TAlterConfigsResponseData>();
     for (const auto& resource : request.Resources) {
@@ -212,6 +199,38 @@ TApiMessage::TPtr AlterConfigsError(const TAlterConfigsRequestData& request, EKa
         resourceResponse.ErrorCode = error;
         resourceResponse.ErrorMessage = "token is invalid or unavailable";
         response->Responses.push_back(std::move(resourceResponse));
+    }
+    return response;
+}
+
+TApiMessage::TPtr AddPartitionsToTxnError(const TAddPartitionsToTxnRequestData& request, EKafkaErrors error) {
+    auto response = std::make_shared<TAddPartitionsToTxnResponseData>();
+    for (const auto& topic : request.Topics) {
+        TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult topicResponse;
+        topicResponse.Name = topic.Name;
+        for (const auto& partition : topic.Partitions) {
+            TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult::TAddPartitionsToTxnPartitionResult partitionResponse;
+            partitionResponse.PartitionIndex = partition;
+            partitionResponse.ErrorCode = error;
+            topicResponse.Results.push_back(partitionResponse);
+        }
+        response->Results.push_back(std::move(topicResponse));
+    }
+    return response;
+}
+
+TApiMessage::TPtr TxnOffsetCommitError(const TTxnOffsetCommitRequestData& request, EKafkaErrors error) {
+    auto response = std::make_shared<TTxnOffsetCommitResponseData>();
+    for (const auto& topic : request.Topics) {
+        TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic topicResponse;
+        topicResponse.Name = topic.Name;
+        for (const auto& partition : topic.Partitions) {
+            TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic::TTxnOffsetCommitResponsePartition partitionResponse;
+            partitionResponse.PartitionIndex = partition.PartitionIndex;
+            partitionResponse.ErrorCode = error;
+            topicResponse.Partitions.push_back(partitionResponse);
+        }
+        response->Topics.push_back(std::move(topicResponse));
     }
     return response;
 }
@@ -250,6 +269,14 @@ TApiMessage::TPtr BuildErrorResponse(const TApiMessage& request, EKafkaErrors er
             return CreateTopicsError(static_cast<const TCreateTopicsRequestData&>(request), error);
         case INIT_PRODUCER_ID:
             return TopLevelError<TInitProducerIdResponseData>(error);
+        case ADD_PARTITIONS_TO_TXN:
+            return AddPartitionsToTxnError(static_cast<const TAddPartitionsToTxnRequestData&>(request), error);
+        case ADD_OFFSETS_TO_TXN:
+            return TopLevelError<TAddOffsetsToTxnResponseData>(error);
+        case END_TXN:
+            return TopLevelError<TEndTxnResponseData>(error);
+        case TXN_OFFSET_COMMIT:
+            return TxnOffsetCommitError(static_cast<const TTxnOffsetCommitRequestData&>(request), error);
         case DESCRIBE_CONFIGS:
             return DescribeConfigsError(static_cast<const TDescribeConfigsRequestData&>(request), error);
         case ALTER_CONFIGS:

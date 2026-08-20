@@ -691,7 +691,7 @@ SID идентифицирует индивидуального [пользов�
 
 #### SelfHeal {#self-heal}
 
-**SelfHeal** — механизм автоматического восстановления отказоустойчивости кластера при длительных отказах узлов или дисков. Есть SelfHeal [хранилища](../maintenance/manual/selfheal.md) (перенос [VDisk](#vdisk) групп хранения) и SelfHeal [State Storage](../maintenance/manual/selfheal_statestorage.md) (перенос реплик подсистем распространения метаданных).
+**SelfHeal** — механизмы автоматического поддержания и восстановления отказоустойчивости кластера. SelfHeal [хранилища](../maintenance/manual/selfheal.md) переносит [VDisk](#vdisk) групп хранения после длительных отказов узлов или дисков. SelfHeal [State Storage](../maintenance/manual/selfheal_statestorage.md) переносит реплики подсистем распространения метаданных после отказов и добавляет реплики при появлении новых узлов.
 
 #### NodeBroker {#node-broker}
 

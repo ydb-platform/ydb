@@ -5,7 +5,7 @@
 1. **Storage SelfHeal** (this article) — for disks and [storage groups](../../concepts/glossary.md#storage-group) that hold data.
 2. **State Storage SelfHeal** — for [State Storage](../../concepts/glossary.md#state-storage), [Board](../../concepts/glossary.md#board), and [SchemeBoard](../../concepts/glossary.md#scheme-board) replicas. See [{#T}](selfheal_statestorage.md).
 
-Both restore cluster fault tolerance after prolonged node or disk failures. If the fault is fixed before the timeout (about one hour by default for disks), SelfHeal does not start: it does not react to short-lived [failure model](../../concepts/topology.md#cluster-config) violations.
+Both restore cluster fault tolerance after prolonged failures. If a faulty node or disk is restored before the timeout expires (about one hour by default for disks), SelfHeal does not start relocation.
 
 {% note info %}
 
@@ -15,7 +15,7 @@ State Storage SelfHeal is available only with [configuration V2](../../devops/co
 
 ## How storage SelfHeal works {#how-it-works}
 
-[CMS](../../concepts/glossary.md#cms) (the Sentinel component) continuously monitors [PDisk](../../concepts/glossary.md#pdisk) and node health. If a fault lasts long enough (about one hour by default), CMS starts moving the affected [VDisks](../../concepts/glossary.md#vdisk) to healthy hardware so the [failure model](../../concepts/topology.md#cluster-config) is restored.
+The Sentinel component of [CMS](../../concepts/glossary.md#cms) continuously monitors [PDisk](../../concepts/glossary.md#pdisk) and node health. If a fault lasts long enough (about one hour by default), Sentinel starts moving the affected [VDisks](../../concepts/glossary.md#vdisk) to healthy hardware so the [failure model](../../concepts/topology.md#cluster-config) is restored.
 
 The [Blob Storage Controller](../../concepts/glossary.md#ds-controller) executes the command: data is replicated in the background. The move itself can take from minutes to a day, depending on data volume and hardware. Once the command is accepted, CMS treats the task as issued; distributed storage is responsible for finishing replication.
 
@@ -79,7 +79,7 @@ The following settings are available:
 | **State update interval (sec.)** | Period of PDisk state updates. |
 | **Timeout (sec.)** | Timeout for PDisk state updates. |
 | **Change status retries** | Number of retries to change the PDisk status in BSC (`ACTIVE`, `FAULTY`, `BROKEN`, etc.). |
-| **Change status retry interval (sec.)** | Delay between attempts to change the PDisk status in BSC. CMS monitors the disk state at an interval of **State update interval**. If the disk remains in one state for several **Status update interval** cycles, CMS changes its status in BSC.<br/>Next are the settings for the number of update cycles after which CMS will change the disk status. If the disk state is `Normal`, the disk is moved to status `ACTIVE`; in other states, the disk is moved to status `FAULTY`.<br/>The value `0` disables status change for the state (as implemented for `Unknown` by default).<br/>For example, with default settings, if CMS observes disk state `Initial` for 5 `Status update interval` cycles of 60 seconds each, the disk status will be changed to `FAULTY`. |
+| **Change status retry interval (sec.)** | Delay between retries when sending a new PDisk status to BSC. |
 | **Default state limit** | For states for which no setting is specified, this "default" value can be used. For unknown PDisk states for which there is no setting, this value is also used. This value is used if the value is not set for states `Initial`, `InitialFormatRead`, `InitialSysLogRead`, `InitialCommonLogRead`, `Normal`. |
 | **Initial** | PDisk starts initialization. Transitions to `FAULTY`. |
 | **InitialFormatRead** | PDisk reads its format record. Transitions to `FAULTY`. |

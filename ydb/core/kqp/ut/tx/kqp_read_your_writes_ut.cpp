@@ -8,7 +8,8 @@ using namespace NYdb::NQuery;
 
 // Helper that wraps a query session and tracks the current transaction.
 //
-//   Exec(query)            — execute in current tx (begin if first call), assert SUCCESS
+//   Begin()                - verify that we are not currently in a tx, begin a new one.
+//   Exec(query)            — execute in current tx, assert SUCCESS
 //   Check(query, yson)     — execute in current tx, assert SUCCESS, compare YSON result set 0
 //   ExecCommit(query)      — execute in current tx and commit, assert SUCCESS
 //   CheckCommit(query, y)  — execute in current tx, commit, assert SUCCESS, compare YSON

@@ -10,12 +10,14 @@ logger = logging.getLogger(__name__)
 
 
 class WorkloadCutHistory(WorkloadBase):
-    """Restart ColumnShard tablets so their channel history grows and can be cut.
+    """Restart ColumnShard tablets while the cutter runs.
 
-    CutHistory only has work to do once a tablet's channel history has more than one
-    entry, and entries appear on generation changes. Restarting the tablets is the
-    cheapest way to produce them from a client; the cutter then nominates and cuts
-    the drained ones on its own one-minute cadence.
+    Restarts do NOT grow channel history (entries are appended only on a Hive
+    channel reassignment, TTxUpdateTabletGroups) — what this workload exercises is
+    the cutter's restart-safety: every OnBootComplete rebuild, re-nomination and
+    in-flight sweep abort happens under generation churn. The positive make-an-
+    entry-and-cut-it check lives in the test driver, which can reach Hive's
+    monitoring to force a reassignment; a client-side workload cannot.
     """
 
     def __init__(self, client, prefix, stop, endpoint, period=30):

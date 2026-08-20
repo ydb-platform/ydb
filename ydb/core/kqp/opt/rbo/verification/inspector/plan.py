@@ -111,6 +111,37 @@ def render_expression(expression: ir.Expr) -> str:
             f"partition_by={_list(partition_by, _quote)}, "
             f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
         )
+    if kind == "window_rank":
+        window_name = _required(expression.window_name, "window_name")
+        execution_order = _required(
+            expression.execution_order,
+            "execution_order",
+        )
+        partition_by = _required(expression.partition_by, "partition_by")
+        order_by = _required(expression.order_by, "order_by")
+        frame = _required(expression.window_frame, "frame")
+        scalar_type = str(_required(expression.result_type, "type"))
+        nullable = _required(expression.nullable, "nullable")
+        if not isinstance(window_name, str) or not window_name:
+            raise InspectionError("window_rank name must be a non-empty string")
+        if type(execution_order) is not int or execution_order < 0:
+            raise InspectionError(
+                "window_rank execution_order must be a non-negative integer"
+            )
+        if partition_by != ():
+            raise InspectionError("window_rank partition must be empty")
+        if not isinstance(order_by, tuple) or len(order_by) != 1:
+            raise InspectionError("window_rank must have exactly one order key")
+        if frame != ir.WINDOW_RANK_FRAME:
+            raise InspectionError("window_rank frame is unsupported")
+        if not isinstance(nullable, bool):
+            raise InspectionError("expression field 'nullable' is not Boolean")
+        return (
+            f"window_rank(name={_quote(window_name)}, "
+            f"execution_order={execution_order}, partition_by=[], "
+            f"order_by={_list(order_by, _order)}, frame={_quote(frame)}, "
+            f"type={_quote(scalar_type)}, nullable={_boolean(nullable)})"
+        )
     if kind in {"and", "or"}:
         return f"{kind}(args={_list(expression.args, render_expression)})"
     if kind == "not":

@@ -176,7 +176,7 @@ class Encoder:
             assert expression.result_type is not None
             return self.null(expression.result_type)
 
-        if expression.kind in {"window_sum", "window_avg"}:
+        if expression.kind in {"window_sum", "window_avg", "window_rank"}:
             try:
                 return relational_values[expression]
             except KeyError as error:
@@ -338,17 +338,14 @@ class Encoder:
                     expression.result_type,
                 )
             else:
-                value = decimal.widen_same_scale(
+                value = decimal.cast_decimal(
                     argument.value,
                     argument.type,
                     expression.result_type,
                 )
-                source_type = decimal.parse_type(argument.type)
-                assert source_type is not None
-                finite_abs_bound = (
-                    argument.decimal_finite_abs_bound
-                    if argument.decimal_finite_abs_bound is not None
-                    else 10**source_type.precision - 1
+                finite_abs_bound = _decimal_cast_finite_abs_bound(
+                    argument,
+                    expression.result_type,
                 )
             return Value(
                 expression.result_type,
@@ -839,6 +836,29 @@ def _integral_decimal_cast_finite_abs_bound(
     max_finite_coefficient = 10**decimal_type.precision - 1
     max_finite_source = max_finite_coefficient // scale
     return min(source_abs_bound, max_finite_source) * scale
+
+
+def _decimal_cast_finite_abs_bound(
+    argument: Value,
+    result_type: str,
+) -> int:
+    """Return the exact finite-result bound for an admitted Decimal cast."""
+
+    source = decimal.parse_type(argument.type)
+    result = decimal.parse_type(result_type)
+    assert source is not None and result is not None
+    source_bound = (
+        argument.decimal_finite_abs_bound
+        if argument.decimal_finite_abs_bound is not None
+        else 10**source.precision - 1
+    )
+    if source.scale == result.scale:
+        assert result.precision >= source.precision
+        return source_bound
+    assert source == decimal.Type(35, 2) and result == decimal.Type(15, 4)
+    # The first recursive cast retains exactly |coefficient| < 10**13;
+    # the second scale-up contributes two decimal places.
+    return min(source_bound, 10**13 - 1) * 100
 
 
 def _wrap_integer(value: smt.Term, scalar_type: str) -> smt.Term:

@@ -6802,6 +6802,494 @@ TSemanticSnapshotExportResult ExportDecimalAbs(
     return ExportSemanticSnapshotV1(root, ctx.RboCtx);
 }
 
+enum class EGlobalRankMutation {
+    None,
+    MissingMetadata,
+    Function,
+    CallName,
+    Options,
+    ResultType,
+    DefinitionName,
+    Partition,
+    OrderType,
+    Direction,
+    NullOrder,
+    Frame,
+    CurrentRow,
+    NoncanonicalName,
+    SingleRank,
+    DuplicateGlobalName,
+    WrongRatioFamily,
+    WrongAggregateFunction,
+    FusedRatioAndRank,
+};
+
+TString GlobalRankName(ui32 ordinal, bool noncanonical = false) {
+    return TStringBuilder()
+        << "_yql_anonymous_window"
+        << (noncanonical ? TString("0") : TString())
+        << ordinal;
+}
+
+TExprNode::TPtr GlobalRankDefinition(
+    TExportTestContext& ctx,
+    TStringBuf name,
+    TStringBuf orderColumn,
+    EGlobalRankMutation mutation)
+{
+    const auto pos = TPositionHandle();
+    const bool wrongOrderType =
+        mutation == EGlobalRankMutation::OrderType;
+    const auto* orderType = DecimalType(
+        ctx,
+        wrongOrderType ? TStringBuf("16") : TStringBuf("15"),
+        "4");
+    const auto* rowType = ctx.ExprCtx.MakeType<TStructExprType>(
+        TVector<const TItemExprType*>{
+            ctx.ExprCtx.MakeType<TItemExprType>(orderColumn, orderType),
+        });
+    auto row = ctx.ExprCtx.NewArgument(pos, "window_row");
+    row->SetTypeAnn(rowType);
+    auto member = TypedCallable(
+        ctx,
+        "Member",
+        {row, ctx.ExprCtx.NewAtom(pos, orderColumn)},
+        orderType);
+    auto rowDescriptor = TypedCallable(
+        ctx,
+        "StructType",
+        {
+            ctx.ExprCtx.NewList(
+                pos,
+                {
+                    ctx.ExprCtx.NewAtom(pos, orderColumn),
+                    DecimalDataTypeDescriptor(
+                        ctx,
+                        wrongOrderType ? TStringBuf("16") : TStringBuf("15"),
+                        "4",
+                        orderType),
+                }),
+        },
+        ctx.ExprCtx.MakeType<TTypeExprType>(rowType));
+    auto sort = TypedCallable(
+        ctx,
+        "YqlSort",
+        {
+            std::move(rowDescriptor),
+            ctx.ExprCtx.NewLambda(
+                pos,
+                ctx.ExprCtx.NewArguments(pos, {row}),
+                std::move(member)),
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutation == EGlobalRankMutation::Direction
+                    ? TStringBuf("desc")
+                    : TStringBuf("asc")),
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutation == EGlobalRankMutation::NullOrder
+                    ? TStringBuf("last")
+                    : TStringBuf("first")),
+        },
+        nullptr);
+    const auto setting = [&](TStringBuf key, TStringBuf value) {
+        return ctx.ExprCtx.NewList(
+            pos,
+            {ctx.ExprCtx.NewAtom(pos, key), ctx.ExprCtx.NewAtom(pos, value)});
+    };
+    auto currentRow = ctx.ExprCtx.NewList(
+        pos,
+        {
+            ctx.ExprCtx.NewAtom(pos, "to_value"),
+            TypedLiteral(
+                ctx,
+                "Int32",
+                mutation == EGlobalRankMutation::CurrentRow ? "1" : "0",
+                ScalarType(ctx, NUdf::EDataSlot::Int32)),
+        });
+    TExprNode::TListType partitions;
+    if (mutation == EGlobalRankMutation::Partition) {
+        partitions.push_back(ctx.ExprCtx.NewAtom(pos, "unexpected"));
+    }
+    return TypedCallable(
+        ctx,
+        "YqlWindow",
+        {
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutation == EGlobalRankMutation::DefinitionName
+                    ? TStringBuf("_yql_anonymous_window5")
+                    : name),
+            ctx.ExprCtx.NewAtom(pos, ""),
+            ctx.ExprCtx.NewList(pos, std::move(partitions)),
+            ctx.ExprCtx.NewList(pos, {std::move(sort)}),
+            ctx.ExprCtx.NewList(
+                pos,
+                {
+                    setting("type", "rows"),
+                    setting("from", "up"),
+                    setting(
+                        "to",
+                        mutation == EGlobalRankMutation::Frame
+                            ? TStringBuf("uf")
+                            : TStringBuf("f")),
+                    std::move(currentRow),
+                }),
+        },
+        nullptr);
+}
+
+TExpression GlobalRankExpression(
+    TExportTestContext& ctx,
+    ui32 ordinal,
+    TStringBuf orderColumn,
+    EGlobalRankMutation mutation)
+{
+    const auto pos = TPositionHandle();
+    const TString canonicalName = GlobalRankName(
+        ordinal,
+        mutation == EGlobalRankMutation::NoncanonicalName);
+    const TString callName = mutation == EGlobalRankMutation::CallName
+        ? TString("_yql_anonymous_window5")
+        : canonicalName;
+    const bool wrongResult =
+        mutation == EGlobalRankMutation::ResultType;
+    const auto resultSlot = wrongResult
+        ? NUdf::EDataSlot::Int64
+        : NUdf::EDataSlot::Uint64;
+    const auto* resultType = ScalarType(ctx, resultSlot);
+    auto row = ctx.ExprCtx.NewArgument(pos, "rank_row");
+    TExprNode::TListType options;
+    if (mutation == EGlobalRankMutation::Options) {
+        options.push_back(ctx.ExprCtx.NewAtom(pos, "ansi"));
+    }
+    auto call = TypedCallable(
+        ctx,
+        "YqlWin",
+        {
+            ctx.ExprCtx.NewAtom(
+                pos,
+                mutation == EGlobalRankMutation::Function
+                    ? TStringBuf("dense_rank")
+                    : TStringBuf("rank")),
+            ctx.ExprCtx.NewAtom(pos, callName),
+            ctx.ExprCtx.NewList(pos, std::move(options)),
+            DataTypeDescriptor(
+                ctx,
+                wrongResult ? TStringBuf("Int64") : TStringBuf("Uint64"),
+                resultType),
+        },
+        resultType);
+    auto lambda = ctx.ExprCtx.NewLambda(
+        pos,
+        ctx.ExprCtx.NewArguments(pos, {row}),
+        std::move(call));
+    return TExpression(
+        std::move(lambda),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps,
+        mutation == EGlobalRankMutation::MissingMetadata
+            ? TExprNode::TPtr{}
+            : GlobalRankDefinition(
+                ctx,
+                canonicalName,
+                orderColumn,
+                mutation));
+}
+
+TExpression Q49RatioExpression(
+    TExportTestContext& ctx,
+    TStringBuf left,
+    TStringBuf right,
+    const TTypeAnnotationNode* sourceType)
+{
+    const auto pos = TPositionHandle();
+    const auto* targetType = DecimalType(ctx, "15", "4");
+    auto row = ctx.ExprCtx.NewArgument(pos, "ratio_row");
+    const auto cast = [&](TStringBuf column) {
+        return TypedCallable(
+            ctx,
+            "SafeCast",
+            {
+                TypedCallable(
+                    ctx,
+                    "Member",
+                    {row, ctx.ExprCtx.NewAtom(pos, column)},
+                    sourceType),
+                DecimalDataTypeDescriptor(
+                    ctx,
+                    "15",
+                    "4",
+                    targetType),
+            },
+            targetType);
+    };
+    return TExpression(
+        ctx.ExprCtx.NewLambda(
+            pos,
+            ctx.ExprCtx.NewArguments(pos, {row}),
+            TypedCallable(
+                ctx,
+                "DecimalDiv",
+                {cast(left), cast(right)},
+                targetType)),
+        &ctx.ExprCtx,
+        &ctx.ExpressionProps);
+}
+
+TIntrusivePtr<TOpMap> MakeGlobalRankBranch(
+    TExportTestContext& ctx,
+    const TKikimrTableDescription& table,
+    ui32 branch,
+    bool split,
+    EGlobalRankMutation mutation)
+{
+    const auto pos = TPositionHandle();
+    const auto* int64Type = ScalarType(ctx, NUdf::EDataSlot::Int64);
+    const auto* decimal7Type = DecimalType(ctx, "7", "2");
+    const auto* decimal35Type = DecimalType(ctx, "35", "2");
+    const auto* decimal15Type = DecimalType(ctx, "15", "4");
+    const auto* uint64Type = ScalarType(ctx, NUdf::EDataSlot::Uint64);
+    const TString alias = TStringBuilder() << "b" << branch;
+    auto read = MakeRead(
+        ctx,
+        table,
+        alias,
+        {"item", "q_num", "q_den", "a_num", "a_den"});
+    SetExactOutputType(ctx, *read, {
+        {alias + ".item", int64Type},
+        {alias + ".q_num", int64Type},
+        {alias + ".q_den", int64Type},
+        {alias + ".a_num", decimal7Type},
+        {alias + ".a_den", decimal7Type},
+    });
+
+    const std::array<TString, 4> sourceColumns = {
+        alias + ".q_num",
+        alias + ".q_den",
+        alias + ".a_num",
+        alias + ".a_den",
+    };
+    const std::array<TString, 4> sumColumns = {
+        "sum_q_num",
+        "sum_q_den",
+        "sum_a_num",
+        "sum_a_den",
+    };
+
+    TIntrusivePtr<TOpAggregate> aggregate;
+    if (!split) {
+        TVector<TOpAggregationTraits> traits;
+        for (size_t index = 0; index < sumColumns.size(); ++index) {
+            traits.emplace_back(
+                TInfoUnit(sourceColumns[index]),
+                mutation == EGlobalRankMutation::WrongAggregateFunction &&
+                        branch == 0 && index == 0
+                    ? TString("max")
+                    : TString("sum"),
+                TInfoUnit(sumColumns[index]));
+        }
+        aggregate = MakeIntrusive<TOpAggregate>(
+            read,
+            std::move(traits),
+            TVector<TInfoUnit>{TInfoUnit(alias + ".item")},
+            EOpPhase::Undefined,
+            false,
+            pos);
+        SetExactOutputType(ctx, *aggregate, {
+            {alias + ".item", int64Type},
+            {sumColumns[0], int64Type},
+            {sumColumns[1], int64Type},
+            {sumColumns[2], decimal35Type},
+            {sumColumns[3], decimal35Type},
+        });
+    } else {
+        const std::array<TString, 4> states = {
+            "state_q_num",
+            "state_q_den",
+            "state_a_num",
+            "state_a_den",
+        };
+        TVector<TOpAggregationTraits> intermediateTraits;
+        for (size_t index = 0; index < states.size(); ++index) {
+            intermediateTraits.emplace_back(
+                TInfoUnit(sourceColumns[index]),
+                "sum",
+                TInfoUnit(states[index]));
+        }
+        auto intermediate = MakeIntrusive<TOpAggregate>(
+            read,
+            std::move(intermediateTraits),
+            TVector<TInfoUnit>{TInfoUnit(alias + ".item")},
+            EOpPhase::Intermediate,
+            false,
+            pos);
+        SetExactOutputType(ctx, *intermediate, {
+            {alias + ".item", int64Type},
+            {states[0], int64Type},
+            {states[1], int64Type},
+            {states[2], decimal35Type},
+            {states[3], decimal35Type},
+        });
+        TVector<TOpAggregationTraits> finalTraits;
+        for (size_t index = 0; index < states.size(); ++index) {
+            finalTraits.emplace_back(
+                TInfoUnit(states[index]),
+                "sum",
+                TInfoUnit(sumColumns[index]));
+        }
+        aggregate = MakeIntrusive<TOpAggregate>(
+            intermediate,
+            std::move(finalTraits),
+            TVector<TInfoUnit>{TInfoUnit(alias + ".item")},
+            EOpPhase::Final,
+            false,
+            pos);
+        SetExactOutputType(ctx, *aggregate, {
+            {alias + ".item", int64Type},
+            {sumColumns[0], int64Type},
+            {sumColumns[1], int64Type},
+            {sumColumns[2], decimal35Type},
+            {sumColumns[3], decimal35Type},
+        });
+    }
+
+    const bool mutateBranch = branch == 0;
+    const TString currencyRight =
+        mutateBranch && mutation == EGlobalRankMutation::WrongRatioFamily
+        ? sumColumns[1]
+        : sumColumns[3];
+    auto ratio = MakeIntrusive<TOpMap>(
+        aggregate,
+        pos,
+        TVector<TMapElement>{
+            TMapElement(
+                TInfoUnit("return_ratio"),
+                Q49RatioExpression(
+                    ctx,
+                    sumColumns[0],
+                    sumColumns[1],
+                    int64Type)),
+            TMapElement(
+                TInfoUnit("currency_ratio"),
+                Q49RatioExpression(
+                    ctx,
+                    sumColumns[2],
+                    currencyRight,
+                    decimal35Type)),
+        });
+    SetExactOutputType(ctx, *ratio, {
+        {alias + ".item", int64Type},
+        {sumColumns[0], int64Type},
+        {sumColumns[1], int64Type},
+        {sumColumns[2], decimal35Type},
+        {sumColumns[3], decimal35Type},
+        {"return_ratio", decimal15Type},
+        {"currency_ratio", decimal15Type},
+    });
+
+    TVector<TMapElement> rankElements;
+    if (mutateBranch && mutation == EGlobalRankMutation::FusedRatioAndRank) {
+        rankElements = ratio->MapElements;
+    }
+    const ui32 firstOrdinal =
+        mutation == EGlobalRankMutation::DuplicateGlobalName && branch == 1
+        ? 0
+        : branch * 2;
+    rankElements.emplace_back(
+        TInfoUnit("return_rank"),
+        GlobalRankExpression(
+            ctx,
+            firstOrdinal,
+            "return_ratio",
+            mutateBranch ? mutation : EGlobalRankMutation::None));
+    if (!(mutateBranch && mutation == EGlobalRankMutation::SingleRank)) {
+        rankElements.emplace_back(
+            TInfoUnit("currency_rank"),
+            GlobalRankExpression(
+                ctx,
+                branch * 2 + 1,
+                "currency_ratio",
+                EGlobalRankMutation::None));
+    }
+    TIntrusivePtr<IOperator> rankInput = ratio;
+    if (mutateBranch && mutation == EGlobalRankMutation::FusedRatioAndRank) {
+        rankInput = aggregate;
+    }
+    auto rank = MakeIntrusive<TOpMap>(
+        rankInput,
+        pos,
+        std::move(rankElements));
+    TVector<std::pair<TString, const TTypeAnnotationNode*>> rankOutput = {
+        {alias + ".item", int64Type},
+        {sumColumns[0], int64Type},
+        {sumColumns[1], int64Type},
+        {sumColumns[2], decimal35Type},
+        {sumColumns[3], decimal35Type},
+        {"return_ratio", decimal15Type},
+        {"currency_ratio", decimal15Type},
+        {"return_rank", uint64Type},
+    };
+    if (!(mutateBranch && mutation == EGlobalRankMutation::SingleRank)) {
+        rankOutput.emplace_back("currency_rank", uint64Type);
+    }
+    SetExactOutputType(ctx, *rank, rankOutput);
+    return rank;
+}
+
+TSemanticSnapshotExportResult ExportGlobalRankPlan(
+    EGlobalRankMutation mutation = EGlobalRankMutation::None,
+    bool split = false)
+{
+    TExportTestContext ctx;
+    const auto& table = AddTable(ctx, "/Root/GlobalRank", {
+        {"item", "Int64", true},
+        {"q_num", "Int64", true},
+        {"q_den", "Int64", true},
+        {"a_num", "Decimal(7,2)", true},
+        {"a_den", "Decimal(7,2)", true},
+    });
+    auto first = MakeGlobalRankBranch(ctx, table, 0, split, mutation);
+    auto second = MakeGlobalRankBranch(ctx, table, 1, split, mutation);
+    auto third = MakeGlobalRankBranch(ctx, table, 2, split, mutation);
+    const auto pos = TPositionHandle();
+    const auto* decimal15Type = DecimalType(ctx, "15", "4");
+    const auto* uint64Type = ScalarType(ctx, NUdf::EDataSlot::Uint64);
+    const TVector<TInfoUnit> columns = {
+        TInfoUnit("return_ratio"),
+        TInfoUnit("currency_ratio"),
+        TInfoUnit("return_rank"),
+        TInfoUnit("currency_rank"),
+    };
+    auto firstUnion = MakeIntrusive<TOpUnionAll>(
+        first,
+        second,
+        pos,
+        columns);
+    SetExactOutputType(ctx, *firstUnion, {
+        {"return_ratio", decimal15Type},
+        {"currency_ratio", decimal15Type},
+        {"return_rank", uint64Type},
+        {"currency_rank", uint64Type},
+    });
+    auto secondUnion = MakeIntrusive<TOpUnionAll>(
+        firstUnion,
+        third,
+        pos,
+        columns);
+    SetExactOutputType(ctx, *secondUnion, {
+        {"return_ratio", decimal15Type},
+        {"currency_ratio", decimal15Type},
+        {"return_rank", uint64Type},
+        {"currency_rank", uint64Type},
+    });
+    TOpRoot root(
+        secondUnion,
+        pos,
+        {"return_ratio", "return_rank", "currency_rank"});
+    return ExportSemanticSnapshotV1(root, ctx.RboCtx);
+}
+
 Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
     Y_UNIT_TEST(OutputIsDeterministicAcrossEquivalentAllocations) {
         UNIT_ASSERT_VALUES_EQUAL(ExportDeterministicPlan(), ExportDeterministicPlan());
@@ -15178,6 +15666,40 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
     }
 
+    Y_UNIT_TEST(ExportsExactQ49DecimalRescaleSafeCast) {
+        TExportTestContext ctx;
+        const auto* sourceType = DecimalType(ctx, "35", "2");
+        const auto* targetType = DecimalType(ctx, "15", "4");
+        const auto expression = ExportTypedMapExpression(
+            ctx,
+            "a",
+            "Decimal(35,2)",
+            false,
+            TypedCallable(
+                ctx,
+                "SafeCast",
+                {
+                    TypedMember(ctx, "a.x", sourceType),
+                    DecimalDataTypeDescriptor(
+                        ctx,
+                        "15",
+                        "4",
+                        targetType),
+                },
+                targetType));
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["kind"].GetStringSafe(),
+            "cast_decimal");
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["source_type"].GetStringSafe(),
+            "Decimal(35,2)");
+        UNIT_ASSERT_VALUES_EQUAL(
+            expression["type"].GetStringSafe(),
+            "Decimal(15,4)");
+        UNIT_ASSERT(!expression["nullable"].GetBooleanSafe());
+    }
+
     Y_UNIT_TEST(IncompleteIntegralSafeCastLiteralsRemainExplicit) {
         struct TCase {
             NUdf::EDataSlot SourceSlot;
@@ -15317,6 +15839,9 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
         const TVector<TDecimalShape> decimalNearMisses = {
             {"13", "2", "12", "2"},
             {"7", "2", "12", "3"},
+            {"35", "2", "16", "4"},
+            {"34", "2", "15", "4"},
+            {"35", "3", "15", "4"},
         };
         for (const auto& test : decimalNearMisses) {
             TExportTestContext ctx;
@@ -19022,6 +19547,149 @@ Y_UNIT_TEST_SUITE(TSemanticSnapshotExporter) {
             UNIT_ASSERT_STRING_CONTAINS(
                 result.UnsupportedReason,
                 "Join filters cannot disambiguate shared input IUs");
+        }
+    }
+
+    Y_UNIT_TEST(ExportsExactQ49GlobalRanksAndDataflow) {
+        for (const bool split : {false, true}) {
+            const auto snapshot = ParseSupported(
+                ExportGlobalRankPlan(EGlobalRankMutation::None, split));
+            size_t rankProjects = 0;
+            size_t rankCount = 0;
+            size_t integralCasts = 0;
+            size_t decimalCasts = 0;
+            THashSet<TString> names;
+            for (const auto& node :
+                 snapshot["plan"]["nodes"].GetArraySafe())
+            {
+                if (node["op"].GetStringSafe() != "project") {
+                    continue;
+                }
+                size_t localRanks = 0;
+                for (const auto& column : node["columns"].GetArraySafe()) {
+                    const auto& expression = column["expression"];
+                    std::function<void(const NJson::TJsonValue&)> visit =
+                        [&](const NJson::TJsonValue& value) {
+                            if (value.IsMap()) {
+                                if (value["kind"].IsString()) {
+                                    const TString kind =
+                                        value["kind"].GetStringSafe();
+                                    if (kind == "window_rank") {
+                                        ++localRanks;
+                                        ++rankCount;
+                                        UNIT_ASSERT_VALUES_EQUAL(
+                                            value.GetMapSafe().size(),
+                                            8);
+                                        UNIT_ASSERT_VALUES_EQUAL(
+                                            value["partition_by"]
+                                                .GetArraySafe().size(),
+                                            0);
+                                        UNIT_ASSERT_VALUES_EQUAL(
+                                            value["order_by"]
+                                                .GetArraySafe().size(),
+                                            1);
+                                        UNIT_ASSERT(
+                                            value["order_by"][0]
+                                                ["ascending"]
+                                                    .GetBooleanSafe());
+                                        UNIT_ASSERT(
+                                            value["order_by"][0]
+                                                ["nulls_first"]
+                                                    .GetBooleanSafe());
+                                        UNIT_ASSERT_VALUES_EQUAL(
+                                            value["frame"].GetStringSafe(),
+                                            "rows_unbounded_preceding_current_row");
+                                        UNIT_ASSERT_VALUES_EQUAL(
+                                            value["type"].GetStringSafe(),
+                                            "Uint64");
+                                        UNIT_ASSERT(
+                                            !value["nullable"]
+                                                .GetBooleanSafe());
+                                        UNIT_ASSERT(names.insert(
+                                            value["window_name"]
+                                                .GetStringSafe()).second);
+                                    } else if (kind == "cast_decimal") {
+                                        const TString source =
+                                            value["source_type"]
+                                                .GetStringSafe();
+                                        integralCasts += source == "Int64";
+                                        decimalCasts +=
+                                            source == "Decimal(35,2)";
+                                    }
+                                }
+                                for (const auto& [_, child] :
+                                     value.GetMapSafe())
+                                {
+                                    visit(child);
+                                }
+                            } else if (value.IsArray()) {
+                                for (const auto& child :
+                                     value.GetArraySafe())
+                                {
+                                    visit(child);
+                                }
+                            }
+                        };
+                    visit(expression);
+                }
+                if (localRanks) {
+                    ++rankProjects;
+                    UNIT_ASSERT_VALUES_EQUAL(localRanks, 2);
+                    THashSet<ui64> executionOrder;
+                    for (const auto& column :
+                         node["columns"].GetArraySafe())
+                    {
+                        const auto& expression = column["expression"];
+                        if (expression["kind"].GetStringSafe() ==
+                            "window_rank")
+                        {
+                            executionOrder.insert(
+                                expression["execution_order"]
+                                    .GetUIntegerSafe());
+                        }
+                    }
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        executionOrder,
+                        THashSet<ui64>({0, 1}));
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(rankProjects, 3);
+            UNIT_ASSERT_VALUES_EQUAL(rankCount, 6);
+            UNIT_ASSERT_VALUES_EQUAL(names.size(), 6);
+            UNIT_ASSERT_VALUES_EQUAL(integralCasts, 6);
+            UNIT_ASSERT_VALUES_EQUAL(decimalCasts, 6);
+        }
+    }
+
+    Y_UNIT_TEST(Q49GlobalRankGrammarAndDataflowFailClosed) {
+        const EGlobalRankMutation mutations[] = {
+            EGlobalRankMutation::MissingMetadata,
+            EGlobalRankMutation::Function,
+            EGlobalRankMutation::CallName,
+            EGlobalRankMutation::Options,
+            EGlobalRankMutation::ResultType,
+            EGlobalRankMutation::DefinitionName,
+            EGlobalRankMutation::Partition,
+            EGlobalRankMutation::OrderType,
+            EGlobalRankMutation::Direction,
+            EGlobalRankMutation::NullOrder,
+            EGlobalRankMutation::Frame,
+            EGlobalRankMutation::CurrentRow,
+            EGlobalRankMutation::NoncanonicalName,
+            EGlobalRankMutation::SingleRank,
+            EGlobalRankMutation::DuplicateGlobalName,
+            EGlobalRankMutation::WrongRatioFamily,
+            EGlobalRankMutation::WrongAggregateFunction,
+            EGlobalRankMutation::FusedRatioAndRank,
+        };
+        for (const auto mutation : mutations) {
+            const auto result = ExportGlobalRankPlan(mutation);
+            UNIT_ASSERT_C(
+                !result.IsSupported(),
+                TStringBuilder()
+                    << "mutation unexpectedly exported: "
+                    << static_cast<ui32>(mutation));
+            UNIT_ASSERT(!result.UnsupportedReason.empty());
         }
     }
 

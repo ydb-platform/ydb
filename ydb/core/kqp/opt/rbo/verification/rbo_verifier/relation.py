@@ -719,13 +719,23 @@ class Evaluator:
             )
             assert len(windows) <= 1
             window = windows[0] if windows else None
+            ranks = tuple(
+                projection.expression
+                for projection in node.columns
+                if projection.expression.kind == "window_rank"
+            )
 
             def project(
                 relation: Relation,
                 bindings: Callable[[int, Row], Mapping[str, Value]],
+                supplied_relational_values: (
+                    tuple[Mapping[Expr, Value], ...] | None
+                ) = None,
             ) -> Relation:
                 relational_values: tuple[Mapping[Expr, Value], ...]
-                if window is None:
+                if supplied_relational_values is not None:
+                    relational_values = supplied_relational_values
+                elif window is None:
                     relational_values = tuple({} for _row in relation.rows)
                 else:
                     _require_relation_row_pairs(
@@ -807,6 +817,47 @@ class Evaluator:
                         for expression in checked_concats
                     ),
                 )
+
+            if ranks:
+                # Rank validation excludes subplans, so each source outcome can
+                # retain its correlated unstable-sort choices directly.
+                outcomes: list[Outcome] = []
+                for outcome_index, source_outcome in enumerate(source.outcomes):
+                    (
+                        ranked,
+                        relational_values,
+                        rank_enabled,
+                        rank_choices,
+                    ) = self._window_rank_values(
+                        node,
+                        source_outcome.relation,
+                        ranks,
+                        outcome_index,
+                    )
+                    outcomes.append(
+                        Outcome(
+                            smt.and_(source_outcome.enabled, rank_enabled),
+                            project(
+                                ranked,
+                                lambda _index, _row: {},
+                                relational_values,
+                            ),
+                            smt.or_(
+                                source_outcome.error,
+                                (
+                                    smt.FALSE
+                                    if not marked_sources and not checked_concats
+                                    else project_error(ranked)
+                                ),
+                            ),
+                            source_outcome.decisions,
+                            _merge_choices(
+                                source_outcome.choices,
+                                rank_choices,
+                            ),
+                        )
+                    )
+                return RelationFamily(tuple(outcomes))
 
             return self._with_consumer_subplans(
                 node.id,
@@ -971,6 +1022,109 @@ class Evaluator:
             return combine_families(sources, union)
 
         raise AssertionError(f"unknown plan node {type(node).__name__}")
+
+    def _window_rank_values(
+        self,
+        node: Project,
+        source: Relation,
+        ranks: tuple[Expr, ...],
+        outcome_index: int,
+    ) -> tuple[
+        Relation,
+        tuple[Mapping[Expr, Value], ...],
+        smt.Term,
+        tuple[BoundedChoice, ...],
+    ]:
+        """Evaluate sequential global Rank definitions on one stage task.
+
+        KQP physical-stage connection inputs are Streams.  Each source window
+        definition therefore lowers its Sort to UnstableSort, including the
+        second definition in a rebuilt CalcOverWindowGroup.  Equal-key orders
+        are consequently fresh between definitions.  CalcOverWindow exports no
+        sorted constraint, so these physical sort orders affect Rank values but
+        do not become an observable sequence contract for downstream operators.
+        """
+
+        ordered_ranks = tuple(
+            sorted(ranks, key=lambda rank: rank.execution_order)
+        )
+        _require_relation_row_pairs(
+            len(source.rows) * len(source.rows) * len(ordered_ranks),
+            "window rank",
+        )
+        relation = source
+        enabled: list[smt.Term] = []
+        choices: tuple[BoundedChoice, ...] = ()
+        relational_values: list[dict[Expr, Value]] = [
+            {} for _row in source.rows
+        ]
+        for rank in ordered_ranks:
+            assert rank.execution_order is not None
+            assert rank.order_by is not None and len(rank.order_by) == 1
+            order = rank.order_by
+            order_item = order[0]
+            _require_order_columns(relation.columns, order, "window rank")
+            ordinals, rank_choices = _fresh_ordinals(
+                self.scalar.script,
+                f"{self.choice_scope}:window_rank:{node.id}:"
+                f"{outcome_index}:{rank.execution_order}:ordinal",
+                relation.rows,
+            )
+            enabled.append(
+                _ordinal_constraints(relation.rows, ordinals, order)
+            )
+            choices = _merge_choices(choices, rank_choices)
+            for candidate_index, candidate in enumerate(relation.rows):
+                candidate_key = candidate.values[order_item.column]
+                candidate_nan = smt.eq(
+                    candidate_key.value,
+                    smt.int_value(decimal.NAN),
+                )
+                preceding = tuple(
+                    smt.ite(
+                        smt.and_(
+                            other.present,
+                            smt.or_(
+                                _ordered_value_less(
+                                    other.values[order_item.column],
+                                    candidate_key,
+                                    order_item,
+                                ),
+                                smt.and_(
+                                    candidate_nan,
+                                    smt.eq(
+                                        other.values[order_item.column].value,
+                                        smt.int_value(decimal.NAN),
+                                    ),
+                                    smt.lt(
+                                        ordinals[other_index],
+                                        ordinals[candidate_index],
+                                    ),
+                                ),
+                            ),
+                        ),
+                        smt.ONE,
+                        smt.ZERO,
+                    )
+                    for other_index, other in enumerate(relation.rows)
+                )
+                relational_values[candidate_index][rank] = Value(
+                    "Uint64",
+                    smt.FALSE,
+                    smt.add(smt.ONE, *preceding),
+                )
+        return (
+            replace(
+                source,
+                sequence=False,
+                order=None,
+                ordinals=None,
+                present_prefix=False,
+            ),
+            tuple(relational_values),
+            smt.and_(*enabled),
+            choices,
+        )
 
     def _whole_partition_decimal_window_value(
         self,

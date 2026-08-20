@@ -267,6 +267,34 @@ def widen_same_scale(
     return value
 
 
+def cast_decimal(
+    value: smt.Term,
+    source_type: str,
+    result_type: str,
+) -> smt.Term:
+    """Exactly evaluate the two audited Decimal-to-Decimal cast families.
+
+    Existing same-scale casts are non-decreasing-precision identity casts.
+    TPC-DS q49 additionally needs exactly Decimal(35,2) to Decimal(15,4):
+    YDB first narrows to Decimal(13,2), saturating coefficients whose absolute
+    value is at least 10**13, and then multiplies retained finite values by 100.
+    Specials remain their canonical in-band codes throughout.
+    """
+
+    source = parse_type(source_type)
+    result = parse_type(result_type)
+    if source is None or result is None:
+        raise ValueError("Decimal cast requires Decimal source and result types")
+    if source.scale == result.scale and result.precision >= source.precision:
+        return value
+    if source == Type(35, 2) and result == Type(15, 4):
+        return _cast_decimal(value, source, result)
+    raise ValueError(
+        "Decimal cast requires same-scale widening or the exact "
+        "Decimal(35,2) to Decimal(15,4) rank-key shape"
+    )
+
+
 def narrow_same_scale(
     value: smt.Term,
     source_type: str,

@@ -59,6 +59,11 @@ HASH_FUNCTIONS = frozenset({"HashV1", "HashV2"})
 OPERATOR_PHASES = frozenset({"undefined", "intermediate", "final"})
 INTEGRAL_AVG_RANK_COMPARISON = "integral_avg_rank_v1"
 WHOLE_PARTITION_DECIMAL_SUM_TYPE = "Decimal(35,2)"
+WINDOW_RANK_ORDER_TYPE = "Decimal(15,4)"
+WINDOW_RANK_RESULT_TYPE = "Uint64"
+WINDOW_RANK_FRAME = "rows_unbounded_preceding_current_row"
+MAX_WINDOW_RANKS_PER_PROJECT = 2
+MAX_WINDOW_RANKS_PER_SNAPSHOT = 6
 
 
 class SnapshotError(ValueError):
@@ -116,6 +121,13 @@ class Expr:
     # ordered tuple.  window_sum deliberately retains its one-string wire
     # spelling; window_avg uses an explicit 1..4 element JSON array.
     partition_by: tuple[str, ...] | None = None
+    # Ordered Rank is deliberately separate from the aggregate-window subset.
+    # The source name and local definition order prevent two transported calls
+    # from being mistaken for independent copies of one definition.
+    window_name: str | None = None
+    execution_order: int | None = None
+    order_by: tuple[SortOrder, ...] | None = None
+    window_frame: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -678,6 +690,65 @@ def _parse_expr(
             nullable=nullable,
             window_input=_string(obj["input"], f"{path}.input"),
             partition_by=partition_by,
+        )
+
+    if kind == "window_rank":
+        _keys(
+            obj,
+            {
+                "kind",
+                "window_name",
+                "execution_order",
+                "partition_by",
+                "order_by",
+                "frame",
+                "type",
+                "nullable",
+            },
+            path,
+        )
+        window_name = _string(obj["window_name"], f"{path}.window_name")
+        if not window_name:
+            _fail(f"{path}.window_name", "must not be empty")
+        raw_partition = _array(obj["partition_by"], f"{path}.partition_by")
+        if raw_partition:
+            _fail(
+                f"{path}.partition_by",
+                "global window_rank requires an empty partition",
+            )
+        order_by = _parse_sort_order(obj["order_by"], f"{path}.order_by")
+        if (
+            len(order_by) != 1
+            or not order_by[0].ascending
+            or not order_by[0].nulls_first
+            or order_by[0].comparison is not None
+        ):
+            _fail(
+                f"{path}.order_by",
+                "window_rank requires one ascending nulls-first direct order key",
+            )
+        frame = _string(obj["frame"], f"{path}.frame")
+        if frame != WINDOW_RANK_FRAME:
+            _fail(
+                f"{path}.frame",
+                f"window_rank frame must be {WINDOW_RANK_FRAME!r}",
+            )
+        result_type = _scalar_type(obj["type"], f"{path}.type")
+        nullable = _bool(obj["nullable"], f"{path}.nullable")
+        if result_type != WINDOW_RANK_RESULT_TYPE or nullable:
+            _fail(path, "window_rank result must be non-null Uint64")
+        return Expr(
+            kind=kind,
+            result_type=result_type,
+            nullable=nullable,
+            partition_by=(),
+            window_name=window_name,
+            execution_order=_index(
+                obj["execution_order"],
+                f"{path}.execution_order",
+            ),
+            order_by=order_by,
+            window_frame=frame,
         )
 
     if kind in {"and", "or"}:
@@ -1681,6 +1752,39 @@ def _infer_expr(
                 _fail(path, f"{expr.kind} partition key must be {expected}")
         return ValueType(WHOLE_PARTITION_DECIMAL_SUM_TYPE, True)
 
+    if expr.kind == "window_rank":
+        if (
+            expr.result_type != WINDOW_RANK_RESULT_TYPE
+            or expr.nullable is not False
+            or expr.partition_by != ()
+            or expr.window_name is None
+            or not expr.window_name
+            or expr.execution_order is None
+            or expr.order_by is None
+            or len(expr.order_by) != 1
+            or expr.window_frame != WINDOW_RANK_FRAME
+        ):
+            _fail(path, "window_rank must carry the audited global Rank shape")
+        order = expr.order_by[0]
+        if (
+            not order.ascending
+            or not order.nulls_first
+            or order.comparison is not None
+        ):
+            _fail(
+                path,
+                "window_rank requires one ascending nulls-first direct order key",
+            )
+        key = columns.get(order.column)
+        if key is None:
+            _fail(path, f"window rank order column {order.column!r} is not available")
+        if key.value_type != ValueType(WINDOW_RANK_ORDER_TYPE, False):
+            _fail(
+                path,
+                f"window_rank order key must be non-null {WINDOW_RANK_ORDER_TYPE}",
+            )
+        return ValueType(WINDOW_RANK_RESULT_TYPE, False)
+
     if expr.kind == "checked_concat":
         if expr.result_type != "String" or expr.nullable:
             _fail(path, "checked_concat result must be non-null String")
@@ -1886,7 +1990,15 @@ def _infer_expr(
         elif source is None:
             _fail(path, "Decimal cast source must be integral or Decimal")
         elif source.scale != result.scale:
-            _fail(path, "Decimal widening must preserve scale")
+            if not (
+                source == decimal.Type(35, 2)
+                and result == decimal.Type(15, 4)
+            ):
+                _fail(
+                    path,
+                    "Decimal widening must preserve scale except for the exact "
+                    "Decimal(35,2) to Decimal(15,4) rank-key cast",
+                )
         elif source.precision > result.precision:
             _fail(path, "Decimal widening must not decrease precision")
         if expr.nullable != argument.nullable:
@@ -2907,6 +3019,147 @@ def _validate_whole_partition_decimal_window_dataflow(
     )
 
 
+def _validate_window_rank_dataflow(
+    snapshot: Snapshot,
+    schemas: Mapping[str, Mapping[str, Column]],
+) -> None:
+    """Admit only q49's direct, independently sorted global Rank leaves."""
+
+    ranks_by_project: dict[str, list[Expr]] = {}
+    rank_count = 0
+    whole_window_count = 0
+    for node in snapshot.plan.nodes:
+        for expression in _node_expressions(node):
+            whole_window_count += sum(
+                _expression_kind_count(expression, kind)
+                for kind in ("window_sum", "window_avg")
+            )
+        if isinstance(node, Project):
+            for index, projection in enumerate(node.columns):
+                count = _expression_kind_count(
+                    projection.expression,
+                    "window_rank",
+                )
+                rank_count += count
+                if not count:
+                    continue
+                if count != 1 or projection.expression.kind != "window_rank":
+                    _fail(
+                        f"node {node.id!r}.columns[{index}].expression",
+                        "window_rank must be one complete top-level Project expression",
+                    )
+                ranks_by_project.setdefault(node.id, []).append(
+                    projection.expression
+                )
+            continue
+        if any(
+            _expression_kind_count(expression, "window_rank")
+            for expression in _node_expressions(node)
+        ):
+            _fail(
+                f"node {node.id!r}",
+                "window_rank may appear only as a top-level Project expression",
+            )
+
+    for index, subplan in enumerate(snapshot.plan.subplans):
+        if isinstance(subplan, ExistsSubplan) and subplan.predicate is not None:
+            predicate_ranks = _expression_kind_count(
+                subplan.predicate,
+                "window_rank",
+            )
+            rank_count += predicate_ranks
+            whole_window_count += sum(
+                _expression_kind_count(subplan.predicate, kind)
+                for kind in ("window_sum", "window_avg")
+            )
+            if predicate_ranks:
+                _fail(
+                    f"snapshot.plan.subplans[{index}].predicate",
+                    "window_rank may appear only as a top-level Project expression",
+                )
+
+    if not rank_count:
+        return
+    if snapshot.plan.subplans:
+        _fail("snapshot.plan.subplans", "window_rank does not admit subplans")
+    if whole_window_count:
+        _fail(
+            "snapshot.plan",
+            "window_rank may not be mixed with aggregate-window leaves",
+        )
+    if rank_count > MAX_WINDOW_RANKS_PER_SNAPSHOT:
+        _fail(
+            "snapshot.plan",
+            "window_rank count exceeds the "
+            f"{MAX_WINDOW_RANKS_PER_SNAPSHOT}-leaf snapshot audit bound",
+        )
+
+    nodes = snapshot.plan.node_map()
+    main_nodes = _plan_descendants(nodes, snapshot.plan.root)
+    consumers: dict[str, list[PlanNode]] = {
+        node.id: [] for node in snapshot.plan.nodes
+    }
+    for consumer in snapshot.plan.nodes:
+        for producer in plan_node_inputs(consumer):
+            consumers[producer].append(consumer)
+    names: list[str] = []
+    for project_id, ranks in ranks_by_project.items():
+        if project_id not in main_nodes:
+            _fail(
+                f"node {project_id!r}",
+                "window_rank must belong to the main result plan",
+            )
+        if len(consumers[project_id]) > 1:
+            _fail(
+                f"node {project_id!r}",
+                "a window_rank Project must not fan out",
+            )
+        if len(ranks) > MAX_WINDOW_RANKS_PER_PROJECT:
+            _fail(
+                f"node {project_id!r}.columns",
+                "window_rank count exceeds the "
+                f"{MAX_WINDOW_RANKS_PER_PROJECT}-leaf Project audit bound",
+            )
+        orders = tuple(rank.execution_order for rank in ranks)
+        if sorted(orders) != list(range(len(ranks))):
+            _fail(
+                f"node {project_id!r}.columns",
+                "window_rank execution_order must be the complete distinct "
+                f"range 0..{len(ranks) - 1}",
+            )
+        input_schema = schemas[nodes[project_id].input]
+        for rank in ranks:
+            assert rank.window_name is not None
+            assert rank.order_by is not None and len(rank.order_by) == 1
+            names.append(rank.window_name)
+            key = input_schema.get(rank.order_by[0].column)
+            assert key is not None
+            assert key.value_type == ValueType(WINDOW_RANK_ORDER_TYPE, False)
+
+        if snapshot.stage_graph is not None:
+            stage_outputs = tuple(
+                (stage.id, output.index)
+                for stage in snapshot.stage_graph.stages
+                for output in stage.outputs
+                if output.node == project_id
+            )
+            outgoing = tuple(
+                edge
+                for stage_id, output_index in stage_outputs
+                for edge in snapshot.stage_graph.edges
+                if (
+                    edge.producer == stage_id
+                    and edge.producer_output == output_index
+                )
+            )
+            if len(outgoing) > 1:
+                _fail(
+                    f"node {project_id!r}",
+                    "a staged window_rank Project output must not fan out",
+                )
+    _unique(names, "snapshot.plan window_rank names")
+
+
 def _validate_void_dataflow(
     snapshot: Snapshot,
     schemas: Mapping[str, Mapping[str, Column]],
@@ -3335,6 +3588,10 @@ def expression_columns(expression: Expr) -> frozenset[str]:
     )
     if expression.kind in {"window_sum", "window_avg"}:
         columns |= frozenset(expression.partition_by or ())
+    if expression.kind == "window_rank":
+        columns |= frozenset(
+            item.column for item in expression.order_by or ()
+        )
     for argument in expression.args:
         columns |= expression_columns(argument)
     return columns
@@ -4613,6 +4870,7 @@ def validate_snapshot(snapshot: Snapshot) -> dict[str, dict[str, Column]]:
     _validate_error_projection_dataflow(snapshot)
     checked_concat_corridor(snapshot)
     _validate_whole_partition_decimal_window_dataflow(snapshot, schemas)
+    _validate_window_rank_dataflow(snapshot, schemas)
     _validate_void_dataflow(snapshot, schemas)
     _validate_stage_graph(snapshot, schemas, average_state_carriers)
     return schemas

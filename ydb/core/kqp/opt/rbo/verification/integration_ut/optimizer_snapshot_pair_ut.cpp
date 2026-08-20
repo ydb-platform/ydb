@@ -3400,6 +3400,167 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_VALUES_EQUAL(verdict["task_bound"].GetIntegerSafe(), 2);
     }
 
+    Y_UNIT_TEST(RealHostCapturesExactTpcdsGlobalRanks) {
+        NYql::IModuleResolver::TPtr moduleResolver;
+        UNIT_ASSERT(
+            NYql::GetYqlDefaultModuleResolverWithContext(moduleResolver));
+
+        auto kikimr = MakeTpcdsRunner();
+        CreateTpcdsColumnTables(kikimr);
+        auto sink = std::make_shared<TRecordingSemanticSnapshotSink>();
+        auto host = MakeHost(
+            kikimr.GetTestServer(),
+            std::move(moduleResolver),
+            sink);
+        IKqpHost::TPrepareSettings settings;
+        settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
+        const TString query = TpcdsQuery(49);
+        const auto prepared = kikimr.GetTestServer().GetRuntime()->RunCall([
+            host,
+            query,
+            settings
+        ] {
+            return host->SyncPrepareDataQuery(query, settings);
+        });
+        UNIT_ASSERT(!prepared.Success());
+        UNIT_ASSERT(!prepared.Issues().ToString().empty());
+
+        const auto results = sink->Extract();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            results.size(),
+            2,
+            prepared.Issues().ToString());
+        UNIT_ASSERT(
+            results[0].Boundary ==
+            ERBOSemanticSnapshotBoundaryV1::Initial);
+        UNIT_ASSERT(
+            results[1].Boundary ==
+            ERBOSemanticSnapshotBoundaryV1::Final);
+        const auto initial = ParseSnapshot(results[0]);
+        const auto final = ParseSnapshot(results[1]);
+
+        const auto assertRanks = [](
+            const NJson::TJsonValue& snapshot)
+        {
+            THashSet<TString> names;
+            TVector<TString> rankProjects;
+            size_t rankCount = 0;
+            for (const auto* project : PlanNodes(snapshot, "project")) {
+                size_t localRanks = 0;
+                THashSet<ui64> executionOrder;
+                for (const auto& column :
+                     (*project)["columns"].GetArraySafe())
+                {
+                    const auto& expression = column["expression"];
+                    if (expression["kind"].GetStringSafe() !=
+                        "window_rank")
+                    {
+                        continue;
+                    }
+                    ++localRanks;
+                    ++rankCount;
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression.GetMapSafe().size(),
+                        8);
+                    UNIT_ASSERT(names.insert(
+                        expression["window_name"]
+                            .GetStringSafe()).second);
+                    executionOrder.insert(
+                        expression["execution_order"]
+                            .GetUIntegerSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression["partition_by"]
+                            .GetArraySafe().size(),
+                        0);
+                    const auto& order =
+                        expression["order_by"].GetArraySafe();
+                    UNIT_ASSERT_VALUES_EQUAL(order.size(), 1);
+                    UNIT_ASSERT(order[0]["ascending"].GetBooleanSafe());
+                    UNIT_ASSERT(order[0]["nulls_first"].GetBooleanSafe());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression["frame"].GetStringSafe(),
+                        "rows_unbounded_preceding_current_row");
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expression["type"].GetStringSafe(),
+                        "Uint64");
+                    UNIT_ASSERT(
+                        !expression["nullable"].GetBooleanSafe());
+                }
+                if (localRanks) {
+                    UNIT_ASSERT_VALUES_EQUAL(localRanks, 2);
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        executionOrder,
+                        THashSet<ui64>({0, 1}));
+                    rankProjects.push_back(
+                        (*project)["id"].GetStringSafe());
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL(rankCount, 6);
+            UNIT_ASSERT_VALUES_EQUAL(rankProjects.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(names.size(), 6);
+            for (ui32 ordinal = 0; ordinal < 6; ++ordinal) {
+                UNIT_ASSERT(names.contains(TStringBuilder()
+                    << "_yql_anonymous_window" << ordinal));
+            }
+
+            TVector<const NJson::TJsonValue*> casts;
+            CollectExpressions(snapshot, "cast_decimal", casts);
+            size_t integralCasts = 0;
+            size_t decimalCasts = 0;
+            for (const auto* cast : casts) {
+                if ((*cast)["type"].GetStringSafe() !=
+                    "Decimal(15,4)")
+                {
+                    continue;
+                }
+                const TString source =
+                    (*cast)["source_type"].GetStringSafe();
+                UNIT_ASSERT_C(
+                    source == "Int64" || source == "Decimal(35,2)",
+                    source);
+                integralCasts += source == "Int64";
+                decimalCasts += source == "Decimal(35,2)";
+            }
+            UNIT_ASSERT_VALUES_EQUAL(integralCasts, 6);
+            UNIT_ASSERT_VALUES_EQUAL(decimalCasts, 6);
+            return rankProjects;
+        };
+
+        const auto initialRankProjects = assertRanks(initial);
+        Y_UNUSED(initialRankProjects);
+        UNIT_ASSERT(initial["stage_graph"].IsNull());
+        const auto finalRankProjects = assertRanks(final);
+        UNIT_ASSERT(!final["stage_graph"].IsNull());
+        for (const auto& projectId : finalRankProjects) {
+            TString stageId;
+            for (const auto& stage :
+                 final["stage_graph"]["stages"].GetArraySafe())
+            {
+                for (const auto& node : stage["nodes"].GetArraySafe()) {
+                    if (node.GetStringSafe() == projectId) {
+                        UNIT_ASSERT(stageId.empty());
+                        stageId = stage["id"].GetStringSafe();
+                    }
+                }
+            }
+            UNIT_ASSERT(!stageId.empty());
+            size_t inputs = 0;
+            for (const auto& edge :
+                 final["stage_graph"]["edges"].GetArraySafe())
+            {
+                if (edge["consumer"].GetStringSafe() != stageId) {
+                    continue;
+                }
+                ++inputs;
+                UNIT_ASSERT_VALUES_EQUAL(
+                    edge["kind"].GetStringSafe(),
+                    "union_all");
+                UNIT_ASSERT(!edge["parallel"].GetBooleanSafe());
+            }
+            UNIT_ASSERT_VALUES_EQUAL(inputs, 1);
+        }
+    }
+
     Y_UNIT_TEST(RealHostRejectsUnsafeTpcdsQuery51WindowMetadata) {
         NYql::IModuleResolver::TPtr moduleResolver;
         UNIT_ASSERT(NYql::GetYqlDefaultModuleResolverWithContext(moduleResolver));
@@ -3427,7 +3588,7 @@ Y_UNIT_TEST_SUITE(TRBOSemanticSnapshotIntegration) {
         UNIT_ASSERT_C(!issues.Contains("Member not found: x.d_date"), issues);
 
         const auto results = sink->Extract();
-        UNIT_ASSERT_VALUES_EQUAL(results.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(results.size(), 2, issues);
         UNIT_ASSERT(results[0].Boundary == ERBOSemanticSnapshotBoundaryV1::Initial);
         UNIT_ASSERT(results[1].Boundary == ERBOSemanticSnapshotBoundaryV1::Final);
         for (const auto& result : results) {

@@ -180,6 +180,11 @@ Y_UNIT_TEST_SUITE(KafkaAuthzRecheck) {
             UNIT_ASSERT_VALUES_EQUAL(describe->Results.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(describe->Results[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
         }
+        {
+            auto alter = client.AlterConfigs({TTopicConfig(topicName, 1)});
+            UNIT_ASSERT_VALUES_EQUAL(alter->Responses.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(alter->Responses[0].ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::TOPIC_AUTHORIZATION_FAILED));
+        }
 
         auto apiVersions = client.ApiVersions();
         UNIT_ASSERT_VALUES_EQUAL(apiVersions->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR));

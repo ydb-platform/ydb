@@ -846,6 +846,14 @@
             ]
         },
         {
+            "Name": "TKqpWasmResidentString",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpWasmResidentString"},
+            "Children": [
+                {"Index": 0, "Name": "Value", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TFulltextAnalyze",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "FulltextAnalyze"},

@@ -83,6 +83,13 @@ public:
         return Handle_ != nullptr;
     }
 
+    //! What the resident string path actually did in this query: how many column
+    //! values went into linear memory, how many UDF args reused those bytes, and
+    //! how many still had to be copied per call.
+    TPreferWasmCounters::TSnapshot GetPreferWasmSnapshot() const {
+        return Handle_ ? Handle_->PreferWasm.GetSnapshot() : TPreferWasmCounters::TSnapshot{};
+    }
+
     TCurrentQueryCompartmentGuard MakeTlsGuard() const {
         return TCurrentQueryCompartmentGuard(Handle_.get());
     }

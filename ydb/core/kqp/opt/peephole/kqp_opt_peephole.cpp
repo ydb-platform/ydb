@@ -93,7 +93,8 @@ TStatus ReplaceNonDetFunctionsWithParams(TExprNode::TPtr& input, TExprContext& c
 
 class TKqpPeepholeTransformer : public TOptimizeTransformerBase {
 public:
-    TKqpPeepholeTransformer(TTypeAnnotationContext& typesCtx, TSet<TString> disabledOpts)
+    TKqpPeepholeTransformer(TTypeAnnotationContext& typesCtx, TSet<TString> disabledOpts,
+        bool enableWasmResidentConstArgs)
         : TOptimizeTransformerBase(&typesCtx, NYql::NLog::EComponent::ProviderKqp, disabledOpts)
     {
 #define HNDL(name) "KqpPeephole-"#name, Hndl(&TKqpPeepholeTransformer::name)
@@ -108,6 +109,9 @@ public:
         AddHandler(0, &TDqPhyLength::Match, HNDL(RewriteLength));
         AddHandler(0, &TKqpWriteConstraint::Match, HNDL(RewriteKqpWriteConstraint));
         AddHandler(0, &TCoWideMap::Match, HNDL(EliminateWideMapForLargeOlapTable));
+        if (enableWasmResidentConstArgs) {
+            AddHandler(0, &TCoApply::Match, HNDL(RewriteWasmResidentConstArgs));
+        }
 #undef HNDL
     }
 
@@ -177,6 +181,12 @@ protected:
         DumpAppliedRule("RewriteKqpWriteConstraint", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
+
+    TMaybeNode<TExprBase> RewriteWasmResidentConstArgs(TExprBase node, TExprContext& ctx) {
+        TExprBase output = KqpRewriteWasmResidentConstArgs(node, ctx);
+        DumpAppliedRule("RewriteWasmResidentConstArgs", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
 };
 
 struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
@@ -195,7 +205,8 @@ struct TKqpPeepholePipelineConfigurator : IPipelineConfigurator {
     }
 
     void AfterOptimize(TTransformationPipeline* pipeline) const override {
-        pipeline->Add(new TKqpPeepholeTransformer(*pipeline->GetTypeAnnotationContext(), DisabledOpts), "KqpPeephole");
+        pipeline->Add(new TKqpPeepholeTransformer(*pipeline->GetTypeAnnotationContext(), DisabledOpts,
+            Config->GetEnableWasmUdfResidentConstArgs()), "KqpPeephole");
     }
 
 private:

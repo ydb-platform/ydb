@@ -72,6 +72,7 @@ TUnboxedValuePod TWasmStringValue::MakePreferWasm(TStringRef data)
     }
 
     TPreferWasmStats::Instance().OnMaterializedInWasm();
+    handle->PreferWasm.OnMaterializedInWasm();
     return Make(data, handle->Compartment.get(), handle->Generation);
 }
 
@@ -129,7 +130,8 @@ void TWasmStringValue::FillAbiStringArg(
     uintptr_t residentOffset = 0;
     ui32 residentLength = 0;
     ui64 generation = 0;
-    if (auto* handle = GetCurrentQueryCompartment()) {
+    auto* handle = GetCurrentQueryCompartment();
+    if (handle) {
         generation = handle->Generation;
     }
 
@@ -137,6 +139,9 @@ void TWasmStringValue::FillAbiStringArg(
         value.Length = residentLength;
         value.Data.String = std::bit_cast<char*>(residentOffset);
         TPreferWasmStats::Instance().OnResidentReused();
+        if (handle) {
+            handle->PreferWasm.OnResidentReused();
+        }
         return;
     }
 
@@ -145,6 +150,9 @@ void TWasmStringValue::FillAbiStringArg(
     value.Length = static_cast<ui32>(string.size());
     value.Data.String = std::bit_cast<char*>(stringGuard.GetCopiedOffset());
     TPreferWasmStats::Instance().OnCopiedIntoCompartment();
+    if (handle) {
+        handle->PreferWasm.OnCopiedIntoCompartment();
+    }
 }
 
 } // namespace NKikimr::NUdfStore::NWasm

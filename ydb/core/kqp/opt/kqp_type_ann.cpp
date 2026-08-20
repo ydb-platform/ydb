@@ -2028,6 +2028,38 @@ TStatus AnnotateKqpEnsure(const TExprNode::TPtr& node, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
+TStatus AnnotateKqpWasmResidentString(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureComputable(node->Head(), ctx)) {
+        return TStatus::Error;
+    }
+
+    const TDataExprType* dataType;
+    bool isOptional;
+    if (!EnsureDataOrOptionalOfData(node->Head(), isOptional, dataType, ctx)) {
+        return TStatus::Error;
+    }
+
+    switch (dataType->GetSlot()) {
+        case EDataSlot::String:
+        case EDataSlot::Utf8:
+        case EDataSlot::Yson:
+        case EDataSlot::Json:
+        case EDataSlot::JsonDocument:
+            break;
+        default:
+            ctx.AddError(TIssue(ctx.GetPosition(node->Head().Pos()), TStringBuilder()
+                << "KqpWasmResidentString expects a string-like argument, but got: " << *node->Head().GetTypeAnn()));
+            return TStatus::Error;
+    }
+
+    node->SetTypeAnn(node->Head().GetTypeAnn());
+    return TStatus::Ok;
+}
+
 TStatus AnnotateKqpLockAndCheck(
         const TExprNode::TPtr& node,
         TExprContext& ctx,
@@ -3314,6 +3346,7 @@ public:
         AddHandler({TKqlSequencer::CallableName()}, HndlInt(&AnnotateSequencer));
         AddHandler({TKqpProgram::CallableName()}, Hndl(&AnnotateKqpProgram));
         AddHandler({TKqpEnsure::CallableName()}, Hndl(&AnnotateKqpEnsure));
+        AddHandler({TKqpWasmResidentString::CallableName()}, Hndl(&AnnotateKqpWasmResidentString));
         AddHandler({TKqpLockAndCheck::CallableName()}, HndlInt(&AnnotateKqpLockAndCheck));
         AddHandler({TFulltextAnalyze::CallableName()}, Hndl(&AnnotateFulltextAnalyze));
         AddHandler({TKqpStreamEnumerate::CallableName()}, Hndl(&AnnotateKqpStreamEnumerate));

@@ -197,6 +197,112 @@ Y_UNIT_TEST(RowSourceExpandMapThenWideMap) {
     UNIT_ASSERT_VALUES_EQUAL(columns[0], "blob");
 }
 
+//! The shape KQP builds for SELECT SUM(Udf(blob)) FROM t: no ExpandMap of the
+//! row, the UDF sits inside the Condense1 handlers instead.
+Y_UNIT_TEST(RowSourceApplyInsideCondense1) {
+    TExprContext ctx;
+    const auto pos = ctx.AppendPosition({});
+
+    auto input = ctx.NewArgument(pos, "input");
+    auto initItem = ctx.NewArgument(pos, "initItem");
+    auto switchItem = ctx.NewArgument(pos, "switchItem");
+    auto switchState = ctx.NewArgument(pos, "switchState");
+    auto updateItem = ctx.NewArgument(pos, "updateItem");
+    auto updateState = ctx.NewArgument(pos, "updateState");
+
+    auto identity = ctx.NewArgument(pos, "identity");
+    auto condense = ctx.NewCallable(pos, "Condense1", {
+        ctx.NewCallable(pos, "ToFlow", {input}),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {initItem}),
+            MakeApplyUdf(ctx, pos, MakeMember(ctx, pos, initItem, "blob"))),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {switchItem, switchState}),
+            ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "false")})),
+        ctx.NewLambda(pos, ctx.NewArguments(pos, {updateItem, updateState}),
+            ctx.NewCallable(pos, "AggrAdd", {
+                MakeApplyUdf(ctx, pos, MakeMember(ctx, pos, updateItem, "blob")),
+                updateState,
+            })),
+    });
+    auto body = ctx.NewCallable(pos, "FromFlow", {
+        ctx.NewCallable(pos, "ExpandMap", {
+            condense,
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {identity}), TExprNode::TPtr(identity)),
+        }),
+    });
+    auto program = ctx.NewLambda(pos, ctx.NewArguments(pos, {input}), std::move(body));
+
+    const auto columns = Collect(ctx, pos, {MakeRowsSource(ctx, pos, SourceColumns)}, program);
+    UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(columns[0], "blob");
+}
+
+//! GROUP BY: the item is the second argument of the init and update handlers,
+//! the first one being the key.
+Y_UNIT_TEST(RowSourceApplyInsideCombineCore) {
+    TExprContext ctx;
+    const auto pos = ctx.AppendPosition({});
+
+    auto input = ctx.NewArgument(pos, "input");
+    auto keyItem = ctx.NewArgument(pos, "keyItem");
+    auto initKey = ctx.NewArgument(pos, "initKey");
+    auto initItem = ctx.NewArgument(pos, "initItem");
+    auto updateKey = ctx.NewArgument(pos, "updateKey");
+    auto updateItem = ctx.NewArgument(pos, "updateItem");
+    auto updateState = ctx.NewArgument(pos, "updateState");
+    auto finishKey = ctx.NewArgument(pos, "finishKey");
+    auto finishState = ctx.NewArgument(pos, "finishState");
+
+    auto body = ctx.NewCallable(pos, "FromFlow", {
+        ctx.NewCallable(pos, "CombineCore", {
+            ctx.NewCallable(pos, "ToFlow", {input}),
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {keyItem}),
+                MakeMember(ctx, pos, keyItem, "id")),
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {initKey, initItem}),
+                MakeApplyUdf(ctx, pos, MakeMember(ctx, pos, initItem, "blob"))),
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {updateKey, updateItem, updateState}),
+                ctx.NewCallable(pos, "AggrAdd", {
+                    MakeApplyUdf(ctx, pos, MakeMember(ctx, pos, updateItem, "blob")),
+                    updateState,
+                })),
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {finishKey, finishState}), TExprNode::TPtr(finishState)),
+            ctx.NewAtom(pos, "0"),
+        }),
+    });
+    auto program = ctx.NewLambda(pos, ctx.NewArguments(pos, {input}), std::move(body));
+
+    const auto columns = Collect(ctx, pos, {MakeRowsSource(ctx, pos, SourceColumns)}, program);
+    UNIT_ASSERT_VALUES_EQUAL(columns.size(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(columns[0], "blob");
+}
+
+//! The condense state is a value of its own: whatever the handler put there is
+//! no longer the buffer the read produced, so its members stay unmarked.
+Y_UNIT_TEST(Condense1StateIsNotARow) {
+    TExprContext ctx;
+    const auto pos = ctx.AppendPosition({});
+
+    auto input = ctx.NewArgument(pos, "input");
+    auto initItem = ctx.NewArgument(pos, "initItem");
+    auto switchItem = ctx.NewArgument(pos, "switchItem");
+    auto switchState = ctx.NewArgument(pos, "switchState");
+    auto updateItem = ctx.NewArgument(pos, "updateItem");
+    auto updateState = ctx.NewArgument(pos, "updateState");
+
+    auto body = ctx.NewCallable(pos, "FromFlow", {
+        ctx.NewCallable(pos, "Condense1", {
+            ctx.NewCallable(pos, "ToFlow", {input}),
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {initItem}), TExprNode::TPtr(initItem)),
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {switchItem, switchState}),
+                ctx.NewCallable(pos, "Bool", {ctx.NewAtom(pos, "false")})),
+            ctx.NewLambda(pos, ctx.NewArguments(pos, {updateItem, updateState}),
+                MakeApplyUdf(ctx, pos, MakeMember(ctx, pos, updateState, "blob"))),
+        }),
+    });
+    auto program = ctx.NewLambda(pos, ctx.NewArguments(pos, {input}), std::move(body));
+
+    UNIT_ASSERT(Collect(ctx, pos, {MakeRowsSource(ctx, pos, SourceColumns)}, program).empty());
+}
+
 Y_UNIT_TEST(WideReadInProgram) {
     TExprContext ctx;
     const auto pos = ctx.AppendPosition({});

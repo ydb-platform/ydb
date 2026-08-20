@@ -145,9 +145,12 @@ public:
     void PollSources(ui64 prevFreeSpace);
 
     void DoTerminateImpl() override {
+        LogWasmResidentStringStats();
         FreeComputeCtxData();
         TBase::DoTerminateImpl();
     }
+
+    void LogWasmResidentStringStats();
 
     void FreeComputeCtxData() {
         if (TaskRunner) {

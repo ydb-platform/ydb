@@ -455,7 +455,7 @@ set -e
 /ydb --endpoint "grpc://localhost:${GRPC_PORT}" --database /local --no-discovery \
     sql -s 'UPSERT INTO acceptance_init (id, value) VALUES (3, "shell-ok");'
 SH
-chmod +x "${INIT_DIR}/03-shell.sh"
+chmod +x "${INIT_DIR}/04-shell.sh"
 
 INIT_VOLUME="${NAME_PREFIX}-init-volume"
 create_volume "$INIT_VOLUME"

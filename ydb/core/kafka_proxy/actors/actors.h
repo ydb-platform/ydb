@@ -2,6 +2,7 @@
 
 #include <ydb/core/raw_socket/sock_impl.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/persqueue/public/pq_rl_helpers.h>
 #include <ydb/core/protos/config.pb.h>
@@ -13,8 +14,11 @@
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h> // strange
 
+#include <util/datetime/base.h>
+#include <util/generic/hash_set.h>
 #include <util/system/backtrace.h>
 #include <util/system/type_name.h>
+#include <optional>
 
 namespace NKafka {
 
@@ -61,6 +65,12 @@ enum EAuthSteps {
     FAILED
 };
 
+enum class ETokenCheckStatus {
+    Ok,
+    Invalid,
+    Unavailable
+};
+
 enum class EBalancingMode {
     Server,
     Native,
@@ -81,6 +91,29 @@ struct TContext {
 
     TContext(const TContext& other)
         : Config(other.Config)
+        , ConnectionId(other.ConnectionId)
+        , KafkaClient(other.KafkaClient)
+        , AuthenticationStep(other.AuthenticationStep)
+        , SaslMechanism(other.SaslMechanism)
+        , GroupId(other.GroupId)
+        , DatabasePath(other.DatabasePath)
+        , FolderId(other.FolderId)
+        , CloudId(other.CloudId)
+        , DatabaseId(other.DatabaseId)
+        , ResourceDatabasePath(other.ResourceDatabasePath)
+        , Coordinator(other.Coordinator)
+        , RlResourcePath(other.RlResourcePath)
+        , InitialServerlessTransactionsFlagValue(other.InitialServerlessTransactionsFlagValue)
+        , UserToken(other.UserToken)
+        , Ticket(other.Ticket)
+        , TicketParserEntries(other.TicketParserEntries)
+        , AuthDatabasePath(other.AuthDatabasePath)
+        , PeerName(other.PeerName)
+        , TokenCheck(other.TokenCheck)
+        , ClientDC(other.ClientDC)
+        , IsServerless(other.IsServerless)
+        , RequireAuthentication(other.RequireAuthentication)
+        , RlContext(other.RlContext)
     {
     }
 
@@ -99,8 +132,15 @@ struct TContext {
     TString CloudId;
     TString DatabaseId;
     TString ResourceDatabasePath;
+    TString Coordinator;
+    TString RlResourcePath;
     std::optional<bool> InitialServerlessTransactionsFlagValue;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    TString Ticket;
+    TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> TicketParserEntries;
+    TString AuthDatabasePath;
+    TString PeerName;
+    ETokenCheckStatus TokenCheck = ETokenCheckStatus::Ok;
     TString ClientDC;
     bool IsServerless = false;
     bool RequireAuthentication = false;
@@ -108,9 +148,52 @@ struct TContext {
 
     NKikimr::NPQ::TRlContext RlContext;
 
+    THashSet<TString> TopicAclOk;
 
     bool Authenticated() {
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
+    }
+
+    bool ShouldCheckTopicAcl() const {
+        return RequireAuthentication || bool(UserToken);
+    }
+
+    bool HasTopicAccess(const NACLib::TSecurityObject* securityObject, NACLib::EAccessRights rights) const {
+        if (!ShouldCheckTopicAcl()) {
+            return true;
+        }
+        if (!UserToken || !securityObject) {
+            return false;
+        }
+        return securityObject->CheckAccess(rights, *UserToken);
+    }
+
+    std::optional<EKafkaErrors> TokenUnusableError() const {
+        switch (TokenCheck) {
+            case ETokenCheckStatus::Invalid:
+                return EKafkaErrors::TOPIC_AUTHORIZATION_FAILED;
+            case ETokenCheckStatus::Unavailable:
+                return EKafkaErrors::BROKER_NOT_AVAILABLE;
+            case ETokenCheckStatus::Ok:
+                return std::nullopt;
+        }
+        return std::nullopt;
+    }
+
+    TDuration TokenRecheckInterval() const {
+        return TDuration::MilliSeconds(Config.GetTokenRecheckIntervalMs());
+    }
+
+    bool TokenRecheckEnabled() const {
+        return Config.GetTokenRecheckIntervalMs() > 0 && !Ticket.empty();
+    }
+
+    void RememberTopicAclOk(const TString& topic) {
+        TopicAclOk.insert(topic);
+    }
+
+    bool HadTopicAclOk(const TString& topic) const {
+        return TopicAclOk.find(topic) != TopicAclOk.end();
     }
 
     bool KafkaTableFeatureFlagChanged(bool serverlessTransactionsEnabledNow) const {
@@ -228,11 +311,17 @@ inline TString GetTopicNameWithoutDb(const TString& database, TString topic) {
 }
 
 inline TString GetUsernameOrAnonymous(std::shared_ptr<TContext> context) {
-    return context->RequireAuthentication ? context->UserToken->GetUserSID() : "anonymous";
+    return context->UserToken ? context->UserToken->GetUserSID() : "anonymous";
 }
 
 inline TString GetUserSerializedToken(std::shared_ptr<TContext> context) {
-    return context->RequireAuthentication ? context->UserToken->GetSerializedToken() : "";
+    if (!context->UserToken) {
+        return "";
+    }
+    if (!context->UserToken->GetSerializedToken().empty()) {
+        return context->UserToken->GetSerializedToken();
+    }
+    return context->UserToken->SerializeAsString();
 }
 
 NActors::IActor* CreateKafkaApiVersionsActor(const TContext::TPtr context, const ui64 correlationId, const TMessagePtr<TApiVersionsRequestData>& message,

@@ -297,7 +297,9 @@ void TKafkaSaslAuthActor::SendResponseAndDie(EKafkaErrors errorCode, Ydb::Status
         auto evResponse = std::make_shared<TEvKafka::TEvResponse>(CorrelationId, responseToClient, errorCode);
         auto authResult = new TEvKafka::TEvAuthResult(EAuthSteps::SUCCESS, evResponse, UserToken, DatabasePath,
                                                         DatabaseId, FolderId, CloudId, ServiceAccountId, Coordinator,
-                                                        ResourcePath, IsServerless, errorMessage, ResourseDatabasePath);
+                                                        ResourcePath, IsServerless, errorMessage, ResourseDatabasePath,
+                                                        Ticket, TicketParserEntries, AuthDatabasePath,
+                                                        TStringBuilder() << Address);
         Send(Context->ConnectionId, authResult);
     }
 

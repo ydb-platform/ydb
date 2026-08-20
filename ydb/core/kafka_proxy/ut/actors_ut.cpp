@@ -11,6 +11,7 @@
 #include <ydb/core/kafka_proxy/actors/kafka_fetch_actor.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 #include <ydb/core/discovery/discovery.h>
+#include <ydb/library/aclib/aclib.h>
 
 
 using namespace NKikimr;
@@ -567,5 +568,74 @@ namespace NKafka::NTests {
             UNIT_ASSERT(ev->Status == EKafkaErrors::NONE_ERROR);
             UNIT_ASSERT_VALUES_EQUAL(ev->Response.partitioning_settings().min_active_partitions(), 1);
         }
+    }
+
+    Y_UNIT_TEST_SUITE(KafkaContextAuthz) {
+        Y_UNIT_TEST(CopyCtorPreservesAuthFields) {
+            NKikimrConfig::TKafkaProxyConfig config;
+            config.SetTokenRecheckIntervalMs(500);
+            TContext original(config);
+            original.DatabasePath = "/Root";
+            original.RequireAuthentication = true;
+            original.Ticket = "ticket";
+            original.AuthDatabasePath = "/Root";
+            original.PeerName = "127.0.0.1";
+            original.TokenCheck = ETokenCheckStatus::Invalid;
+            original.UserToken = new NACLib::TUserToken("user@builtin", TVector<TString>{});
+            original.ReadSession.BalancingMode = EBalancingMode::Server;
+
+            TContext copy(original);
+            UNIT_ASSERT_VALUES_EQUAL(copy.DatabasePath, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(copy.RequireAuthentication, true);
+            UNIT_ASSERT_VALUES_EQUAL(copy.Ticket, "ticket");
+            UNIT_ASSERT_VALUES_EQUAL(copy.AuthDatabasePath, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL(copy.PeerName, "127.0.0.1");
+            UNIT_ASSERT_EQUAL(copy.TokenCheck, ETokenCheckStatus::Invalid);
+            UNIT_ASSERT(copy.UserToken);
+            UNIT_ASSERT_VALUES_EQUAL(copy.UserToken->GetUserSID(), "user@builtin");
+            UNIT_ASSERT_EQUAL(copy.ReadSession.BalancingMode, EBalancingMode::Native);
+        }
+
+        Y_UNIT_TEST(TokenRecheckEnabledRequiresPositiveIntervalAndTicket) {
+            NKikimrConfig::TKafkaProxyConfig disabledConfig;
+            disabledConfig.SetTokenRecheckIntervalMs(0);
+            TContext disabled(disabledConfig);
+            disabled.Ticket = "ticket";
+            UNIT_ASSERT(!disabled.TokenRecheckEnabled());
+
+            NKikimrConfig::TKafkaProxyConfig enabledConfig;
+            enabledConfig.SetTokenRecheckIntervalMs(500);
+            TContext noTicket(enabledConfig);
+            UNIT_ASSERT(!noTicket.TokenRecheckEnabled());
+
+            TContext enabled(enabledConfig);
+            enabled.Ticket = "ticket";
+            UNIT_ASSERT(enabled.TokenRecheckEnabled());
+        }
+
+        Y_UNIT_TEST(TokenUnusableErrorMapsInvalidAndUnavailable) {
+            NKikimrConfig::TKafkaProxyConfig config;
+            TContext ctx(config);
+            UNIT_ASSERT(!ctx.TokenUnusableError().has_value());
+
+            ctx.TokenCheck = ETokenCheckStatus::Invalid;
+            UNIT_ASSERT_EQUAL(*ctx.TokenUnusableError(), EKafkaErrors::TOPIC_AUTHORIZATION_FAILED);
+
+            ctx.TokenCheck = ETokenCheckStatus::Unavailable;
+            UNIT_ASSERT_EQUAL(*ctx.TokenUnusableError(), EKafkaErrors::BROKER_NOT_AVAILABLE);
+        }
+
+        Y_UNIT_TEST(GetUserSerializedTokenFallsBackToSerializeAsString) {
+            NKikimrConfig::TKafkaProxyConfig config;
+            auto ctx = std::make_shared<TContext>(config);
+            UNIT_ASSERT_VALUES_EQUAL(GetUserSerializedToken(ctx), "");
+
+            ctx->UserToken = new NACLib::TUserToken("user@builtin", TVector<TString>{});
+            UNIT_ASSERT(ctx->UserToken->GetSerializedToken().empty());
+            const TString serialized = GetUserSerializedToken(ctx);
+            UNIT_ASSERT(!serialized.empty());
+            UNIT_ASSERT_VALUES_EQUAL(serialized, ctx->UserToken->SerializeAsString());
+        }
+
     }
 }

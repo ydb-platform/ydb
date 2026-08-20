@@ -47,6 +47,7 @@ struct TEvKafka {
         EvFetchActorStateRequest,
         EvFetchActorStateResponse,
         EvMtlsAuthRequest,
+        EvTokenRecheck,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -172,7 +173,9 @@ struct TEvKafka {
 
         TEvAuthResult(EAuthSteps authStep, std::shared_ptr<TEvKafka::TEvResponse> clientResponse, TIntrusiveConstPtr<NACLib::TUserToken> token, TString databasePath, TString databaseId,
                       TString folderId, TString cloudId, TString serviceAccountId, TString coordinator, TString resourcePath,
-                      bool isServerless, TString error = "", TString resourceDatabasePath = "")
+                      bool isServerless, TString error = "", TString resourceDatabasePath = "",
+                      TString ticket = {}, TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> ticketParserEntries = {},
+                      TString authDatabasePath = {}, TString peerName = {})
             : AuthStep(authStep)
             , UserToken(token)
             , DatabasePath(databasePath)
@@ -185,7 +188,11 @@ struct TEvKafka {
             , IsServerless(isServerless)
             , ResourceDatabasePath(resourceDatabasePath)
             , Error(error)
-            , ClientResponse(std::move(clientResponse)) {
+            , ClientResponse(std::move(clientResponse))
+            , Ticket(std::move(ticket))
+            , TicketParserEntries(std::move(ticketParserEntries))
+            , AuthDatabasePath(std::move(authDatabasePath))
+            , PeerName(std::move(peerName)) {
         }
 
         EAuthSteps AuthStep;
@@ -203,6 +210,26 @@ struct TEvKafka {
         TString Error;
         TString SaslMechanism;
         std::shared_ptr<TEvKafka::TEvResponse> ClientResponse;
+        TString Ticket;
+        TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> TicketParserEntries;
+        TString AuthDatabasePath;
+        TString PeerName;
+    };
+
+    struct TEvTokenRecheck : public TEventLocal<TEvTokenRecheck, EvTokenRecheck> {
+        enum class EKind {
+            Periodic,
+            Timeout,
+        };
+
+        TEvTokenRecheck() = default;
+        explicit TEvTokenRecheck(EKind kind, ui64 cookie = 0)
+            : Kind(kind)
+            , Cookie(cookie)
+        {}
+
+        EKind Kind = EKind::Periodic;
+        ui64 Cookie = 0;
     };
 
     struct TEvHandshakeResult : public TEventLocal<TEvHandshakeResult, EvHandshakeResult> {

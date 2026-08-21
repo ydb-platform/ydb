@@ -19,15 +19,15 @@ const TString consumerName  = "consumer";
 
 struct TClusterEndpoints {
     TClusterEndpoints() {
-        const TString cmPort = std::getenv("CM_PORT");
-        const TString portA = std::getenv("cluster_a_port");
-        const TString portB = std::getenv("cluster_b_port");
-        UNIT_ASSERT_C(cmPort, "CM_PORT is not set");
-        UNIT_ASSERT_C(portA, "cluster_a_port is not set by federation_recipe");
-        UNIT_ASSERT_C(portB, "cluster_b_port is not set by federation_recipe");
-        EndpointA = TStringBuilder() << "localhost:" << portA;
-        EndpointB = TStringBuilder() << "localhost:" << portB;
-        EndpointCM = TStringBuilder() << "localhost:" << cmPort;
+        const char* rawCmPort = std::getenv("CM_PORT");
+        const char* rawPortA = std::getenv("cluster_a_port");
+        const char* rawPortB = std::getenv("cluster_b_port");
+        UNIT_ASSERT_C(rawCmPort, "CM_PORT is not set");
+        UNIT_ASSERT_C(rawPortA, "cluster_a_port is not set");
+        UNIT_ASSERT_C(rawPortB, "cluster_b_port is not set");
+        EndpointA = TStringBuilder() << "localhost:" << rawPortA;
+        EndpointB = TStringBuilder() << "localhost:" << rawPortB;
+        EndpointCM = TStringBuilder() << "localhost:" << rawCmPort;
     }
 
     TString EndpointA;

@@ -15,6 +15,7 @@ PEERDIR(
     library/cpp/retry
     ydb/core/base
     ydb/core/cms/console
+    ydb/core/fq/libs/checkpoint_storage
     ydb/core/kqp/common
     ydb/core/kqp/common/events
     ydb/core/kqp/gateway/behaviour/streaming_query/common
@@ -29,6 +30,7 @@ PEERDIR(
     ydb/library/conclusion
     ydb/library/query_actor
     ydb/library/table_creator
+    ydb/library/yql/dq/actors/compute
     ydb/library/yql/providers/pq/proto
     ydb/services/metadata
     ydb/services/metadata/abstract

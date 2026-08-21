@@ -113,8 +113,9 @@ namespace {
         const TString& authorizationStr = "")
     {
         TString authorization = authorizationStr;
-        if (authorization.StartsWith("Authorization: ")) {
-            authorization.erase(0, 14);
+        constexpr TStringBuf authorizationPrefix = "Authorization: ";
+        if (authorization.StartsWith(authorizationPrefix)) {
+            authorization = authorization.substr(authorizationPrefix.size());
         }
         auto res = fixture.SendHttpRequestSpecified(
             "/Root",

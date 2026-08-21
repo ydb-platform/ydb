@@ -203,4 +203,15 @@ Y_UNIT_TEST_SUITE(SqsTopicMakeQueueUrl) {
             url,
             TStringBuilder() << "http://" << FQDNHostName() << ":2135/v1/5//Root/5/topic/8/consumer");
     }
+
+    Y_UNIT_TEST(FallsBackWithoutPortWhenHttpProxyConfigPortIsZero) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
+
+        const TString url = CollectMakeQueueUrlWithoutRequestMetadata(runtime, 0, true);
+        UNIT_ASSERT_VALUES_EQUAL(
+            url,
+            TStringBuilder() << "https://" << FQDNHostName() << "/v1/5//Root/5/topic/8/consumer");
+        UNIT_ASSERT(!url.Contains(":0"));
+    }
 }

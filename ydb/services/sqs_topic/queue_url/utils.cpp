@@ -126,7 +126,12 @@ namespace NKikimr::NSqsTopic {
             }
             return endpoint;
         }
-        return TStringBuilder() << (secure ? "https://" : "http://") << fallbackHost << ":" << httpProxyPort;
+        TStringBuilder endpoint;
+        endpoint << (secure ? "https://" : "http://") << fallbackHost;
+        if (httpProxyPort != 0) {
+            endpoint << ":" << httpProxyPort;
+        }
+        return endpoint;
     }
 
     TString MakeQueueUrl(const TRichQueueUrl& queueUrl, TStringBuf requestEndpoint, TStringBuf fallbackHost, ui16 httpProxyPort, bool secure) {

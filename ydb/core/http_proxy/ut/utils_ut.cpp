@@ -45,6 +45,27 @@ Y_UNIT_TEST_SUITE(SqsRequestEndpoint) {
             "https://lbkx.example.net:8443");
     }
 
+    Y_UNIT_TEST(IgnoresInvalidForwardedHostAndUsesRequestHost) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeSqsRequestEndpoint(
+                "sqs.ydb.test:8443",
+                "X-Forwarded-Host: evil.com/phishing#\r\n",
+                false),
+            "http://sqs.ydb.test:8443");
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeSqsRequestEndpoint(
+                "sqs.ydb.test:8443",
+                "X-Forwarded-Host: evil.com?next=1\r\n",
+                true),
+            "https://sqs.ydb.test:8443");
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeSqsRequestEndpoint(
+                "evil.com/phishing#",
+                "X-Forwarded-Host: evil.com/phishing#\r\n",
+                false),
+            "");
+    }
+
     Y_UNIT_TEST(IgnoresUnknownForwardedProtoAndUsesConnectionScheme) {
         UNIT_ASSERT_VALUES_EQUAL(
             MakeSqsRequestEndpoint(

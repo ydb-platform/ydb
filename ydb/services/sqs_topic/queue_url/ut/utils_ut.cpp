@@ -98,4 +98,22 @@ Y_UNIT_TEST_SUITE(SqsTopicQueueUrl) {
             MakeQueueUrlEndpoint("", "localhost", 2135, false),
             "http://localhost:2135");
     }
+
+    Y_UNIT_TEST(MakeQueueUrlFallbackOmitsZeroPort) {
+        TRichQueueUrl qu{
+            .Database = "/Root",
+            .TopicPath = "topic",
+            .Consumer = "consumer",
+            .Fifo = false,
+        };
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeQueueUrl(qu, "", "vla5-2135.example.net", 0, true),
+            "https://vla5-2135.example.net/v1/5//Root/5/topic/8/consumer");
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeQueueUrlEndpoint("", "vla5-2135.example.net", 0, true),
+            "https://vla5-2135.example.net");
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeQueueUrlEndpoint("", "localhost", 0, false),
+            "http://localhost");
+    }
 }

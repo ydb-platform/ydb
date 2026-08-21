@@ -163,6 +163,24 @@ class KikimrSqsTopicTestBase(object):
         with resolve_hostname_as_localhost(request_host):
             yield origin, self._make_boto_client(endpoint_url='{}{}'.format(origin, self.database))
 
+    @contextmanager
+    def _boto_client_with_forwarded_host(self, public_host, proto='HTTPS, http'):
+        # Talk to the real backend Host (localhost:http_proxy_port) and inject balancer headers.
+        first_proto = proto.split(',', 1)[0].strip().lower()
+        public_origin = '{}://{}'.format(first_proto, public_host)
+        client = self._make_boto_client()
+
+        def add_forwarded_headers(request, **kwargs):
+            request.headers['X-Forwarded-Host'] = public_host
+            request.headers['X-Forwarded-Proto'] = proto
+
+        event_name = 'before-send.sqs.*'
+        client.meta.events.register(event_name, add_forwarded_headers)
+        try:
+            yield public_origin, client
+        finally:
+            client.meta.events.unregister(event_name, add_forwarded_headers)
+
     def _make_ydb_driver(self):
         node = self.cluster.nodes[1]
         config = ydb.DriverConfig(

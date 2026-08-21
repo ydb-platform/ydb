@@ -25,7 +25,8 @@ namespace NKikimr::NSqsTopic {
 
     // Public SQS QueueUrl prefix: scheme://host[:port] without a trailing slash.
     // If requestEndpoint is set (from the incoming HTTP request), it is used as-is.
-    // Otherwise scheme://fallbackHost:httpProxyPort, where scheme is https iff secure.
+    // Otherwise scheme://fallbackHost[:httpProxyPort], where scheme is https iff secure.
+    // Port 0 omits :port so the URL is not scheme://host:0.
     TString MakeQueueUrlEndpoint(TStringBuf requestEndpoint, TStringBuf fallbackHost, ui16 httpProxyPort, bool secure = true);
     TString MakeQueueUrl(const TRichQueueUrl& queueUrl, TStringBuf requestEndpoint, TStringBuf fallbackHost, ui16 httpProxyPort, bool secure = true);
 

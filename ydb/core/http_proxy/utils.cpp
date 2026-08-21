@@ -100,14 +100,22 @@ TString NormalizeForwardedProto(TStringBuf proto) {
     return scheme;
 }
 
+// Host / X-Forwarded-Host must be host[:port] (or [ipv6]:port). Reject path, query and fragment
+// so they cannot leak into QueueUrl as https://evil.com/phishing#/v1/...
+bool IsValidRequestHost(TStringBuf host) {
+    return !host.empty() && host.find_first_of("/?#") == TStringBuf::npos;
+}
+
 } // namespace
 
 TString MakeSqsRequestEndpoint(TStringBuf host, TStringBuf headersBlob, bool tlsSecure) {
     const NHttp::THeaders headers(headersBlob);
-    if (TStringBuf forwardedHost = FirstForwardedValue(headers.Get("x-forwarded-host")); !forwardedHost.empty()) {
+    if (TStringBuf forwardedHost = FirstForwardedValue(headers.Get("x-forwarded-host"));
+        IsValidRequestHost(forwardedHost))
+    {
         host = forwardedHost;
     }
-    if (host.empty()) {
+    if (!IsValidRequestHost(host)) {
         return {};
     }
     TString scheme = tlsSecure ? "https" : "http";

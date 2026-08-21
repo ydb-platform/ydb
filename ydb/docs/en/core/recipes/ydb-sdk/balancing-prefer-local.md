@@ -1,6 +1,6 @@
 # Prefer the nearest data center
 
-Below are code examples for setting the balancing algorithm option "prefer the nearest data center" in different {{ ydb-short-name }} SDKs.
+Below are code examples for setting the "prefer the nearest data center" balancing algorithm option in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
@@ -42,9 +42,9 @@ Below are code examples for setting the balancing algorithm option "prefer the n
 
   - database/sql
 
-    Client-side balancing in the `database/sql` driver for {{ ydb-short-name }} is performed only when a new connection is established (in terms of `database/sql`), which is a {{ ydb-short-name }} session on a specific node. Once the session is created, all queries on that session are directed to the node where the session was created. Queries on the same {{ ydb-short-name }} session are not balanced between different {{ ydb-short-name }} nodes.
+    Client-side balancing in the `database/sql` driver for {{ ydb-short-name }} is performed only when a new connection is established (in terms of `database/sql`), which is a {{ ydb-short-name }} session on a specific node. Once the session is created, all queries on that session are routed to the node where the session was created. No query balancing occurs on the same {{ ydb-short-name }} session between different {{ ydb-short-name }} nodes.
 
-    Code example for setting the balancing algorithm "prefer the nearest data center":
+    Code example for setting the "prefer the nearest data center" balancing algorithm:
 
 
     ```go
@@ -88,9 +88,9 @@ Below are code examples for setting the balancing algorithm option "prefer the n
 
   {% endlist %}
 
-- With++
+- C++
 
-  The {{ ydb-short-name }} C++ SDK uses the `prefer_local_dc` algorithm (prefer the nearest data center) by default.
+  {{ ydb-short-name }} C++ SDK uses the `prefer_local_dc` algorithm (prefer the nearest data center) by default.
 
 
   ```cpp
@@ -123,7 +123,7 @@ Below are code examples for setting the balancing algorithm option "prefer the n
         endpoint=os.environ["YDB_ENDPOINT"],
         database=os.environ["YDB_DATABASE"],
         credentials=ydb.credentials_from_env_variables(),
-        use_all_nodes=False,  # prefer nearest data center
+        use_all_nodes=False,  # prefer the nearest data center
     )
 
     with ydb.Driver(driver_config) as driver:
@@ -143,7 +143,7 @@ Below are code examples for setting the balancing algorithm option "prefer the n
             endpoint=os.environ["YDB_ENDPOINT"],
             database=os.environ["YDB_DATABASE"],
             credentials=ydb.credentials_from_env_variables(),
-            use_all_nodes=False,  # prefer nearest data center
+            use_all_nodes=False,  # prefer the nearest data center
         )
         async with ydb.aio.Driver(driver_config) as driver:
             await driver.wait()
@@ -162,7 +162,7 @@ Below are code examples for setting the balancing algorithm option "prefer the n
         os.environ["YDB_SQLALCHEMY_URL"],
         connect_args={
             "driver_config_kwargs": {
-                "use_all_nodes": False,  # prefer nearest data center
+                "use_all_nodes": False,  # prefer the nearest data center
             }
         },
     )

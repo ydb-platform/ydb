@@ -6,7 +6,7 @@ Consider a scenario where it is necessary to ensure that only one instance of a 
 
 In contrast to local multithreaded programming, clients in distributed systems do not directly acquire locks or semaphores. Instead, they lease them for a specified duration, which can be periodically renewed. Due to reliance on physical time which can vary between machines, clients and the server might encounter situations where multiple clients believe they have acquired the same semaphore simultaneously, even if the server's perspective differs. To reduce the likelihood of such occurrences, it is crucial to configure automatic time synchronization beforehand, both on servers hosting client applications and on the {{ ydb-short-name }} side, ideally using a unified time source.
 
-Therefore, while distributed locking through such mechanisms cannot guarantee the complete absence of simultaneous resource access, it can significantly lower the probability of such events. This approach serves as an optimization to prevent unnecessary competition among clients for a shared resource. Absolute guarantees against concurrent resource requests withould be implemented on the resource side.
+Therefore, while distributed locking through such mechanisms cannot guarantee the complete absence of simultaneous resource access, it can significantly lower the probability of such events. This approach serves as an optimization to prevent unnecessary competition among clients for a shared resource. Absolute guarantees against concurrent resource requests would be implemented on the resource side.
 
 ## Code example
 
@@ -76,3 +76,5 @@ Therefore, while distributed locking through such mechanisms cannot guarantee th
   {% endlist %}
 
 {% endlist %}
+
+{% include [feature-not-supported](../../_includes/feature-not-supported.md) %}

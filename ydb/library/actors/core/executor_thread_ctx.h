@@ -43,15 +43,7 @@ namespace NActors {
         TThreadParkPad WaitingPad;
 
     private:
-        static constexpr ui64 EncodeState(EThreadState state) {
-            return static_cast<ui64>(state);
-        }
-
-        static constexpr EThreadState DecodeState(ui64 state) {
-            return static_cast<EThreadState>(state);
-        }
-
-        std::atomic<ui64> WaitingFlag = EncodeState(EThreadState::None);
+        std::atomic<ui64> WaitingFlag = static_cast<ui64>(EThreadState::None);
 
     public:
         ~TGenericExecutorThreadCtx(); // in executor_thread.cpp
@@ -59,33 +51,26 @@ namespace NActors {
         ui64 StartWakingTs = 0;
 
         ui64 GetStateInt() {
-            return static_cast<ui64>(DecodeState(WaitingFlag.load()));
+            return WaitingFlag.load();
         }
 
     protected:
         template <typename TWaitState>
         TWaitState GetState() {
-            return TWaitState(DecodeState(WaitingFlag.load()));
+            return TWaitState(WaitingFlag.load());
         }
 
         template <typename TWaitState>
         TWaitState ExchangeState(TWaitState state) {
-            return TWaitState(DecodeState(WaitingFlag.exchange(EncodeState(static_cast<EThreadState>(state)))));
+            return TWaitState(WaitingFlag.exchange(static_cast<ui64>(state)));
         }
 
         template <typename TWaitState>
         bool ReplaceState(TWaitState &expected, TWaitState state) {
-            ui64 expectedInt = WaitingFlag.load();
-            while (true) {
-                const EThreadState current = DecodeState(expectedInt);
-                if (current != static_cast<EThreadState>(expected)) {
-                    expected = TWaitState(current);
-                    return false;
-                }
-                if (WaitingFlag.compare_exchange_weak(expectedInt, EncodeState(static_cast<EThreadState>(state)))) {
-                    return true;
-                }
-            }
+            ui64 expectedInt = static_cast<ui64>(expected);
+            bool result = WaitingFlag.compare_exchange_strong(expectedInt, static_cast<ui64>(state));
+            expected = TWaitState(expectedInt);
+            return result;
         }
 
         template <typename TDerived, typename TWaitState>

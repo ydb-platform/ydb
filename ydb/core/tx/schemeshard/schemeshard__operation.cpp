@@ -352,6 +352,7 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     if (!Subscribers.empty()) {
         NIceDb::TNiceDb db(context.GetDB());
         operation->SchemeChangeOrderBase = NextSchemeChangeOrder;
+        operation->SchemeChangeOrdersReserved = true;
         for (ui32 i = 0; i < rewrittenTransactions.size(); ++i) {
             TOperation::TSchemeChangeSlot slot;
             if (PersistSchemeChangeRecordAtPropose(db, txId, i, rewrittenTransactions[i], slot)) {
@@ -383,7 +384,7 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
     // reserved record rows and the persisted counter with it -- but not the
     // in-memory counter. Left alone, the next propose would hand out an order
     // that is already persisted against a live record and overwrite it.
-    if (operation->SchemeChangeOrderBase) {
+    if (operation->SchemeChangeOrdersReserved) {
         NextSchemeChangeOrder = operation->SchemeChangeOrderBase;
     }
 

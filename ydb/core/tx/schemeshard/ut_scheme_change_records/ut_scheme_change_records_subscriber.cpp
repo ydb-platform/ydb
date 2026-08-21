@@ -1,6 +1,7 @@
 #include "ut_scheme_change_records_helpers.h"
 
 #include <ydb/core/tx/schemeshard/ut_helpers/mon_helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/schemeshard_counters.h>
 
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
@@ -893,7 +894,16 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "the surviving reservation must be finalised into a fetchable record");
     }
 
-    // --- Phase 1.4: a stale subscriber must not wedge DDL forever ------------
+    // --- Phase 1.4: staleness is a diagnostic, never a licence to discard ----
+    //
+    // POLICY REVERSAL (W2). This block used to assert the opposite: that a
+    // subscriber idle past the TTL stops holding the retention floor, so DDL
+    // recovers on its own. That self-healing was a silent-data-loss path -- the
+    // forgotten consumer's records were swept to keep the cluster moving, and
+    // the backup chain broke with nobody notified. Under the no-silent-loss
+    // policy a stale subscriber still holds the floor and DDL wedges until an
+    // admin acts. The tests below are inverted accordingly, not deleted: the
+    // staleness DETECTION they were written to protect still has to work.
     //
     // All four LastActivityAt writes and the age comparison use ctx.Now().
     // Under TTestActorRuntime the actor-system clock is virtual and starts at
@@ -901,7 +911,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     // zero -- so a half-conversion would make every age 0 and nothing would
     // ever be stale, silently, in every UT.
 
-    Y_UNIT_TEST(StaleSubscriberDoesNotBlockDdlForever) {
+    Y_UNIT_TEST(StaleSubscriberBlocksDdlUntilAdminOverride) {
         TSchemeShard* schemeshard = nullptr;
         auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
             schemeshard = new TSchemeShard(tablet, info);
@@ -931,8 +941,24 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         // The subscriber goes dark for well past the TTL.
         runtime.SimulateSleep(TDuration::Seconds(2 * ttlSeconds));
 
-        // It must stop holding the floor down, so DDL recovers on its own with
-        // no operator intervention.
+        // Going dark buys it nothing: it still holds the floor, so DDL stays
+        // wedged. Recovering "on its own" would mean discarding its records.
+        TestMkDir(runtime, ++txId, "/MyRoot", "Dir3", {NKikimrScheme::StatusResourceExhausted});
+
+        // Staleness must still be DETECTED -- the wedge has to be diagnosable,
+        // or an operator cannot tell which consumer to blame. This is the
+        // assertion the old TTL test existed to protect, kept alive.
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeSubscribersStale"), 1u,
+            "the idle subscriber must be visible as stale even though nothing was swept");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeSubscribersLost"), 0u,
+            "stale is not lost: it has been told nothing, but it has lost nothing either");
+
+        // The admin override is the only way out.
+        TAutoPtr<IEventHandle> advHandle;
+        ForceAdvanceSubscriber(runtime, "dead:sub", advHandle);
+
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir3", {NKikimrScheme::StatusAccepted});
         env.TestWaitNotification(runtime, txId);
     }
@@ -973,7 +999,11 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir3", {NKikimrScheme::StatusResourceExhausted});
     }
 
-    Y_UNIT_TEST(StaleExclusionMarksSubscriberLost) {
+    // Was StaleExclusionMarksSubscriberLost. Its premise -- that a live
+    // subscriber's ack sweeps a stale one's unread records -- is exactly the
+    // silent loss W2 removed, so the assertions are inverted: the stale
+    // subscriber's records must SURVIVE another subscriber draining the log.
+    Y_UNIT_TEST(StaleSubscriberRecordsSurviveAnotherSubscribersAck) {
         TSchemeShard* schemeshard = nullptr;
         auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
             schemeshard = new TSchemeShard(tablet, info);
@@ -1010,23 +1040,30 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         // Both go quiet past the TTL...
         runtime.SimulateSleep(TDuration::Seconds(2 * ttlSeconds));
 
-        // ...but live:sub comes back, which refreshes only its own
-        // LastActivityAt. dead:sub stays stale and is excluded from the floor,
-        // so live:sub's ack sweeps records dead:sub never consumed.
+        // ...but live:sub comes back and drains the whole log. dead:sub is
+        // stale, yet it still holds the retention floor, so live:sub's ack must
+        // NOT be able to sweep records dead:sub never consumed.
         TAutoPtr<IEventHandle> liveFetch;
         FetchSchemeChangeRecords(runtime, "live:sub", 0, 100, liveFetch);
         TAutoPtr<IEventHandle> ackHandle;
         AckSchemeChangeRecords(runtime, "live:sub", tail, ackHandle);
 
-        // The stale subscriber comes back and must be TOLD its records are
-        // gone. Excluding it is intended; losing its records silently is not.
+        // Physical survival, read by explicit order so no cursor can mask it.
+        auto present = ProbeRecordOrdersPresent(runtime, "live:sub", {1, 2});
+        UNIT_ASSERT_VALUES_EQUAL_C(present.size(), 2u,
+            "a stale subscriber still pins retention; another subscriber's ack "
+            "must not delete records it never read");
+
+        // And when it comes back it gets its records, not a loss report.
         TAutoPtr<IEventHandle> fetchHandle;
         auto* fetch = FetchSchemeChangeRecords(runtime, "dead:sub", 0, 100, fetchHandle);
-        UNIT_ASSERT_C(fetch->Record.GetSkippedEntries() > 0,
-            "a stale subscriber whose records were swept must be told how many it lost");
+        UNIT_ASSERT_VALUES_EQUAL_C(fetch->Record.GetSkippedEntries(), 0u,
+            "nothing was swept, so nothing may be reported as lost");
         UNIT_ASSERT_VALUES_EQUAL_C((ui32)fetch->Record.GetState(),
-            (ui32)NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST,
-            "and must be marked Lost, never silently short-changed");
+            (ui32)NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_READY,
+            "a subscriber that lost nothing must not be marked Lost");
+        UNIT_ASSERT_VALUES_EQUAL_C(fetch->Record.EntriesSize(), 2u,
+            "it must actually receive the records it was owed");
     }
 
     // --- Phase 1.5: internal ops bypass the gate; the cap binds the subscriber
@@ -1037,8 +1074,10 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     //   * Churn ops are excluded separately, and that is NOT redundant with
     //     Internal: a user-initiated split is not Internal=true, yet emits no
     //     record, so gating it blocks an op on an outbox it never feeds.
-    //   * The cap is still enforced -- at the record-allocation site, against
-    //     the subscriber, by force-advancing it and marking it Lost.
+    //   * The cap is still enforced -- at the propose gate, by REFUSING the
+    //     DDL. It is no longer relieved by force-advancing the subscriber:
+    //     discarding a consumer's records to keep DDL flowing was the silent
+    //     loss path W2 removed. Only an admin force-advance may discard.
 
     Y_UNIT_TEST(UserDdlStillRejectedAtCap) {
         TTestBasicRuntime runtime;
@@ -2292,5 +2331,437 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_VALUES_EQUAL_C((ui32)fetched->Record.GetState(),
             (ui32)NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_READY,
             "a subscriber that lost nothing must not be marked Lost");
+    }
+
+    // W2. No silent loss. A consumer that stops acking must WEDGE DDL, not get
+    // its records quietly discarded so the cluster can keep going.
+    //
+    // Two automatic discard paths used to prevent this wedge: cap relief
+    // force-advanced a lagging subscriber at MaxSchemeChangeRecords, and the
+    // staleness TTL dropped an idle one out of the retention floor. Both are
+    // gone. The only way past a broken consumer is an explicit admin action.
+    Y_UNIT_TEST(BrokenConsumerWedgesDdlUntilAdminOverride) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        // Small cap so the wedge is reachable in a unit test.
+        ApplySchemeShardConfig(runtime, {.MaxSchemeChangeRecords = 2});
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "broken:sub", regHandle);
+
+        // The consumer never acks. Fill the outbox to the cap.
+        for (int i = 0; i < 2; ++i) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "w2t%d"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // DDL must now be REFUSED rather than silently making room.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "wedged"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )", {NKikimrScheme::StatusResourceExhausted});
+
+        // ...and the backlog must still be on disk. "Rejected" is only the right
+        // behaviour if the records it was protecting actually survived.
+        auto present = ProbeRecordOrdersPresent(runtime, "broken:sub", {1, 2});
+        UNIT_ASSERT_VALUES_EQUAL_C(present.size(), 2u,
+            "the unacked records must be retained, not discarded to unblock DDL");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeSubscribersLost"), 0u,
+            "nothing was discarded, so nobody may be marked Lost");
+        UNIT_ASSERT_C(
+            GetCumulativeCounter(runtime, "SchemeShard/SchemeChangeDdlRejectedByOutbox") > 0,
+            "the wedge firing must be visible to monitoring");
+
+        // The admin override is the one and only release valve.
+        TAutoPtr<IEventHandle> advHandle;
+        ForceAdvanceSubscriber(runtime, "broken:sub", advHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "released"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeSubscribersLost"), 1u,
+            "the admin override discarded records, so the subscriber must now be Lost");
+    }
+
+    // W3. The outbox's failure modes are all silent -- records dropped, a
+    // subscriber wedged, DDL blocked at the cap -- and under the no-silent-loss
+    // policy DDL now STOPS on a broken consumer rather than self-healing. That
+    // makes these gauges load-bearing rather than nice-to-have: an operator has
+    // to see the depth climbing before it reaches the wedge.
+    //
+    // Deliberately asserted through the real exported tablet counters, not a
+    // test-only accumulator: the same numbers a production dashboard reads.
+    Y_UNIT_TEST(OutboxCountersAreExported) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeSubscribers"), 0u,
+            "no subscriber registered yet");
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "w3:sub", regHandle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeSubscribers"), 1u,
+            "the registered subscriber must be visible to monitoring");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeOutboxDepth"), 0u,
+            "nothing emitted yet, so the backlog must read zero");
+
+        for (int i = 0; i < 3; ++i) {
+            TestCreateTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+                Name: "t%d"
+                Columns { Name: "key" Type: "Uint64" }
+                KeyColumnNames: ["key"]
+            )", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeOutboxDepth"), 3u,
+            "three unacked records must show as a backlog of three");
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeSubscribersLost"), 0u,
+            "nobody has lost anything");
+        UNIT_ASSERT_C(
+            GetCumulativeCounter(runtime, "SchemeShard/SchemeChangeDescriptionBytes") > 0,
+            "the redo cost of captured descriptions must be attributed somewhere");
+
+        // Draining the backlog must bring the gauge back down -- a depth that
+        // only ever rises would be useless to alert on.
+        TAutoPtr<IEventHandle> ackHandle;
+        AckSchemeChangeRecords(runtime, "w3:sub", 3, ackHandle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            GetSimpleCounter(runtime, "SchemeShard/SchemeChangeOutboxDepth"), 0u,
+            "after acking everything the backlog must return to zero");
+    }
+
+    // W1. Description is serialized into the local-DB redo log on every DDL, so
+    // it must not carry anything that scales with the object's size. The default
+    // DescribePath options return partitioning info, partition config, children
+    // and range keys -- bounded only by MaxShardsInPath (35k) and
+    // MaxChildrenInDir (100k), i.e. not bounded in any useful sense.
+    //
+    // Two tables identical except for partition count: the captured descriptions
+    // must be about the same size.
+    Y_UNIT_TEST(DescriptionDoesNotGrowWithPartitionCount) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "w1:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "single"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 1
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "spread"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+            UniformPartitionsCount: 64
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        size_t single = 0;
+        size_t spread = 0;
+        for (const auto& rec : ReadSchemeChangeRecordsFull(runtime).Entries) {
+            if (rec.Path.Contains("single")) {
+                single = rec.Description.size();
+            } else if (rec.Path.Contains("spread")) {
+                spread = rec.Description.size();
+            }
+        }
+
+        // Positive companions: "small" must not be "absent". A fix that simply
+        // stopped capturing Description would otherwise pass this test.
+        UNIT_ASSERT_C(single > 0, "the 1-partition table's description must still be captured");
+        UNIT_ASSERT_C(spread > 0, "the 64-partition table's description must still be captured");
+
+        UNIT_ASSERT_C(spread < single + 256,
+            "Description must not grow with partition count: 1 partition -> " << single
+                << " bytes, 64 partitions -> " << spread << " bytes");
+    }
+
+    // W0. The order counter must be rewound when a propose is rejected AFTER it
+    // has already reserved outbox rows.
+    //
+    // AbortOperationPropose guards the rewind with `if (SchemeChangeOrderBase)`,
+    // but NextSchemeChangeOrder starts at 0 -- so on the very first reserving
+    // DDL the base IS 0, the guard is false, and the rewind never runs. The
+    // reserved order is then never written (the propose's DB changes were rolled
+    // back) while the in-memory counter has already moved past it, leaving a
+    // permanent hole that fetch's gap detection reports as record loss.
+    //
+    // The source table is created BEFORE the subscriber registers on purpose:
+    // reservation is gated on !Subscribers.empty(), so doing it first keeps
+    // NextSchemeChangeOrder at 0 and makes the ABORTED propose the first one
+    // that reserves -- which is the only case where the sentinel collides.
+    Y_UNIT_TEST(AbortedFirstProposeDoesNotFakeRecordLoss) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        // Take control of the redo-size limit: it is the only check that rejects
+        // a propose after IgniteOperation has run, hence the only way to reach
+        // AbortOperationPropose with rows already reserved.
+        TControlWrapper maxCommitRedoMB;
+        {
+            TControlBoard::RegisterSharedControl(
+                maxCommitRedoMB, runtime.GetAppData().Icb->TabletControls.MaxCommitRedoMB);
+            maxCommitRedoMB.Reset(200, 1, 4096);
+        }
+
+        // No subscriber yet, so this reserves nothing and the counter stays 0.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "src"
+            Columns { Name: "key" Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "w0:sub", regHandle);
+
+        // Reserves an order, then gets rejected: the DB is rolled back but the
+        // in-memory counter is not.
+        {
+            maxCommitRedoMB = 1;
+            AsyncCopyTable(runtime, ++txId, "/MyRoot", "src-copy", "/MyRoot/src");
+            TestModificationResults(runtime, txId, {{NKikimrScheme::StatusSchemeError,
+                "local tx commit redo size generated by IgniteOperation() is more than allowed limit"}});
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // ...so this one reserves the NEXT order, and the skipped one exists nowhere.
+        {
+            maxCommitRedoMB = 200;
+            AsyncCopyTable(runtime, ++txId, "/MyRoot", "src-copy", "/MyRoot/src");
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto* fetched = FetchSchemeChangeRecords(runtime, "w0:sub", 0, 100, fetchHandle);
+
+        // Positive companion first: absence of loss must not be absence of data.
+        UNIT_ASSERT_VALUES_EQUAL_C(fetched->Record.EntriesSize(), 1u,
+            "the successful CopyTable must have produced exactly one record");
+        UNIT_ASSERT_VALUES_EQUAL_C(fetched->Record.GetSkippedEntries(), 0u,
+            "an aborted propose must not leave a hole in the order sequence; "
+            "this subscriber lost nothing but was told it did");
+        UNIT_ASSERT_VALUES_EQUAL_C((ui32)fetched->Record.GetState(),
+            (ui32)NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_READY,
+            "a subscriber that lost nothing must not be marked Lost");
+    }
+
+    // --- W5: the cleanup scan is bounded at both ends -----------------------
+    //
+    // DeleteAckedSchemeChangeRecords now selects [oldMinOrder+1, newMinOrder]
+    // instead of a one-sided GreaterOrEqual: the one-sided form precharges with
+    // an empty maxKey, charging the whole tail of the table, so a cleanup
+    // deleting a handful of rows paid for every record above them.
+    //
+    // That cost is NOT observable from a unit test -- the charge counters
+    // (TxKeyChargeSieved/Weeded) come from txStats and stay at zero while the
+    // data lives in the memtable, which it always does here. Measured: both a
+    // 10-record and an 80-record tail reported a delta of exactly 0.
+    //
+    // So this test does not claim to prove the cost bound. It pins the part of
+    // the change that CAN regress: the upper bound is inclusive. A LessOrEqual
+    // -> Less slip would strand the boundary record forever, since the next
+    // pass starts above it.
+
+    Y_UNIT_TEST(CleanupDeletesThroughTheBoundaryButNotPastIt) {
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "boundary:sub", regHandle);
+
+        const ui32 total = 6;
+        for (ui32 i = 0; i < total; ++i) {
+            TestMkDir(runtime, ++txId, "/MyRoot", Sprintf("Dir%u", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        const ui64 tail = schemeshard->NextSchemeChangeOrder;
+        UNIT_ASSERT_C(tail >= total, "precondition: records must exist");
+
+        const ui64 boundary = 3;
+
+        // Positive companion: the rows are physically present beforehand, so a
+        // later "gone" cannot be vacuous.
+        auto before = ProbeRecordOrdersPresent(runtime, "boundary:sub", {boundary, boundary + 1});
+        UNIT_ASSERT_VALUES_EQUAL_C(before.size(), 2u,
+            "both the boundary record and the one above it must exist first");
+
+        TAutoPtr<IEventHandle> ackHandle;
+        AckSchemeChangeRecords(runtime, "boundary:sub", boundary, ackHandle);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto after = ProbeRecordOrdersPresent(runtime, "boundary:sub", {boundary, boundary + 1});
+        UNIT_ASSERT_VALUES_EQUAL_C(after.size(), 1u,
+            "exactly one of the two must survive the sweep");
+        UNIT_ASSERT_VALUES_EQUAL_C(after[0], boundary + 1,
+            "the acked boundary record must be deleted and the record above it "
+            "kept; a stranded boundary row is never revisited");
+    }
+
+    // --- W5: the cleanup floor survives a reboot ----------------------------
+    //
+    // Deleted outbox rows remain as tombstones until compaction, so a cleanup
+    // that restarts at order 1 re-seeks the whole dead prefix on every batch.
+    // The floor records how far deletion has physically reached. If it were
+    // kept only in memory a reboot would silently reset it to 0 and restore
+    // the quadratic drain -- correct output, wrong cost, invisible in any
+    // functional test. Hence asserting the persisted value directly.
+
+    Y_UNIT_TEST(CleanupFloorAdvancesAndSurvivesReboot) {
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "floor:sub", regHandle);
+
+        for (ui32 i = 0; i < 6; ++i) {
+            TestMkDir(runtime, ++txId, "/MyRoot", Sprintf("Dir%u", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeshard->SchemeChangeFloorOrder, 0u,
+            "precondition: nothing deleted yet, so the floor must still be 0");
+
+        const ui64 acked = 3;
+        TAutoPtr<IEventHandle> ackHandle;
+        AckSchemeChangeRecords(runtime, "floor:sub", acked, ackHandle);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeshard->SchemeChangeFloorOrder, acked,
+            "the floor must advance to the last row actually deleted");
+
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeshard->SchemeChangeFloorOrder, acked,
+            "the floor must be reloaded at TTxInit; resetting to 0 would send "
+            "every later cleanup batch back over the tombstoned prefix");
+    }
+
+    // --- W7: fetching bodies costs |Orders|, not the span they cover --------
+    //
+    // Unlike the cleanup scan above, this one IS observable: the old code
+    // walked [min(Orders), max(Orders)] on both tables and counted every row
+    // it stepped over, so a two-element request spanning the whole outbox
+    // scanned the whole outbox. Point lookups make the count track the request.
+
+    Y_UNIT_TEST(FetchBodiesCostTracksRequestedCountNotTheirSpan) {
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "span:sub", regHandle);
+
+        const ui32 total = 40;
+        for (ui32 i = 0; i < total; ++i) {
+            TestMkDir(runtime, ++txId, "/MyRoot", Sprintf("Dir%u", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+        const ui64 tail = schemeshard->NextSchemeChangeOrder;
+        UNIT_ASSERT_C(tail >= total, "precondition: records must exist");
+
+        // Two orders at opposite ends of the outbox: minimal request, maximal span.
+        const TVector<ui64> orders = {1, tail - 1};
+
+        const ui64 before = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangeOutboxRowsScanned");
+        TAutoPtr<IEventHandle> bodiesHandle;
+        auto* bodies = FetchSchemeChangeRecordBodies(runtime, "span:sub", orders, bodiesHandle);
+        const ui64 scanned = GetCumulativeCounter(runtime, "SchemeShard/SchemeChangeOutboxRowsScanned") - before;
+
+        // Positive companion: the cheap path must still return the data.
+        UNIT_ASSERT_VALUES_EQUAL_C(bodies->Record.EntriesSize(), 2u,
+            "both requested records must come back; a cheap-but-empty reply "
+            "would satisfy the bound below for the wrong reason");
+
+        // 2 metadata lookups + up to 2 detail lookups. Generous headroom, but
+        // far below the ~2 * tail the span scan cost.
+        UNIT_ASSERT_C(scanned <= 8,
+            "fetching 2 bodies must not scan the span between them: scanned "
+                << scanned << " rows across an outbox of " << tail);
+    }
+
+    Y_UNIT_TEST(FetchBodiesRejectsOversizedRequestRatherThanTruncating) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "flood:sub", regHandle);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "Dir");
+        env.TestWaitNotification(runtime, txId);
+
+        TVector<ui64> orders;
+        for (ui64 i = 1; i <= 1001; ++i) {
+            orders.push_back(i);
+        }
+
+        // The plain helper asserts STATUS_SUCCESS internally, so a rejection
+        // has to go through the Expect variant.
+        TAutoPtr<IEventHandle> bodiesHandle;
+        auto* bodies = FetchSchemeChangeRecordBodiesExpect(runtime, "flood:sub", orders,
+            NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST, bodiesHandle);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(bodies->Record.EntriesSize(), 0u,
+            "a refused request must not carry a partial result");
     }
 }

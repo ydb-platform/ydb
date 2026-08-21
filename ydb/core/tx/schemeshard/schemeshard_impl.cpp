@@ -4212,6 +4212,11 @@ void TSchemeShard::PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const
     ++NextSchemeChangeOrderPersistCount;
 }
 
+void TSchemeShard::PersistSchemeChangeFloorOrder(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_SchemeChangeFloorOrder).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(SchemeChangeFloorOrder)));
+}
+
 void TSchemeShard::PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const {
     db.Table<Schema::SysParams>().Key(Schema::SysParam_LastAssignedPlanStep).Update(
         NIceDb::TUpdate<Schema::SysParams::Value>(ToString(LastAssignedPlanStep)));
@@ -4225,11 +4230,38 @@ void TSchemeShard::PersistSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId tx
 }
 
 void TSchemeShard::PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx) const {
-    // Point delete by known key avoids a range scan, which would otherwise
-    // trigger a late Precharge and abort in non-init transactions (reads in
-    // the caller's tx have already set NoMoreUnprechargedReadsFlag without
-    // including table SchemeChangePendingRecords).
+    // Point delete by known key avoids a range scan, which would abort the
+    // tablet here: TTxOperationPropose::Execute calls txc.DB.NoMoreReadsForTx()
+    // at its top (schemeshard__operation.cpp:452), after which both
+    // CheckReadAllowed and CheckPrechargeAllowed hard-abort -- and a range scan
+    // is both. A blind point Delete reads nothing, so it is safe.
     db.Table<Schema::SchemeChangePendingRecords>().Key(txId, userTxIdx).Delete();
+}
+
+void TSchemeShard::UpdateSchemeChangeGauges() const {
+    const TInstant now = AppData()->TimeProvider->Now();
+    ui64 lost = 0;
+    ui64 stale = 0;
+    for (const auto& [_, info] : Subscribers) {
+        if (info.State == NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST) {
+            ++lost;
+        }
+        if (IsSubscriberStale(info, now)) {
+            ++stale;
+        }
+    }
+
+    // Depth is meaningless without a consumer: with no subscribers the floor
+    // tracks the tail, and reporting a non-zero backlog nobody is waiting on
+    // would page someone for nothing.
+    const ui64 depth = Subscribers.empty()
+        ? 0
+        : NextSchemeChangeOrder - GetMinSubscriberOrder(now);
+
+    TabletCounters->Simple()[COUNTER_SCHEME_CHANGE_OUTBOX_DEPTH].Set(depth);
+    TabletCounters->Simple()[COUNTER_SCHEME_CHANGE_SUBSCRIBERS].Set(Subscribers.size());
+    TabletCounters->Simple()[COUNTER_SCHEME_CHANGE_SUBSCRIBERS_LOST].Set(lost);
+    TabletCounters->Simple()[COUNTER_SCHEME_CHANGE_SUBSCRIBERS_STALE].Set(stale);
 }
 
 ui64 TSchemeShard::GetVisibleSchemeChangeTail() const {
@@ -4253,33 +4285,6 @@ ui64 TSchemeShard::GetVisibleSchemeChangeTail() const {
     return firstPending == Max<ui64>() ? NextSchemeChangeOrder : firstPending - 1;
 }
 
-void TSchemeShard::ForceAdvanceLaggingSubscribers(NIceDb::TNiceDb& db, const TActorContext& ctx) {
-    const TInstant now = ctx.Now();
-    const ui64 floor = GetMinSubscriberOrder(now);
-    const ui64 tail = GetVisibleSchemeChangeTail();
-    if (floor >= tail) {
-        return;
-    }
-    for (auto& [subscriberId, info] : Subscribers) {
-        if (IsSubscriberStale(info, now) || info.LastAckedOrder > floor) {
-            continue;
-        }
-        // The consumer must learn its chain is broken so it can fall back to a
-        // full snapshot instead of silently resuming with a hole. Same contract
-        // as the TTL force-advance and the clamped-registration path.
-        info.LastAckedOrder = tail;
-        info.State = NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST;
-        info.LastActivityAt = now;
-        db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
-            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(tail),
-            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::State>(
-                NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST)
-        );
-        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Scheme change records cap reached; force-advancing subscriber '" << subscriberId
-                << "' to " << tail << " and marking it Lost");
-    }
-}
 
 ui32 TSchemeShard::CountTransactionSupportingDomains() const {
     ui32 count = 0;
@@ -4292,11 +4297,24 @@ ui32 TSchemeShard::CountTransactionSupportingDomains() const {
 }
 
 bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr, TInstant now) const {
+    // Refresh the gauges here, not only from the outbox transactions' Complete().
+    //
+    // A wedged cluster runs NO outbox transactions -- DDL is being refused at
+    // this gate and the broken consumer is not fetching -- so hooks on those
+    // transactions alone leave the gauges frozen at their last healthy value,
+    // precisely in the situation an operator needs them. This gate runs on
+    // every DDL attempt, rejected ones included.
+    UpdateSchemeChangeGauges();
+
     if (Subscribers.empty()) {
         return true;
     }
     const ui64 unacked = NextSchemeChangeOrder - GetMinSubscriberOrder(now);
     if (unacked >= MaxSchemeChangeRecords) {
+        // The wedge firing. This is the counter that pages someone: DDL is now
+        // being refused cluster-wide and nothing but an admin force-advance
+        // will clear it.
+        TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_DDL_REJECTED].Increment(1);
         errStr = TStringBuilder()
             << "scheme change records is full: " << unacked
             << " unacked entries (limit: " << MaxSchemeChangeRecords << ")."

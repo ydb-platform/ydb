@@ -1377,6 +1377,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextShardIdx, Self->NextLocalShardIdx));
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_NextSchemeChangeOrder, Self->NextSchemeChangeOrder));
         RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_LastAssignedPlanStep, Self->LastAssignedPlanStep));
+        RETURN_IF_NO_PRECHARGED(Self->ReadSysValue(db, Schema::SysParam_SchemeChangeFloorOrder, Self->SchemeChangeFloorOrder));
 
         {
             auto subRowset = db.Table<Schema::SchemeChangeSubscribers>().Range().Select();

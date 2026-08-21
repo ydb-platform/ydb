@@ -284,6 +284,11 @@ public:
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
     ui64 NextSchemeChangeOrder = 0;
+    // Highest outbox order known to be physically gone. Deleted rows stay as
+    // tombstones until compaction, so a cleanup that restarts at order 1 walks
+    // the whole dead prefix again on every batch -- quadratic while draining a
+    // backlog. Reloaded at TTxInit.
+    ui64 SchemeChangeFloorOrder = 0;
     ui64 MaxSchemeChangeRecords = 100000;
     // A subscriber idle for longer than this stops holding the retention
     // floor down. Prevents a dead subscriber from wedging DDL forever.
@@ -346,6 +351,12 @@ public:
     // rather than wait for a long chain of back-to-back cleanup txs.
     TDuration SchemeChangeCleanupInterval = TDuration::MilliSeconds(10);
 
+    // Cap on Orders per FetchSchemeChangeRecordBodies request. Bodies are read
+    // by point lookup, so cost is |Orders| rather than the span they cover --
+    // but |Orders| is caller-supplied, so it needs its own bound. Matches the
+    // metadata fetch's maxCount ceiling.
+    ui64 MaxSchemeChangeBodiesPerRequest = 1000;
+
     // Test-only: counts PersistUpdateNextSchemeChangeOrder calls.
     // Used by unit tests to verify that a multi-part DDL persists the
     // NextSchemeChangeOrder sysparam once per batch, not once per record.
@@ -389,25 +400,32 @@ public:
     // schemeshard_impl.cpp.
     ui64 GetVisibleSchemeChangeTail() const;
 
+    // Refresh the outbox gauges. Cheap (O(|Subscribers|), capped at 100), so it
+    // is called from every path that can move the depth or a subscriber's state
+    // rather than being scheduled. Depth is the one operators alert on: DDL is
+    // rejected at MaxSchemeChangeRecords and only an admin can release it.
+    void UpdateSchemeChangeGauges() const;
+
     // Retention floor. Where nothing holds it down it rises to the visible
     // tail rather than the reserved one -- cleanup deletes everything at or
     // below this, and a reserved row must outlive that sweep or the operation
     // still running would have nothing left to finalise.
-    ui64 GetMinSubscriberOrder(TInstant now) const {
+    ui64 GetMinSubscriberOrder(TInstant) const {
         if (Subscribers.empty()) {
             return GetVisibleSchemeChangeTail();
         }
+        // Every registered subscriber holds the floor, including a stale one.
+        //
+        // Staleness used to exclude a subscriber here, which silently handed its
+        // unread records to the cleanup sweep. Under the no-silent-loss policy
+        // nothing is discarded without an explicit admin force-advance: a dead
+        // consumer wedges DDL instead of losing data quietly. Staleness is now
+        // only a diagnostic (see the Stale gauge).
         ui64 m = Max<ui64>();
-        bool any = false;
         for (const auto& [_, info] : Subscribers) {
-            if (IsSubscriberStale(info, now)) {
-                continue;
-            }
-            any = true;
             m = Min(m, info.LastAckedOrder);
         }
-        // Every subscriber is stale: nothing holds the floor down.
-        return any ? m : GetVisibleSchemeChangeTail();
+        return m;
     }
 
     bool IsSubscriberStale(const TSubscriberInfo& info, TInstant now) const {
@@ -1036,6 +1054,7 @@ public:
     void PersistUpdateNextPathId(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const;
     void PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const;
+    void PersistSchemeChangeFloorOrder(NIceDb::TNiceDb& db) const;
     void PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const;
 
     // Back-pointer from an in-flight operation to the outbox order reserved
@@ -1128,7 +1147,6 @@ public:
     // Cap relief: advance whichever subscribers are pinning the retention
     // floor to the tail and mark them Lost, so the log can be swept. Called
     // from the record-allocation site when appending would exceed the cap.
-    void ForceAdvanceLaggingSubscribers(NIceDb::TNiceDb& db, const TActorContext& ctx);
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
     void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);

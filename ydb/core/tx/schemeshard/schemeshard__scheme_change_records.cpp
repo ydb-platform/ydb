@@ -173,11 +173,24 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
     // A secret's description carries the value, so it is never captured.
     // Consumers get identity for secrets, never content.
     if (resolvedPathId && resolvedObjectType != NKikimrSchemeOp::EPathTypeSecret) {
-        auto desc = DescribePath(this, ctx, resolvedPathId);
+        // Schema only. The default options return partitioning info, partition
+        // config, children and range keys -- and those are the two unbounded
+        // terms: MaxShardsInPath is 35k partitions and MaxChildrenInDir is 100k
+        // entries, all of which would be serialized into the local-DB redo log
+        // on every single DDL. What a consumer needs to recreate the object is
+        // its schema; the partition layout is re-derived at incremental-backup
+        // time, which is where it belongs.
+        NKikimrSchemeOp::TDescribeOptions opts;
+        opts.SetReturnPartitioningInfo(false);
+        opts.SetReturnPartitionConfig(false);
+        opts.SetReturnChildren(false);
+        opts.SetReturnRangeKey(false);
+        auto desc = DescribePath(this, ctx, resolvedPathId, opts);
         Y_UNUSED(desc->GetRecord().SerializeToString(&description));
     }
 
     TestSchemeChangeRedoBytesAccum += description.size();
+    TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_DESCRIPTION_BYTES].Increment(description.size());
 
     // CompletedAtUs is written last in intent: a non-zero value is what makes
     // this row visible to subscribers, and everything it promises is set in the
@@ -249,14 +262,31 @@ bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldM
     if (newMinOrder <= oldMinOrder) {
         return true;
     }
+    // Resume above whatever is already physically gone. Callers pass their own
+    // notion of "already acked" (0, for the periodic cleanup tx), but deleted
+    // rows linger as tombstones until compaction, so restarting at order 1
+    // re-seeks the whole dead prefix on every batch -- quadratic while
+    // draining a backlog.
+    const ui64 from = Max(oldMinOrder, SchemeChangeFloorOrder) + 1;
+    if (newMinOrder < from) {
+        return true;
+    }
+    // Bound both ends. The loop below breaks past newMinOrder, so iteration was
+    // always bounded -- but a one-sided GreaterOrEqual().Select() precharges
+    // with an empty maxKey, which charges the whole tail of the table. That
+    // made a cleanup deleting a handful of rows pay for every record sitting
+    // above them. LessOrEqual routes to the bounded RangeKeyOperations path.
     auto logRowset = db.Table<Schema::SchemeChangeRecords>()
-        .GreaterOrEqual(oldMinOrder + 1)
+        .GreaterOrEqual(from)
+        .LessOrEqual(newMinOrder)
         .Select();
     if (!logRowset.IsReady()) {
         return false;
     }
     ui64 deleted = 0;
+    ui64 lastDeleted = 0;
     while (!logRowset.EndOfSet()) {
+        TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_ROWS_SCANNED].Increment(1);
         ui64 order = logRowset.GetValue<Schema::SchemeChangeRecords::Order>();
         if (order > newMinOrder) {
             break;
@@ -267,10 +297,17 @@ bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldM
         }
         db.Table<Schema::SchemeChangeRecords>().Key(order).Delete();
         db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Delete();
+        lastDeleted = order;
         ++deleted;
         if (!logRowset.Next()) {
             return false;
         }
+    }
+    // Advance the floor to the last row actually removed -- not to newMinOrder,
+    // which the batch limit may have stopped short of. Only ever moves forward.
+    if (lastDeleted > SchemeChangeFloorOrder) {
+        SchemeChangeFloorOrder = lastDeleted;
+        PersistSchemeChangeFloorOrder(db);
     }
     return true;
 }

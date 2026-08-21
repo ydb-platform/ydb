@@ -25,6 +25,7 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
     }
 
     void Complete(const TActorContext& ctx) override {
+        Self->UpdateSchemeChangeGauges();
         ++Self->SchemeChangeCleanupTxCount;
         if (HasMoreToCleanup) {
             Self->EnqueueSchemeChangeRecordsCleanup(ctx);
@@ -132,6 +133,7 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
     }
 
     void Complete(const TActorContext& ctx) override {
+        Self->UpdateSchemeChangeGauges();
         // Empty when driven from the monitoring page: that path answers the
         // HTTP request itself, and the internal result event has no recipient.
         if (ReplyTo) {

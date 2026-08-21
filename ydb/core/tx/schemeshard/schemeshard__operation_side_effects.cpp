@@ -1025,21 +1025,15 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             }
         }
 
-        // Cap enforcement, against the SUBSCRIBER rather than against DDL.
-        //
-        // This sits at finalisation, not at the propose gate, because it must
-        // not abort the tablet: TTxForceAdvanceSubscriber writes via NIceDb and
-        // would flip DirectAccessGranted before later parts propose. Here we
-        // are already inside the operation's local-DB transaction, so NFR1
-        // holds and the O(|Subscribers|) scan is paid only at the cap.
-        if (ss->NextSchemeChangeOrder - ss->GetMinSubscriberOrder(ctx.Now())
-                > ss->MaxSchemeChangeRecords) {
-            ss->ForceAdvanceLaggingSubscribers(db, ctx);
-        }
+        // No cap relief here any more. The outbox filling up is handled by
+        // the propose gate refusing DDL, not by quietly discarding a lagging
+        // subscriber's records -- only an admin force-advance may do that.
 
         for (const auto& slot : operation->SchemeChangeSlots) {
             ss->FinalizeSchemeChangeRecord(db, ctx, slot, planStep);
             ss->PersistRemoveSchemeChangePendingOrder(db, txId, slot.UserTxIdx);
+
+            ss->UpdateSchemeChangeGauges();
 
             LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "DoPersistSchemeChangeRecords: finalised user-level entry"

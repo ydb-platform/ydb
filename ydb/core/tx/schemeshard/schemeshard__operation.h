@@ -38,8 +38,14 @@ struct TOperation: TSimpleRefCount<TOperation> {
     // orders. A propose that is rejected after ignition rolls the local DB
     // back but not the in-memory counter, which would let a later propose
     // reuse a persisted order and overwrite a live record; AbortOperationPropose
-    // rewinds to this. Zero means nothing was reserved.
+    // rewinds to this.
+    //
+    // The companion flag is not redundant: the counter starts at 0, so on the
+    // very first reserving DDL the base legitimately IS 0. Testing the base for
+    // truthiness there silently skips the rewind and leaves a permanent hole
+    // that fetch reports to subscribers as record loss.
     ui64 SchemeChangeOrderBase = 0;
+    bool SchemeChangeOrdersReserved = false;
 
     THashSet<TActorId> Subscribers;
     THashSet<TTxId> DependentOperations;

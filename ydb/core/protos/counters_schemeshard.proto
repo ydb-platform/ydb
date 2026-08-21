@@ -308,6 +308,22 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 238        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
     
     COUNTER_RUNNING_STREAMING_QUERY_COUNT = 239           [(CounterOpts) = {Name: "RunningStreamingQueryCount"}];
+
+    // Scheme change outbox (RFC-0129).
+    //
+    // OutboxDepth is the metric that matters operationally: once it reaches
+    // MaxSchemeChangeRecords, DDL is REJECTED cluster-wide and only an admin
+    // force-advance releases it. Alert on this well before the wedge.
+    COUNTER_SCHEME_CHANGE_OUTBOX_DEPTH = 240              [(CounterOpts) = {Name: "SchemeChangeOutboxDepth"}];
+    COUNTER_SCHEME_CHANGE_SUBSCRIBERS = 241               [(CounterOpts) = {Name: "SchemeChangeSubscribers"}];
+    // A Lost subscriber has an unrecoverable hole in its stream and must fall
+    // back to a full snapshot -- it will not heal on its own.
+    COUNTER_SCHEME_CHANGE_SUBSCRIBERS_LOST = 242          [(CounterOpts) = {Name: "SchemeChangeSubscribersLost"}];
+    // Idle beyond the stale TTL. Distinct from Lost on purpose: a stale
+    // subscriber has lost nothing (its records are retained, which is exactly
+    // why DDL will eventually wedge), so folding it into Lost would fire the
+    // "take a full snapshot" alert for a consumer that only needs restarting.
+    COUNTER_SCHEME_CHANGE_SUBSCRIBERS_STALE = 243         [(CounterOpts) = {Name: "SchemeChangeSubscribersStale"}];
 }
 
 enum ECumulativeCounters {
@@ -509,6 +525,14 @@ enum ECumulativeCounters {
 
     COUNTER_FINISHED_OPS_TxCreateTestShardSet = 149      [(CounterOpts) = {Name: "FinishedOps/CreateTestShardSet"}];
     COUNTER_FINISHED_OPS_TxDropTestShardSet = 150        [(CounterOpts) = {Name: "FinishedOps/DropTestShardSet"}];
+
+    // Scheme change outbox (RFC-0129).
+    COUNTER_SCHEME_CHANGE_DDL_REJECTED = 151             [(CounterOpts) = {Name: "SchemeChangeDdlRejectedByOutbox"}];
+    // Rows the outbox transactions actually walk. Bounded work keeps this
+    // proportional to rows delivered; a regression that reintroduces an
+    // unbounded scan shows up here as a rate spike with no matching delivery.
+    COUNTER_SCHEME_CHANGE_ROWS_SCANNED = 152             [(CounterOpts) = {Name: "SchemeChangeOutboxRowsScanned"}];
+    COUNTER_SCHEME_CHANGE_DESCRIPTION_BYTES = 153        [(CounterOpts) = {Name: "SchemeChangeDescriptionBytes"}];
 }
 
 enum EPercentileCounters {

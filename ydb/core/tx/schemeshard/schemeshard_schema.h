@@ -2765,11 +2765,11 @@ struct Schema : NIceDb::Schema {
     // operation is.
     //
     // Path is duplicated from the record row on purpose. Finalisation happens
-    // inside the operation's own local-DB transaction, which has already taken
-    // its reads and cannot issue another without tripping a late Precharge, so
-    // completion must have the path in memory; this table is range-scanned at
-    // boot (bounded by in-flight operations, not by retained log size) to put
-    // it back there.
+    // inside the operation's own local-DB transaction, which ran
+    // txc.DB.NoMoreReadsForTx() at its top -- after that both reads and
+    // precharges hard-abort the tablet -- so completion must already have the
+    // path in memory; this table is range-scanned at boot (bounded by in-flight
+    // operations, not by retained log size) to put it back there.
     //
     // Column 3 is burned: it held the serialized TModifyScheme back when the
     // request body itself was the durable artefact.
@@ -2943,6 +2943,10 @@ struct Schema : NIceDb::Schema {
     static constexpr ui64 SysParam_TablePartitionsFormatSweepTarget = 14;
     static constexpr ui64 SysParam_NextSchemeChangeOrder = 15;
     static constexpr ui64 SysParam_LastAssignedPlanStep = 16;
+    // Highest outbox order known to be physically deleted. Cleanup resumes
+    // above it instead of restarting at order 1 and re-seeking the tombstoned
+    // prefix on every batch. Persisted so a reboot does not lose the position.
+    static constexpr ui64 SysParam_SchemeChangeFloorOrder = 17;
 
     // List of incompatible changes:
     // * Change 1: store migrated shards of local tables (e.g. after a rename) as a migrated record

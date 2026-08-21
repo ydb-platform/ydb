@@ -179,6 +179,7 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
     }
 
     void Complete(const TActorContext& ctx) override {
+        Self->UpdateSchemeChangeGauges();
         ctx.Send(Request->Sender, Result.Release());
     }
 };
@@ -245,6 +246,7 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
                 break;
             }
 
+            Self->TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_ROWS_SCANNED].Increment(1);
             ui64 order = rowset.GetValue<Schema::SchemeChangeRecords::Order>();
 
             // Stop at the first row whose operation is still in flight. Its
@@ -364,6 +366,7 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
     }
 
     void Complete(const TActorContext& ctx) override {
+        Self->UpdateSchemeChangeGauges();
         ctx.Send(Request->Sender, Result.Release());
     }
 };
@@ -436,6 +439,7 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
     }
 
     void Complete(const TActorContext& ctx) override {
+        Self->UpdateSchemeChangeGauges();
         ctx.Send(Request->Sender, Result.Release());
         if (HasMoreToCleanup) {
             Self->EnqueueSchemeChangeRecordsCleanup(ctx);
@@ -494,6 +498,7 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
     }
 
     void Complete(const TActorContext& ctx) override {
+        Self->UpdateSchemeChangeGauges();
         ctx.Send(Request->Sender, Result.Release());
         if (HasMoreToCleanup) {
             Self->EnqueueSchemeChangeRecordsCleanup(ctx);
@@ -532,61 +537,68 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
             return true;
         }
 
-        THashSet<ui64> requestedSet(requestedOrders.begin(), requestedOrders.end());
-        ui64 minOrder = Max<ui64>();
-        ui64 maxOrder = 0;
-        for (ui64 o : requestedSet) {
-            minOrder = Min(minOrder, o);
-            maxOrder = Max(maxOrder, o);
+        // Reject rather than truncate. A truncated reply is indistinguishable
+        // from "those records no longer exist", which is exactly the silent
+        // loss the subscriber contract forbids.
+        if ((ui64)requestedOrders.size() > Self->MaxSchemeChangeBodiesPerRequest) {
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
+            Result->Record.SetReason(TStringBuilder()
+                << "Too many orders requested: " << requestedOrders.size()
+                << ", max " << Self->MaxSchemeChangeBodiesPerRequest);
+            return true;
         }
 
+        THashSet<ui64> requestedSet(requestedOrders.begin(), requestedOrders.end());
+
+        // Point lookups, not a [min,max] span scan. The span between the
+        // lowest and highest requested order is unbounded and caller-chosen:
+        // asking for orders {1, 100000} made the old range scan walk every row
+        // in between on both tables to return two entries. Cost is now
+        // |requestedSet|, which the clamp above bounds.
+        //
+        // A faulted page yields !IsReady; keep issuing the remaining lookups
+        // before returning false so the restart resolves them in one batch
+        // rather than one round trip per missing page.
         THashMap<ui64, TString> descriptionByOrder;
         THashSet<ui64> metaExisting;
-        {
-            auto metaRowset = db.Table<Schema::SchemeChangeRecords>()
-                .GreaterOrEqual(minOrder)
-                .LessOrEqual(maxOrder)
-                .Select();
-            if (!metaRowset.IsReady()) {
-                return false;
+        bool allReady = true;
+        for (ui64 order : requestedSet) {
+            Self->TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_ROWS_SCANNED].Increment(1);
+            auto row = db.Table<Schema::SchemeChangeRecords>().Key(order).Select();
+            if (!row.IsReady()) {
+                allReady = false;
+                continue;
             }
-            while (!metaRowset.EndOfSet()) {
-                ui64 order = metaRowset.GetValue<Schema::SchemeChangeRecords::Order>();
-                if (requestedSet.contains(order)) {
-                    metaExisting.insert(order);
-                    // Description lives on this table, so it rides along with
-                    // the scan we are already doing -- no second pass.
-                    auto desc = metaRowset.GetValueOrDefault<
-                        Schema::SchemeChangeRecords::Description>(TString());
-                    if (!desc.empty()) {
-                        descriptionByOrder.emplace(order, std::move(desc));
-                    }
-                }
-                if (!metaRowset.Next()) {
-                    return false;
-                }
+            if (!row.IsValid()) {
+                continue;
+            }
+            metaExisting.insert(order);
+            // Description lives on this table, so it rides along with the
+            // lookup we are already doing -- no second pass.
+            auto desc = row.GetValueOrDefault<Schema::SchemeChangeRecords::Description>(TString());
+            if (!desc.empty()) {
+                descriptionByOrder.emplace(order, std::move(desc));
             }
         }
 
         THashMap<ui64, TString> bodyByOrder;
-        // (descriptionByOrder is filled by the metadata scan above)
-        if (!metaExisting.empty()) {
-            auto bodyRowset = db.Table<Schema::SchemeChangeRecordDetails>()
-                .GreaterOrEqual(minOrder)
-                .LessOrEqual(maxOrder)
-                .Select();
-            if (!bodyRowset.IsReady()) {
-                return false;
+        for (ui64 order : metaExisting) {
+            Self->TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_ROWS_SCANNED].Increment(1);
+            auto row = db.Table<Schema::SchemeChangeRecordDetails>().Key(order).Select();
+            if (!row.IsReady()) {
+                allReady = false;
+                continue;
             }
-            while (!bodyRowset.EndOfSet()) {
-                ui64 order = bodyRowset.GetValue<Schema::SchemeChangeRecordDetails::Order>();
-                if (metaExisting.contains(order)) {
-                    bodyByOrder.emplace(order, bodyRowset.GetValue<Schema::SchemeChangeRecordDetails::Body>());
-                }
-                if (!bodyRowset.Next()) {
-                    return false;
-                }
+            if (!row.IsValid()) {
+                continue;
             }
+            bodyByOrder.emplace(order, row.GetValue<Schema::SchemeChangeRecordDetails::Body>());
+        }
+
+        // Restart only after every lookup above has been issued. Nothing has
+        // been written to Result yet, so the re-execution starts clean.
+        if (!allReady) {
+            return false;
         }
 
         // Iterate requestedOrders (not metaExisting) to preserve request order and duplicates.
@@ -611,6 +623,7 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
     }
 
     void Complete(const TActorContext& ctx) override {
+        Self->UpdateSchemeChangeGauges();
         ctx.Send(Request->Sender, Result.Release());
     }
 };

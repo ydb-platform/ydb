@@ -32,6 +32,8 @@ source "${SCRIPT_DIR}/acceptance/test_image_metadata.sh"
 source "${SCRIPT_DIR}/acceptance/test_default_startup.sh"
 # shellcheck source=acceptance/test_custom_config.sh
 source "${SCRIPT_DIR}/acceptance/test_custom_config.sh"
+# shellcheck source=acceptance/test_default_tls.sh
+source "${SCRIPT_DIR}/acceptance/test_default_tls.sh"
 # shellcheck source=acceptance/test_custom_tls.sh
 source "${SCRIPT_DIR}/acceptance/test_custom_tls.sh"
 # shellcheck source=acceptance/test_partial_tls.sh
@@ -50,6 +52,7 @@ source "${SCRIPT_DIR}/acceptance/test_interactive.sh"
 test_image_metadata
 test_default_startup
 test_custom_config
+test_default_tls
 test_custom_tls
 test_partial_tls
 test_tls_disabled

@@ -4231,8 +4231,8 @@ void TSchemeShard::PersistSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId tx
 
 void TSchemeShard::PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx) const {
     // Point delete by known key, not a range scan: TTxOperationPropose::Execute
-    // calls txc.DB.NoMoreReadsForTx() before this runs, after which any read
-    // (a range scan included) hard-aborts the tablet.
+    // calls txc.DB.NoMoreReadsForTx() before this runs, and any read after that
+    // hard-aborts the tablet.
     db.Table<Schema::SchemeChangePendingRecords>().Key(txId, userTxIdx).Delete();
 }
 
@@ -4249,8 +4249,7 @@ void TSchemeShard::UpdateSchemeChangeGauges() const {
         }
     }
 
-    // Depth is meaningless without a consumer: reporting a backlog nobody is
-    // waiting on would page someone for nothing.
+    // Depth is meaningless without a consumer.
     const ui64 depth = Subscribers.empty()
         ? 0
         : NextSchemeChangeOrder - GetMinSubscriberOrder(now);
@@ -4263,9 +4262,9 @@ void TSchemeShard::UpdateSchemeChangeGauges() const {
 
 ui64 TSchemeShard::GetVisibleSchemeChangeTail() const {
     // The highest order a subscriber cursor may legitimately sit at.
-    // NextSchemeChangeOrder is the *reserved* tail, counting rows still in
-    // flight with no identity or plan step yet -- parking a cursor there would
-    // let cleanup delete a row out from under its running operation.
+    // NextSchemeChangeOrder counts rows still in flight with no identity or
+    // plan step yet; parking a cursor there would let cleanup delete a row
+    // out from under its running operation.
     ui64 firstPending = Max<ui64>();
     for (const auto& [_, operation] : Operations) {
         for (const auto& slot : operation->SchemeChangeSlots) {
@@ -4287,9 +4286,8 @@ ui32 TSchemeShard::CountTransactionSupportingDomains() const {
 }
 
 bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr, TInstant now) const {
-    // Refresh the gauges here, not only from the outbox transactions'
-    // Complete(): a wedged cluster runs no outbox transactions, which would
-    // otherwise leave the gauges frozen exactly when an operator needs them.
+    // Refresh the gauges here too: a wedged cluster runs no outbox
+    // transactions, which would otherwise leave the gauges frozen.
     UpdateSchemeChangeGauges();
 
     if (Subscribers.empty()) {
@@ -4297,8 +4295,7 @@ bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr, TInstant no
     }
     const ui64 unacked = NextSchemeChangeOrder - GetMinSubscriberOrder(now);
     if (unacked >= MaxSchemeChangeRecords) {
-        // The wedge firing: DDL is now refused cluster-wide until an admin
-        // force-advance clears it.
+        // DDL is now refused cluster-wide until an admin force-advance clears it.
         TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_DDL_REJECTED].Increment(1);
         errStr = TStringBuilder()
             << "scheme change records is full: " << unacked
@@ -6070,7 +6067,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NReplication::TEvController::TEvAlterReplicationResult, Handle);
         HFuncTraced(NReplication::TEvController::TEvDropReplicationResult, Handle);
 
-        // scheme change records bounded cleanup continuation
+        // Scheme change records bounded cleanup continuation.
         HFuncTraced(TEvPrivate::TEvSchemeChangeRecordsCleanup, Handle);
 
         // conditional erase

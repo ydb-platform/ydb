@@ -991,10 +991,8 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         return;
     }
 
-    // Runs regardless of whether a subscriber exists *now*: what matters is
-    // whether one existed at propose, which is exactly what a non-empty
-    // SchemeChangeSlots records. A subscriber unregistering mid-DDL must not
-    // leave a permanently un-finalised row blocking the outbox.
+    // Runs regardless of whether a subscriber exists now: what matters is
+    // whether one existed at propose, recorded by a non-empty SchemeChangeSlots.
     NIceDb::TNiceDb db(txc.DB);
 
     for (const auto& txId : DoneTransactions) {
@@ -1016,9 +1014,8 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             }
         }
 
-        // No cap relief here: the outbox filling up is handled by the propose
-        // gate refusing DDL, not by discarding a lagging subscriber's records.
-        // Only an admin force-advance may do that.
+        // No cap relief here: an outbox overflow is handled by the propose
+        // gate refusing DDL, or by an admin force-advance, not by discarding records.
 
         for (const auto& slot : operation->SchemeChangeSlots) {
             ss->FinalizeSchemeChangeRecord(db, ctx, slot, planStep);

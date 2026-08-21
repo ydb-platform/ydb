@@ -2272,8 +2272,7 @@ private:
                     << "No scheme change subscriber '" << subscriberId << "'", ctx);
                 return;
             }
-            // RFC 0129:359-363 names this the escape hatch for a dead subscriber
-            // wedging DDL. It had no reachable caller until now.
+            // Escape hatch for a dead subscriber wedging DDL.
             Self->Execute(Self->CreateTxForceAdvanceSubscriberFromMonitoring(
                 subscriberId, TActorId()), ctx);
             ctx.Send(Ev->Sender, new NMon::TEvRemoteBinaryInfoRes(

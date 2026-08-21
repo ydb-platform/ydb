@@ -1,10 +1,6 @@
-// Scheme change records subscriber protocol.
-//
-// SchemeShard maintains an append-only log of DDL sub-operations.
-// Subscribers register with a stable string ID, fetch records in
-// order, request bodies for the subset they care about, and ack
-// consumed ranges. Acks may trigger inline cleanup of acked
-// records.
+// Scheme change records subscriber protocol. Subscribers register with a
+// stable string ID, fetch records in order, pull bodies for the subset they
+// need, and ack consumed ranges.
 syntax = "proto3";
 
 package NKikimrSchemeShard;
@@ -21,8 +17,7 @@ message TSchemeChangeRecordsStatus {
         STATUS_NOT_REGISTERED = 2;
         STATUS_INVALID_REQUEST = 3;
         STATUS_INTERNAL_ERROR = 4;
-        // Caller is not a cluster administrator. The mutating requests
-        // (register / unregister / force-advance) are admin-only.
+        // Register / unregister / force-advance are admin-only.
         STATUS_ACCESS_DENIED = 5;
     }
 }
@@ -33,13 +28,10 @@ message TSchemeChangeSubscriberState {
         STATE_UNSPECIFIED = 0;
         // Streaming normally.
         STATE_READY = 1;
-        // Reserved: subscriber is backfilling a snapshot and its stream
-        // begins at StartOrder. No backfill mechanism exists yet; the seam
-        // is here so adding one later needs no schema migration.
+        // Reserved for snapshot backfill; no mechanism exists yet.
         STATE_SCAN = 2;
-        // The cursor was advanced past records this subscriber never
-        // received (registration below the retention floor, or the
-        // count-triggered force-advance). SkippedEntries says how many.
+        // Cursor advanced past records never received; SkippedEntries
+        // says how many.
         STATE_LOST = 3;
     }
 }
@@ -51,12 +43,9 @@ message TSchemeChangePosition {
         // PlanStep is the coordinator step this operation was actually planned
         // at. Safe to interleave against data records carrying the same clock.
         KIND_EXACT = 1;
-        // The operation never reached a coordinator (it completed at propose
-        // time and touched no shards), so it has no step of its own. PlanStep
-        // is a LOWER BOUND: the highest step SchemeShard had already applied,
-        // which means the op provably happened after every coordinated tx
-        // planned at that step. Use for window assignment only -- such records
-        // have no data to interleave against, because they touched no shard.
+        // The operation never reached a coordinator, so PlanStep is a LOWER
+        // BOUND: the highest step already applied. Use for window assignment
+        // only; such records touched no shard.
         KIND_BUCKETED = 2;
     }
 }
@@ -64,46 +53,29 @@ message TSchemeChangePosition {
 // Register a subscriber to the scheme change records log. Idempotent.
 message TEvRegisterSubscriber {
     string SubscriberId = 1;
-    // Absent => start at the tail (NextSchemeChangeOrder). This is the
-    // default and the only non-privileged form: a new subscriber asks for
-    // what happens next, never for history.
+    // Absent => start at the tail; the only non-privileged form.
     // Present => admin-only. Clamped up to the retention floor if below it
-    // (reported via State=STATE_LOST + SkippedEntries); rejected if beyond
-    // the tail.
+    // (State=STATE_LOST + SkippedEntries); rejected if beyond the tail.
     optional uint64 StartOrder = 2;
-    // Serialized NACLib::TUserToken of the caller. These events arrive over a
-    // tablet pipe, which carries no identity of its own, so the caller must
-    // supply one. Checked with IsAdministrator; note an EMPTY cluster-admin
-    // allowlist admits any token, including none.
+    // Serialized NACLib::TUserToken; these events arrive over a tablet pipe,
+    // which carries no identity. An EMPTY admin allowlist admits any token.
     bytes UserToken = 3;
 }
 
-// Response to TEvRegisterSubscriber. CurrentOrder is the subscriber's
-// cursor position: the tail for a default registration, or the accepted
-// (possibly clamped) StartOrder.
+// CurrentOrder is the subscriber's cursor after registration.
 message TEvRegisterSubscriberResult {
     optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
     uint64 CurrentOrder = 3;
     optional TSchemeChangeSubscriberState.EState State = 4;
-    // Non-zero only when an explicit StartOrder was clamped up to the
-    // retention floor: the number of records that were already swept and
-    // can never be delivered to this subscriber.
+    // Non-zero only when an explicit StartOrder was clamped up: records
+    // already swept and never deliverable to this subscriber.
     uint64 SkippedEntries = 5;
 }
 
-// A single scheme change log entry describing one DDL sub-operation.
-//
-// Under parent-level persistence, the record represents one user-level
-// TModifyScheme. `Body` (fetched via TEvFetchSchemeChangeRecordBodies)
-// is the source of truth for replay. The fields below carry best-effort
-// metadata for filtering/display:
-//   - `OperationType`, `PathId`, `ObjectType`, `SchemaVersion`, `UserSID`:
-//     advisory; may be zero/unset if the user-level op does not target
-//     a single identifiable path. Subscribers should consult `Body` for
-//     authoritative operation details.
-//   - `Path`: best-effort joined path (WorkingDir + target name from the
-//     body's typed sub-message), for human display.
+// One user-level TModifyScheme. `Body` (via TEvFetchSchemeChangeRecordBodies)
+// is the source of truth; the metadata fields below are advisory and may be
+// unset when the operation targets no single identifiable path.
 message TSchemeChangeRecord {
     uint64 Order = 1;
     uint64 TxId = 2;
@@ -117,11 +89,9 @@ message TSchemeChangeRecord {
     uint64 SchemaVersion = 10;
     uint64 CompletedAtUs = 11;
     uint64 BodySize = 13;
-    // Window membership ranks by (PlanStep, PositionKind) with EXACT < BUCKETED.
-    // There is deliberately NO tiebreak: records equal on both are concurrent by
-    // construction (the coordinator assigns one step precisely because it does
-    // not order them), so consumers must not infer an order from delivery.
-    // TxId is identity for joining to a CDC record's ts -- never an order.
+    // Window membership ranks by (PlanStep, PositionKind), EXACT < BUCKETED.
+    // No tiebreak: records equal on both are concurrent, so consumers must not
+    // infer an order from delivery. TxId is identity, never an order.
     optional TSchemeChangePosition.EKind PositionKind = 14;
 }
 
@@ -139,25 +109,14 @@ message TEvFetchSchemeChangeRecordsResult {
     string Reason = 2;
     repeated TSchemeChangeRecord Entries = 3;
     bool HasMore = 5;
-    // Number of entries the server fast-forwarded over because the client's
-    // AfterOrder was behind the persisted LastAckedOrder for this subscriber.
-    // Happens when a client restarts and retries from its local cursor before
-    // re-syncing with the ack state stored on schemeshard. Subscribers should
-    // treat this as informational (e.g., log it) — the skipped records are
-    // already acked and cannot be re-fetched.
+    // Entries fast-forwarded because AfterOrder was behind the persisted
+    // LastAckedOrder. Informational: those records are already acked.
     uint64 SkippedEntries = 6;
-    // Cursor state. STATE_LOST means records this subscriber had not consumed
-    // were swept (staleness exclusion, force-advance, or a clamped explicit
-    // StartOrder); SkippedEntries counts them.
+    // STATE_LOST means unconsumed records were swept; SkippedEntries counts them.
     optional TSchemeChangeSubscriberState.EState State = 8;
-    // Highest PlanStep through which the record stream is COMPLETE: no
-    // operation planned at or below it is still in flight. A consumer may
-    // close window (S_prev, S] once this is >= S.
-    //
-    // Needed because Order is completion order while PlanStep is plan order,
-    // and the two diverge across tablet transactions -- a DDL planned before a
-    // sync point can be persisted after it, so seeing the sync-point record is
-    // NOT sufficient to conclude the window is complete.
+    // Highest PlanStep through which the stream is COMPLETE. A consumer may
+    // close window (S_prev, S] once this is >= S. Needed because Order is
+    // completion order while PlanStep is plan order, and the two diverge.
     uint64 ClosedThroughPlanStep = 7;
 }
 
@@ -215,21 +174,11 @@ message TEvFetchSchemeChangeRecordBodiesResult {
     message TEntry {
         uint64 Order = 1;
         bytes Body = 2;
-        // Serialized TEvDescribeSchemeResult of the target as it existed when
-        // the record was written. Travels with Body rather than with the Fetch
-        // metadata for the same reason Body does: it is large, and only the
-        // subset of records a consumer actually cares about should pay for it.
+        // Serialized TEvDescribeSchemeResult as of when the record was
+        // written. Travels with Body because it is large.
         bytes Description = 3;
     }
     optional TSchemeChangeRecordsStatus.EStatus Status = 1;
     string Reason = 2;
     repeated TEntry Entries = 3;
 }
-
-// RFC-0129 phase 4.2: TEvReplaySchemeChangeRecord was removed.
-//
-// It re-executed a stored TModifyScheme with Internal=true and
-// AllowAccessToPrivatePaths=true, rewriting only WorkingDir -- which cannot
-// translate a request that names its target any other way (TDrop.Id resolves a
-// LOCAL path id on the target; TMove.SrcPath/DstPath are absolute). The record
-// now carries a resolved event instead, so nothing needs replaying.

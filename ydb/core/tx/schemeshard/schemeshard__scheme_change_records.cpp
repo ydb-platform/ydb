@@ -5,8 +5,8 @@ namespace NKikimr::NSchemeShard {
 
 namespace {
 
-// Name of the object a user-level TModifyScheme targets, found generically via
-// reflection so a newly added object type is covered without extending a switch.
+// Name of the object a user-level TModifyScheme targets, found via reflection
+// so a newly added object type is covered without extending a switch.
 TString ExtractSchemeChangeTargetName(const NKikimrSchemeOp::TModifyScheme& tx) {
     // The only shape where the name is not directly at <SubMessage>.Name.
     if (tx.HasCreateIndexedTable()) {
@@ -49,8 +49,8 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
         return false;
     }
 
-    // Redact plaintext secrets before persisting: TSecretSchemaOp.Value is
-    // sensitive and must never be written to the outbox or handed to subscribers.
+    // Redact secrets before persisting: TSecretSchemaOp.Value must never
+    // reach the outbox or subscribers.
     NKikimrSchemeOp::TModifyScheme redacted;
     const NKikimrSchemeOp::TModifyScheme* toPersist = &userTx;
     if (userTx.HasCreateSecret() || userTx.HasAlterSecret()) {
@@ -88,8 +88,8 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
         NIceDb::TUpdate<T::Path>(path),
         NIceDb::TUpdate<T::Status>(ui32(NKikimrScheme::StatusAccepted)),
         NIceDb::TUpdate<T::BodySize>(body.size()),
-        // Zero until finalisation: the marker the fetch path stops at, so a
-        // record for an operation still in flight is never handed out.
+        // Zero until finalisation; the fetch path stops here so an in-flight
+        // record is never handed out.
         NIceDb::TUpdate<T::CompletedAtUs>(ui64(0))
     );
     if (!body.empty()) {
@@ -109,8 +109,8 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
 
 void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorContext& ctx,
         const TOperation::TSchemeChangeSlot& slot, TStepId planStep) {
-    // Ops completing at propose (e.g. TModifyACL) have no coordinator step:
-    // they borrow the ceiling, sort as BUCKETED, and clamp to >= 1.
+    // Ops completing at propose (e.g. TModifyACL) have no coordinator step: they
+    // borrow the ceiling and sort as BUCKETED, clamped to >= 1.
     ui64 step = ui64(planStep);
     auto positionKind = NKikimrSchemeShard::TSchemeChangePosition::KIND_EXACT;
     if (step == 0 || planStep == InvalidStepId) {
@@ -119,8 +119,7 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
     }
     step = Max<ui64>(step, 1);
 
-    // Resolved here rather than shipping placeholders: after a DROP the name
-    // is gone, so identity must be captured now, at completion.
+    // Must be captured now: after a DROP the name is gone.
     TPathId resolvedPathId;
     auto resolvedObjectType = NKikimrSchemeOp::EPathTypeInvalid;
     ui64 schemaVersion = 0;
@@ -139,8 +138,8 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
     TString description;
     // A secret's description carries the value, so it is never captured.
     if (resolvedPathId && resolvedObjectType != NKikimrSchemeOp::EPathTypeSecret) {
-        // Schema only: partitioning/children/range-key info is unbounded
-        // (up to 35k partitions, 100k dir entries) and would bloat the redo log.
+        // Schema only: partitioning/children/range-key info is unbounded and
+        // would bloat the redo log.
         NKikimrSchemeOp::TDescribeOptions opts;
         opts.SetReturnPartitioningInfo(false);
         opts.SetReturnPartitionConfig(false);
@@ -153,8 +152,8 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
     TestSchemeChangeRedoBytesAccum += description.size();
     TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_DESCRIPTION_BYTES].Increment(description.size());
 
-    // CompletedAtUs is non-zero here, making this row visible to subscribers,
-    // so everything it promises must already be set in this same Update.
+    // CompletedAtUs is non-zero here, making the row visible to subscribers,
+    // so all its fields must be set in this same Update.
     using T = Schema::SchemeChangeRecords;
     db.Table<T>().Key(slot.Order).Update(
         NIceDb::TUpdate<T::PathOwnerId>(resolvedPathId.OwnerId),
@@ -220,14 +219,14 @@ bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldM
     if (newMinOrder <= oldMinOrder) {
         return true;
     }
-    // Resume above whatever is already physically gone (tombstones linger
-    // until compaction), or restarting at order 1 is quadratic on a backlog.
+    // Resume above whatever is already physically gone; restarting at order 1
+    // is quadratic on a backlog.
     const ui64 from = Max(oldMinOrder, SchemeChangeFloorOrder) + 1;
     if (newMinOrder < from) {
         return true;
     }
     // Bound both ends: an unbounded GreaterOrEqual().Select() would precharge
-    // the whole tail of the table. LessOrEqual keeps this on the bounded path.
+    // the whole tail of the table.
     auto logRowset = db.Table<Schema::SchemeChangeRecords>()
         .GreaterOrEqual(from)
         .LessOrEqual(newMinOrder)
@@ -256,7 +255,7 @@ bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldM
         }
     }
     // Advance to the last row actually removed, not newMinOrder: the batch
-    // limit may have stopped short of it.
+    // limit may have stopped short.
     if (lastDeleted > SchemeChangeFloorOrder) {
         SchemeChangeFloorOrder = lastDeleted;
         PersistSchemeChangeFloorOrder(db);

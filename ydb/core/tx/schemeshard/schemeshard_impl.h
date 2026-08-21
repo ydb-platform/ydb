@@ -340,8 +340,7 @@ public:
         ui64 LastAckedOrder = 0;
         TInstant LastActivityAt;
         // NKikimrSchemeShard::TSchemeChangeSubscriberState::EState value.
-        // Defaults to STATE_READY (1) rather than 0 so a row written before
-        // the column existed reads as Ready, not Unspecified.
+        // Defaults to STATE_READY (1) so a pre-existing row reads as Ready.
         ui32 State = 1;
         // Order this subscriber's stream begins at; see the schema comment
         // on Schema::SchemeChangeSubscribers::StartOrder.
@@ -361,8 +360,7 @@ public:
         if (Subscribers.empty()) {
             return GetVisibleSchemeChangeTail();
         }
-        // Stale subscribers still hold the floor. Records are dropped only by
-        // an admin force-advance.
+        // Stale subscribers still hold the floor; only an admin force-advance drops it.
         ui64 m = Max<ui64>();
         for (const auto& [_, info] : Subscribers) {
             m = Min(m, info.LastAckedOrder);
@@ -999,18 +997,14 @@ public:
     void PersistSchemeChangeFloorOrder(NIceDb::TNiceDb& db) const;
     void PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const;
 
-    // Back-pointer from an in-flight operation to the outbox order reserved
-    // for one of its user-level transactions, so completion can finalise the
-    // right row after a restart.
+    // Back-pointer from an in-flight operation to the outbox order reserved for
+    // one of its user-level transactions, so completion can finalise it after a restart.
     void PersistSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx,
         ui64 order, const TString& path) const;
     void PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx) const;
 
-    // Reserve an order and write the half of the record that is knowable at
-    // propose: what was asked for, and where. Identity and coordinator
-    // position are not known yet -- CompletedAtUs stays 0, which is what marks
-    // the row un-finalised and keeps the fetch path from handing it out.
-    // Returns false if this transaction emits no record.
+    // Reserves an order and writes the row with CompletedAtUs = 0, which keeps
+    // it hidden from fetch. Returns false if this transaction emits no record.
     bool PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx,
         const NKikimrSchemeOp::TModifyScheme& userTx, TOperation::TSchemeChangeSlot& slot);
 
@@ -1057,9 +1051,8 @@ public:
     void Handle(TEvSchemeShard::TEvUnregisterSubscriber::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxSchemeChangeRecordsCleanup();
     NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriber(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev);
-    // Operator surface: force-advance initiated from the monitoring page. The
-    // mon endpoint has already authorized the caller, and this entry point is
-    // in-process only, so it does not re-check admin rights.
+    // Force-advance initiated from the monitoring page, which has already
+    // authorized the caller; this in-process entry point skips the admin check.
     NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriberFromMonitoring(
         const TString& subscriberId, TActorId replyTo);
     void Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx);

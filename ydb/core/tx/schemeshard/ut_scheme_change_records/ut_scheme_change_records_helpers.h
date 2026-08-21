@@ -30,10 +30,9 @@ inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriber(
     return result;
 }
 
-// Register at an explicit start position (privileged form). `startOrder` is an
-// exclusive cursor with LastAckedOrder shape, so 0 means "everything still
-// retained". Values below the retention floor are clamped up to it and
-// reported as STATE_LOST with SkippedEntries > 0.
+// Register at an explicit start position. `startOrder` is an exclusive cursor
+// (0 means "everything retained"); values below the retention floor are
+// clamped up and reported as STATE_LOST.
 inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriberAtExpect(
     TTestActorRuntime& runtime, const TString& subscriberId, ui64 startOrder,
     NKikimrSchemeShard::TSchemeChangeRecordsStatus::EStatus expected,
@@ -59,10 +58,8 @@ inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriberAt(
         NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS, handle);
 }
 
-// Register while supplying an explicit caller token. Note that with an EMPTY
-// AppData().AdministrationAllowedSIDs every token -- including none -- is an
-// administrator, so a test asserting rejection must populate that list first
-// or the assertion proves nothing.
+// Register with an explicit caller token. An empty AdministrationAllowedSIDs
+// admits any token, so a rejection test must populate that list first.
 inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriberWithTokenExpect(
     TTestActorRuntime& runtime, const TString& subscriberId, const TString& userToken,
     NKikimrSchemeShard::TSchemeChangeRecordsStatus::EStatus expected,
@@ -98,8 +95,8 @@ inline TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecor
     return result;
 }
 
-// Asserts STATUS_SUCCESS. Without this, a failed fetch returns zero entries
-// and any emptiness-asserting test passes on code that never swept.
+// Asserts STATUS_SUCCESS, so a failed fetch cannot pass an emptiness check
+// meant to verify a sweep happened.
 inline TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecords(
     TTestActorRuntime& runtime, const TString& subscriberId, ui64 afterOrder, ui32 maxCount,
     TAutoPtr<IEventHandle>& handle)
@@ -216,8 +213,7 @@ struct TSchemeChangeRecordEntry {
     ui64 CompletedAtUs = 0;
     ui32 PositionKind = 0;
     NKikimrSchemeOp::TModifyScheme Body;
-    // Resolved description captured when the record was written; empty when the
-    // record has none (e.g. the target could not be resolved at completion).
+    // Resolved description captured when the record was written; empty if none.
     TString Description;
 };
 
@@ -231,11 +227,9 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
 {
     const TString tempSubId = "__internal_read_sub__";
 
-    // Register the temp subscriber at 0, not at the tail: this helper exists
-    // to read the log's whole retained contents. A default registration would
-    // start at the tail and read nothing. Requesting 0 against a log whose
-    // floor has advanced is clamped up to the floor and reported LOST, which
-    // is exactly right -- it reads everything still retained.
+    // Register at 0, not at the tail: this helper reads the log's whole
+    // retained contents. If the floor has advanced, 0 clamps up to it and
+    // reports LOST, which correctly reads everything still retained.
     TAutoPtr<IEventHandle> regHandle;
     RegisterSubscriberAt(runtime, tempSubId, 0, regHandle);
 
@@ -305,17 +299,9 @@ inline TVector<TSchemeChangeRecordEntry> ReadSchemeChangeRecords(
     return ReadSchemeChangeRecordsFull(runtime).Entries;
 }
 
-// Cursor-independent physical-row oracle.
-//
-// Built on TEvFetchSchemeChangeRecordBodies, whose only gate is
-// Subscribers.contains(subscriberId): it never reads LastAckedOrder, never
-// clamps, and emits an entry only for orders physically present on disk.
-// Returns the subset of `orders` that still exist.
-//
-// Pass an EXISTING subscriber that outlives the scenario. Do not mint a temp
-// one inside the probe: register+unregister moves GetMinSubscriberOrder() and
-// can itself fire DeleteAckedSchemeChangeRecords, making the oracle perturb
-// the very thing it measures.
+// Cursor-independent physical-row oracle: returns the subset of `orders`
+// still present on disk, gated only on subscriber existence. Pass an existing
+// subscriber; a temp one would itself perturb GetMinSubscriberOrder().
 inline TVector<ui64> ProbeRecordOrdersPresent(
     TTestActorRuntime& runtime, const TString& subscriberId, const TVector<ui64>& orders)
 {
@@ -329,10 +315,8 @@ inline TVector<ui64> ProbeRecordOrdersPresent(
     return present;
 }
 
-// Every SchemeShard config knob the suite drives, applied in ONE config
-// notification. Unset members keep the caller's previous value rather than
-// reverting to the built-in default -- a per-knob helper would silently reset
-// every other knob on each call.
+// SchemeShard config knobs applied in one config notification. Unset members
+// keep the caller's previous value instead of reverting to the default.
 struct TSchemeShardConfigOverrides {
     TMaybe<ui64> MaxSchemeChangeRecords;
     TMaybe<ui64> SchemeChangeSubscriberStaleTtlSeconds;

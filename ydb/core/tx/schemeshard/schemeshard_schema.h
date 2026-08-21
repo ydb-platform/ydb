@@ -2712,10 +2712,7 @@ struct Schema : NIceDb::Schema {
         struct PlanStep :      Column<12, NScheme::NTypeIds::Uint64> {};
         struct BodySize :      Column<13, NScheme::NTypeIds::Uint64> {};
         // Serialized TEvDescribeSchemeResult for the target path, captured at
-        // completion. Makes the record self-contained: a consumer can rebuild
-        // the object without calling back into SchemeShard, which matters
-        // because after a DROP the object is gone and because a later read
-        // would race a newer version.
+        // completion so the record is self-contained even after a DROP.
         struct Description :   Column<14, NScheme::NTypeIds::String, false, true> {}; // Sensitive: may describe a secret
         // NKikimrSchemeShard::TSchemeChangePosition::EKind
         struct PositionKind :  Column<15, NScheme::NTypeIds::Uint32> {};
@@ -2751,8 +2748,7 @@ struct Schema : NIceDb::Schema {
     };
 
     // Maps an in-flight operation to the outbox orders reserved at propose.
-    // Path is duplicated here because finalisation runs after NoMoreReadsForTx().
-    // Column 3 is burned: it held the serialized TModifyScheme.
+    // Path is duplicated here since finalisation runs after NoMoreReadsForTx().
     struct SchemeChangePendingRecords : Table<144> {
         struct TxId :      Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct UserTxIdx : Column<2, NScheme::NTypeIds::Uint32> {};
@@ -2923,9 +2919,8 @@ struct Schema : NIceDb::Schema {
     static constexpr ui64 SysParam_TablePartitionsFormatSweepTarget = 14;
     static constexpr ui64 SysParam_NextSchemeChangeOrder = 15;
     static constexpr ui64 SysParam_LastAssignedPlanStep = 16;
-    // Highest outbox order known to be physically deleted. Cleanup resumes
-    // above it instead of restarting at order 1 and re-seeking the tombstoned
-    // prefix on every batch. Persisted so a reboot does not lose the position.
+    // Highest outbox order known to be physically deleted. Cleanup resumes above
+    // it instead of restarting at order 1 on every batch.
     static constexpr ui64 SysParam_SchemeChangeFloorOrder = 17;
 
     // List of incompatible changes:

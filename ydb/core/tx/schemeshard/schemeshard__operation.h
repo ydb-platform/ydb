@@ -14,11 +14,8 @@ struct TOperation: TSimpleRefCount<TOperation> {
     ui32 PreparedParts = 0;
     TVector<ISubOperation::TPtr> Parts;
 
-    // User-level transactions (after Phase-Zero rewrite and Phase-One
-    // auto-mkdir split) that drive this operation. In-memory only, and only
-    // for the duration of the propose that created them: the outbox record is
-    // written from these before the propose tx commits, so nothing downstream
-    // needs them back after a reboot.
+    // User-level transactions driving this operation. In-memory, and only for
+    // the propose that created them: outbox rows are written before it commits.
     TVector<TTxTransaction> UserLevelTransactions;
 
     // Outbox rows reserved at propose, one per emitting user-level transaction.

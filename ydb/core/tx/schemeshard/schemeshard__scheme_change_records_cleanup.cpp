@@ -37,8 +37,8 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
     TString SubscriberId;
     TString UserToken;
     TActorId ReplyTo;
-    // Not settable over a tablet pipe: only the already-authorized in-process
-    // monitoring path can set this false.
+    // Not settable over a tablet pipe: only the in-process monitoring path
+    // can set this false.
     bool RequireAdmin = true;
     THolder<TEvSchemeShard::TEvForceAdvanceSubscriberResult> Result;
     bool HasMoreToCleanup = false;
@@ -87,13 +87,13 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
         const ui64 oldMinOrder = Self->GetMinSubscriberOrder(ctx.Now());
 
         const ui64 oldOrder = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
-        // Use the visible tail, not the reserved one: must not park the cursor
+        // Use the visible tail, not the reserved one: the cursor must not sit
         // above a record an in-flight operation has yet to finalise.
         const ui64 newOrder = Max(oldOrder, Self->GetVisibleSchemeChangeTail());
         const TInstant now = ctx.Now();
 
-        // Only mark Lost if records are actually skipped -- a force-advance of
-        // an already-drained subscriber loses nothing.
+        // Only mark Lost if records are actually skipped; force-advancing an
+        // already-drained subscriber loses nothing.
         const bool losesRecords = newOrder > oldOrder;
         const auto newState = losesRecords
             ? NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST
@@ -124,7 +124,7 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
 
     void Complete(const TActorContext& ctx) override {
         Self->UpdateSchemeChangeGauges();
-        // Empty when driven from the monitoring page, which answers directly.
+        // Empty when driven from the monitoring page, which replies directly.
         if (ReplyTo) {
             ctx.Send(ReplyTo, Result.Release());
         }

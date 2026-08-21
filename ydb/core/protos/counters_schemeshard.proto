@@ -309,20 +309,14 @@ enum ESimpleCounters {
     
     COUNTER_RUNNING_STREAMING_QUERY_COUNT = 239           [(CounterOpts) = {Name: "RunningStreamingQueryCount"}];
 
-    // Scheme change outbox (RFC-0129).
-    //
-    // OutboxDepth is the metric that matters operationally: once it reaches
-    // MaxSchemeChangeRecords, DDL is REJECTED cluster-wide and only an admin
-    // force-advance releases it. Alert on this well before the wedge.
+    // Scheme change outbox. DDL is rejected once depth reaches
+    // MaxSchemeChangeRecords; only an admin force-advance releases it.
     COUNTER_SCHEME_CHANGE_OUTBOX_DEPTH = 240              [(CounterOpts) = {Name: "SchemeChangeOutboxDepth"}];
     COUNTER_SCHEME_CHANGE_SUBSCRIBERS = 241               [(CounterOpts) = {Name: "SchemeChangeSubscribers"}];
-    // A Lost subscriber has an unrecoverable hole in its stream and must fall
-    // back to a full snapshot -- it will not heal on its own.
+    // Has an unrecoverable hole in its stream; must resync from a full snapshot.
     COUNTER_SCHEME_CHANGE_SUBSCRIBERS_LOST = 242          [(CounterOpts) = {Name: "SchemeChangeSubscribersLost"}];
-    // Idle beyond the stale TTL. Distinct from Lost on purpose: a stale
-    // subscriber has lost nothing (its records are retained, which is exactly
-    // why DDL will eventually wedge), so folding it into Lost would fire the
-    // "take a full snapshot" alert for a consumer that only needs restarting.
+    // Idle beyond the stale TTL. Records are still retained, so unlike Lost
+    // this subscriber has lost nothing.
     COUNTER_SCHEME_CHANGE_SUBSCRIBERS_STALE = 243         [(CounterOpts) = {Name: "SchemeChangeSubscribersStale"}];
 }
 

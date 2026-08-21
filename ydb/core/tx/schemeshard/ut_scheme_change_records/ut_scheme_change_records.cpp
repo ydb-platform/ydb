@@ -243,9 +243,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     }
 
     Y_UNIT_TEST(AckFreesOverflowCapacityImmediately) {
-        // Verifies the invariant: overflow check uses
-        // (NextSchemeChangeOrder - MinSubscriberOrder), so an ack
-        // restores capacity immediately without waiting for background cleanup.
+        // Overflow check uses (NextSchemeChangeOrder - MinSubscriberOrder), so
+        // an ack restores capacity immediately without waiting for cleanup.
         TSchemeShard* schemeshard;
         auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
             schemeshard = new TSchemeShard(tablet, info);
@@ -290,8 +289,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         TAutoPtr<IEventHandle> ackHandle;
         AckSchemeChangeRecords(runtime, "test:sub", lastOrder, ackHandle);
 
-        // Capacity must be free immediately after ack (overflow check is
-        // based on unacked range, not on row count in SchemeChangeRecords).
+        // Capacity must be free immediately after ack: overflow check is based
+        // on unacked range, not row count.
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "T3b"
             Columns { Name: "key" Type: "Uint64" }
@@ -542,8 +541,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
 
         auto result = ReadSchemeChangeRecordsFull(runtime);
         UNIT_ASSERT(!result.Entries.empty());
-        // Clients rely on ClosedThroughPlanStep being monotonic: once reported at
-        // some value, it must not drop below it even when TxInFlight empties.
+        // ClosedThroughPlanStep must be monotonic even when TxInFlight empties.
         UNIT_ASSERT_C(result.ClosedThroughPlanStep > 0,
             "ClosedThroughPlanStep must not regress to 0 after an op completes, got: "
                 << result.ClosedThroughPlanStep);
@@ -620,7 +618,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Read notification log -- Table2 should be present, Table1 still in-flight
+        // Table2 should be present, Table1 still in-flight.
         auto result = ReadSchemeChangeRecordsFull(runtime);
 
         UNIT_ASSERT_C(result.ClosedThroughPlanStep > 0,
@@ -640,9 +638,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     }
 
     Y_UNIT_TEST(CreateTableWithIndexProducesSingleParentRecord) {
-        // Under parent-level persistence, a multi-part DDL emits exactly one
-        // record carrying the user-level body — index descriptions live
-        // inside it and the target cluster re-runs decomposition on replay.
+        // A multi-part DDL emits exactly one record carrying the user-level
+        // body; the target cluster re-runs decomposition on replay.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -687,10 +684,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     }
 
     Y_UNIT_TEST(AutoMkDirBodyPreservedOnParent) {
-        // Auto-mkdirs are an internal decomposition detail. Under parent-
-        // level persistence, only the user's original CreateTable body
-        // (with its "A/B/C/Leaf" path) is persisted; the target cluster
-        // regenerates the MkDir chain on replay.
+        // Only the user's original CreateTable body is persisted; the target
+        // cluster regenerates the auto-mkdir chain on replay.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -720,9 +715,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     }
 
     Y_UNIT_TEST(ParentBodyCarriesFullSubDescriptions) {
-        // Every CreateTableIndex/CreateTable sub-description the decomposer
-        // would ever need must live inside the one parent body — otherwise
-        // replay cannot reproduce the DDL on the target.
+        // Every sub-description the decomposer needs must live inside the one
+        // parent body, or replay cannot reproduce the DDL on the target.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         ui64 txId = 100;
@@ -757,15 +751,6 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_VALUES_EQUAL(ct->IndexDescriptionSize(), 1u);
         UNIT_ASSERT_VALUES_EQUAL(ct->GetIndexDescription(0).GetName(), "IdxByValue");
     }
-
-    // MultiPartDDLIsReconstructibleBySubscriber was deleted.
-    //
-    // Its whole point was the replay round-trip through TEvReplaySchemeChangeRecord,
-    // which no longer exists: the record carries a resolved event rather than a
-    // re-executable request. Its non-replay half (exactly one parent record for a
-    // multi-index CREATE) is covered by CreateTableWithIndexProducesSingleParentRecord;
-    // its composite-reconstruction coverage is replaced by the resolved Description
-    // asserted in CreateRecordCarriesResolvedDescription.
 
     Y_UNIT_TEST(FetchBodiesReturnsOnlyRequestedSparseOrders) {
         TTestBasicRuntime runtime;
@@ -817,11 +802,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     }
 
     Y_UNIT_TEST(AckWithLargeBacklogDrainsAcrossMultipleTxs) {
-        // Bounded cleanup: a single Ack tx deletes at most
-        // SchemeChangeCleanupBatchSize rows; the rest drains via a chain
-        // of follow-up TTxSchemeChangeRecordsCleanup txs kicked off from
-        // Complete(). Ack reply must return with correct LastAckedOrder
-        // before the drain completes.
+        // A single Ack tx deletes at most SchemeChangeCleanupBatchSize rows;
+        // the rest drains via follow-up cleanup txs. Ack reply must return
+        // with the correct LastAckedOrder before the drain completes.
         TSchemeShard* schemeshard = nullptr;
         auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
             schemeshard = new TSchemeShard(tablet, info);
@@ -875,9 +858,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     }
 
     Y_UNIT_TEST(PersistsNextSchemeChangeOrderOncePerBatch) {
-        // Under parent-level persistence a multi-part DDL emits one record,
-        // so the NextSchemeChangeOrder sysparam is persisted once per batch
-        // by construction. This test locks in both properties.
+        // A multi-part DDL emits one record, so NextSchemeChangeOrder is
+        // persisted once per batch by construction.
         TSchemeShard* schemeshard = nullptr;
         auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
             schemeshard = new TSchemeShard(tablet, info);

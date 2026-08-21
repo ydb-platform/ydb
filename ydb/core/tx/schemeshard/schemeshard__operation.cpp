@@ -123,20 +123,9 @@ bool TSchemeShard::ProcessOperationParts(
         } else if (schemeChangeRecordsOverflow
                 && !part->GetTransaction().GetInternal()
                 && !IsChurnOp(part->GetTransaction().GetOperationType())) {
-            // Internal ops are NEVER rejected: split/merge, temp-dir GC and
-            // export/import all run with Internal=true, and rejecting them is
-            // a cluster-level outage, not backpressure.
-            //
-            // Churn ops are excluded separately and this is not redundant with
-            // Internal: a user-initiated split is not Internal=true, yet it
-            // emits no record (IsChurnOp), so gating it would block an op on an
-            // outbox it never feeds.
-            //
-            // The cap is still enforced -- but against the subscriber, at the
-            // record-allocation site in DoPersistSchemeChangeRecords, where it
-            // fires only when a record is actually appended. Doing it here
-            // would also flip DirectAccessGranted before later parts propose,
-            // hard-aborting the tablet on any subsequent failed propose.
+            // Internal ops are never rejected: refusing split/merge or temp-dir
+            // GC is an outage, not backpressure. Churn ops are excluded
+            // separately because they emit no record at all.
             response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
             response->SetError(NKikimrScheme::StatusResourceExhausted, overflowErr);
         } else {

@@ -228,11 +228,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
 
         TAutoPtr<IEventHandle> fetch2Handle;
         auto fetch2 = FetchSchemeChangeRecords(runtime, "test:sub:2", 0, 100, fetch2Handle);
-        // Unregistering the last subscriber drops all retained records:
-        // GetMinSubscriberOrder() collapses to NextSchemeChangeOrder when
-        // Subscribers is empty, so the inline cleanup deletes everything.
-        // A fresh subscriber starts with an empty log; NextSchemeChangeOrder
-        // is preserved so future orders never collide with old ones.
+        // Unregistering the last subscriber drops all retained records: with
+        // no subscribers, GetMinSubscriberOrder() collapses to
+        // NextSchemeChangeOrder and inline cleanup deletes everything.
         for (int i = 0; i < (int)fetch2->Record.EntriesSize(); ++i) {
             const auto& e = fetch2->Record.GetEntries(i);
             UNIT_ASSERT_C(e.GetPath() != "T1",

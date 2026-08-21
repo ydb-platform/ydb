@@ -7,8 +7,7 @@ namespace NKikimr::NSchemeShard {
 namespace {
 
 // These events arrive over a tablet pipe, which carries no caller identity, so
-// the token is supplied in the request. An EMPTY cluster-admin allowlist
-// admits any token including none (auth.cpp IsTokenAllowedImpl).
+// the token is supplied in the request.
 template <class TResultRecord>
 bool CheckSubscriberAdmin(const TString& userToken, TResultRecord& result) {
     if (IsAdministrator(AppData(), userToken)) {
@@ -19,9 +18,8 @@ bool CheckSubscriberAdmin(const TString& userToken, TResultRecord& result) {
     return false;
 }
 
-// An empty SubscriberId is the dangerous case: two consumers that both leave
-// it unset silently share one cursor, so one's ack deletes records the other
-// never saw and SkippedEntries reports 0.
+// An empty SubscriberId is dangerous: two consumers that both leave it unset
+// silently share one cursor, so one's ack deletes records the other never saw.
 template <class TResultRecord>
 bool CheckSubscriberId(const TString& subscriberId, TResultRecord& result) {
     if (subscriberId.empty()) {
@@ -61,10 +59,8 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
             return true;
         }
 
-        // A plain (non-Ext) SubDomain can serve several coordinator timelines
-        // on this SchemeShard, which would let a Bucketed record borrow a step
-        // from a foreign domain. Refusing registration keeps the outbox
-        // single-timeline by construction.
+        // A plain (non-Ext) SubDomain can serve several coordinator timelines,
+        // which would let a Bucketed record borrow a step from a foreign domain.
         if (Self->CountTransactionSupportingDomains() > 1) {
             Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
             Result->Record.SetReason(
@@ -102,8 +98,7 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
         }
 
         // Use the visible tail, not the raw allocation counter: a subscriber
-        // registering while a DDL is in flight must start below the rows
-        // already reserved for it.
+        // must start below rows already reserved by an in-flight DDL.
         const ui64 tail = Self->GetVisibleSchemeChangeTail();
 
         const ui64 floor = Self->GetMinSubscriberOrder(ctx.Now());
@@ -122,9 +117,8 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
                 return true;
             }
             if (requested < floor) {
-                // Clamp up rather than reject: the new subscriber can never
-                // sit below the existing min, so it cannot widen the unacked
-                // window and stall DDL.
+                // Clamp up rather than reject: a new subscriber must never
+                // widen the unacked window and stall DDL.
                 startOrder = floor;
                 skipped = floor - requested;
                 state = NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST;
@@ -227,10 +221,9 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             Self->TabletCounters->Cumulative()[COUNTER_SCHEME_CHANGE_ROWS_SCANNED].Increment(1);
             ui64 order = rowset.GetValue<Schema::SchemeChangeRecords::Order>();
 
-            // Stop, don't skip, at the first row still in flight
-            // (CompletedAtUs == 0): the cursor is a single watermark, so
-            // handing out a later record would let an ack advance past this
-            // one and lose it.
+            // Stop, don't skip, at the first row still in flight (CompletedAtUs
+            // == 0): the cursor is one watermark, so handing out a later record
+            // would let an ack skip past this one and lose it.
             if (rowset.GetValueOrDefault<Schema::SchemeChangeRecords::CompletedAtUs>(0) == 0) {
                 blockedByPending = true;
                 break;
@@ -238,9 +231,8 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
 
             auto* entry = Result->Record.AddEntries();
 
-            // If the first surviving row sits above effectiveAfterOrder+1,
-            // records in between were swept while this subscriber still
-            // needed them. Report it rather than skipping silently.
+            // A first row above effectiveAfterOrder+1 means records in between
+            // were swept while this subscriber still needed them; report it.
             if (firstRow) {
                 firstRow = false;
                 if (order > effectiveAfterOrder + 1) {
@@ -273,13 +265,12 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             }
         }
 
-        // Total-loss case: the loop above never ran, but exclude blockedByPending
-        // -- an in-flight record is a not-yet, not a loss.
+        // Total-loss case: the loop above never ran, excluding blockedByPending
+        // since an in-flight record is a not-yet, not a loss.
         if (count == 0 && !blockedByPending && effectiveAfterOrder < Self->GetVisibleSchemeChangeTail()) {
             skippedEntries += Self->GetVisibleSchemeChangeTail() - effectiveAfterOrder;
             subscriberLost = true;
-            // Advance to the tail: leaving the cursor behind would re-report
-            // the same loss on every subsequent fetch.
+            // Advance to the tail, or the same loss re-reports on every fetch.
             effectiveAfterOrder = Self->GetVisibleSchemeChangeTail();
         }
 
@@ -313,10 +304,8 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
                 static_cast<NKikimrSchemeShard::TSchemeChangeSubscriberState::EState>(it->second.State));
         }
 
-        // Order is completion order while ts is plan order, and they diverge
-        // across tablet transactions, so a DDL planned before a sync point can
-        // be persisted after it. Without this a consumer can never know that
-        // window (S_prev, S] is complete.
+        // Order is completion order while plan step is plan order, and they can
+        // diverge, so a consumer needs this to know window (S_prev, S] is complete.
         Result->Record.SetClosedThroughPlanStep(Self->GetClosedThroughPlanStep());
 
         return true;
@@ -364,9 +353,8 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
 
         ui64 newOrder = Max(currentOrder, upToOrder);
 
-        // Clamp to the visible tail, not the reserved one: a cursor parked
-        // above an in-flight operation's row would drop that record the moment
-        // it finalises.
+        // Clamp to the visible tail, not the reserved one: a cursor above an
+        // in-flight row would drop that record once it finalises.
         if (newOrder > Self->GetVisibleSchemeChangeTail()) {
             newOrder = Self->GetVisibleSchemeChangeTail();
         }
@@ -493,8 +481,8 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
             return true;
         }
 
-        // Reject rather than truncate: a truncated reply would be
-        // indistinguishable from "those records no longer exist".
+        // Reject rather than truncate: a truncated reply is indistinguishable
+        // from "those records no longer exist".
         if ((ui64)requestedOrders.size() > Self->MaxSchemeChangeBodiesPerRequest) {
             Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
             Result->Record.SetReason(TStringBuilder()
@@ -506,7 +494,6 @@ struct TTxFetchSchemeChangeRecordBodies : public NTabletFlatExecutor::TTransacti
         THashSet<ui64> requestedSet(requestedOrders.begin(), requestedOrders.end());
 
         // Point lookups, not a [min,max] span scan: cost is |requestedSet|.
-        // After a faulted page keep issuing the rest, so restart batches them.
         THashMap<ui64, TString> descriptionByOrder;
         THashSet<ui64> metaExisting;
         bool allReady = true;

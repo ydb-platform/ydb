@@ -1390,8 +1390,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 info.LastActivityAt = TInstant::MicroSeconds(
                     subRowset.GetValue<Schema::SchemeChangeSubscribers::LastActivityAt>());
                 // Rows written before these columns existed read as absent;
-                // keep TSubscriberInfo's defaults (State = READY) in that case
-                // rather than persisting a STATE_UNSPECIFIED zero.
+                // keep TSubscriberInfo's defaults (State = READY) in that case.
                 if (subRowset.HaveValue<Schema::SchemeChangeSubscribers::State>()) {
                     info.State = subRowset.GetValue<Schema::SchemeChangeSubscribers::State>();
                 }
@@ -4377,8 +4376,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
-        // Restore the outbox rows each in-flight operation reserved at propose,
-        // so completion can still finalise them after a restart.
+        // Restore the outbox rows reserved at propose so completion can finalise them.
         {
             auto rowset = db.Table<Schema::SchemeChangePendingRecords>().Range().Select();
             if (!rowset.IsReady()) return false;

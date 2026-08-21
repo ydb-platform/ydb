@@ -162,7 +162,7 @@ bool CanDeleteParts(ETxType t);
 
 // Ops that fire on internal churn rather than expressing a user-visible schema
 // change. They neither produce scheme change records nor consume the outbox
-// budget. See IsChurnOp in the .cpp -- THAT SWITCH IS THE FILTER.
+// budget. See IsChurnOp in the .cpp.
 bool IsChurnOp(NKikimrSchemeOp::EOperationType opType);
 
 }  // namespace NKikimr::NSchemeShard

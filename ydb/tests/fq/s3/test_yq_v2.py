@@ -132,13 +132,10 @@ Pear;15;33'''
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_select_sys_view(self, kikimr, client, unique_prefix):
         kikimr.control_plane.wait_bootstrap(1)
-        connection_response = client.create_storage_connection(unique_prefix + "fruitbucket", "fbucket")
 
         sql = """
             SELECT COUNT(*) FROM `.sys/top_queries_by_cpu_time_one_hour` WHERE QueryText = "SELECT COUNT(*) FROM `.sys/top_queries_by_cpu_time_one_hour` WHERE ...";
             """
-
-        p1 = ydb.TypedValue(type=ydb.Type(type_id=ydb.Type.INT64), value=ydb.Value(int64_value=10))
 
         query_id = client.create_query(
             "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS

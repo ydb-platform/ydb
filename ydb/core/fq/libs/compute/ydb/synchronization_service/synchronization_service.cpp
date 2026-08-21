@@ -372,11 +372,14 @@ private:
     }
 
     void UpdateAcl() {
+
         const TString sysPath = ConnectionConfig.database() + "/.sys";
+        auto settings = NYdb::NScheme::TModifyPermissionsSettings()
+            .AddInterruptInheritance(true)
+            .AddGrantPermissions(NYdb::NScheme::TPermissions("ydb.clusters.manage@as", {"ydb.generic.full"}));
+
         SchemeClient
-            ->ModifyPermissions(sysPath,
-                NYdb::NScheme::TModifyPermissionsSettings()
-                    .AddInterruptInheritance(true))
+            ->ModifyPermissions(sysPath, settings)
             .Subscribe([actorSystem = TActivationContext::ActorSystem(), self = SelfId()](const NYdb::TAsyncStatus& future) {
                 actorSystem->Send(self, new TEvYdbCompute::TEvUpdateAclResponse(ExtractStatus(future)));
             });

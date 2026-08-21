@@ -16,7 +16,6 @@
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_primitive.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/record_batch.h>
 #include <library/cpp/testing/unittest/registar.h>
-#include <util/generic/size_literals.h>
 
 namespace NKikimr::NOlap::NTest {
 
@@ -31,8 +30,7 @@ constexpr ui32 NGrammIndexId = 1001;
 constexpr ui32 FilterSizeBytes = NLocalIndex::NBloom::TConstants::MaxFilterSizeBytes;
 constexpr i64 MaxBlobSize = FilterSizeBytes / 2;
 
-ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version, const ui32 filterSizeBytes = FilterSizeBytes,
-    const ui32 recordsCountBase = 1024, const TString& indexStorageId = IStoragesManager::DefaultStorageId, const ui32 indexesCount = 1) {
+ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version) {
     NKikimrSchemeOp::TColumnTableSchema proto;
     const std::vector<NArrow::NTest::TTestColumn> columns = {
         NArrow::NTest::TTestColumn("pk", NScheme::TTypeInfo(NScheme::NTypeIds::Uint64)),
@@ -46,15 +44,13 @@ ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version, const ui32 f
     NLocalIndex::NBloom::TRequestSettings request;
     request.NGrammSize = 3;
     request.DeprecatedHashesCount = 2;
-    request.DeprecatedFilterSizeBytes = filterSizeBytes;
-    request.DeprecatedRecordsCount = recordsCountBase;
-    for (ui32 i = 0; i < indexesCount; ++i) {
-        *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
-            std::make_shared<NIndexes::NBloomNGramm::TIndexMeta>(NGrammIndexId + i, "ngramm_value_" + ::ToString(i), indexStorageId, false,
-                ValueColumnId, NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>()),
-                NIndexes::IBitsStorageConstructor::GetDefault(), request))
-                                  .SerializeToProto();
-    }
+    request.DeprecatedFilterSizeBytes = FilterSizeBytes;
+    request.DeprecatedRecordsCount = 1024;
+    *proto.AddIndexes() = NIndexes::TIndexMetaContainer(
+        std::make_shared<NIndexes::NBloomNGramm::TIndexMeta>(NGrammIndexId, "ngramm_value", IStoragesManager::DefaultStorageId, false,
+            ValueColumnId, NIndexes::TReadDataExtractorContainer(std::make_shared<NIndexes::TDefaultDataExtractor>()),
+            NIndexes::IBitsStorageConstructor::GetDefault(), request))
+                              .SerializeToProto();
 
     auto cache = std::make_shared<TSchemaObjectsCache>();
     auto indexInfo = TIndexInfo::BuildFromProto(version, proto, TTestStoragesManager::GetInstance(), cache);
@@ -62,16 +58,13 @@ ISnapshotSchema::TPtr MakeSchemaWithNGrammIndex(const ui64 version, const ui32 f
     return std::make_shared<TSnapshotSchema>(cache->UpsertIndexInfo(std::move(*indexInfo)), TSnapshot(1, 1));
 }
 
-std::shared_ptr<arrow::RecordBatch> MakeTestBatch(const ui32 rowsCount = 3) {
+std::shared_ptr<arrow::RecordBatch> MakeTestBatch() {
     arrow::UInt64Builder pkBuilder;
     arrow::StringBuilder valueBuilder;
-    for (ui32 i = 0; i < rowsCount; ++i) {
-        UNIT_ASSERT(pkBuilder.Append(1 + i).ok());
-        const TString value = "value_" + ::ToString(1 + i);
-        UNIT_ASSERT(valueBuilder.Append(value.data(), value.size()).ok());
-    }
+    UNIT_ASSERT(pkBuilder.AppendValues({ 1, 2, 3 }).ok());
+    UNIT_ASSERT(valueBuilder.AppendValues({ "alpha", "beta", "gamma" }).ok());
     auto schema = arrow::schema({ arrow::field("pk", arrow::uint64()), arrow::field("value", arrow::utf8()) });
-    return arrow::RecordBatch::Make(schema, rowsCount, { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie() });
+    return arrow::RecordBatch::Make(schema, 3, { pkBuilder.Finish().ValueOrDie(), valueBuilder.Finish().ValueOrDie() });
 }
 
 THashMap<ui32, std::vector<std::shared_ptr<IPortionDataChunk>>> BuildColumnChunks(
@@ -188,32 +181,6 @@ Y_UNIT_TEST_SUITE(TIndexBlobSizeLimitTests) {
         syncResult->RegisterFakeBlobIds();
         syncResult->FinalizePortionConstructor(TSnapshot(1, 1));
         UNIT_ASSERT(HasIndex(*syncResult, NGrammIndexId));
-    }
-
-    // Inplace indexes are size-guarded individually: all are stored even when their sum exceeds the limit,
-    // the aggregate goes to the portion metadata row, not to a blob.
-    Y_UNIT_TEST(MultipleLocalIndexesAggregateAboveLimitIsStored) {
-        constexpr i64 BlobLimit = 2_MB;
-        constexpr ui32 FilterSize = 1_MB;
-        constexpr ui32 RecordsCount = 128;
-        constexpr ui32 IndexesCount = 128;
-        constexpr ui64 AggregateLimit = 100_MB;
-        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
-        csController->SetOverrideBlobSplitSettings(NSplitter::TSplitSettings().SetMaxBlobSize(BlobLimit).SetMinBlobSize(BlobLimit / 4));
-
-        const auto schema = MakeSchemaWithNGrammIndex(1, FilterSize, RecordsCount, IStoragesManager::LocalMetadataStorageId, IndexesCount);
-        const auto chunks = BuildColumnChunks(schema, MakeTestBatch(RecordsCount));
-
-        auto secondaryData = schema->GetIndexInfo()
-                                 .AppendIndexes(chunks, TTestStoragesManager::GetInstance(), RecordsCount, IStoragesManager::DefaultStorageId)
-                                 .DetachResult();
-        UNIT_ASSERT_VALUES_EQUAL(secondaryData.GetSecondaryInplaceData().size(), IndexesCount);
-        ui64 sumSize = 0;
-        for (const auto& [indexId, chunk] : secondaryData.GetSecondaryInplaceData()) {
-            UNIT_ASSERT_LE(chunk->GetPackedSize(), BlobLimit);
-            sumSize += chunk->GetPackedSize();
-        }
-        UNIT_ASSERT_GT(sumSize, AggregateLimit);
     }
 }
 

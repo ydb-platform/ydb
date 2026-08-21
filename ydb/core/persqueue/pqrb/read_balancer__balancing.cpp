@@ -6,6 +6,8 @@
 
 #include <library/cpp/containers/absl/btree_set.h>
 
+#include <util/system/yassert.h>
+
 #include <algorithm>
 #include <array>
 
@@ -129,10 +131,6 @@ bool TPartitionFamily::IsLonely() const {
     return Partitions.size() == 1;
 }
 
-bool TPartitionFamily::HasActivePartitions() const {
-    return ActivePartitionCount;
-}
-
 const TString& TPartitionFamily::Topic() const {
     return Consumer.Topic();
 }
@@ -168,6 +166,8 @@ TString TPartitionFamily::LogPrefix() const {
 
 
 void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetStatus) {
+    Y_DEBUG_ABORT_UNLESS(IsActive(), "Releasing a family that is not active, family %lu", Id);
+    Y_DEBUG_ABORT_UNLESS(Session, "Releasing a family without a session, family %lu", Id);
     if (Status != EStatus::Active) {
         YDB_LOG_CRIT("Releasing the family that isn't active",
             {"logPrefix", LogPrefix()},
@@ -316,6 +316,8 @@ void TPartitionFamily::Destroy() {
         return;
     }
 
+    Y_DEBUG_ABORT_UNLESS(Consumer.DoomedGuardDepth > 0,
+        "Destroy family %zu without a doomed-family guard", Id);
     Consumer.DoomedFamilies.push_back(std::move(it->second));
     Consumer.Families.erase(it);
 }
@@ -351,6 +353,9 @@ void TPartitionFamily::AfterRelease() {
 }
 
 void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx) {
+    Y_DEBUG_ABORT_UNLESS(IsFree(), "StartReading requires a free family %lu", Id);
+    Y_DEBUG_ABORT_UNLESS(Consumer.Sessions.contains(session.Pipe),
+        "StartReading session is not registered, family %lu", Id);
     if (Status != EStatus::Free) {
         YDB_LOG_CRIT("Try start reading but the family status is",
             {"logPrefix", LogPrefix()},
@@ -401,6 +406,11 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
 
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(newPartitions);
     ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
+
+    for (auto partitionId : newPartitions) {
+        Y_DEBUG_ABORT_UNLESS(IsReadable(partitionId),
+            "Cannot attach unreadable partition %u to family %lu", partitionId, Id);
+    }
 
     auto appendUniqueRoots = [&](const std::vector<ui32>& partitions) {
         absl::flat_hash_set<ui32> seen(RootPartitions.begin(), RootPartitions.end());
@@ -641,9 +651,6 @@ std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const TPartitions
 }
 
 template
-std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const absl::btree_set<ui32>& partitions);
-
-template
 std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const std::vector<ui32>& partitions);
 
 void TPartitionFamily::UpdatePartitionMapping(const std::vector<ui32>& partitions) {
@@ -670,6 +677,10 @@ void TPartitionFamily::UpdateSpecialSessions() {
 }
 
 void TPartitionFamily::LockPartition(ui32 partitionId, const TActorContext& ctx) {
+    Y_DEBUG_ABORT_UNLESS(Session, "Lock partition %u without a session, family %lu", partitionId, Id);
+    Y_DEBUG_ABORT_UNLESS(IsActive(), "Lock partition %u from a non-active family %lu", partitionId, Id);
+    Y_DEBUG_ABORT_UNLESS(IsReadable(partitionId),
+        "Lock unreadable partition %u, family %lu", partitionId, Id);
     if (!Session) {
         YDB_LOG_CRIT("Lock partition without a session",
             {"logPrefix", LogPrefix()},
@@ -797,6 +808,7 @@ TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, const 
 }
 
 TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TPartitionFamily::EStatus status, const TActorContext&) {
+    Y_DEBUG_ABORT_UNLESS(!partitions.empty(), "Cannot create an empty family, consumer %s", ConsumerName.data());
     auto id = ++NextFamilyId;
     auto [it, _] = Families.emplace(id, std::make_unique<TPartitionFamily>(*this, id, std::move(partitions)));
     auto* family = it->second.get();
@@ -958,6 +970,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
 }
 
 std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx) {
+    Y_DEBUG_ABORT_UNLESS(lhs && rhs, "MergeFamilies with a null family");
     AFL_ENSURE(lhs != rhs)
         ("lhs_id", lhs->Id)("rhs_id", rhs->Id)
         ("lhs_partitions", lhs->Partitions.size())("rhs_partitions", rhs->Partitions.size());
@@ -1378,13 +1391,15 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
                     auto* other = FindFamily(id);
                     if (other && other != family) {
                         auto [f, v] = MergeFamilies(family, other, ctx);
+                        family = f;
                         if (!v) {
                             family->WantedPartitions.insert(id);
                         }
-                        family = f;
                     } else {
                         family->AttachePartitions({id}, ctx);
                     }
+                } else {
+                    family->WantedPartitions.insert(id);
                 }
             } else {
                 YDB_LOG_DEBUG("Can't attache partition",
@@ -1520,6 +1535,123 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
     }
 }
 
+void TConsumer::AssertBalancingInvariants() {
+#ifdef NDEBUG
+    return;
+#endif
+
+    absl::flat_hash_set<TPartitionFamily*> liveFamilies;
+    absl::flat_hash_set<TSession*> liveSessions;
+    absl::flat_hash_map<TSession*, size_t> activeFamilies;
+    absl::flat_hash_map<TSession*, size_t> releasingFamilies;
+    absl::flat_hash_set<ui32> claimedPartitions;
+
+    liveFamilies.reserve(Families.size());
+    for (const auto& [id, family] : Families) {
+        Y_DEBUG_ABORT_UNLESS(family, "null family %zu", id);
+        liveFamilies.insert(family.get());
+    }
+    for (const auto& [pipe, session] : Sessions) {
+        Y_DEBUG_ABORT_UNLESS(session, "null session for pipe");
+        Y_DEBUG_ABORT_UNLESS(session->Pipe == pipe, "session pipe mismatch");
+        liveSessions.insert(session);
+    }
+
+    for (const auto& [id, family] : Families) {
+        Y_DEBUG_ABORT_UNLESS(family->Id == id, "family id mismatch %zu vs %zu", family->Id, id);
+
+        if (family->IsFree()) {
+            Y_DEBUG_ABORT_UNLESS(!family->Session, "free family %zu has a session", id);
+            Y_DEBUG_ABORT_UNLESS(family->LockedPartitions.empty(), "free family %zu has locked partitions", id);
+            auto uIt = UnreadableFamilies.find(id);
+            Y_DEBUG_ABORT_UNLESS(uIt != UnreadableFamilies.end() && uIt->second == family.get(),
+                "free family %zu is not in UnreadableFamilies", id);
+        } else {
+            Y_DEBUG_ABORT_UNLESS(family->Session, "active/releasing family %zu has no session", id);
+            Y_DEBUG_ABORT_UNLESS(liveSessions.contains(family->Session),
+                "family %zu session is not registered", id);
+            auto sit = family->Session->Families.find(family->Id);
+            Y_DEBUG_ABORT_UNLESS(sit != family->Session->Families.end() && sit->second == family.get(),
+                "session does not own family %zu", id);
+            if (family->IsActive()) {
+                ++activeFamilies[family->Session];
+            } else if (family->IsReleasing()) {
+                ++releasingFamilies[family->Session];
+            }
+        }
+
+        absl::flat_hash_set<ui32> uniquePartitions;
+        for (auto partitionId : family->Partitions) {
+            Y_DEBUG_ABORT_UNLESS(uniquePartitions.insert(partitionId).second,
+                "duplicate partition %u in family %zu", partitionId, id);
+            Y_DEBUG_ABORT_UNLESS(claimedPartitions.insert(partitionId).second,
+                "partition %u belongs to multiple families (family %zu)", partitionId, id);
+            auto mit = PartitionMapping.find(partitionId);
+            Y_DEBUG_ABORT_UNLESS(mit != PartitionMapping.end() && mit->second == family.get(),
+                "partition mapping mismatch for %u, family %zu", partitionId, id);
+        }
+
+        absl::flat_hash_set<ui32> uniqueRoots;
+        for (auto partitionId : family->RootPartitions) {
+            Y_DEBUG_ABORT_UNLESS(uniqueRoots.insert(partitionId).second,
+                "duplicate root partition %u in family %zu", partitionId, id);
+            Y_DEBUG_ABORT_UNLESS(uniquePartitions.contains(partitionId) || family->WantedPartitions.contains(partitionId),
+                "root partition %u is neither in Partitions nor WantedPartitions, family %zu", partitionId, id);
+        }
+
+        for (auto partitionId : family->LockedPartitions) {
+            Y_DEBUG_ABORT_UNLESS(uniquePartitions.contains(partitionId),
+                "locked partition %u is not in family %zu", partitionId, id);
+        }
+        if (family->IsActive()) {
+            Y_DEBUG_ABORT_UNLESS(family->LockedPartitions.size() == uniquePartitions.size(),
+                "active family %zu locked/partitions mismatch", id);
+        }
+
+        for (const auto& [pipe, session] : family->SpecialSessions) {
+            Y_DEBUG_ABORT_UNLESS(liveSessions.contains(session),
+                "stale special session in family %zu", id);
+            auto sIt = Sessions.find(pipe);
+            Y_DEBUG_ABORT_UNLESS(sIt != Sessions.end() && sIt->second == session,
+                "stale special session pipe in family %zu", id);
+        }
+    }
+
+    for (const auto& [partitionId, family] : PartitionMapping) {
+        Y_DEBUG_ABORT_UNLESS(liveFamilies.contains(family),
+            "mapping for partition %u points to a destroyed family", partitionId);
+        Y_DEBUG_ABORT_UNLESS(claimedPartitions.contains(partitionId),
+            "mapping for partition %u is not in any family partition list", partitionId);
+    }
+
+    for (const auto& [id, family] : UnreadableFamilies) {
+        Y_DEBUG_ABORT_UNLESS(liveFamilies.contains(family),
+            "unreadable family %zu is destroyed", id);
+        Y_DEBUG_ABORT_UNLESS(family->IsFree(), "unreadable family %zu is not free", id);
+        auto it = Families.find(id);
+        Y_DEBUG_ABORT_UNLESS(it != Families.end() && it->second.get() == family,
+            "unreadable family %zu is not in Families", id);
+    }
+
+    for (const auto& [_, session] : Sessions) {
+        Y_DEBUG_ABORT_UNLESS(activeFamilies[session] == session->ActiveFamilyCount,
+            "ActiveFamilyCount mismatch for session %s: actual %zu tracked %zu",
+            session->SessionName.data(), activeFamilies[session], session->ActiveFamilyCount);
+        Y_DEBUG_ABORT_UNLESS(releasingFamilies[session] == session->ReleasingFamilyCount,
+            "ReleasingFamilyCount mismatch for session %s: actual %zu tracked %zu",
+            session->SessionName.data(), releasingFamilies[session], session->ReleasingFamilyCount);
+        for (const auto& [familyId, family] : session->Families) {
+            Y_DEBUG_ABORT_UNLESS(liveFamilies.contains(family),
+                "session references a destroyed family %zu", familyId);
+            Y_DEBUG_ABORT_UNLESS(family->Session == session,
+                "session family back-pointer mismatch, family %zu", familyId);
+            auto it = Families.find(familyId);
+            Y_DEBUG_ABORT_UNLESS(it != Families.end() && it->second.get() == family,
+                "session references an unknown family %zu", familyId);
+        }
+    }
+}
+
 void TConsumer::ScheduleBalance(const TActorContext& ctx) {
     if (BalanceScheduled) {
         YDB_LOG_TRACE("Rebalancing already was scheduled",
@@ -1587,6 +1719,8 @@ size_t GetStatistics(const TFamilies& values, TPredicate predicate) {
 
 void TConsumer::Balance(const TActorContext& ctx) {
     TDoomedFamilyGuard doomed(*this);
+
+    AssertBalancingInvariants();
 
     YDB_LOG_DEBUG("Balancing",
         {"logPrefix", LogPrefix()},
@@ -1762,6 +1896,8 @@ void TConsumer::Balance(const TActorContext& ctx) {
     YDB_LOG_DEBUG("Balancing",
         {"logPrefix", LogPrefix()},
         {"duration", duration});
+
+    AssertBalancingInvariants();
 }
 
 void TConsumer::Release(ui32 partitionId, const TActorContext& ctx) {

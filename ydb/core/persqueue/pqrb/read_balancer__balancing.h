@@ -114,7 +114,6 @@ struct TPartitionFamily {
 
     bool IsCommon() const;
     bool IsLonely() const;
-    bool HasActivePartitions() const;
 
     // Releases all partitions of the family.
     void Release(const TActorContext& ctx, ETargetStatus targetStatus = ETargetStatus::Free);
@@ -254,6 +253,8 @@ struct TConsumer {
     bool ScalingSupport() const;
 
 private:
+    void AssertBalancingInvariants();
+
     TString LogPrefix() const;
     bool AttachingDescendants = false;
 

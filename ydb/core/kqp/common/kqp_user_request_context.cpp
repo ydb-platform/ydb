@@ -11,7 +11,7 @@ namespace NKikimr::NKqp {
             o << ", CustomerSuppliedId: " << CustomerSuppliedId;
         }
         if (CurrentExecutionId) {
-            o << ", CurrentExecutionId: " << CurrentExecutionId;
+            o << ", CurrentExecutionId: " << CurrentExecutionId << "/" << CurrentExecutionGeneration;
             o << ", RunScriptActorId: " << RunScriptActorId.ToString();
         }
         if (StreamingQueryPath) {

@@ -56,6 +56,7 @@ public:
     bool EnableWatermarks = false;
     bool EnableWatermarksAdvanced = false;
     bool EnableStreamingPartitionBalancing = false;
+    TString ExactlyOnceTransactionPrefix;
     const TString SessionId;
     THashMap<std::pair<TString, TString>, TTopicMeta> Topics;
 

@@ -327,17 +327,26 @@ TExprNode::TPtr BuildInitHopLambda(const TCoAggregate& aggregate, TExprContext& 
     ui32 index = 0;
     for (const auto& handler : aggregateHandlers) {
         const auto tuple = handler.Cast<TCoAggregateTuple>();
+        const auto trait = tuple.Trait().Cast<TCoAggregationTraits>();
+
+        // Project the full input row onto the type expected by InitHandler,
+        // so that extra fields (e.g. the hopping time column) do not "leak"
+        // into the accumulator state type.
+        const auto castedItem = Build<TCoSafeCast>(ctx, pos)
+            .Type(trait.ItemType())
+            .Value(initItemArg)
+            .Done();
 
         TMaybeNode<TExprBase> applier;
-        if (tuple.Trait().Cast<TCoAggregationTraits>().InitHandler().Args().Size() == 1) {
+        if (trait.InitHandler().Args().Size() == 1) {
             applier = Build<TExprApplier>(ctx, pos)
-                .Apply(tuple.Trait().Cast<TCoAggregationTraits>().InitHandler())
-                .With(0, initItemArg)
+                .Apply(trait.InitHandler())
+                .With(0, castedItem)
                 .Done();
         } else {
             applier = Build<TExprApplier>(ctx, pos)
-                .Apply(tuple.Trait().Cast<TCoAggregationTraits>().InitHandler())
-                .With(0, initItemArg)
+                .Apply(trait.InitHandler())
+                .With(0, castedItem)
                 .With<TCoUint32>(1)
                     .Literal().Build(ToString(index))
                     .Build()
@@ -373,6 +382,7 @@ TExprNode::TPtr BuildUpdateHopLambda(const TCoAggregate& aggregate, TExprContext
     i32 index = 0;
     for (const auto& handler : aggregateHandlers) {
         const auto tuple = handler.Cast<TCoAggregateTuple>();
+        const auto trait = tuple.Trait().Cast<TCoAggregationTraits>();
         const TString columnName = BuildColumnName(tuple.ColumnName());
 
         const auto member = Build<TCoMember>(ctx, pos)
@@ -380,17 +390,25 @@ TExprNode::TPtr BuildUpdateHopLambda(const TCoAggregate& aggregate, TExprContext
             .Name().Build(columnName)
             .Done();
 
+        // Project the full input row onto the type expected by UpdateHandler,
+        // so that extra fields (e.g. the hopping time column) do not "leak"
+        // into the accumulator state type.
+        const auto castedItem = Build<TCoSafeCast>(ctx, pos)
+            .Type(trait.ItemType())
+            .Value(updateItemArg)
+            .Done();
+
         TMaybeNode<TExprBase> applier;
-        if (tuple.Trait().Cast<TCoAggregationTraits>().UpdateHandler().Args().Size() == 2) {
+        if (trait.UpdateHandler().Args().Size() == 2) {
             applier = Build<TExprApplier>(ctx, pos)
-                .Apply(tuple.Trait().Cast<TCoAggregationTraits>().UpdateHandler())
-                .With(0, updateItemArg)
+                .Apply(trait.UpdateHandler())
+                .With(0, castedItem)
                 .With(1, member)
                 .Done();
         } else {
             applier = Build<TExprApplier>(ctx, pos)
-                .Apply(tuple.Trait().Cast<TCoAggregationTraits>().UpdateHandler())
-                .With(0, updateItemArg)
+                .Apply(trait.UpdateHandler())
+                .With(0, castedItem)
                 .With(1, member)
                 .With<TCoUint32>(2)
                     .Literal().Build(ToString(index))

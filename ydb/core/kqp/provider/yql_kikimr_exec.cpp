@@ -2171,6 +2171,12 @@ public:
                                         columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
                                     }
 
+                                    if (!IsLiteralDefaultValue(constraint.Value().Cast())) {
+                                        ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
+                                            "Column addition with a DEFAULT expression is not supported"));
+                                        return SyncError();
+                                    }
+
                                     columnBuild->SetColumnName(TString(columnName));
                                     auto err = FillLiteralProto(constraint.Value().Cast(), actualType, *columnBuild->mutable_default_from_literal());
                                     if (err) {
@@ -2282,12 +2288,12 @@ public:
                     THashSet<TString> generatedDependencyColumns;
 
                     for (const auto& [genName, genMeta] : table.Metadata->Columns) {
-                        if (!genMeta.IsDefaultFromExpression()) {
+                        if (!genMeta.IsDefaultFromExpression() || !genMeta.DefaultExpression->IsGenerated()) {
                             continue;
                         }
 
                         generatedColumns.insert(genName);
-                        if (!genMeta.DefaultExpression->Stored) {
+                        if (!genMeta.DefaultExpression->IsStored()) {
                             virtualGeneratedColumns.insert(genName);
                         }
 
@@ -2420,6 +2426,14 @@ public:
                             } else {
                                 if (auto maybeJust = defaultExpr.Maybe<TCoJust>()) {
                                     defaultExpr = maybeJust.Cast().Input();
+                                }
+
+                                if (!IsLiteralDefaultValue(defaultExpr)) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(defaultExpr.Pos()), TStringBuilder()
+                                        << "Cannot set a DEFAULT expression on the existing column "
+                                        << columnName.Value()
+                                        << ": a DEFAULT expression can only be defined in CREATE TABLE"));
+                                    return SyncError();
                                 }
 
                                 alter_columns->SetDefaultKind(NKikimrKqp::TKqpColumnMetadataProto::DEFAULT_KIND_LITERAL);

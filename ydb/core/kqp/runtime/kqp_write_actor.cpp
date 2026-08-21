@@ -2960,7 +2960,7 @@ private:
                 return;
             }
 
-            if (!Closed && outOfMemory) {
+            if (!WriteTableActor->IsClosed() && (outOfMemory || CheckpointInProgress)) {
                 WriteTableActor->FlushBuffers();
             }
 

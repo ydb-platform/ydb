@@ -3790,11 +3790,9 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, bool n
         }
     }
 
-    if (newRboEnabled && !txPlans.empty()) {
-        NJson::TJsonValue lastTxPlan;
-        NJson::ReadJsonTree(txPlans.back(), &lastTxPlan, true);
-        if (lastTxPlan.IsMap() && lastTxPlan.GetMapSafe().contains("SimplifiedPlan")) {
-            return SerializeRBOAnalyzePlan(txPlans, queryStats, poolId);
+    if (newRboEnabled) {
+        if (auto rboPlan = SerializeRBOAnalyzePlan(txPlans, queryStats, poolId); !rboPlan.empty()) {
+            return rboPlan;
         }
     }
 

@@ -367,7 +367,7 @@ protected:
         for (const auto tag : schema->KeyColumnIds) {
             auto it = schema->Columns.find(tag);
             Y_ENSURE(it != schema->Columns.end());
-            table["primaryKeyColumnNames"] = it->second.Name;
+            table["primaryKeyColumnNames"].AppendValue(it->second.Name);
         }
 
         for (const auto& [tag, column] : schema->Columns) {

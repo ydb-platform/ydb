@@ -22,6 +22,7 @@ struct TSecretSetting {
 
 bool SqlToProtoAst(const TString& queryStr, NSQLv1Generated::TRule_sql_query& queryProto, NYql::TIssues& issues);
 bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues);
+bool SplitSqlStatements(const TString& query, TVector<TString>& statements, NYql::TIssues& issues);
 
 bool ValidateTableRefs(const NSQLv1Generated::TRule_sql_query& query, NYql::TIssues& issues);
 

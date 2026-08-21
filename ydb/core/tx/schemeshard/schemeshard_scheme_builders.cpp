@@ -67,9 +67,6 @@ bool BuildCreateTableQuery(
     }
 
     query = result.ExtractOut();
-    if (const auto alterTablePos = query.find("\nALTER TABLE "); alterTablePos != TString::npos) {
-        query.resize(alterTablePos);
-    }
     return true;
 }
 

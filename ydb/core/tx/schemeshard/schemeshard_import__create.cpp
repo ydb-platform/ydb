@@ -129,6 +129,35 @@ bool IsTableCreatedByQuery(const TItem& item) {
     }, item.PreparedCreationQuery->GetOperationType());
 }
 
+TMaybe<TString> GetPreparedQueryTargetPath(const NKikimrSchemeOp::TModifyScheme& modifyScheme) {
+    TString name;
+    switch (modifyScheme.GetOperationType()) {
+    case NKikimrSchemeOp::ESchemeOpCreateTable:
+        name = modifyScheme.GetCreateTable().GetName();
+        break;
+    case NKikimrSchemeOp::ESchemeOpCreateIndexedTable:
+        name = modifyScheme.GetCreateIndexedTable().GetTableDescription().GetName();
+        break;
+    case NKikimrSchemeOp::ESchemeOpCreateView:
+        name = modifyScheme.GetCreateView().GetName();
+        break;
+    case NKikimrSchemeOp::ESchemeOpCreateReplication:
+    case NKikimrSchemeOp::ESchemeOpCreateTransfer:
+        name = modifyScheme.GetReplication().GetName();
+        break;
+    case NKikimrSchemeOp::ESchemeOpCreateExternalDataSource:
+        name = modifyScheme.GetCreateExternalDataSource().GetName();
+        break;
+    case NKikimrSchemeOp::ESchemeOpCreateExternalTable:
+        name = modifyScheme.GetCreateExternalTable().GetName();
+        break;
+    default:
+        return Nothing();
+    }
+
+    return CanonizePath(JoinPath({modifyScheme.GetWorkingDir(), name}));
+}
+
 bool RewriteCreateQuery(
     TString& query,
     const TString& dbRestoreRoot,
@@ -762,9 +791,20 @@ private:
         return true;
     }
 
-    void ExecutePreparedQuery(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+    bool ExecutePreparedQuery(TTransactionContext& txc, TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items[itemIdx];
+
+        const auto preparedTargetPath = GetPreparedQueryTargetPath(*item.PreparedCreationQuery);
+        if (!preparedTargetPath || *preparedTargetPath != CanonizePath(item.DstPathName)) {
+            NIceDb::TNiceDb db(txc.DB);
+            CancelAndPersist(db, importInfo, itemIdx, TStringBuilder()
+                << "Prepared creation query target path "
+                << (preparedTargetPath ? preparedTargetPath->Quote() : "<unknown>")
+                << " does not match destination path " << CanonizePath(item.DstPathName).Quote(),
+                "invalid prepared creation query");
+            return false;
+        }
 
         item.SubState = ESubState::Proposed;
 
@@ -803,10 +843,12 @@ private:
 
         if (TString error; !FillACL(modifyScheme, item.Permissions, error)) {
             NIceDb::TNiceDb db(txc.DB);
-            return CancelAndPersist(db, importInfo, itemIdx, error, "cannot parse permissions");
+            CancelAndPersist(db, importInfo, itemIdx, error, "cannot parse permissions");
+            return false;
         }
 
         Send(Self->SelfId(), std::move(propose));
+        return true;
     }
 
     void DelayObjectCreation(
@@ -1597,7 +1639,9 @@ private:
             switch (item.State) {
             case EState::CreateSchemeObject:
                 if (item.PreparedCreationQuery) {
-                    ExecutePreparedQuery(txc, importInfo, i, txId);
+                    if (!ExecutePreparedQuery(txc, importInfo, i, txId)) {
+                        return;
+                    }
                     itemIdx = i;
                     break;
                 }

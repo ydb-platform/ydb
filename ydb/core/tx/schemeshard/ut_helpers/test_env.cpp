@@ -184,6 +184,7 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest, Handle);
+            HFunc(NConsole::TEvConfigsDispatcher::TEvGetConfigRequest, Handle);
         }
     }
 
@@ -191,6 +192,12 @@ public:
         Y_UNUSED(ev);
         auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
         *event->Record.MutableConfig() = Config;
+        ctx.Send(ev->Sender, event.Release(), 0, ev->Cookie);
+    }
+
+    void Handle(NConsole::TEvConfigsDispatcher::TEvGetConfigRequest::TPtr& ev, const TActorContext& ctx) {
+        auto event = MakeHolder<NConsole::TEvConfigsDispatcher::TEvGetConfigResponse>();
+        event->Config = std::make_shared<NKikimrConfig::TAppConfig>(Config);
         ctx.Send(ev->Sender, event.Release(), 0, ev->Cookie);
     }
 private:

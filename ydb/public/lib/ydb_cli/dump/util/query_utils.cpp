@@ -161,6 +161,39 @@ struct TTokenCollector {
     std::function<TString(const TString&)> PathRewriter;
 };
 
+bool GetTokenOffset(const TString& query, const TToken& token, size_t& offset) {
+    const ui32 targetLine = token.GetLine();
+    const ui32 targetColumn = token.GetColumn();
+    if (targetLine == 0) {
+        return false;
+    }
+
+    offset = 0;
+    for (ui32 line = 1; line < targetLine; ++line) {
+        const auto newline = query.find('\n', offset);
+        if (newline == TString::npos) {
+            return false;
+        }
+        offset = newline + 1;
+    }
+    offset += targetColumn;
+    return offset <= query.size()
+        && TStringBuf(query).SubStr(offset, token.GetValue().size()) == token.GetValue();
+}
+
+void VisitAllFields(const NProtoBuf::Message& msg, const std::function<bool(const NProtoBuf::Message&)>& callback);
+
+TVector<const TToken*> CollectTokens(const NProtoBuf::Message& message) {
+    TVector<const TToken*> tokens;
+    VisitAllFields(message, [&tokens](const NProtoBuf::Message& child) {
+        if (const auto* token = dynamic_cast<const TToken*>(&child); token && token->GetValue() != "<EOF>") {
+            tokens.push_back(token);
+        }
+        return true;
+    });
+    return tokens;
+}
+
 void VisitAllFields(const NProtoBuf::Message& msg, const std::function<bool(const NProtoBuf::Message&)>& callback) {
     const auto* md = msg.GetDescriptor();
     for (int i = 0; i < md->field_count(); ++i) {
@@ -333,6 +366,42 @@ bool Format(const TString& query, TString& formattedQuery, NYql::TIssues& issues
 
     auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
     return formatter->Format(query, formattedQuery, issues);
+}
+
+bool SplitSqlStatements(const TString& query, TVector<TString>& statements, NYql::TIssues& issues) {
+    TRule_sql_query queryProto;
+    if (!SqlToProtoAst(query, queryProto, issues)) {
+        return false;
+    }
+
+    TVector<size_t> statementOffsets;
+    VisitAllFields(queryProto, [&query, &issues, &statementOffsets](const NProtoBuf::Message& message) {
+        const auto* statement = dynamic_cast<const TRule_sql_stmt_core*>(&message);
+        if (!statement) {
+            return true;
+        }
+
+        const auto tokens = CollectTokens(*statement);
+        size_t offset = 0;
+        if (tokens.empty() || !GetTokenOffset(query, *tokens.front(), offset)) {
+            issues.AddIssue("cannot determine SQL statement position");
+            return false;
+        }
+        statementOffsets.push_back(offset);
+        return false;
+    });
+    if (!issues.Empty()) {
+        return false;
+    }
+
+    statements.clear();
+    statements.reserve(statementOffsets.size());
+    for (size_t i = 0; i < statementOffsets.size(); ++i) {
+        const size_t begin = i == 0 ? 0 : statementOffsets[i];
+        const size_t end = i + 1 < statementOffsets.size() ? statementOffsets[i + 1] : query.size();
+        statements.push_back(query.substr(begin, end - begin));
+    }
+    return true;
 }
 
 bool ValidateTableRefs(const TRule_sql_query& query, NYql::TIssues& issues) {

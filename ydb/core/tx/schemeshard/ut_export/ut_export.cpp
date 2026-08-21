@@ -1810,7 +1810,10 @@ partitioning_settings {
             const auto& query = backup.GetCreateTableQuery();
             UNIT_ASSERT_STRING_CONTAINS(query, "GENERATED ALWAYS AS (a + b) STORED");
             UNIT_ASSERT_STRING_CONTAINS(query, "INDEX `ByA` GLOBAL SYNC ON (`a`)");
-            UNIT_ASSERT_C(!query.Contains("ALTER TABLE"), query);
+            UNIT_ASSERT_STRING_CONTAINS(query, "ALTER TABLE `/MyRoot/Table`");
+            UNIT_ASSERT_STRING_CONTAINS(query, "ALTER INDEX `ByA`");
+            UNIT_ASSERT_STRING_CONTAINS(query, "AUTO_PARTITIONING_BY_LOAD = ENABLED");
+            UNIT_ASSERT_STRING_CONTAINS(query, "AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10");
             return true;
         });
 

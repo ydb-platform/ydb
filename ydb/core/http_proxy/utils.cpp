@@ -94,6 +94,9 @@ TString NormalizeForwardedProto(TStringBuf proto) {
     for (char c : first) {
         scheme.push_back(AsciiToLower(c));
     }
+    if (scheme != "http" && scheme != "https") {
+        return {};
+    }
     return scheme;
 }
 

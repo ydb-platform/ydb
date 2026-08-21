@@ -45,6 +45,21 @@ Y_UNIT_TEST_SUITE(SqsRequestEndpoint) {
             "https://lbkx.example.net:8443");
     }
 
+    Y_UNIT_TEST(IgnoresUnknownForwardedProtoAndUsesConnectionScheme) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeSqsRequestEndpoint(
+                "sqs.ydb.test:8443",
+                "X-Forwarded-Proto: ftp\r\n",
+                false),
+            "http://sqs.ydb.test:8443");
+        UNIT_ASSERT_VALUES_EQUAL(
+            MakeSqsRequestEndpoint(
+                "sqs.ydb.test:8443",
+                "X-Forwarded-Proto: FTP, https\r\n",
+                true),
+            "https://sqs.ydb.test:8443");
+    }
+
     Y_UNIT_TEST(ParsedHttpRequestWithTlsEndpoint) {
         auto endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
         endpoint->Secure = true;

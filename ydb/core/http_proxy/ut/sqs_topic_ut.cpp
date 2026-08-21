@@ -109,8 +109,13 @@ namespace {
         const TString& host,
         const TString& method,
         NJson::TJsonMap request,
-        const TVector<std::pair<TString, TString>>& extraHeaders = {})
+        const TVector<std::pair<TString, TString>>& extraHeaders = {},
+        const TString& authorizationStr = "")
     {
+        TString authorization = authorizationStr;
+        if (authorization.StartsWith("Authorization: ")) {
+            authorization.erase(0, 14);
+        }
         auto res = fixture.SendHttpRequestSpecified(
             "/Root",
             TStringBuilder() << "AmazonSQS." << method,
@@ -118,8 +123,8 @@ namespace {
             host,
             "20150830T123600Z",
             "sqs-topic-ut",
-            "identity",
             "",
+            authorization,
             "application/json",
             extraHeaders);
         UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
@@ -461,6 +466,24 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             auto json = SendSqsJsonWithHost(*this, host, "CreateQueue", {{"QueueName", queueName}});
             const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
             UNIT_ASSERT(queueUrl.StartsWith(TStringBuilder() << "http://" << host << "/v1/"));
+            UNIT_ASSERT(queueUrl.Contains(queueName));
+        }
+
+        Y_UNIT_TEST_F(TestCreateQueueUsesForwardedHost, TNoAuthFixture) {
+            const TString queueName = "CreateQueueForwardedHost";
+            const TString backendHost = "vla5-2135.lbkx.example.net:8771";
+            const TString publicHost = "lbkx.example.net:8443";
+            auto json = SendSqsJsonWithHost(
+                *this,
+                backendHost,
+                "CreateQueue",
+                {{"QueueName", queueName}},
+                {
+                    {"X-Forwarded-Host", publicHost},
+                    {"X-Forwarded-Proto", "HTTPS, http"},
+                });
+            const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+            UNIT_ASSERT(queueUrl.StartsWith(TStringBuilder() << "https://" << publicHost << "/v1/"));
             UNIT_ASSERT(queueUrl.Contains(queueName));
         }
 
@@ -1174,6 +1197,36 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 {"QueueName", "my_topic@my/consumer"},
             });
             UNIT_ASSERT_VALUES_EQUAL(listPath, GetPathFromQueueUrlMap(getJson));
+        }
+
+        Y_UNIT_TEST_F(TestListQueuesUsesForwardedHost, TFixture) {
+            const TString queueName = "ListQueuesForwardedHost";
+            const TString consumer = "ydb-sqs-consumer";
+            {
+                auto driver = MakeDriver(*this);
+                Y_ENSURE(CreateTopic(driver, queueName, consumer));
+            }
+
+            const TString backendHost = "vla5-2135.lbkx.example.net:8771";
+            const TString publicHost = "lbkx.example.net:8443";
+            auto json = SendSqsJsonWithHost(
+                *this,
+                backendHost,
+                "ListQueues",
+                {{"QueueNamePrefix", queueName}},
+                {
+                    {"X-Forwarded-Host", publicHost},
+                    {"X-Forwarded-Proto", "HTTPS, http"},
+                },
+                FormAuthorizationStr("ru-central1"));
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                queueName.size(), queueName.c_str(), consumer.size(), consumer.c_str());
+            const auto& urls = json["QueueUrls"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(urls.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(
+                urls[0].GetString(),
+                TStringBuilder() << "https://" << publicHost << expectedPath);
         }
 
         struct TSqsTopicPaths {

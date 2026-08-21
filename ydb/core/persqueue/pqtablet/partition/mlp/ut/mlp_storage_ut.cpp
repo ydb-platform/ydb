@@ -280,6 +280,52 @@ struct TUtils {
     }
 };
 
+Y_UNIT_TEST(InitializeIgnoresTruncatedSlowMessages) {
+    TStorage storage(CreateDefaultTimeProvider(), {.MinMessages = 1, .MaxMessages = 8});
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+    snapshot.SetFormatVersion(1);
+    snapshot.SetSlowMessages(TString(1, '\xff'));
+    UNIT_ASSERT(storage.Initialize(snapshot));
+}
+
+Y_UNIT_TEST(InitializeIgnoresTruncatedDlqAndPartialSlowVarint) {
+    {
+        TStorage storage(CreateDefaultTimeProvider(), {.MinMessages = 1, .MaxMessages = 8});
+        NKikimrPQ::TMLPStorageSnapshot snapshot;
+        snapshot.SetFormatVersion(1);
+        snapshot.SetDLQMessages(TString(1, '\xff'));
+        UNIT_ASSERT(storage.Initialize(snapshot));
+        UNIT_ASSERT(storage.GetDLQMessages().empty());
+    }
+    {
+        TStorage storage(CreateDefaultTimeProvider(), {.MinMessages = 1, .MaxMessages = 8});
+        NKikimrPQ::TMLPStorageSnapshot snapshot;
+        snapshot.SetFormatVersion(1);
+        snapshot.SetSlowMessages(TString(8, '\0') + '\xff');
+        UNIT_ASSERT(storage.Initialize(snapshot));
+    }
+}
+
+Y_UNIT_TEST(ApplyWALIgnoresTruncatedAddedAndChangedMessages) {
+    TStorage storage(CreateDefaultTimeProvider(), {.MinMessages = 1, .MaxMessages = 8});
+    NKikimrPQ::TMLPStorageSnapshot snapshot;
+    snapshot.SetFormatVersion(1);
+    UNIT_ASSERT(storage.Initialize(snapshot));
+
+    {
+        NKikimrPQ::TMLPStorageWAL wal;
+        wal.SetFormatVersion(1);
+        wal.SetAddedMessages(TString(1, '\xff'));
+        UNIT_ASSERT(storage.ApplyWAL(wal));
+    }
+    {
+        NKikimrPQ::TMLPStorageWAL wal;
+        wal.SetFormatVersion(1);
+        wal.SetChangedMessages(TString(1, '\xff'));
+        UNIT_ASSERT(storage.ApplyWAL(wal));
+    }
+}
+
 Y_UNIT_TEST(NextFromEmptyStorage) {
     TStorage storage(CreateDefaultTimeProvider(), {});
 

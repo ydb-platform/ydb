@@ -24,6 +24,47 @@ static constexpr size_t RecordBatchCrcOffset =
 static constexpr size_t RecordBatchCrcBodyOffset =
     RecordBatchCrcOffset + sizeof(TKafkaRecordBatch::CrcMeta::Type);
 
+// Same bit pattern as Java `long` + / - (two's complement wrap).
+i64 WrapAddI64(i64 a, i64 b) {
+    return static_cast<i64>(static_cast<ui64>(a) + static_cast<ui64>(b));
+}
+
+i64 WrapSubI64(i64 a, i64 b) {
+    return static_cast<i64>(static_cast<ui64>(a) - static_cast<ui64>(b));
+}
+
+// Mirrors AbstractLegacyRecordBatch.DeepRecordsIterator (Apache Kafka).
+i64 LegacyAbsoluteBaseOffset(
+    TKafkaVersion magic,
+    i64 wrapperOffset,
+    const std::vector<TKafkaRecordBatchV0>& entries)
+{
+    if (entries.empty()) {
+        ythrow yexception() << "Found invalid compressed record set with no inner records";
+    }
+    if (magic != 1) {
+        return 0;
+    }
+    // Outer offset 0 is produce data from some librdkafka versions.
+    if (wrapperOffset == 0) {
+        return 0;
+    }
+    const i64 lastInnerOffset = entries.back().Offset;
+    if (wrapperOffset < lastInnerOffset) {
+        ythrow yexception() << "Found invalid wrapper offset in compressed v1 message set, wrapper offset '"
+            << wrapperOffset << "' is less than the last inner message offset '" << lastInnerOffset
+            << "' and it is not zero.";
+    }
+    return WrapSubI64(wrapperOffset, lastInnerOffset);
+}
+
+i64 LegacyRecordOffset(TKafkaVersion magic, i64 absoluteBaseOffset, i64 entryOffset) {
+    if (magic != 1) {
+        return entryOffset;
+    }
+    return WrapAddI64(absoluteBaseOffset, entryOffset);
+}
+
 TBuffer TakeRecordBatchBody(TKafkaReadable& readable, TKafkaInt32 batchLength) {
     if (batchLength < 0) {
         ythrow yexception() << "invalid Kafka record batch length " << batchLength;
@@ -206,18 +247,9 @@ void AppendLegacyRecords(
     i64 wrapperOffset = 0,
     std::optional<i64> wrapperTimestamp = std::nullopt)
 {
-    if (entries.empty()) {
-        return;
-    }
-
-    i64 absoluteBaseOffset = 0;
-    if (magic == 1) {
-        absoluteBaseOffset = wrapperOffset == 0 ? 0 : wrapperOffset - entries.back().Offset;
-    }
-
+    const i64 absoluteBaseOffset = LegacyAbsoluteBaseOffset(magic, wrapperOffset, entries);
     for (const auto& entry : entries) {
-        const i64 offset = magic == 1 ? absoluteBaseOffset + entry.Offset : entry.Offset;
-        AppendLegacyRecord(batch, entry, offset, wrapperTimestamp);
+        AppendLegacyRecord(batch, entry, LegacyRecordOffset(magic, absoluteBaseOffset, entry.Offset), wrapperTimestamp);
     }
 }
 
@@ -303,18 +335,13 @@ struct TLegacyHeaderConsumer {
             ? std::optional<i64>(entry.Record.Timestamp)
             : std::nullopt;
 
-        i64 absoluteBaseOffset = 0;
-        if (Magic == 1) {
-            absoluteBaseOffset = entry.Offset == 0 ? 0 : entry.Offset - innerEntries.back().Offset;
-        }
-
+        const i64 absoluteBaseOffset = LegacyAbsoluteBaseOffset(Magic, entry.Offset, innerEntries);
         for (const auto& innerEntry : innerEntries) {
-            const i64 offset = Magic == 1
-                ? absoluteBaseOffset + innerEntry.Offset
-                : innerEntry.Offset;
             const i64 timestamp = wrapperTimestamp.value_or(
                 Magic >= 1 ? innerEntry.Record.Timestamp : 0);
-            AppendHeaderRecord(offset, timestamp);
+            AppendHeaderRecord(
+                LegacyRecordOffset(Magic, absoluteBaseOffset, innerEntry.Offset),
+                timestamp);
         }
     }
 
@@ -328,7 +355,8 @@ private:
                 Header.MaxTimestamp = timestamp;
             }
         } else {
-            Header.LastOffsetDelta = offset - Header.BaseOffset;
+            Header.LastOffsetDelta = static_cast<TKafkaInt32>(
+                WrapSubI64(offset, Header.BaseOffset));
             if (Magic >= 1) {
                 Header.MaxTimestamp = Max(Header.MaxTimestamp, timestamp);
             }
@@ -1087,6 +1115,10 @@ ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TK
             % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1);
     }
     return static_cast<ui64>(batch.BaseOffset) + record.OffsetDelta;
+}
+
+i64 GetRecordTimestamp(i64 baseTimestamp, i64 timestampDelta) {
+    return WrapAddI64(baseTimestamp, timestampDelta);
 }
 
 } // namespace NKafka

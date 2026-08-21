@@ -346,12 +346,7 @@ std::conditional_t<GetValue, TValue, TParams> TQueryFromFileIterator::ReadNext()
         if (line.empty()) {
             continue;
         }
-        ++CurrentLineNo;
-        try {
-            Query.AddLine(line);
-        } catch (const std::exception& e) {
-            throw yexception() << DataFileName << ":" << CurrentLineNo << ": " << e.what();
-        }
+        Query.AddLine(line);
         ++querySizeRows;
         querySizeBytes += AlignUp<i64>(line.size(), METERING_ROW_PRECISION);
         if (MaxRowsPerQuery > 0 && querySizeRows >= MaxRowsPerQuery

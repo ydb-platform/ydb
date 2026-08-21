@@ -2710,7 +2710,7 @@ struct Schema : NIceDb::Schema {
         struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
         struct CompletedAtUs : Column<11, NScheme::NTypeIds::Uint64> {};
         struct PlanStep :      Column<12, NScheme::NTypeIds::Uint64> {};
-        struct BodySize :      Column<13, NScheme::NTypeIds::Uint64> {};
+        struct BodySizeBytes :      Column<13, NScheme::NTypeIds::Uint64> {};
         // Serialized TEvDescribeSchemeResult for the target path, captured at
         // completion so the record is self-contained even after a DROP.
         struct Description :   Column<14, NScheme::NTypeIds::String, false, true> {}; // Sensitive: may describe a secret
@@ -2720,7 +2720,7 @@ struct Schema : NIceDb::Schema {
         using TKey = TableKey<Order>;
         using TColumns = TableColumns<Order, TxId, OperationType, PathOwnerId, PathLocalId,
                                       Path, ObjectType, Status, UserSID, SchemaVersion,
-                                      CompletedAtUs, PlanStep, BodySize, Description, PositionKind>;
+                                      CompletedAtUs, PlanStep, BodySizeBytes, Description, PositionKind>;
     };
 
     struct SchemeChangeRecordDetails : Table<143> {
@@ -2735,7 +2735,7 @@ struct Schema : NIceDb::Schema {
     struct SchemeChangeSubscribers : Table<142> {
         struct SubscriberId :   Column<1, NScheme::NTypeIds::Utf8> {};
         struct LastAckedOrder : Column<2, NScheme::NTypeIds::Uint64> {};
-        struct LastActivityAt : Column<3, NScheme::NTypeIds::Uint64> {};
+        struct LastActivityAtUs : Column<3, NScheme::NTypeIds::Uint64> {};
         // NKikimrSchemeShard::TSchemeChangeSubscriberState::EState. LOST is
         // written when a cursor is advanced past records the subscriber never
         // received.
@@ -2744,7 +2744,7 @@ struct Schema : NIceDb::Schema {
         struct StartOrder :     Column<5, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<SubscriberId>;
-        using TColumns = TableColumns<SubscriberId, LastAckedOrder, LastActivityAt, State, StartOrder>;
+        using TColumns = TableColumns<SubscriberId, LastAckedOrder, LastActivityAtUs, State, StartOrder>;
     };
 
     // Maps an in-flight operation to the outbox orders reserved at propose.

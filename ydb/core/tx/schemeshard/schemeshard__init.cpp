@@ -1388,7 +1388,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TSchemeShard::TSubscriberInfo info;
                 info.LastAckedOrder = subRowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
                 info.LastActivityAt = TInstant::MicroSeconds(
-                    subRowset.GetValue<Schema::SchemeChangeSubscribers::LastActivityAt>());
+                    subRowset.GetValue<Schema::SchemeChangeSubscribers::LastActivityAtUs>());
                 // Rows written before these columns existed read as absent;
                 // keep TSubscriberInfo's defaults (State = READY) in that case.
                 if (subRowset.HaveValue<Schema::SchemeChangeSubscribers::State>()) {

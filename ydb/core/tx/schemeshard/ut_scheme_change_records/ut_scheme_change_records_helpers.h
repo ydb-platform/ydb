@@ -257,13 +257,13 @@ inline TSchemeChangeRecordsReadResult ReadSchemeChangeRecordsFull(
         entry.SchemaVersion = proto.GetSchemaVersion();
         entry.CompletedAtUs = proto.GetCompletedAtUs();
         entry.PositionKind = (ui32)proto.GetPositionKind();
-        if (proto.GetBodySize() > 0) {
+        if (proto.GetBodySizeBytes() > 0) {
             ordersWithBody.push_back(proto.GetOrder());
         }
         result.Entries.push_back(std::move(entry));
     }
 
-    // Step 2: Fetch bodies for entries with non-zero BodySize; merge back.
+    // Step 2: Fetch bodies for entries with non-zero BodySizeBytes; merge back.
     if (!ordersWithBody.empty()) {
         TAutoPtr<IEventHandle> bodiesHandle;
         auto* bodies = FetchSchemeChangeRecordBodies(runtime, tempSubId, ordersWithBody, bodiesHandle);

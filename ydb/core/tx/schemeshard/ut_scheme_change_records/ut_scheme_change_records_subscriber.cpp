@@ -220,8 +220,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT(fetch->Record.EntriesSize() >= 1);
         for (int i = 0; i < (int)fetch->Record.EntriesSize(); ++i) {
             const auto& entry = fetch->Record.GetEntries(i);
-            UNIT_ASSERT_C(entry.GetBodySize() > 0,
-                "Metadata should include non-zero BodySize for entry " << entry.GetOrder());
+            UNIT_ASSERT_C(entry.GetBodySizeBytes() > 0,
+                "Metadata should include non-zero BodySizeBytes for entry " << entry.GetOrder());
         }
     }
 

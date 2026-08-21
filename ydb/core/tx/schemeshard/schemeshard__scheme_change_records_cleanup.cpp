@@ -102,7 +102,7 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(newOrder),
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::State>(newState),
-            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAtUs>(now.MicroSeconds())
         );
 
         if (auto it = Self->Subscribers.find(subscriberId); it != Self->Subscribers.end()) {

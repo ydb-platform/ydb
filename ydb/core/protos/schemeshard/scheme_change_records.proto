@@ -88,7 +88,7 @@ message TSchemeChangeRecord {
     string UserSID = 9;
     uint64 SchemaVersion = 10;
     uint64 CompletedAtUs = 11;
-    uint64 BodySize = 13;
+    uint64 BodySizeBytes = 13;
     // Window membership ranks by (PlanStep, PositionKind), EXACT < BUCKETED.
     // No tiebreak: records equal on both are concurrent, so consumers must not
     // infer an order from delivery. TxId is identity, never an order.

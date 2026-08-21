@@ -10672,7 +10672,7 @@
             },
             {
                 "ColumnId": 13,
-                "ColumnName": "BodySize",
+                "ColumnName": "BodySizeBytes",
                 "ColumnType": "Uint64"
             },
             {
@@ -10744,7 +10744,7 @@
             },
             {
                 "ColumnId": 3,
-                "ColumnName": "LastActivityAt",
+                "ColumnName": "LastActivityAtUs",
                 "ColumnType": "Uint64"
             },
             {

@@ -128,7 +128,6 @@ namespace TEvSchemeShard {
         EvUnregisterSubscriberResult,
         EvFetchSchemeChangeRecordBodies,
         EvFetchSchemeChangeRecordBodiesResult,
-        EvReplaySchemeChangeRecord_Removed,  // RFC-0129 4.2: slot burned, do not reuse
 
         EvEnd
     };

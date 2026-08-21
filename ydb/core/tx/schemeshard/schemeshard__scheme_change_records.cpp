@@ -87,7 +87,7 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
         NIceDb::TUpdate<T::OperationType>(static_cast<ui32>(userTx.GetOperationType())),
         NIceDb::TUpdate<T::Path>(path),
         NIceDb::TUpdate<T::Status>(ui32(NKikimrScheme::StatusAccepted)),
-        NIceDb::TUpdate<T::BodySize>(body.size()),
+        NIceDb::TUpdate<T::BodySizeBytes>(body.size()),
         // Zero until finalisation; the fetch path stops here so an in-flight
         // record is never handed out.
         NIceDb::TUpdate<T::CompletedAtUs>(ui64(0))
@@ -202,7 +202,7 @@ void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeC
         NIceDb::TUpdate<T::SchemaVersion>(entry.SchemaVersion),
         NIceDb::TUpdate<T::CompletedAtUs>(entry.CompletedAtUs.MicroSeconds()),
         NIceDb::TUpdate<T::PlanStep>(ui64(entry.PlanStep)),
-        NIceDb::TUpdate<T::BodySize>(entry.Body.size()),
+        NIceDb::TUpdate<T::BodySizeBytes>(entry.Body.size()),
         NIceDb::TUpdate<T::Description>(entry.Description),
         NIceDb::TUpdate<T::PositionKind>(entry.PositionKind)
     );

@@ -130,7 +130,7 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
         const TInstant now = ctx.Now();
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(startOrder),
-            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds()),
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAtUs>(now.MicroSeconds()),
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::State>(state),
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::StartOrder>(startOrder)
         );
@@ -253,7 +253,7 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             entry->SetSchemaVersion(rowset.GetValue<Schema::SchemeChangeRecords::SchemaVersion>());
             entry->SetCompletedAtUs(rowset.GetValue<Schema::SchemeChangeRecords::CompletedAtUs>());
             entry->SetPlanStep(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::PlanStep>(0));
-            entry->SetBodySize(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::BodySize>(0));
+            entry->SetBodySizeBytes(rowset.GetValueOrDefault<Schema::SchemeChangeRecords::BodySizeBytes>(0));
             entry->SetPositionKind(static_cast<NKikimrSchemeShard::TSchemeChangePosition::EKind>(
                 rowset.GetValueOrDefault<Schema::SchemeChangeRecords::PositionKind>(
                     NKikimrSchemeShard::TSchemeChangePosition::KIND_EXACT)));
@@ -279,13 +279,13 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
             // Persist the Lost marking so it survives a reboot.
             db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
                 NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(effectiveAfterOrder),
-                NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds()),
+                NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAtUs>(now.MicroSeconds()),
                 NIceDb::TUpdate<Schema::SchemeChangeSubscribers::State>(
                     NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST)
             );
         } else {
             db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
-                NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
+                NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAtUs>(now.MicroSeconds())
             );
         }
         if (auto it = Self->Subscribers.find(subscriberId); it != Self->Subscribers.end()) {
@@ -364,7 +364,7 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
         const TInstant now = ctx.Now();
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(newOrder),
-            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAtUs>(now.MicroSeconds())
         );
 
         if (auto it = Self->Subscribers.find(subscriberId); it != Self->Subscribers.end()) {

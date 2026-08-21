@@ -395,22 +395,26 @@ Load Information:
 
 #### Pool usage is over than 90%, Pool usage is over than 95%, Pool usage is over than 99%
 
+**Description:** One of the CPU pools is overloaded.
 **Actions:** Add cores to the configuration of the actor system for the corresponding CPU pool.
 
 ### NODE_UPTIME
 
 #### The number of node restarts has increased
 
+**Description:** The number of node restarts has exceeded the threshold. By default, this is 10 restarts per hour.
 **Actions:** Check the logs to determine the reasons for the process restarts.
 
 #### Node is restarting too often
 
+**Description:** Nodes are restarting too frequently. By default, this is 30 restarts per hour.
 **Actions:** Check the logs to determine the reasons for the process restarts.
 
 ### NODES_TIME_DIFFERENCE
 
 #### Node is ... ms behind peer [id], Node is ... ms ahead of peer [id]
 
+**Description:** Time discrepancy among nodes, which can lead to issues with coordinating distributed transactions. The problem starts to manifest at a discrepancy of 5 ms.
 **Actions:** Check for discrepancies in system time between the nodes listed in the alert, and verify the operation of the time synchronization process.
 
 ## Examples {#examples}

@@ -1,12 +1,24 @@
 # Configuring Time to Live (TTL) for a table
 
-This section contains recipes for configuration of table's TTL with {{ ydb-short-name }} SDK.
+This section contains recipes for configuring the TTL of a table with {{ ydb-short-name }} SDK.
 
 ## Enabling TTL for existing row-based and column-based tables {#enable-on-existent-table}
 
-In the example below, the items of the `mytable` table will be deleted an hour after the time set in the `created_at` column:
+In the example below, the rows of the `mytable` table will be deleted an hour after the time set in the `created_at` column:
 
 {% list tabs group=tool %}
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
 
 - 
 
@@ -79,6 +91,18 @@ In the example below, the items of the `mytable` table will be deleted an hour a
 The example below shows how to use the `modified_at` column with a numeric type (`Uint32`) as a TTL column. The column value is interpreted as the number of seconds since the Unix epoch:
 
 {% list tabs group=tool %}
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
 
 - 
 
@@ -182,6 +206,18 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 
 - 
 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
   {% if oss == true %}
 
   - C++
@@ -225,6 +261,18 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 For a newly created table, you can pass TTL settings along with the table description:
 
 {% list tabs group=tool %}
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
 
 - 
 
@@ -333,6 +381,18 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - 
 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
   {% if oss == true %}
 
   - C++
@@ -384,6 +444,18 @@ For a newly created table, you can pass TTL settings along with the table descri
 The current TTL settings can be obtained from the table description:
 
 {% list tabs group=tool %}
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
 
 - 
 

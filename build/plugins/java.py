@@ -423,3 +423,22 @@ def JAVAC_FLAGS(unit: ymake.Unit, *args: str):
         ymake.report_configure_error(
             'Usage -proc:full and -proc:only is forbidden in JAVAC_FLAGS, please, use ANNOTATION_PROCESSOR or USE_ANNOTATION_PROCESSOR macroses'
         )
+
+
+@ymake.macro
+def ENABLE_KOTLIN_ABI_JAR(unit: ymake.Unit, *args: str):
+    if not unit.enabled('WITH_KOTLIN_VALUE'):
+        ymake.report_configure_error('ENABLE_KOTLIN_ABI_JAR requires WITH_KOTLIN')
+        return
+
+    version = unit.get('_KOTLIN_VERSION')
+    try:
+        parsed_version = tuple(int(component) for component in version.split('.'))
+    except (AttributeError, ValueError):
+        ymake.report_configure_error(
+            'ENABLE_KOTLIN_ABI_JAR requires a numeric Kotlin version; found {}'.format(version or '<empty>')
+        )
+        return
+
+    if parsed_version < (2, 3, 10):
+        ymake.report_configure_error('ENABLE_KOTLIN_ABI_JAR requires Kotlin 2.3.10 or newer; found {}'.format(version))

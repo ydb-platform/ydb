@@ -9,11 +9,17 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 class TICStorageTransport: public IStorageTransport
 {
 public:
+    // Owns icStorageTransportActorId. actorSystem must outlive this object.
     TICStorageTransport(
         NActors::TActorSystem* actorSystem,
         NActors::TActorId icStorageTransportActorId);
 
-    ~TICStorageTransport() override = default;
+    ~TICStorageTransport() override;
+
+    TICStorageTransport(const TICStorageTransport&) = delete;
+    TICStorageTransport& operator=(const TICStorageTransport&) = delete;
+    TICStorageTransport(TICStorageTransport&&) = delete;
+    TICStorageTransport& operator=(TICStorageTransport&&) = delete;
 
     TConnectResultFutures Connect(const THostConnection& connection) override;
 
@@ -81,10 +87,13 @@ public:
     NThreading::TFuture<TEvDeleteTabletChunksResult> DeleteTabletChunks(
         const THostConnection& connection) override;
 
+protected:
+    NActors::TActorSystem* const ActorSystem;
+
 private:
     using EConnectionType = THostConnection::EConnectionType;
 
-    NActors::TActorSystem* const ActorSystem;
+    // Owned actor: stopped with TEvPoisonPill in the destructor.
     const NActors::TActorId ICStorageTransportActorId;
 };
 

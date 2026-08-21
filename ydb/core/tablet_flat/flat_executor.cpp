@@ -31,6 +31,7 @@
 #include "util_string.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/blobstorage_data_kind.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
@@ -251,7 +252,7 @@ void TExecutor::Broken(EBrokenReason reason) {
     if (Owner) {
         ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
         Owner->Detach(OwnerCtx());
     }
 
@@ -866,7 +867,7 @@ void TExecutor::Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) {
     if (Stats->IsFollower()) {
         ForceSendCounters();
         TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+            Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
     }
 
     if (!Counters) {
@@ -957,7 +958,7 @@ void TExecutor::Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &
 void TExecutor::DetachTablet() {
     ForceSendCounters();
     TabletCountersForgetTablet(Owner->TabletID(), Owner->TabletType(),
-        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId());
+        Owner->Info()->TenantPathId, Stats->IsFollower(), SelfId(), FollowerId);
     return PassAway();
 }
 
@@ -5069,6 +5070,8 @@ THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
         }
     }
 
+    cfg.DataKind = DataKindByTabletType(Owner->TabletType());
+
     TLogoBlobID mask(Owner->TabletID(), Generation(), step, Max<ui8>(), 0, 0);
 
     if (auto logl = Logger->Log(ELnLev::Info)) {
@@ -5238,6 +5241,8 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
         // We are not compacting tx status, avoid deleting current blobs
         snapshot->Subset->TxStatus.clear();
     }
+
+    comp->DataKind = DataKindByTabletType(Owner->TabletType());
 
     TLogoBlobID mask(Owner->TabletID(), Generation(),
                     snapshot->Barrier->Step, Max<ui8>(), 0, 0);

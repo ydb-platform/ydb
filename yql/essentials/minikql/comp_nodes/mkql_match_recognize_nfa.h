@@ -8,6 +8,7 @@
 #include <util/generic/hash_table.h>
 #include <util/generic/string.h>
 
+#include <array>
 #include <utility>
 
 namespace NKikimr::NMiniKQL::NMatchRecognize {
@@ -47,7 +48,7 @@ struct TVariantHelper {
 
     static std::variant<Ts...> GetVariantByIndex(size_t i) {
         MKQL_ENSURE(i < sizeof...(Ts), "Wrong variant index");
-        static std::variant<Ts...> Table[] = {Ts{}...};
+        static std::array<std::variant<Ts...>, sizeof...(Ts)> Table = {Ts{}...};
         return Table[i];
     }
 };

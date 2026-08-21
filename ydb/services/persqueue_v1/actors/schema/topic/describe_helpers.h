@@ -18,4 +18,10 @@ void UpdateProtoTime(T& proto, const T& time, bool storeMin) {
     }
 }
 
+inline void AddWindowsStat(Ydb::Topic::MultipleWindowsStat* stat, ui64 perMin, ui64 perHour, ui64 perDay) {
+    stat->set_per_minute(stat->per_minute() + perMin);
+    stat->set_per_hour(stat->per_hour() + perHour);
+    stat->set_per_day(stat->per_day() + perDay);
+}
+
 } // namespace NKikimr::NGRpcProxy::V1::NTopic

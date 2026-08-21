@@ -5,6 +5,7 @@ TEST_SRCS(
 )
 
 PEERDIR(
+    ydb/tools/ydb_bench/benchmarks
     ydb/tools/ydb_bench/lib
 )
 

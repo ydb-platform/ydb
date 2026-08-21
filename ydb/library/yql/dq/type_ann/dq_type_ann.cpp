@@ -596,8 +596,9 @@ const TStructExprType* GetDqJoinResultType(const TExprNode::TPtr& input, bool st
 }
 
 TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& ctx) {
-    // BlockHashJoin expects 8 args: leftStream, rightStream, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames, settings
-    if (!EnsureArgsCount(*node, 8, ctx)) {
+    // BlockHashJoin expects from 8 to 11 args:
+    // leftStream, rightStream, joinKind, leftKeys, rightKeys, leftKeyNames, rightKeyNames, settings, (leftFilter:optional), (rightFilter:optional), (commonFilter:optional)
+    if (!EnsureMinMaxArgsCount(*node, 8, 11, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
 
@@ -606,6 +607,7 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     const auto& joinTypeNode = *node->Child(2);
     auto& leftKeysNode = *node->Child(3);
     auto& rightKeysNode = *node->Child(4);
+    const auto childrenSize = node->ChildrenSize();
 
     if (!EnsureAtom(joinTypeNode, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
@@ -621,6 +623,7 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     if (!EnsureWideStreamBlockType(leftInputNode, leftItemTypes, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
+
     // Remove length column
     leftItemTypes.pop_back();
 
@@ -628,6 +631,7 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
     if (!EnsureWideStreamBlockType(rightInputNode, rightItemTypes, ctx)) {
         return IGraphTransformer::TStatus(TStatus::Error);
     }
+
     // Remove length column
     rightItemTypes.pop_back();
 
@@ -659,6 +663,64 @@ TStatus AnnotateDqBlockHashJoinCore(const TExprNode::TPtr& node, TExprContext& c
                 }
             }
             resultItems.push_back(ctx.MakeType<TBlockExprType>(itemType));
+        }
+    }
+
+    TTypeAnnotationNode::TListType rightFilterItemTypes;
+    rightFilterItemTypes.reserve(rightItemTypes.size());
+    for (auto itemType : rightItemTypes) {
+        if (joinType == "Left" && itemType->GetKind() != ETypeAnnotationKind::Optional) {
+            itemType = ctx.MakeType<TOptionalExprType>(itemType);
+        }
+        rightFilterItemTypes.push_back(itemType);
+    }
+
+    // Left filter.
+    if (childrenSize > TDqBlockHashJoinCore::idx_LeftFilter) {
+        auto& leftFilter = node->ChildRef(TDqBlockHashJoinCore::idx_LeftFilter);
+        auto status = ConvertToLambda(leftFilter, ctx, leftItemTypes.size());
+        if (status.Level != TStatus::Ok) {
+            return status;
+        }
+        if (!UpdateLambdaAllArgumentsTypes(leftFilter, leftItemTypes, ctx)) {
+            return TStatus::Error;
+        }
+        if (!leftFilter->GetTypeAnn()) {
+            return TStatus::Repeat;
+        }
+    }
+
+    // Right filter.
+    if (childrenSize > TDqBlockHashJoinCore::idx_RightFilter) {
+        auto& rightFilter = node->ChildRef(TDqBlockHashJoinCore::idx_RightFilter);
+        auto status = ConvertToLambda(rightFilter, ctx, rightFilterItemTypes.size());
+        if (status.Level != TStatus::Ok) {
+            return status;
+        }
+        if (!UpdateLambdaAllArgumentsTypes(rightFilter, rightFilterItemTypes, ctx)) {
+            return TStatus::Error;
+        }
+        if (!rightFilter->GetTypeAnn()) {
+            return TStatus::Repeat;
+        }
+    }
+
+    // Common filter.
+    if (childrenSize > TDqBlockHashJoinCore::idx_CommonFilter) {
+        auto commonInputs = leftItemTypes;
+        commonInputs.insert(commonInputs.end(), rightFilterItemTypes.begin(), rightFilterItemTypes.end());
+        auto& commonFilter = node->ChildRef(TDqBlockHashJoinCore::idx_CommonFilter);
+        auto status = ConvertToLambda(commonFilter, ctx, commonInputs.size());
+        if (status.Level != TStatus::Ok) {
+            return status;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(commonFilter, commonInputs, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!commonFilter->GetTypeAnn()) {
+            return TStatus::Repeat;
         }
     }
 

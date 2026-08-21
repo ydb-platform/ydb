@@ -776,33 +776,57 @@ TKeyBoundaries SplitBodyHeadAndFastWrite(const std::deque<TDataKey>& keys)
     return b;
 }
 
+// Heal meta/keys mismatch on init: KV has no data keys (NODATA or OK with zero pairs),
+// but TypeMeta still has StartOffset < EndOffset. That leaves encoders with a non-empty
+// offset range and empty key containers — an inconsistent partition state; the next
+// GetWriteTimeEstimate (e.g. from InitComplete → ReportCounters) hits PQ_ENSURE (#49507).
+//
+// Typical cause: compactification deletes blob keys in CompactificationWrite without
+// AddMetaKey in the same KV request; meta is updated only later via Persist. A crash
+// (or other restart) in between leaves stale meta on disk. Retention/GC can produce
+// the same shape. Collapse both encoders to an empty partition at EndOffset (high-water
+// mark); this is an in-memory bandage and does not rewrite TypeMeta.
 void TInitDataRangeStep::NormalizeOffsetsForEmptyData() {
     auto& fwz = Partition()->BlobEncoder;
     auto& cz = Partition()->CompactionBlobEncoder;
 
     // Keep EndOffset from meta as the high-water mark for an empty partition.
-    const ui64 emptyOffset = fwz.EndOffset;
+    const ui64 endOffset = fwz.EndOffset;
+    const ui64 startOffset = fwz.StartOffset;
 
-    YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE,
-        "No data keys during partition init; normalizing empty partition offsets",
-        {"logPrefix", LogPrefix()},
-        {"tablet_id", Partition()->TabletId},
-        {"partition", Partition()->Partition},
-        {"metaStartOffset", fwz.StartOffset},
-        {"metaEndOffset", emptyOffset});
+    // Empty topics (Start == End, no keys) are normal and common — keep INFO.
+    // WARN when meta claims a non-empty range while keys are gone: partition would stay
+    // inconsistent (offset range without blobs) until we collapse to endOffset (#49507).
+    if (startOffset < endOffset) {
+        YDB_LOG_WARN_COMP(NKikimrServices::PERSQUEUE,
+            "No data keys during partition init; normalizing empty partition offsets",
+            {"logPrefix", LogPrefix()},
+            {"tablet_id", Partition()->TabletId},
+            {"partition", Partition()->Partition},
+            {"metaStartOffset", startOffset},
+            {"metaEndOffset", endOffset});
+    } else {
+        YDB_LOG_INFO_COMP(NKikimrServices::PERSQUEUE,
+            "No data keys during partition init; normalizing empty partition offsets",
+            {"logPrefix", LogPrefix()},
+            {"tablet_id", Partition()->TabletId},
+            {"partition", Partition()->Partition},
+            {"metaStartOffset", startOffset},
+            {"metaEndOffset", endOffset});
+    }
 
-    fwz.StartOffset = emptyOffset;
-    fwz.Head.Offset = emptyOffset;
+    fwz.StartOffset = endOffset;
+    fwz.Head.Offset = endOffset;
     fwz.Head.PartNo = 0;
-    fwz.NewHead.Offset = emptyOffset;
+    fwz.NewHead.Offset = endOffset;
     fwz.NewHead.PartNo = 0;
     fwz.BodySize = 0;
 
-    cz.StartOffset = emptyOffset;
-    cz.EndOffset = emptyOffset;
-    cz.Head.Offset = emptyOffset;
+    cz.StartOffset = endOffset;
+    cz.EndOffset = endOffset;
+    cz.Head.Offset = endOffset;
     cz.Head.PartNo = 0;
-    cz.NewHead.Offset = emptyOffset;
+    cz.NewHead.Offset = endOffset;
     cz.NewHead.PartNo = 0;
     cz.BodySize = 0;
 }
@@ -1193,11 +1217,9 @@ void TPartition::Bootstrap(const TActorContext& ctx) {
 }
 
 void TPartition::Initialize(const TActorContext& ctx) {
-    if (MirroringEnabled(Config)) {
-        ManageWriteTimestampEstimate = !Config.GetPartitionConfig().GetMirrorFrom().GetSyncWriteTime();
-    } else {
-        ManageWriteTimestampEstimate = IsLocalDC;
-    }
+    // SyncWriteTime was removed; mirrored partitions always use source write time
+    // and therefore never manage a local write-timestamp estimate.
+    ManageWriteTimestampEstimate = MirroringEnabled(Config) ? false : IsLocalDC;
 
     CreationTime = ctx.Now();
     WriteCycleStartTime = ctx.Now();

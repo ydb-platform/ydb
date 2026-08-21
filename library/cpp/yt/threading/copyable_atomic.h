@@ -21,27 +21,17 @@ struct TCopyableAtomic
 
     TCopyableAtomic() = default;
 
-    TCopyableAtomic(const TCopyableAtomic& other) noexcept
-        : std::atomic<T>(other.load())
-    { }
+    TCopyableAtomic(const TCopyableAtomic& other) noexcept;
+    TCopyableAtomic(TCopyableAtomic&& other) noexcept;
 
-    TCopyableAtomic(TCopyableAtomic&& other) noexcept
-        : std::atomic<T>(other.load())
-    { }
-
-    TCopyableAtomic& operator=(const TCopyableAtomic& other) noexcept
-    {
-        this->store(other.load());
-        return *this;
-    }
-
-    TCopyableAtomic& operator=(TCopyableAtomic&& other) noexcept
-    {
-        this->store(other.load());
-        return *this;
-    }
+    TCopyableAtomic& operator=(const TCopyableAtomic& other) noexcept;
+    TCopyableAtomic& operator=(TCopyableAtomic&& other) noexcept;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NThreading
+
+#define COPYABLE_ATOMIC_INL_H_
+#include "copyable_atomic-inl.h"
+#undef COPYABLE_ATOMIC_INL_H_

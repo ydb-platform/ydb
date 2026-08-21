@@ -103,6 +103,8 @@ public:
     class TTxUpdateBridgeGroupInfo;
     class TTxUpdateBridgeSyncState;
     class TTxCleanupStaleStorageEntries;
+    class TTxListDDiskInfoTablets;
+    class TTxGetDDiskInfoTablet;
 
     class TVSlotInfo;
     class TPDiskInfo;
@@ -547,17 +549,18 @@ public:
             Operational = TGroupMapper::IsPDiskOperational(nodeConnected, &Metrics);
         }
 
-        bool ShouldBeSettledBySelfHeal() const {
-            return Status == NKikimrBlobStorage::EDriveStatus::FAULTY
-                || Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED
-                || DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT
-                || MaintenanceStatus == NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED;
-        }
-
-        bool IsSelfHealReasonDecommit() const {
-            return DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT &&
-                Status != NKikimrBlobStorage::EDriveStatus::FAULTY &&
-                Status != NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED;
+        ESelfHealReassignmentPriority GetSelfHealReassignmentPriority() const {
+            if (Status == NKikimrBlobStorage::EDriveStatus::FAULTY ||
+                    Status == NKikimrBlobStorage::EDriveStatus::TO_BE_REMOVED) {
+                return ESelfHealReassignmentPriority::DriveStatus;
+            } else if (DecommitStatus == NKikimrBlobStorage::EDecommitStatus::DECOMMIT_IMMINENT) {
+                return ESelfHealReassignmentPriority::DecommitStatus;
+            } else if (MaintenanceStatus ==
+                    NKikimrBlobStorage::TMaintenanceStatus::LONG_TERM_MAINTENANCE_PLANNED) {
+                return ESelfHealReassignmentPriority::MaintenanceStatus;
+            } else {
+                return ESelfHealReassignmentPriority::None;
+            }
         }
 
         bool UsableInTermsOfDecommission(bool isSelfHealReasonDecommit) const {
@@ -570,7 +573,7 @@ public:
         }
 
         auto GetSelfHealStatusTuple() const {
-            return std::make_tuple(ShouldBeSettledBySelfHeal(), BadInTermsOfSelfHeal(), Decommitted(), IsSelfHealReasonDecommit());
+            return std::make_tuple(GetSelfHealReassignmentPriority(), BadInTermsOfSelfHeal(), Decommitted());
         }
 
         bool AcceptsNewSlots() const {
@@ -1549,6 +1552,7 @@ private:
     TTabletCountersBase* TabletCounters;
     TAutoPtr<TTabletCountersBase> TabletCountersPtr;
     TActorId ResponsivenessActorID;
+    TActorId CmsPipe;
     TTabletResponsivenessPinger* ResponsivenessPinger;
     TMap<THostConfigId, THostConfigInfo> HostConfigs;
     TMap<TBoxId, TBoxInfo> Boxes;
@@ -1908,6 +1912,7 @@ public:
     // For test purposes, required for self heal actor
     void CreateEmptyHostRecordsMap() {
         HostRecords = std::make_shared<THostRecordMapImpl>();
+        EnableSelfHealWithDegraded = std::make_shared<TControlWrapper>(0, 0, 1);
     }
 
     ui64 NextConfigTxSeqNo = 1;
@@ -2676,6 +2681,13 @@ public:
     class TTxAllocateDDiskBlockGroup;
 
     void Handle(TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::TPtr ev);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoListTablets::TPtr ev);
+    void Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTablet::TPtr ev);
+
+    // Handles both the CMS notification pipe (CmsPipe) and forwards other
+    // client pipes (e.g. Console) to their respective owners.
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
     // NODE WARDEN PIPE LIFETIME MANAGEMENT

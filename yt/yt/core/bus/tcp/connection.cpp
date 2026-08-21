@@ -564,7 +564,7 @@ void TConnection::Abort(const TError& error, NLogging::ELogLevel logLevel)
         PendingControl_.fetch_or(static_cast<ui64>(EPollControl::Shutdown));
     }
 
-    YT_TLOG_EVENT_FLUENT(Logger, logLevel, "Connection aborted")
+    YT_TLOG_EVENT(Logger, logLevel, "Connection aborted")
         .With(detailedError);
 
     // OnShutdown() will be called after draining events from thread pools.

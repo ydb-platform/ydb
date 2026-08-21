@@ -2,7 +2,7 @@
 
 #include "host_roles.h"
 
-#include <util/generic/hash.h>
+#include <util/generic/map.h>
 #include <util/system/types.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -48,6 +48,7 @@ public:
     TString DemoteHost(THostIndex hostIndex);
     // Adds ddisk to the host.
     void PromoteHost(THostIndex hostIndex);
+    TString PromoteHostIfNeeded();
 
     [[nodiscard]] EHostRole GetPBufferRole(THostIndex hostIndex) const;
     [[nodiscard]] EHostRole GetDDiskRole(THostIndex hostIndex) const;
@@ -64,6 +65,8 @@ public:
 
     // Get a list of all DDisks (enabled and disabled).
     [[nodiscard]] THostMask GetDDisks() const;
+    // Get a list of all enabled DDisks.
+    [[nodiscard]] THostMask GetEnabledDDisks() const;
     // Get a list of all DDisks with full data (enabled or not).
     [[nodiscard]] THostMask GetFullDDisks() const;
     // Get a list of all healthy DDisks (enabled and full filed).
@@ -99,9 +102,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// Vchunk index -> persisted config override. Vchunks without an entry fall
-// back to TVChunkConfig::Make().
-using TVChunkConfigByIndex = THashMap<ui32, TVChunkConfig>;
+using TVChunkConfigs = TMap<ui32, TVChunkConfig>;
 
 ////////////////////////////////////////////////////////////////////////////////
 

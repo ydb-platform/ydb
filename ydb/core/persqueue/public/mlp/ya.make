@@ -13,6 +13,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/public
     ydb/core/persqueue/public/describer
+    ydb/public/sdk/cpp/src/library/kafka
 )
 
 END()

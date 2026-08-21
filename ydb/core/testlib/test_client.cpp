@@ -141,6 +141,7 @@
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 #include <ydb/core/tx/columnshard/data_accessor/cache_policy/policy.h>
 #include <ydb/core/tx/columnshard/overload_manager/overload_manager_service.h>
+#include <ydb/core/tx/columnshard/flow_control_manager/flow_control_manager_service.h>
 #include <ydb/core/tx/general_cache/usage/service.h>
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 
@@ -739,11 +740,12 @@ namespace Tests {
             Cerr << "TServer::EnableGrpc on GrpcPort " << options.Port << ", node " << system->NodeId << Endl;
         }
 
-        system->Register(
-            NConsole::CreateJaegerTracingConfigurator(appData.TracingConfigurator, Settings->AppConfig->GetTracingConfig()),
-            TMailboxType::ReadAsFilled,
-            appData.UserPoolId
-        );
+        for (IActor* configurator : NConsole::CreateJaegerTracingConfigurators(
+                appData.TracingConfigurator,
+                appData.UserFacingTracingConfigurator,
+                *Settings->AppConfig)) {
+            system->Register(configurator, TMailboxType::ReadAsFilled, appData.UserPoolId);
+        }
 
         auto grpcMon = system->Register(NGRpcService::CreateGrpcMonService(), TMailboxType::ReadAsFilled, appData.UserPoolId);
         system->RegisterLocalService(NGRpcService::GrpcMonServiceId(), grpcMon);
@@ -1284,14 +1286,27 @@ namespace Tests {
             Runtime->RegisterService(NConveyor::TScanServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         {
-            auto* actor = NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), appData.Counters);
-            const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
-            Runtime->RegisterService(NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
+            const auto registerService = [&](const ui32 poolId, const bool useBatchPool) {
+                auto counters = appData.Counters->GetSubgroup("actor_system_pool_id", ::ToString(poolId));
+                auto* actor = NConveyorComposite::CreateService(NConveyorComposite::NConfig::TConfig::BuildDefault(), counters);
+                const auto aid = Runtime->Register(actor, nodeIdx, poolId, TMailboxType::Revolving, 0);
+                Runtime->RegisterService(
+                    NConveyorComposite::TServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx), useBatchPool), aid, nodeIdx);
+            };
+
+            registerService(appData.UserPoolId, false);
+            registerService(appData.BatchPoolId, true);
         }
         {
             auto actor = NColumnShard::NOverload::TOverloadManagerServiceOperator::CreateService(appData.Counters);
             const auto aid = Runtime->Register(actor.release(), nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NColumnShard::NOverload::TOverloadManagerServiceOperator::MakeServiceId(), aid, nodeIdx);
+        }
+        {
+            auto countersGroup = NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::BuildCountersGroup(appData.Counters);
+            auto actor = NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::CreateService(countersGroup);
+            const auto aid = Runtime->Register(actor.release(), nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
+            Runtime->RegisterService(NColumnShard::NFlowControl::TFlowControlManagerServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 

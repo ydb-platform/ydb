@@ -4,8 +4,8 @@
 -#include "hwy/ops/x86_256-inl.h"
 +#error #include "hwy/ops/x86_256-inl.h"
 @@ -583 +583 @@ struct AddExport {
--#include "hwy/ops/x86_512-inl.h"
-+#error #include "hwy/ops/x86_512-inl.h"
+-#include "hwy/ops/x86_avx3-inl.h"
++#error #include "hwy/ops/x86_avx3-inl.h"
 @@ -586 +586 @@ struct AddExport {
 -#include "hwy/ops/ppc_vsx-inl.h"
 +#error #include "hwy/ops/ppc_vsx-inl.h"
@@ -27,8 +27,11 @@
 @@ -600 +600 @@ struct AddExport {
 -#include "hwy/ops/scalar-inl.h"
 +#error #include "hwy/ops/scalar-inl.h"
---- contrib/python/numpy/py3/numpy/_core/src/umath/dispatching.c	(index)
-+++ contrib/python/numpy/py3/numpy/_core/src/umath/dispatching.c	(working tree)
+@@ -635 +635 @@ struct AddExport {
+-#include "hwy/ops/loongarch_lsx-inl.h"
++#error #include "hwy/ops/loongarch_lsx-inl.h"
+--- contrib/python/numpy/py3/numpy/_core/src/umath/dispatching.cpp	(index)
++++ contrib/python/numpy/py3/numpy/_core/src/umath/dispatching.cpp	(working tree)
 @@ -49 +49 @@
 -#include "arrayobject.h"
 +#include "contrib/python/numpy/py3/numpy/_core/src/multiarray/arrayobject.h"

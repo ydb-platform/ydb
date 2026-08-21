@@ -48,7 +48,10 @@
 
 Эти режимы не поддерживают чтение из колоночных таблиц. Попытка чтения вызовет ошибку следующего вида:
 
-`Read from column tables is not supported in Online Read-Only or Stale Read-Only transaction modes. Use Serializable or Snapshot Read-Only mode instead.`
+```text
+Read from column tables is not supported in Online Read-Only or Stale Read-Only
+transaction modes. Use Serializable or Snapshot Read-Only mode instead.
+```
 
 Для транзакций с чтением из колоночных таблиц используйте:
 

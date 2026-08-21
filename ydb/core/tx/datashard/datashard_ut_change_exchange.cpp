@@ -4705,8 +4705,60 @@ Y_UNIT_TEST_SUITE(Cdc) {
 
         const auto& table = records[1]["tableChanges"][0]["table"];
         UNIT_ASSERT(table.Has("schemaVersion"));
-        UNIT_ASSERT_VALUES_EQUAL(table["primaryKeyColumnNames"].GetString(), "key");
+        const auto& pk = table["primaryKeyColumnNames"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(pk.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key");
         UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetString(), "Uint32");
+    }
+
+    Y_UNIT_TEST(SchemaChangesCompositePrimaryKey) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", TShardedTableOptions()
+            .Columns({
+                {"key1", "Uint32", true, false},
+                {"key2", "Uint32", true, false},
+                {"value", "Uint32", false, false},
+            }));
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithSchemaChanges(Updates(NKikimrSchemeOp::ECdcStreamFormatJson))));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key1, key2, value) VALUES (1, 10, 100);
+        )");
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddExtraColumn(server, "/Root", "Table"));
+
+        ExecSQL(server, edgeActor, R"(
+            UPSERT INTO `/Root/Table` (key1, key2, value, extra) VALUES (2, 20, 200, 2000);
+        )");
+
+        auto records = WaitForContent(server, edgeActor, "/Root/Table/Stream", {
+            R"({"update":{"value":100},"key":[1,10]})",
+            R"({"tableChanges":"***","ts":"***"})",
+            R"({"update":{"extra":2000,"value":200},"key":[2,20]})",
+        });
+
+        const auto& table = records[1]["tableChanges"][0]["table"];
+        UNIT_ASSERT(table.Has("schemaVersion"));
+        const auto& pk = table["primaryKeyColumnNames"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(pk.size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key1");
+        UNIT_ASSERT_VALUES_EQUAL(pk[1].GetString(), "key2");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key1"].GetString(), "Uint32");
+        UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key2"].GetString(), "Uint32");
         UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetString(), "Uint32");
         UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetString(), "Uint32");
     }
@@ -4778,7 +4830,9 @@ Y_UNIT_TEST_SUITE(Cdc) {
         UNIT_ASSERT(NJson::ReadJsonTree(schemaChangeBody, &json));
         const auto& table = json["tableChanges"][0]["table"];
         UNIT_ASSERT(table.Has("schemaVersion"));
-        UNIT_ASSERT_VALUES_EQUAL(table["primaryKeyColumnNames"].GetString(), "key");
+        const auto& pk = table["primaryKeyColumnNames"].GetArraySafe();
+        UNIT_ASSERT_VALUES_EQUAL(pk.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pk[0].GetString(), "key");
         UNIT_ASSERT_VALUES_EQUAL(table["columns"]["key"].GetString(), "Uint32");
         UNIT_ASSERT_VALUES_EQUAL(table["columns"]["value"].GetString(), "Uint32");
         UNIT_ASSERT_VALUES_EQUAL(table["columns"]["extra"].GetString(), "Uint32");

@@ -268,6 +268,27 @@ TJoinTestData EmptyRightInnerTestData() {
     return td;
 }
 
+[[maybe_unused]] TJoinTestData LeftJoinInplaceBuildRowLeftIsBuildTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+
+    TVector<ui64> rightKeys = {2, 3, 3, 6};
+    TVector<ui64> rightValues = {20, 30, 31, 60};
+
+    TVector<ui64> expectedKeysLeft = {1, 2, 3, 3, 4, 5};
+    TVector<std::optional<ui64>> expectedKeysRight = {std::nullopt, 2, 3, 3, std::nullopt, std::nullopt};
+    TVector<std::optional<ui64>> expectedValuesRight = {std::nullopt, 20, 30, 31, std::nullopt, std::nullopt};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeysLeft, expectedKeysRight, expectedValuesRight);
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {0, EJoinSide::kRight}, {1, EJoinSide::kRight}};
+    td.Kind = EJoinKind::Left;
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
 [[maybe_unused]] TJoinTestData LeftJoinSpillingTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -1570,6 +1591,10 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestLeftJoinWithMatchesLeftIsBuild) {
         Test(LeftJoinWithMatchesTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinInplaceBuildRowLeftIsBuild) {
+        Test(LeftJoinInplaceBuildRowLeftIsBuildTestData(), true);
     }
 
     Y_UNIT_TEST(TestLeftJoinSpillingLeftIsBuild) {

@@ -492,6 +492,16 @@ class TNeumannHashTable {
         }
     }
 
+    size_t IndexOfPackedRow(const ui8* packedRow) const {
+        return IsInplace_ ? (packedRow - Buffer_.data()) / BufferSlotSize_
+                          : (packedRow - Tuples_) / Layout_->TotalRowSize;
+    }
+
+    const ui8* PackedRow(size_t index) const {
+        return IsInplace_ ? Buffer_.data() + index * BufferSlotSize_
+                          : Tuples_ + index * Layout_->TotalRowSize;
+    }
+
     void Clear() {
         Directories_.clear();
         Buffer_.clear();

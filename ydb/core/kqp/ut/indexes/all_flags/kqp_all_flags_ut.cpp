@@ -119,6 +119,61 @@ Y_UNIT_TEST(FeatureGateFulltextRowId) {
     )sql", "requires the __ydb_row_id doc_id feature, which is disabled");
 }
 
+Y_UNIT_TEST(FulltextRowIdExistingIndexSurvivesRuntimeFlagOff) {
+    auto kikimr = KikimrWithAllExperimentalIndexes();
+    auto db = kikimr.GetQueryClient();
+
+    Execute(db, R"sql(
+        CREATE TABLE `/Root/Docs` (
+            Key Utf8 NOT NULL,
+            Text Utf8,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+    Execute(db, R"sql(
+        UPSERT INTO `/Root/Docs` (Key, Text) VALUES
+            ("a"u, "cats play"u);
+    )sql");
+    Execute(db, R"sql(
+        ALTER TABLE `/Root/Docs` ADD INDEX ft_idx
+            GLOBAL USING fulltext_plain ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+    const TString initialRowId = SelectYson(db,
+        "SELECT __ydb_row_id FROM `/Root/Docs` WHERE Key = \"a\"u;");
+
+    // This flag gates choosing/provisioning row-id mode for a new index. The persisted mode of an
+    // existing index and its generated column/sequence must remain operational after the kill-switch.
+    kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableFulltextIndexRowId(false);
+    Execute(db, R"sql(
+        UPDATE `/Root/Docs` SET Text = "dogs only"u WHERE Key = "a"u;
+        INSERT INTO `/Root/Docs` (Key, Text) VALUES ("b"u, "cats sleep"u);
+    )sql");
+    CompareYson("[[\"b\"]]", SelectYson(db, R"sql(
+        SELECT Key FROM `/Root/Docs` VIEW ft_idx
+        WHERE FulltextMatch(Text, "cats") ORDER BY Key;
+    )sql"));
+    UNIT_ASSERT_VALUES_EQUAL(initialRowId,
+        SelectYson(db, "SELECT __ydb_row_id FROM `/Root/Docs` WHERE Key = \"a\"u;"));
+    AssertFailsWith(db, R"sql(
+        ALTER TABLE `/Root/Docs` ADD INDEX rejected_idx
+            GLOBAL USING fulltext_plain ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql", "requires the __ydb_row_id doc_id feature, which is disabled");
+
+    Execute(db, "ALTER TABLE `/Root/Docs` DROP INDEX ft_idx;");
+    kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableFulltextIndexRowId(true);
+    Execute(db, R"sql(
+        ALTER TABLE `/Root/Docs` ADD INDEX recreated_idx
+            GLOBAL USING fulltext_plain ON (Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+    CompareYson("[[\"b\"]]", SelectYson(db, R"sql(
+        SELECT Key FROM `/Root/Docs` VIEW recreated_idx
+        WHERE FulltextMatch(Text, "cats") ORDER BY Key;
+    )sql"));
+}
+
 Y_UNIT_TEST(FeatureGateCompactFulltextFallsBackToLegacy) {
     auto kikimr = KikimrWithAllExperimentalIndexes(EDisabledFeature::CompactFulltext);
     auto db = kikimr.GetQueryClient();
@@ -201,6 +256,27 @@ Y_UNIT_TEST(FeatureGateJsonIndexAutoSelect) {
 Y_UNIT_TEST(FeatureGateAddUniqueIndex) {
     auto kikimr = KikimrWithAllExperimentalIndexes(EDisabledFeature::AddUniqueIndex);
     auto db = kikimr.GetQueryClient();
+
+    // EnableAddUniqueIndex gates online ADD to an existing table, not an inline unique constraint.
+    // Existing unique indexes must remain enforceable and droppable while the creation gate is off.
+    Execute(db, R"sql(
+        CREATE TABLE `/Root/InlineUnique` (
+            Key Uint64,
+            ExternalId Utf8,
+            PRIMARY KEY (Key),
+            INDEX inline_uidx GLOBAL UNIQUE SYNC ON (ExternalId)
+        );
+    )sql");
+    Execute(db, R"sql(
+        INSERT INTO `/Root/InlineUnique` (Key, ExternalId) VALUES (1, "one"u);
+    )sql");
+    AssertFailsWith(db, R"sql(
+        INSERT INTO `/Root/InlineUnique` (Key, ExternalId) VALUES (2, "one"u);
+    )sql", "Conflict with existing key");
+    CompareYson("[[[1u]]]", SelectYson(db, R"sql(
+        SELECT Key FROM `/Root/InlineUnique` VIEW inline_uidx WHERE ExternalId = "one"u;
+    )sql"));
+    Execute(db, "ALTER TABLE `/Root/InlineUnique` DROP INDEX inline_uidx;");
 
     Execute(db, R"sql(
         CREATE TABLE `/Root/Docs` (

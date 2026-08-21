@@ -1140,7 +1140,8 @@ void TMultiDeltaReader::Consume(ui32 rdrId, TReaderRef& rdr) {
     ui64 docId = 0;
     ui32 freq = 1;
     if (rdr.Reader->Read(docId, freq)) {
-        Items.push_back(TItem{docId, (rdr.Added ? (i32)freq : -(i32)freq), rdrId});
+        const i64 signedFreq = static_cast<i64>(freq);
+        Items.push_back(TItem{docId, rdr.Added ? signedFreq : -signedFreq, rdrId});
         std::push_heap(Items.begin(), Items.end(), Sign ? CompareSigned : CompareItems);
     }
 }
@@ -1168,7 +1169,7 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
                 // Finished, item has positive frequency (not canceled by updates)
                 // Leave NextItem as is
                 docId = cur.DocId;
-                freq = cur.Freq;
+                freq = static_cast<ui32>(cur.Freq);
                 return true;
             } else {
                 // Scan the next item
@@ -1180,7 +1181,7 @@ bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
     if (cur.Freq > 0) {
         // Finished, item has positive frequency (not canceled by updates)
         docId = cur.DocId;
-        freq = cur.Freq;
+        freq = static_cast<ui32>(cur.Freq);
         return true;
     }
     return false;

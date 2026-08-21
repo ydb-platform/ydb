@@ -1,6 +1,7 @@
 
 #include <ydb/core/kqp/compile_service/helpers/kqp_compile_service_helpers.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/core/protos/feature_flags.pb.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/kqp_compile_settings.pb.h>
 
@@ -12,6 +13,18 @@ namespace NKikimr {
 namespace NKqp {
 
 Y_UNIT_TEST_SUITE(KqpCompileServiceHelpers) {
+    Y_UNIT_TEST(FeatureFlagChangeInvalidates) {
+        NKikimrConfig::TFeatureFlags prev;
+        NKikimrConfig::TFeatureFlags next;
+
+        UNIT_ASSERT(!ShouldInvalidateCompileCache(prev, next).has_value());
+
+        next.SetEnableJsonIndexAutoSelect(true);
+        auto diff = ShouldInvalidateCompileCache(prev, next);
+        UNIT_ASSERT(diff.has_value());
+        UNIT_ASSERT_STRING_CONTAINS(*diff, "EnableJsonIndexAutoSelect");
+    }
+
     Y_UNIT_TEST(CheckInvalidator) {
 
         NKikimrConfig::TTableServiceConfig prev;

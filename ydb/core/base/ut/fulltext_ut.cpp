@@ -16,6 +16,41 @@ struct TDeltaItem {
     ui32 Freq;
 };
 
+struct TGeneration {
+    bool Added;
+    TVector<TDeltaItem> Items;
+};
+
+TVector<ui8> Encode(const TVector<TDeltaItem>& items, bool withFreq = true) {
+    TDeltaWriter writer;
+    writer.Reset(withFreq, false);
+    for (const auto& item : items) {
+        writer.Add(item.DocId, item.Freq);
+    }
+    return TVector<ui8>(writer.GetBuf().begin(), writer.GetBuf().end());
+}
+
+TVector<TDeltaItem> Merge(const TVector<TGeneration>& generations, bool withFreq = true) {
+    TVector<TVector<ui8>> encoded;
+    encoded.reserve(generations.size());
+
+    TMultiDeltaReader reader;
+    reader.Reset(withFreq, false);
+    for (const auto& generation : generations) {
+        encoded.push_back(Encode(generation.Items, withFreq));
+        reader.Add(generation.Added, encoded.back());
+    }
+    reader.Start();
+
+    TVector<TDeltaItem> result;
+    ui64 docId = 0;
+    ui32 freq = 0;
+    while (reader.Read(docId, freq)) {
+        result.push_back({docId, freq});
+    }
+    return result;
+}
+
 TVector<TDeltaItem> RoundTrip(const TVector<TDeltaItem>& items, bool withFreq, bool sign = false) {
     TDeltaWriter writer;
     writer.Reset(withFreq, sign);
@@ -230,6 +265,99 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         // totals disappear. A delete of an absent id is canceled if a later generation adds it.
         const TVector<TDeltaItem> expected = {{1, 4}, {3, 1}, {6, 1}, {8, 1}};
         AssertDeltaItemsEqual(actual, expected);
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderManyGenerationsDifferentialAndIdempotent) {
+        // Treat a simple posting map as the legacy/reference representation and compare it with compact
+        // add/delete segments over many generations. The fixed seed makes failures exactly reproducible.
+        TVector<TGeneration> generations;
+        TMap<ui64, i64> reference;
+        ui64 random = 0xd1b54a32d192ed03ULL;
+        auto nextRandom = [&]() {
+            random ^= random << 13;
+            random ^= random >> 7;
+            random ^= random << 17;
+            return random;
+        };
+
+        for (ui32 gen = 0; gen < 250; ++gen) {
+            TGeneration generation{.Added = (nextRandom() % 3) != 0};
+            TMap<ui64, ui32> uniqueItems;
+            for (ui32 i = 0, count = 1 + nextRandom() % 40; i < count; ++i) {
+                // Mix a dense head with a sparse tail. Repeated ids occur across generations, while
+                // every individual segment remains strictly sorted as required by TDeltaWriter.
+                const ui64 docId = (nextRandom() & 1)
+                    ? nextRandom() % 128
+                    : (nextRandom() % 128) * (1ULL << (nextRandom() % 40));
+                uniqueItems[docId] = 1 + nextRandom() % 31;
+            }
+            for (const auto& [docId, freq] : uniqueItems) {
+                generation.Items.push_back({docId, freq});
+                reference[docId] += generation.Added ? static_cast<i64>(freq) : -static_cast<i64>(freq);
+            }
+            generations.push_back(std::move(generation));
+        }
+
+        TVector<TDeltaItem> expected;
+        for (const auto& [docId, freq] : reference) {
+            if (freq > 0) {
+                expected.push_back({docId, static_cast<ui32>(freq)});
+            }
+        }
+        const auto compacted = Merge(generations);
+        AssertDeltaItemsEqual(compacted, expected);
+
+        // Compacting the canonical single add segment again is byte-for-byte and logically idempotent.
+        const auto compactedAgain = Merge({TGeneration{.Added = true, .Items = compacted}});
+        AssertDeltaItemsEqual(compactedAgain, compacted);
+        UNIT_ASSERT(Encode(compactedAgain) == Encode(compacted));
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderAddDeleteAddFrequencyExtremes) {
+        const ui32 maxFreq = Max<ui32>();
+        const TVector<TGeneration> generations = {
+            {true,  {{0, maxFreq}, {1, 7}, {64, 100}, {Max<ui64>(), 3}}},
+            {false, {{0, maxFreq}, {1, 7}, {64, 40}, {Max<ui64>(), 3}}},
+            {true,  {{0, maxFreq}, {1, 9}, {64, 2}, {Max<ui64>(), 1}}},
+            {false, {{1, 4}, {64, 62}}},
+            {true,  {{1, 1}, {64, 5}}},
+        };
+        const TVector<TDeltaItem> expected = {
+            {0, maxFreq},
+            {1, 6},
+            {64, 5},
+            {Max<ui64>(), 1},
+        };
+        AssertDeltaItemsEqual(Merge(generations), expected);
+    }
+
+    Y_UNIT_TEST(DeltaReaderMaxIdBoundaryDoesNotConsume) {
+        const auto encoded = Encode({{5, 1}, {10, 2}, {Max<ui64>(), 3}});
+        TDeltaReader reader(encoded, true, false);
+        reader.SetMaxId(7);
+
+        ui64 docId = 0;
+        ui32 freq = 0;
+        UNIT_ASSERT(reader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, 5);
+        UNIT_ASSERT_VALUES_EQUAL(freq, 1);
+        UNIT_ASSERT(!reader.Read(docId, freq));
+
+        // Read() restores its cursor when MaxId rejects an otherwise valid item.
+        reader.SetMaxId(10);
+        UNIT_ASSERT(reader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, 10);
+        UNIT_ASSERT_VALUES_EQUAL(freq, 2);
+        UNIT_ASSERT(!reader.Read(docId, freq));
+        reader.SetMaxId(Max<ui64>());
+        UNIT_ASSERT(reader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, Max<ui64>());
+        UNIT_ASSERT_VALUES_EQUAL(freq, 3);
+        UNIT_ASSERT(!reader.Read(docId, freq));
+
+        // There is intentionally no malformed/truncated-input test here. TDeltaReader's bool result is
+        // EOF/MaxId, not a decode status: truncated varints are currently accepted as partial values and
+        // overlong varints raise an ensure. A safe negative corpus needs a fallible decode API first.
     }
 
     Y_UNIT_TEST(MultiDeltaReader2) {

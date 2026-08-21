@@ -213,8 +213,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
     }
 
     Y_UNIT_TEST(TruncateAbsentTable) {
-        // Truncation of an absent table is a no-op at the column shard level.
-        // The proposal succeeds (PREPARED), and at plan time the truncation is silently skipped.
+        // Truncation of an absent table is rejected at propose time with SCHEMA_ERROR.
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -226,19 +225,9 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 absentPathId = 111;
         ui64 txId = 10;
-        // Truncation of absent table succeeds at propose time (PREPARED) but is a no-op at plan time.
-        // ProposeSchemaTx already asserts the result is non-null, which implies PREPARED status.
-        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(absentPathId, 1), ++txId);
-        PlanSchemaTx(runtime, sender, { planStep, txId });
-        PlanSchemaTx(runtime, sender, { planStep, txId });
+        // Truncation of absent table is rejected at propose time.
+        ProposeSchemaTxFail(runtime, sender, TTestSchema::TruncateTableTxBody(absentPathId, 1), ++txId);
 
-        // Original table should still be readable (empty, since no data was written)
-        {
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, pathId, NOlap::TSnapshot(planStep, txId));
-            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
-            auto rb = reader.ReadAll();
-            UNIT_ASSERT(!rb);
-        }
     }
 
     Y_UNIT_TEST(MultipleTruncates) {

@@ -30,6 +30,23 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
     owner, repo = repo_env.split("/", 1)
     workflow_id = "cherry_pick_v2.yml"
     return_url = f"https://github.com/{owner}/{repo}/pull/{pr_number}"
+
+    def generate_row(branch_value: str, branch_display: str) -> str:
+        params = {
+            "owner": owner,
+            "repo": repo,
+            "workflow_id": workflow_id,
+            "ref": "main",
+            "commits_and_prs": str(pr_number),
+            "target_branches": branch_value,
+            "allow_unmerged": "true",
+            "return_url": return_url
+        }
+        query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
+        url_ui = f"{base_url}?{query_string}&ui=true"
+        badge_text = "▶  Backport".replace(" ", "%20")
+        button = f"[![▶  Backport](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
+        return f"| `{branch_display}` | {button} |"
     
     # Load backport branches from config
     workspace = os.environ.get("GITHUB_WORKSPACE")
@@ -48,6 +65,19 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
         raise ValueError(f"Invalid backport branches config: expected non-empty list, got {type(branches)}")
     
     print(f"::notice::Loaded {len(branches)} backport branch entries from {backport_branches_path}")
+
+    nbs_backport_branches_path = os.path.join(workspace, ".github", "config", "nbs_backport_branches.json")
+
+    if not os.path.exists(nbs_backport_branches_path):
+        raise FileNotFoundError(f"NBS backport branches config file not found: {nbs_backport_branches_path}")
+
+    with open(nbs_backport_branches_path, 'r') as f:
+        nbs_branches = json.load(f)
+
+    if not isinstance(nbs_branches, list) or len(nbs_branches) == 0:
+        raise ValueError(f"Invalid NBS backport branches config: expected non-empty list, got {type(nbs_branches)}")
+
+    print(f"::notice::Loaded {len(nbs_branches)} NBS backport branch entries from {nbs_backport_branches_path}")
     
     # Collect all unique branches from all entries for manual button
     all_unique_branches = set()
@@ -70,25 +100,14 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
         branch_list = [b.strip() for b in branch_value.split(',')]
         branch_display = ", ".join(branch_list)
         
-        # Use PR number - workflow_dispatch input name is commits_and_prs
-        params = {
-            "owner": owner,
-            "repo": repo,
-            "workflow_id": workflow_id,
-            "ref": "main",
-            "commits_and_prs": str(pr_number),  # workflow_dispatch input parameter name
-            "target_branches": branch_value,  # Use original value for URL parameter
-            "allow_unmerged": "true",
-            "return_url": return_url
-        }
-        query_string = "&".join([f"{k}={urllib.parse.quote(str(v), safe='')}" for k, v in params.items()])
-        url_ui = f"{base_url}?{query_string}&ui=true"
-        
-        # Badge with only message (no label) - format: badge/message-color
-        # Encode only spaces, keep emoji as is
-        badge_text = "▶  Backport".replace(" ", "%20")
-        button = f"[![▶  Backport](https://img.shields.io/badge/{badge_text}-4caf50)]({url_ui})"
-        rows.append(f"| `{branch_display}` | {button} |")
+        rows.append(generate_row(branch_value, branch_display))
+
+    nbs_rows = []
+    for branch_entry in nbs_branches:
+        branch_value = branch_entry.strip()
+        branch_list = [b.strip() for b in branch_value.split(',')]
+        branch_display = ", ".join(branch_list)
+        nbs_rows.append(generate_row(branch_value, branch_display))
     
     # Generate URL for backporting all unique branches (manual button)
     params_manual = {
@@ -114,6 +133,10 @@ def generate_backport_table(pr_number: int, app_domain: str) -> str:
     table += "| Branch | Run |\n"
     table += "|--------|-----|\n"
     table += "\n".join(rows)
+    table += "\n\n<h3>NBS Backport</h3>\n\n"
+    table += "| Branch | Run |\n"
+    table += "|--------|-----|\n"
+    table += "\n".join(nbs_rows)
     table += "\n\n"
     table += f"[![▶  Backport manual](https://img.shields.io/badge/{badge_text_manual}-2196F3)]({url_manual_ui})"
     return table
@@ -221,4 +244,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

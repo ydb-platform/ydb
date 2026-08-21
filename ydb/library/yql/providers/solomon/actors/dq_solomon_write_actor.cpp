@@ -407,7 +407,8 @@ private:
                         auto httpRequest = BuildSolomonRequest(data, url, clusterType, authToken);
                         actorSystem->Send(httpSenderId, new NHttp::TEvHttpProxy::TEvHttpOutgoingRequest(httpRequest), /*flags=*/0, cookie);
                     } catch(std::exception& ex) {
-                        actorSystem->Send(httpSenderId, new TEvents::TEvPoison()); // unused
+                        // Assume GetAuthInfoAsync retries internally, no external retries needed
+                        actorSystem->Send(httpSenderId, new TEvents::TEvPoison()); // sender actor was unused, terminate explicitly
                         // Fake error message to ourself
                         actorSystem->Send(selfId, new TEvHttpBase::TEvSendResult(
                                     IEventHandle::Downcast<NHttp::TEvHttpProxy::TEvHttpIncomingResponse>(new IEventHandle(
@@ -416,10 +417,10 @@ private:
                                         new NHttp::TEvHttpProxy::TEvHttpIncomingResponse(
                                             /*outgoingRequest=*/{},
                                             /*incomingResponse=*/{},
-                                            /*error=*/TStringBuilder() << "Failed to get auth token: " << ex.what()),
-                                        /*flags*/0,
-                                        cookie)),
-                                    /*retryCount=*/0, /*isTerminal=*/true));
+                                            /*error=*/TStringBuilder() << "Failed to get auth token: " << ex.what()))),
+                                    /*retryCount=*/0, /*isTerminal=*/true),
+                                /*flags*/0,
+                                cookie);
                     }
             });
             SINK_LOG_T("Sent " << metricsToSend.MetricsCount << " metrics with size of " << metricsToSend.Data.size() << " bytes to solomon");

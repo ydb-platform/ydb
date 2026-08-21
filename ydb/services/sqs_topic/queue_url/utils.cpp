@@ -117,4 +117,19 @@ namespace NKikimr::NSqsTopic {
         }
         return result;
     }
+
+    TString MakeQueueUrlEndpoint(TStringBuf requestEndpoint, TStringBuf fallbackHost, ui16 httpProxyPort, bool secure) {
+        if (requestEndpoint) {
+            TString endpoint{requestEndpoint};
+            while (endpoint.EndsWith('/')) {
+                endpoint.pop_back();
+            }
+            return endpoint;
+        }
+        return TStringBuilder() << (secure ? "https://" : "http://") << fallbackHost << ":" << httpProxyPort;
+    }
+
+    TString MakeQueueUrl(const TRichQueueUrl& queueUrl, TStringBuf requestEndpoint, TStringBuf fallbackHost, ui16 httpProxyPort, bool secure) {
+        return MakeQueueUrlEndpoint(requestEndpoint, fallbackHost, httpProxyPort, secure) + PackQueueUrlPath(queueUrl);
+    }
 } // namespace NKikimr::NSqsTopic

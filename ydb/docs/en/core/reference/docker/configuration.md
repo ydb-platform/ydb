@@ -6,8 +6,8 @@
 
 | Name | Type | Default  | Description |
 | -- | -- | -- | -- |
-| [`YDB_GRPC_ENABLE_TLS`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L258) | `0`, `1`, `false`, or `true` | `true` | Enable the `grpcs://` protocol (gRPC over TLS). Values `1` and `true` enable TLS; `0` and `false` disable it. |
-| [`YDB_GRPC_TLS_DATA_PATH`](https://GitHub.com/ydb-platform/ydb/blob/8fefc809c83829d8d8b886e82534d009de4c8826/ydb/public/tools/lib/cmds/__init__.py#L291) | `string` | `/ydb_certs` | Directory with TLS certificates for the `grpcs://` connection. |
+| [`YDB_GRPC_ENABLE_TLS`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L258) | `0` or `1` | `1` | Enable the `grpcs://` protocol (gRPC over TLS) |
+| [`YDB_GRPC_TLS_DATA_PATH`](https://GitHub.com/ydb-platform/ydb/blob/8fefc809c83829d8d8b886e82534d009de4c8826/ydb/public/tools/lib/cmds/__init__.py#L291) | `string` | `/ydb_data` | Data path with TLS certificates for the `grpcs://` connection |
 | [`MON_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L170) | `int` | `8765` | HTTP port of [Embedded UI](../../reference/embedded-ui/index.md) |
 | [`GRPC_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L174) | `int` | `2136` | gRPC port |
 | [`IC_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L179) | `int` | `19001` | [Interconnect](../../concepts/glossary.md#interconnect) port |
@@ -23,5 +23,3 @@
 | [`YDB_ENABLE_COLUMN_TABLES`](https://GitHub.com/ydb-platform/ydb/blob/69a57074e4c259aea0bbb9a735c5ed821743629c/ydb/tests/library/harness/kikimr_config.py#L86) | `0` or `1` | `0` | Enables [column-oriented tables](../../concepts/datamodel/table.md#column-oriented-tables) |
 | [`YDB_PREINITSCRIPTS_DIR`](https://github.com/ydb-platform/ydb/blob/e7065254821ac3093d8135a76145c9a09e3631e2/.github/docker/files/initialize_local_ydb#L14) | `string` | `/preinit.d` | Path to the [pre-init scripts](./init-scripts.md) directory |
 | [`YDB_INITSCRIPTS_DIR`](https://github.com/ydb-platform/ydb/blob/e7065254821ac3093d8135a76145c9a09e3631e2/.github/docker/files/initialize_local_ydb#L13) | `string` | `/init.d` | Path to the [init scripts](./init-scripts.md) directory |
-
-When TLS is enabled, the directory specified by `YDB_GRPC_TLS_DATA_PATH` may contain a pre-generated `ca.pem`, `cert.pem`, and `key.pem`. If all three files are present, non-empty, and regular files, the container uses them without regenerating or overwriting them. If none of these files exist, the container generates a self-signed certificate set. A partial or invalid set causes startup to fail with an error.

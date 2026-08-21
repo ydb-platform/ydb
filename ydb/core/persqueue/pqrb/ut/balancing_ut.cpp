@@ -1027,6 +1027,114 @@ Y_UNIT_TEST(FinishThenImmediatePipeBreakKeepsConsumerIfOtherSessionAlive) {
     env.AssertLocked(3);
 }
 
+Y_UNIT_TEST(FinishDuringBalancerRestartIsIgnored) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    NActors::TBlockEvents<TEvTablet::TEvRestored> restored(*env.tc.Runtime, [&](auto& ev) {
+        return ev->Get()->TabletID == env.tc.BalancerTabletId
+            && ev->GetRecipientRewrite() == ev->Get()->UserTabletActor;
+    });
+
+    const TActorId pqrb = env.RebootBalancerAndHoldRestored(restored);
+    const TActorId pipe = env.InjectSessionDuringInit(pqrb, "session-0");
+    env.SendToBalancerActor(
+        pqrb,
+        new TEvPersQueue::TEvReadingPartitionFinishedRequest(pipe, "user", 0, true, true),
+        env.tc.Edge
+    );
+    DispatchFor(env.tc);
+
+    restored.Unblock();
+    restored.Stop();
+    DispatchFor(env.tc, TDuration::MilliSeconds(200));
+
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    env.SendToBalancerActor(
+        pqrb,
+        new TEvPersQueue::TEvReadingPartitionFinishedRequest(pipe, "user", 0, true, true),
+        env.tc.Edge
+    );
+    DispatchFor(env.tc, TDuration::MilliSeconds(200));
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(CommitDuringBalancerRestartMakesChildrenReadable) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    NActors::TBlockEvents<TEvTablet::TEvRestored> restored(*env.tc.Runtime, [&](auto& ev) {
+        return ev->Get()->TabletID == env.tc.BalancerTabletId
+            && ev->GetRecipientRewrite() == ev->Get()->UserTabletActor;
+    });
+
+    const TActorId pqrb = env.RebootBalancerAndHoldRestored(restored);
+    env.InjectSessionDuringInit(pqrb, "session-0");
+    env.SendToBalancerActor(
+        pqrb,
+        new TEvPQ::TEvReadingPartitionStatusRequest("user", 0, 1, 1),
+        env.tc.Edge
+    );
+    DispatchFor(env.tc);
+
+    restored.Unblock();
+    restored.Stop();
+    DispatchFor(env.tc, TDuration::MilliSeconds(200));
+
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(FinishThenDisconnectDuringBalancerRestartIsIgnored) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.AssertLocked(0, "session-0");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+
+    NActors::TBlockEvents<TEvTablet::TEvRestored> restored(*env.tc.Runtime, [&](auto& ev) {
+        return ev->Get()->TabletID == env.tc.BalancerTabletId
+            && ev->GetRecipientRewrite() == ev->Get()->UserTabletActor;
+    });
+
+    const TActorId pqrb = env.RebootBalancerAndHoldRestored(restored);
+    const TActorId pipe = env.InjectSessionDuringInit(pqrb, "session-0");
+    env.SendToBalancerActor(
+        pqrb,
+        new TEvPersQueue::TEvReadingPartitionFinishedRequest(pipe, "user", 0, true, true),
+        env.tc.Edge
+    );
+    env.SendToBalancerActor(
+        pqrb,
+        new TEvTabletPipe::TEvServerDisconnected(env.tc.BalancerTabletId, pipe, pipe),
+        pipe
+    );
+    DispatchFor(env.tc);
+
+    restored.Unblock();
+    restored.Stop();
+    DispatchFor(env.tc, TDuration::MilliSeconds(200));
+
+    env.RegisterSession("session-new");
+    env.AssertLocked(0, "session-new");
+    env.AssertNotLocked(1);
+    env.AssertNotLocked(2);
+}
 } // Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants)
 
 struct TClassicEnv : TScaleEnv {

@@ -158,15 +158,15 @@ void TPersQueueReadBalancer::InitDone(const TActorContext &ctx) {
         {"logPrefix", LogPrefix()},
         {"getInitLog", getInitLog()});
 
+    InitCompleted = true;
+
     for (auto &ev : UpdateEvents) {
         ctx.Send(ctx.SelfID, ev.Release());
     }
     UpdateEvents.clear();
 
-    for (auto &ev : RegisterEvents) {
-        ctx.Send(ctx.SelfID, ev.Release());
-    }
-    RegisterEvents.clear();
+    ReplayQueuedEvents(RegisterEvents, ctx);
+    ReplayQueuedEvents(InitBalancerEvents, ctx);
 
     GetStat(ctx);
 
@@ -837,9 +837,30 @@ void TPersQueueReadBalancer::UpdateActivePartitions() {
 // Balancing
 //
 
+// Finish/start/release are bound to a pipe and are stale after a PQRB restart.
+// Commit/status comes from the PQ tablet and must survive InitDone.
+void TPersQueueReadBalancer::EnqueueUntilInitDone(TAutoPtr<IEventHandle> ev) {
+    InitBalancerEvents.emplace_back(ev.Release());
+}
+
+void TPersQueueReadBalancer::ReplayQueuedEvents(std::deque<THolder<IEventHandle>>& events, const TActorContext& ctx) {
+    for (auto& ev : events) {
+        ctx.Send(IEventHandle::Forward(std::move(ev), ctx.SelfID).Release());
+    }
+    events.clear();
+}
+
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx) {
+    if (!InitCompleted) {
+        EnqueueUntilInitDone(ev.Release());
+        return;
+    }
     Balancer->Handle(ev, ctx);
     MLPBalancer->Handle(ev, ctx);
+}
+
+void TPersQueueReadBalancer::HandleOnInit(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext&) {
+    EnqueueUntilInitDone(ev.Release());
 }
 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx) {
@@ -874,11 +895,15 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
 
 void TPersQueueReadBalancer::HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext&)
 {
-    RegisterEvents.push_back(ev->Release().Release());
+    RegisterEvents.emplace_back(ev.Release());
 }
 
 void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvRegisterReadSession::TPtr& ev, const TActorContext& ctx)
 {
+    if (!InitCompleted) {
+        RegisterEvents.emplace_back(ev.Release());
+        return;
+    }
     Balancer->Handle(ev, ctx);
 }
 
@@ -1155,6 +1180,10 @@ STFUNC(TPersQueueReadBalancer::StateInit) {
         HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+        IgnoreFunc(TEvPersQueue::TEvPartitionReleased);
+        IgnoreFunc(TEvPersQueue::TEvReadingPartitionStartedRequest);
+        IgnoreFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest);
+        HFunc(TEvPQ::TEvReadingPartitionStatusRequest, HandleOnInit);
         HFunc(TEvents::TEvWakeup, HandleWakeup);
         // MLP
         hFunc(TEvPQ::TEvMLPGetPartitionRequest, Handle);

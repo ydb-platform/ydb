@@ -141,11 +141,15 @@ class TPersQueueReadBalancer : public TActor<TPersQueueReadBalancer>,
     void Handle(TEvPQ::TEvBalanceConsumer::TPtr& ev, const TActorContext& ctx); // from self
 
     void Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx); // from Partition/PQ
+    void HandleOnInit(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPersQueue::TEvReadingPartitionStartedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
     void Handle(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx); // from ReadSession
     void HandleOnInit(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx); // from ReadSession
     void Handle(TEvPersQueue::TEvRegisterReadSession::TPtr &ev, const TActorContext& ctx); // from ReadSession
     void Handle(TEvPersQueue::TEvPartitionReleased::TPtr& ev, const TActorContext& ctx);  // from ReadSession
+
+    void EnqueueUntilInitDone(TAutoPtr<IEventHandle> ev);
+    void ReplayQueuedEvents(std::deque<THolder<IEventHandle>>& events, const TActorContext& ctx);
 
     void Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActorContext&);
     void Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext&);
@@ -285,8 +289,10 @@ private:
 
     ui64 StatsReportRound;
 
-    std::deque<TAutoPtr<TEvPersQueue::TEvRegisterReadSession>> RegisterEvents;
+    bool InitCompleted = false;
+    std::deque<THolder<IEventHandle>> RegisterEvents;
     std::deque<TAutoPtr<TEvPersQueue::TEvUpdateBalancerConfig>> UpdateEvents;
+    std::deque<THolder<IEventHandle>> InitBalancerEvents;
 
     static constexpr ui64 PARTITIONS_LOCATION_WAKEUP_TAG = 11;
     static constexpr TDuration PARTITIONS_LOCATION_WAKEUP_QUANTUM = TDuration::MilliSeconds(25);

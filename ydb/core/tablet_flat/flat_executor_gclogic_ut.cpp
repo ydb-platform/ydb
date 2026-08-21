@@ -431,9 +431,15 @@ Y_UNIT_TEST_SUITE(THistoryCutter) {
             info->TabletType = type;
             return info;
         };
-        UNIT_ASSERT(!NTabletFlatExecutor::TExecutorGCLogic::IsHistoryCuttingSound(*makeInfo(TTabletTypes::ColumnShard)));
-        UNIT_ASSERT(NTabletFlatExecutor::TExecutorGCLogic::IsHistoryCuttingSound(*makeInfo(TTabletTypes::DataShard)));
-        UNIT_ASSERT(NTabletFlatExecutor::TExecutorGCLogic::IsHistoryCuttingSound(*makeInfo(TTabletTypes::KeyValue)));
+        using NTabletFlatExecutor::TExecutorGCLogic;
+        const auto columnShard = makeInfo(TTabletTypes::ColumnShard);
+        // Channels 0/1 carry only executor blobs even on ColumnShard, so they stay with this cutter.
+        UNIT_ASSERT(TExecutorGCLogic::IsHistoryCuttingSound(*columnShard, 0));
+        UNIT_ASSERT(TExecutorGCLogic::IsHistoryCuttingSound(*columnShard, 1));
+        UNIT_ASSERT(!TExecutorGCLogic::IsHistoryCuttingSound(*columnShard, 2));
+        UNIT_ASSERT(!TExecutorGCLogic::IsHistoryCuttingSound(*columnShard, 65));
+        UNIT_ASSERT(TExecutorGCLogic::IsHistoryCuttingSound(*makeInfo(TTabletTypes::DataShard), 2));
+        UNIT_ASSERT(TExecutorGCLogic::IsHistoryCuttingSound(*makeInfo(TTabletTypes::KeyValue), 2));
     }
 }
 

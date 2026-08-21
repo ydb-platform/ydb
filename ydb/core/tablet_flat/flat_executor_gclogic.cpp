@@ -114,7 +114,7 @@ void TExecutorGCLogic::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap, ui32 s
             x->SetSetToStep(chIt.second.CommitedGcBarrier.Step);
 
             if (chIt.second.CutHistoryStatus == TChannelInfo::ECutHistoryStatus::None && chIt.second.GcWaitFor == 0 &&
-                    IsHistoryCuttingSound(*TabletStorageInfo)) {
+                    IsHistoryCuttingSound(*TabletStorageInfo, chIt.first)) {
                 ChannelsToCutHistory.insert(chIt.first);
             }
         }
@@ -148,7 +148,7 @@ TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGar
     TChannelInfo& channel = ChannelInfo[channelId];
     if (ev->Status == NKikimrProto::EReplyStatus::OK) {
         if (channel.OnCollectGarbageSuccess() && channel.CutHistoryStatus == TChannelInfo::ECutHistoryStatus::SentBarrier &&
-                IsHistoryCuttingSound(*TabletStorageInfo)) {
+                IsHistoryCuttingSound(*TabletStorageInfo, channelId)) {
             auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
             for (const auto* historyEntry : historyToCut) {
                 TAutoPtr<TEvTablet::TEvCutTabletHistory> request(new TEvTablet::TEvCutTabletHistory);
@@ -200,12 +200,12 @@ void TExecutorGCLogic::FollowersSyncComplete(bool isBoot) {
     AllowGarbageCollection = true;
 }
 
-bool TExecutorGCLogic::IsHistoryCuttingSound(const TTabletStorageInfo& info) {
-    return info.TabletType != TTabletTypes::ColumnShard;
+bool TExecutorGCLogic::IsHistoryCuttingSound(const TTabletStorageInfo& info, ui32 channel) {
+    return info.TabletType != TTabletTypes::ColumnShard || channel < 2;
 }
 
 void TExecutorGCLogic::Confirm(const TActorContext &ctx) {
-    if (!AppData()->FeatureFlags.GetEnableCutHistory() || !IsHistoryCuttingSound(*TabletStorageInfo)) {
+    if (!AppData()->FeatureFlags.GetEnableCutHistory()) {
         return;
     }
     for (auto channelId : ChannelsToCutHistory) {

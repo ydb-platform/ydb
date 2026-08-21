@@ -616,6 +616,9 @@ public:
                     {"traceId", TraceId()});
 
                 QueryState->UserRequestContext->PoolId = s.PoolId;
+                if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
+                    updater->SetPoolId(s.PoolId, s.Resolver.ToSysViewString());
+                }
                 if (s.SkipAdmission) {
                     QueryState->UserRequestContext->PoolConfig = s.PoolConfig;
                     return std::nullopt;
@@ -1060,6 +1063,9 @@ public:
                     {"skipAdmission", r.SkipAdmission},
                     {"traceId", TraceId()});
                 QueryState->UserRequestContext->PoolId = r.PoolId;
+                if (auto updater = QueryState->RequestEv->GetWmSessionUpdater()) {
+                    updater->SetPoolId(r.PoolId, r.Resolver.ToSysViewString());
+                }
                 if (r.SkipAdmission) {
                     QueryState->UserRequestContext->PoolConfig = r.PoolConfig;
                     return std::nullopt;

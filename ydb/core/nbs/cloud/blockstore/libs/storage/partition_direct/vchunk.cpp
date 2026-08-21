@@ -51,6 +51,7 @@ TVChunk::TVChunk(
     IPartitionDirectService* partitionDirectService,
     const TDiskDescription& diskDescription,
     const TVChunkConfig& vChunkConfig,
+    const TDirtyMapStateProto& dirtyMapState,
     IDirectBlockGroupPtr directBlockGroup,
     ui32 syncRequestsBatchSize,
     ui64 vChunkSize,
@@ -83,6 +84,8 @@ TVChunk::TVChunk(
         NKikimrServices::NBS_PARTITION,
         "%s Create",
         LogTitle.GetWithTime().c_str());
+
+    BlocksDirtyMap->Load(dirtyMapState);
 }
 
 TVChunk::~TVChunk()
@@ -846,7 +849,7 @@ void TVChunk::DoPersistDirtyMap()
         [weakSelf = weak_from_this(),
          executor = Executor,
          stateGeneration]   //
-        (const TFuture<void>& f)
+        (const TFuture<void>& f) mutable
         {
             Y_UNUSED(f);
             executor->ExecuteSimple(
@@ -861,6 +864,8 @@ void TVChunk::DoPersistDirtyMap()
 
 void TVChunk::OnDirtyMapPersisted(ui32 stateGeneration)
 {
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
     LOG_INFO(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,

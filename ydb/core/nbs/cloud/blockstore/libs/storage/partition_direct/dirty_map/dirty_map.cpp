@@ -57,6 +57,15 @@ TBlocksDirtyMap::~TBlocksDirtyMap()
         });
 }
 
+void TBlocksDirtyMap::Load(const TDirtyMapStateProto& proto)
+{
+    size_t ddisk = 0;   // TODO (drbasic). Reliable ddisk matching.
+    for (const auto& ddiskState: proto.GetDDiskStates()) {
+        DDiskStates[ddisk].Load(ddiskState);
+        ++ddisk;
+    }
+}
+
 void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
 {
     ResizeHosts(vChunkConfig.GetHostCount());
@@ -759,7 +768,7 @@ void TBlocksDirtyMap::StatePersisted(ui32 persistGeneration)
     PersistedGeneration = persistGeneration;
 }
 
-ui64 TBlocksDirtyMap::GetCurrentGeneration() const
+ui32 TBlocksDirtyMap::GetCurrentGeneration() const
 {
     return BehindAheadGeneration;
 }

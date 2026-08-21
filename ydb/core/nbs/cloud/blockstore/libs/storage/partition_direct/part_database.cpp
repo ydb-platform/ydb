@@ -123,7 +123,7 @@ bool TPartitionDatabase::ReadDirectBlockGroupsConnections(
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TPartitionDatabase::ReadAllVChunkConfigs(TVector<TVChunkConfig>& out)
+bool TPartitionDatabase::ReadAllVChunkConfigs(TVChunkConfigs& out)
 {
     using TTable = TPartitionSchema::VChunkConfigs;
 
@@ -135,7 +135,9 @@ bool TPartitionDatabase::ReadAllVChunkConfigs(TVector<TVChunkConfig>& out)
 
     while (it.IsValid()) {
         if (it.HaveValue<TTable::Config>()) {
-            out.push_back(FromProto(it.GetValue<TTable::Config>()));
+            auto parsedConfig = FromProto(it.GetValue<TTable::Config>());
+            const ui32 vChunkIndex = parsedConfig.GetVChunkIndex();
+            out[vChunkIndex] = std::move(parsedConfig);
         }
         it.Next();
     }
@@ -179,8 +181,7 @@ void TPartitionDatabase::StoreVChunkConfig(const TVChunkConfig& cfg)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TPartitionDatabase::ReadAllDirtyMapStates(
-    TMap<ui32, TDirtyMapStateProto>& out)
+bool TPartitionDatabase::ReadAllDirtyMapStates(TDirtyMapStateProtos& out)
 {
     using TTable = TPartitionSchema::DirtyMapStates;
 

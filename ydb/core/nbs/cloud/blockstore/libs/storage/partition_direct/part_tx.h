@@ -48,9 +48,6 @@ struct TTxPartition
     //
     struct TInitSchema
     {
-        explicit TInitSchema()
-        {}
-
         void Clear()
         {
             // nothing to do
@@ -64,17 +61,16 @@ struct TTxPartition
     {
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
-        TVector<TVChunkConfig> VChunkConfigs;
+        TVChunkConfigs VChunkConfigs;
+        TDirtyMapStateProtos DirtyMapStates;
         TMaybe<TAddHostInProgress> AddHostInProgress;
-
-        explicit TLoadState()
-        {}
 
         void Clear()
         {
             VolumeConfig.Clear();
             DirectBlockGroupsConnections.Clear();
             VChunkConfigs.clear();
+            DirtyMapStates.clear();
             AddHostInProgress.Clear();
         }
     };
@@ -210,7 +206,7 @@ struct TTxPartition
         TMaybe<NKikimrBlockStore::TVolumeConfig> VolumeConfig;
         TMaybe<TDirectBlockGroupsConnections> DirectBlockGroupsConnections;
         TMaybe<TAddHostInProgress> AddHostInProgress;
-        TVector<TVChunkConfig> VChunkConfigs;
+        TVChunkConfigs VChunkConfigs;
 
         explicit TMonitoring(NActors::TActorId requester)
             : Requester(requester)

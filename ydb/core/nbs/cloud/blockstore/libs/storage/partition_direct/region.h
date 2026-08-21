@@ -7,6 +7,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/disk_description.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos/public.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
@@ -28,7 +29,8 @@ public:
         const TDiskDescription& diskDescription,
         ui32 regionIndex,
         const TVector<IDirectBlockGroupPtr>& directBlockGroups,
-        const TVChunkConfigByIndex& vChunkConfigs,
+        const TVChunkConfigs& vChunkConfigs,
+        const TDirtyMapStateProtos& dirtyMapStates,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,
         NMonitoring::TDynamicCounterPtr counters);

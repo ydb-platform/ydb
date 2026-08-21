@@ -594,6 +594,44 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         RunWakerSaturatedBenchmark(true);
     }
 
+    Y_UNIT_TEST(WakerIdleStatistics) {
+        constexpr ui64 SampleDurationUs = 200'000;
+
+        auto setup = TActorBenchmark::GetActorSystemSetup();
+        TActorBenchmark::AddBasicPool(setup, 1, false, false);
+        auto& config = setup->CpuManager.Basic.back();
+        config.EnableWaker = true;
+        config.SpinThreshold = 0;
+
+        TActorSystem actorSystem(setup);
+        actorSystem.Start();
+
+        const auto getThreadStats = [&] {
+            TExecutorPoolStats poolStats;
+            TVector<TExecutorThreadStats> threadStats;
+            GetActorSystemStats(actorSystem).GetPoolStats(0, poolStats, threadStats);
+            UNIT_ASSERT_VALUES_EQUAL(threadStats.size(), 2);
+            return threadStats[1];
+        };
+
+        Sleep(TDuration::MilliSeconds(50));
+        const TExecutorThreadStats before = getThreadStats();
+        Sleep(TDuration::MicroSeconds(SampleDurationUs));
+        const TExecutorThreadStats after = getThreadStats();
+
+        actorSystem.Stop();
+
+        const ui64 parkedUs = Ts2Us(after.SafeParkedTicks - before.SafeParkedTicks);
+        const ui64 elapsedUs = Ts2Us(after.SafeElapsedTicks - before.SafeElapsedTicks);
+        const ui64 cpuUs = after.CpuUs - before.CpuUs;
+        UNIT_ASSERT_GE_C(parkedUs, SampleDurationUs / 2,
+            "parked_us# " << parkedUs << " elapsed_us# " << elapsedUs << " cpu_us# " << cpuUs);
+        UNIT_ASSERT_LT_C(elapsedUs, SampleDurationUs / 2,
+            "parked_us# " << parkedUs << " elapsed_us# " << elapsedUs << " cpu_us# " << cpuUs);
+        UNIT_ASSERT_LT_C(cpuUs, SampleDurationUs / 2,
+            "parked_us# " << parkedUs << " elapsed_us# " << elapsedUs << " cpu_us# " << cpuUs);
+    }
+
     Y_UNIT_TEST(SendReceive1Pool1ThreadNoAlloc) {
         for (const auto& mType : TSettings::MailboxTypes) {
             auto stats =  TActorBenchmark::CountStats([mType] {

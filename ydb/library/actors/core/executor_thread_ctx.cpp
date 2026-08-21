@@ -105,11 +105,28 @@ namespace NActors {
             state = GetState<EThreadState>();
         }
 
-        while ((state == EThreadState::Sleep || state == EThreadState::Blocking) && !stopFlag.load(std::memory_order_relaxed)) {
-            if (WaitingPad.Park()) {
-                return true;
-            }
-            state = GetState<EThreadState>();
+        if ((state == EThreadState::Sleep || state == EThreadState::Blocking) &&
+                !stopFlag.load(std::memory_order_relaxed)) {
+            Y_DEBUG_ABORT_UNLESS(TlsThreadContext);
+
+            NHPTimer::STime hpnow = GetCycleCountFast();
+            NHPTimer::STime hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+            ui32 prevActivity = TlsThreadContext->ActivityContext.ElapsingActorActivity.exchange(
+                SleepActivity, std::memory_order_acq_rel);
+            TlsThreadContext->ExecutionStats->AddElapsedCycles(prevActivity, hpnow - hpprev);
+            do {
+                if (WaitingPad.Park()) {
+                    return true;
+                }
+                hpnow = GetCycleCountFast();
+                hpprev = TlsThreadContext->UpdateStartOfProcessingEventTS(hpnow);
+                TlsThreadContext->ExecutionStats->AddParkedCycles(hpnow - hpprev);
+                state = GetState<EThreadState>();
+            } while ((state == EThreadState::Sleep || state == EThreadState::Blocking) &&
+                !stopFlag.load(std::memory_order_relaxed));
+            TlsThreadContext->ActivityContext.ActivationStartTS.store(hpnow, std::memory_order_release);
+            TlsThreadContext->ActivityContext.ElapsingActorActivity.store(
+                TlsThreadContext->ActivityContext.ActorSystemIndex, std::memory_order_release);
         }
         return stopFlag.load(std::memory_order_relaxed);
     }

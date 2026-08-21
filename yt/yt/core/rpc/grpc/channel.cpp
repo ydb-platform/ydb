@@ -283,6 +283,8 @@ private:
 
         void Initialize()
         {
+            Request_->Header().set_start_time(ToProto(TInstant::Now()));
+
             YT_TLOG_DEBUG("Sending request")
                 .With("RequestId", Request_->GetRequestId())
                 .WithFormat("Method", "%v.%v", Request_->GetService(), Request_->GetMethod())
@@ -314,6 +316,7 @@ private:
                 NYT::Ref(Tracer_.Get());
             }
             InitialMetadataBuilder_.Add(RequestIdMetadataKey, ToString(Request_->GetRequestId()));
+            InitialMetadataBuilder_.Add(StartTimeMetadataKey, ToString(Request_->Header().start_time()));
             if (Request_->GetUser() != RootUserName) {
                 InitialMetadataBuilder_.Add(UserMetadataKey, Request_->GetUser());
             }

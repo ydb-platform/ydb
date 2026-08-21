@@ -207,7 +207,6 @@ private:
         return true;
     }
 
-private:
     const TVectorType& List_;
     const TItemFactory ItemFactory_;
     const ui64 Start_;

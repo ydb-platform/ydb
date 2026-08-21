@@ -93,16 +93,19 @@ namespace NActors {
             const std::atomic<ui64>& reductions,
             ui64 wakerRequestBit) {
         EThreadState state = GetState<EThreadState>();
-        while (state == EThreadState::Spin && !stopFlag.load(std::memory_order_relaxed)) {
-            if (activationCredits.load(std::memory_order_acquire) > 0 ||
-                    (reductions.load(std::memory_order_acquire) & wakerRequestBit)) {
-                if (ReplaceState(state, EThreadState::None)) {
-                    return false;
+        if (state == EThreadState::Spin) {
+            TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_SPIN> activityGuard;
+            while (state == EThreadState::Spin && !stopFlag.load(std::memory_order_relaxed)) {
+                if (activationCredits.load(std::memory_order_acquire) > 0 ||
+                        (reductions.load(std::memory_order_acquire) & wakerRequestBit)) {
+                    if (ReplaceState(state, EThreadState::None)) {
+                        return false;
+                    }
+                    continue;
                 }
-                continue;
+                SpinLockPause();
+                state = GetState<EThreadState>();
             }
-            SpinLockPause();
-            state = GetState<EThreadState>();
         }
 
         if ((state == EThreadState::Sleep || state == EThreadState::Blocking) &&

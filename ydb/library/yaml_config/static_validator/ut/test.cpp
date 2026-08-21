@@ -347,27 +347,58 @@ Y_UNIT_TEST_SUITE(StaticValidator) {
         UNIT_ASSERT(!validator.Validate(makeConfig(30, "IO")).Ok());
     }
 
-    Y_UNIT_TEST(ExecutorIndices) {
+    Y_UNIT_TEST(ExecutorReferences) {
         auto validator = TMapBuilder()
             .Field("actor_system_config", ActorSystemConfigBuilder())
             .CreateValidator();
 
-        auto yaml =
-            "actor_system_config:\n"
-            "  executor:\n"
-            "  - name: System\n"
-            "    threads: 1\n"
-            "    type: BASIC\n"
+        auto makeConfig = [](TStringBuf executorReferences) {
+            return ::TStringBuilder()
+                << "actor_system_config:\n"
+                << "  executor:\n"
+                << "  - name: System\n"
+                << "    threads: 1\n"
+                << "    type: BASIC\n"
+                << executorReferences
+                << "  scheduler:\n"
+                << "    progress_threshold: 10000\n"
+                << "    resolution: 64\n"
+                << "    spin_threshold: 0\n";
+        };
+
+        UNIT_ASSERT(Valid(validator.Validate(makeConfig(
             "  sys_executor: 0\n"
             "  user_executor: 0\n"
             "  io_executor: 0\n"
             "  batch_executor: 0\n"
-            "  scheduler:\n"
-            "    progress_threshold: 10000\n"
-            "    resolution: 64\n"
-            "    spin_threshold: 0\n";
+            "  service_executor:\n"
+            "  - service_name: Interconnect\n"
+            "    executor_id: 0\n"))));
 
-        UNIT_ASSERT(Valid(validator.Validate(yaml)));
+        for (TStringBuf field : {"sys_executor", "user_executor", "io_executor", "batch_executor"}) {
+            UNIT_ASSERT_C(!validator.Validate(makeConfig(
+                ::TStringBuilder() << "  " << field << ": 1\n")).Ok(), field);
+        }
+
+        UNIT_ASSERT(HasOnlyThisIssues(validator.Validate(makeConfig(
+            "  service_executor:\n"
+            "  - service_name: Interconnect\n"
+            "    executor_id: 1\n")), {{
+                "/actor_system_config",
+                "Check \"Executor references\" failed: service_executor[0].executor_id "
+                "must refer to an existing executor (got 1, executor count is 1)"
+            }}));
+
+        UNIT_ASSERT(HasOnlyThisIssues(validator.Validate(makeConfig(
+            "  sys_executor: 256\n")), {{
+                "/actor_system_config/sys_executor",
+                "Value must be less or equal to max value(i.e <= 255)"
+            }}));
+
+        UNIT_ASSERT(!validator.Validate(makeConfig(
+            "  service_executor:\n"
+            "  - service_name: Interconnect\n"
+            "    executor_id: 256\n")).Ok());
     }
 
     Y_UNIT_TEST(UseSharedThreadsRequiresAutoConfig) {

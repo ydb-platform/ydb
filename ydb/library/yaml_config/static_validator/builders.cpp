@@ -3,10 +3,16 @@
 #include <ydb/library/yaml_config/validator/validator_checks.h>
 #include <ydb/library/yaml_config/validator/configurators.h>
 
+#include <util/string/builder.h>
+
+#include <limits>
+
 namespace NKikimr {
 
 using namespace NYamlConfig::NValidator;
 using namespace NYamlConfig::NValidator::Configurators;
+
+constexpr i64 MaxExecutorPoolId = std::numeric_limits<ui8>::max();
 
 TArrayBuilder HostConfigBuilder() {
   return TArrayBuilder([](auto& hostsConfig) {
@@ -252,22 +258,22 @@ TMapBuilder ActorSystemConfigBuilder() {
     .Int64("sys_executor", [](auto& sysExecutor){
       sysExecutor
       .Optional()
-      .Min(0);
+      .Range(0, MaxExecutorPoolId);
     })
     .Int64("user_executor", [](auto& userExecutor){
       userExecutor
       .Optional()
-      .Min(0);
+      .Range(0, MaxExecutorPoolId);
     })
     .Int64("io_executor", [](auto& ioExecutor){
       ioExecutor
       .Optional()
-      .Min(0);
+      .Range(0, MaxExecutorPoolId);
     })
     .Int64("batch_executor", [](auto& batchExecutor){
       batchExecutor
       .Optional()
-      .Min(0);
+      .Range(0, MaxExecutorPoolId);
     })
     .Array("service_executor", [](auto& serviceExecutor){
       serviceExecutor
@@ -275,7 +281,9 @@ TMapBuilder ActorSystemConfigBuilder() {
       .MapItem([](auto& serviceExecutorItem){
         serviceExecutorItem
         .String("service_name")
-        .Int64("executor_id", nonNegative());
+        .Int64("executor_id", [](auto& executorId){
+          executorId.Range(0, MaxExecutorPoolId);
+        });
       });
     })
     .Map("scheduler", [](auto& scheduler){
@@ -284,6 +292,37 @@ TMapBuilder ActorSystemConfigBuilder() {
       .Int64("progress_threshold", nonNegative())
       .Int64("resolution", nonNegative())
       .Int64("spin_threshold", nonNegative());
+    })
+    .AddCheck("Executor references", [](auto& actorSystemContext){
+      auto node = actorSystemContext.Node();
+      if (!node["executor"].Exists()) {
+        return;
+      }
+
+      const i64 executorCount = node["executor"].Array().Length();
+      auto validateReference = [&](auto reference, const TString& referenceName) {
+        if (!reference.Exists()) {
+          return;
+        }
+
+        const i64 executorId = reference.Int64();
+        actorSystemContext.Expect(executorId < executorCount,
+          ::TStringBuilder() << referenceName << " must refer to an existing executor (got "
+            << executorId << ", executor count is " << executorCount << ")");
+      };
+
+      validateReference(node["sys_executor"], "sys_executor");
+      validateReference(node["user_executor"], "user_executor");
+      validateReference(node["io_executor"], "io_executor");
+      validateReference(node["batch_executor"], "batch_executor");
+
+      if (node["service_executor"].Exists()) {
+        auto serviceExecutors = node["service_executor"].Array();
+        for (int i = 0; i < serviceExecutors.Length(); ++i) {
+          validateReference(serviceExecutors[i].Map()["executor_id"],
+            ::TStringBuilder() << "service_executor[" << i << "].executor_id");
+        }
+      }
     })
     .AddCheck("Must either be auto config or manual config", [](auto& actorSystemContext){
       bool autoConfig = false;

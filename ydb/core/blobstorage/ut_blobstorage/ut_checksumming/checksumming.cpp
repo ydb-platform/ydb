@@ -3,6 +3,7 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/ut_helpers.h>
 
 #include <ydb/core/blobstorage/dsproxy/dsproxy.h>
+#include <ydb/core/blobstorage/vdisk/scrub/restore_corrupted_blob_actor.h>
 #include <ydb/core/erasure/erasure.h>
 
 #include <cstring>
@@ -298,6 +299,58 @@ void TestDsProxyGetWithErrors(TBlobStorageGroupType erasure, ui32 brokenPartCoun
     if (expectedStatus == NKikimrProto::OK) {
         UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data);
     }
+}
+
+void TestDsProxyRestoresChecksumMismatchedParts(ui32 brokenPartCount) {
+    TTestEnv env(TErasureType::CrcModeWholePart, TBlobStorageGroupType::Erasure4Plus2Block);
+    const TString data = GenData(16_KB, 300 + brokenPartCount);
+    const auto putResult = env.Write(data, env.Env.Runtime->GetClock() + TDuration::Seconds(30));
+    UNIT_ASSERT_C(putResult, "DSProxy did not finish the setup VPut");
+    UNIT_ASSERT_VALUES_EQUAL(putResult->Get()->Status, NKikimrProto::OK);
+
+    for (ui32 orderNumber = 0; orderNumber < env.GroupInfo->Type.TotalPartCount(); ++orderNumber) {
+        env.Env.CompactVDisk(env.GroupInfo->GetActorId(orderNumber));
+    }
+    env.Env.Sim(TDuration::Seconds(20));
+
+    THashMap<ui32, ui32> candidatePartsByNode;
+    for (ui32 partId = 1; partId <= brokenPartCount; ++partId) {
+        const TVDiskID vdiskId = env.GroupInfo->GetVDiskInSubgroup(partId - 1, env.LastBlobId.Hash());
+        const ui32 orderNumber = env.GroupInfo->GetOrderNumber(vdiskId);
+        UNIT_ASSERT(candidatePartsByNode.emplace(env.GroupInfo->GetActorId(orderNumber).NodeId(), partId).second);
+    }
+
+    env.EnableVDiskChecksumValidation(true, false);
+    THashSet<ui32> brokenParts;
+    ui32 restoreRequests = 0;
+    env.Env.Runtime->FilterFunction = [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev) {
+        if (ev->GetTypeRewrite() == TEvBlobStorage::EvChunkReadResult) {
+            const auto it = candidatePartsByNode.find(nodeId);
+            if (it != candidatePartsByNode.end() && !brokenParts.contains(it->second)) {
+                auto* result = ev->Get<NPDisk::TEvChunkReadResult>();
+                const TRcBuf readData = result->Data.ToString();
+                TString partData(readData.GetData(), readData.GetSize());
+                UNIT_ASSERT(partData.size() > sizeof(ui64));
+                char* checksum = partData.Detach() + partData.size() - 1;
+                *checksum = ~*checksum;
+                result->Data.SetData(TRcBuf(std::move(partData)));
+                brokenParts.insert(it->second);
+            }
+        } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvRestoreCorruptedBlob) {
+            const auto* restore = ev->Get<TEvRestoreCorruptedBlob>();
+            UNIT_ASSERT_VALUES_EQUAL(restore->Items.size(), 1);
+            ++restoreRequests;
+        }
+        return true;
+    };
+
+    const auto result = env.ReadFromDsProxy(0, 0, env.Env.Runtime->GetClock() + TDuration::Seconds(30));
+    UNIT_ASSERT_C(result, "DSProxy did not finish VGet after injected checksum mismatches");
+    UNIT_ASSERT_VALUES_EQUAL(brokenParts.size(), brokenPartCount);
+    UNIT_ASSERT_VALUES_EQUAL(restoreRequests, brokenPartCount);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Get()->Status, NKikimrProto::OK, result->Get()->ToString());
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Status, NKikimrProto::OK);
+    UNIT_ASSERT_VALUES_EQUAL(result->Get()->Responses[0].Buffer.ConvertToString(), data);
 }
 
 struct TMirror3dcErrorInjection {
@@ -660,6 +713,14 @@ Y_UNIT_TEST(DsProxyBlock42ReadsWithTwoErrors) {
 
 Y_UNIT_TEST(DsProxyBlock42ReadsWithThreeErrors) {
     TestDsProxyGetWithErrors(TBlobStorageGroupType::Erasure4Plus2Block, 3, NKikimrProto::ERROR);
+}
+
+Y_UNIT_TEST(DsProxyRestoresOneChecksumMismatchedPart) {
+    TestDsProxyRestoresChecksumMismatchedParts(1);
+}
+
+Y_UNIT_TEST(DsProxyRestoresTwoChecksumMismatchedParts) {
+    TestDsProxyRestoresChecksumMismatchedParts(2);
 }
 
 Y_UNIT_TEST(DsProxyMirror3dcWritesWithOneDcUnavailable) {

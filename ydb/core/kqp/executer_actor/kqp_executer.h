@@ -124,6 +124,15 @@ struct TEvKqpExecuter {
         TDuration CpuTime;
     };
 
+    // Sent by TKqpPqTopicResolver to the executer when all PQ topic describes
+    // have finished (or at least one failed).
+    struct TEvPqTopicResolveStatus : public TEventLocal<TEvPqTopicResolveStatus,
+        TKqpExecuterEvents::EvPqTopicResolveStatus>
+    {
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        NYql::TIssues Issues;
+    };
+
     struct TEvTxDelayedExecution : public TEventLocal<TEvTxDelayedExecution,
         TKqpExecuterEvents::EvDelayedExecution>
     {

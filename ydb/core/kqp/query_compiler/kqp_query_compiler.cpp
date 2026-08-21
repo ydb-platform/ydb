@@ -1192,6 +1192,7 @@ private:
         txProto.SetType(GetPhyTxType(*txSettings.Type));
 
         bool hasEffectStage = false;
+        bool hasPqSources = false;
 
         TMap<ui64, ui32> stagesMap;
         THashMap<ui64, NKqpProto::TKqpPhyStage*> physicalStageByID;
@@ -1203,6 +1204,13 @@ private:
             CompileStage(stage, *physicalStageByID[stage.Ref().UniqueId()], ctx, stagesMap, rPredictor, tablesMap, physicalStageByID);
             hasEffectStage |= physicalStageByID[stage.Ref().UniqueId()]->GetIsEffectsStage();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
+            const auto* compiledStage = physicalStageByID[stage.Ref().UniqueId()];
+            for (const auto& src : compiledStage->GetSources()) {
+                if (src.HasExternalSource() && src.GetExternalSource().GetType() == "PqSource") {
+                    hasPqSources = true;
+                    break;
+                }
+            }
         }
         for (auto&& i : *txProto.MutableStages()) {
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
@@ -1210,6 +1218,7 @@ private:
 
         txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->GetDefaultEnableShuffleElimination()));
         txProto.SetHasEffects(hasEffectStage);
+        txProto.SetHasPqSources(hasPqSources);
         txProto.SetDqChannelVersion(Config->DqChannelVersion.Get().GetOrElse(Config->GetDqChannelVersion()));
         for (const auto& paramBinding : tx.ParamBindings()) {
             TString paramName(paramBinding.Name().Value());

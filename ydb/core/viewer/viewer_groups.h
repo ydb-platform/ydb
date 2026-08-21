@@ -1030,15 +1030,17 @@ public:
         std::unordered_set<ui32> PDiskIds;
     };
 
-    TDatabaseStorageScope GetDatabaseStorageScope() {
+    // Returns nothing if the storage of the database could not be determined - an empty scope would
+    // be indistinguishable from a database that legitimately owns nothing.
+    std::optional<TDatabaseStorageScope> GetDatabaseStorageScope() {
+        if (DatabaseStoragePools.empty() || !FieldsAvailable.test(+EGroupFields::PoolName)) {
+            return std::nullopt; // we don't know which groups belong to the database
+        }
         TDatabaseStorageScope scope;
         if (AreDatabaseNodesKnown()) {
             for (TNodeId nodeId : GetDatabaseNodes()) {
                 scope.NodeIds.insert(nodeId);
             }
-        }
-        if (DatabaseStoragePools.empty() || !FieldsAvailable.test(+EGroupFields::PoolName)) {
-            return scope; // we don't know which groups belong to the database
         }
         for (const TGroup& group : GroupData) {
             if (DatabaseStoragePools.count(group.PoolName)) {
@@ -1063,7 +1065,18 @@ public:
         if (FilterGroupIds.Requested.empty() && FilterNodeIds.Requested.empty() && FilterPDiskIds.Requested.empty()) {
             return false;
         }
-        const TDatabaseStorageScope scope = GetDatabaseStorageScope();
+        const std::optional<TDatabaseStorageScope> scope = GetDatabaseStorageScope();
+        if (!scope) {
+            YDB_LOG_NOTICE_COMP(NKikimrServices::VIEWER, "Access denied: the storage of the database is unknown",
+                {"logPrefix", GetLogPrefix()},
+                {"user", GetUserSID()},
+                {"database", Database});
+            TBase::ReplyAndPassAway(
+                GETHTTPACCESSDENIED("text/plain",
+                    "Database storage list is unavailable, request cannot be validated"),
+                "Access denied");
+            return true;
+        }
         auto denyIfOutOfScope = [this](TStringBuf objects, const auto& requested, const auto& allowed) {
             for (const auto& id : requested) {
                 if (allowed.count(id)) {
@@ -1085,9 +1098,9 @@ public:
             }
             return false;
         };
-        return denyIfOutOfScope("storage groups", FilterGroupIds.Requested, scope.GroupIds)
-            || denyIfOutOfScope("nodes", FilterNodeIds.Requested, scope.NodeIds)
-            || denyIfOutOfScope("PDisk identifiers", FilterPDiskIds.Requested, scope.PDiskIds);
+        return denyIfOutOfScope("storage groups", FilterGroupIds.Requested, scope->GroupIds)
+            || denyIfOutOfScope("nodes", FilterNodeIds.Requested, scope->NodeIds)
+            || denyIfOutOfScope("PDisk identifiers", FilterPDiskIds.Requested, scope->PDiskIds);
     }
 
     void ApplyFilter() {

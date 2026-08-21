@@ -398,17 +398,25 @@ def test_storage_groups_scope_params_forbidden_for_strict_database_token(
         {'node_id': str(tenant_nodelist_ids[0])},
         {'node_id': str(min(tenant_storage_ids['node_ids']))},
         {'pdisk_id': str(min(tenant_storage_ids['pdisk_ids']))},
+        {
+            'node_id': str(min(tenant_storage_ids['node_ids'])),
+            'pdisk_id': str(min(tenant_storage_ids['pdisk_ids'])),
+        },
     )
 
     foreign_group_ids = cluster_storage_ids['group_ids'] - tenant_storage_ids['group_ids']
     foreign_pdisk_ids = cluster_storage_ids['pdisk_ids'] - tenant_storage_ids['pdisk_ids']
     assert foreign_group_ids, 'the cluster must have a storage group outside the tenant database'
+    foreign_pdisk_id = str(min(foreign_pdisk_ids) if foreign_pdisk_ids else 999999)
     forbidden_cases = (
         {'group_id': str(min(foreign_group_ids))},
         {'node_id': str(unknown_node_id)},
         # a pdisk which exists but holds nothing of the database may be absent in a small cluster,
         # then an id of a pdisk that doesn't exist at all is checked instead
-        {'pdisk_id': str(min(foreign_pdisk_ids) if foreign_pdisk_ids else 999999)},
+        {'pdisk_id': foreign_pdisk_id},
+        # every parameter is validated on its own, so a single out of scope one is enough to deny
+        {'node_id': str(tenant_nodelist_ids[0]), 'pdisk_id': foreign_pdisk_id},
+        {'group_id': str(min(tenant_storage_ids['group_ids'])), 'node_id': str(unknown_node_id)},
     )
 
     for extra_params in allowed_cases:
@@ -431,6 +439,16 @@ def test_storage_groups_scope_params_forbidden_for_strict_database_token(
         # Scope-param validation must not block tokens above strict database level.
         for token in ('viewer@builtin', 'monitoring@builtin', 'root@builtin'):
             _assert_status(base, path, token, 200)
+
+    # Without the database parameter the scope can't be determined at all, so a strict database user
+    # is rejected by the endpoint validation before the scope check even runs.
+    path = _build_endpoint_path(
+        '/storage/groups',
+        with_database_cgi=False,
+        extra_params={'group_id': str(min(tenant_storage_ids['group_ids']))},
+    )
+    _assert_status(base, path, 'database@builtin', 400)
+    _assert_status(base, path, 'root@builtin', 200)
 
 
 def test_viewer_sysinfo_tabletinfo_node_id_forbidden_for_strict_database_token(

@@ -32,6 +32,7 @@ SRCS(
     ydb_service_operation.cpp
     ydb_service_scheme.cpp
     ydb_service_scripting.cpp
+    ydb_service_session.cpp
     ydb_service_topic.cpp
     ydb_service_table.cpp
     ydb_sql.cpp
@@ -81,6 +82,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/operation
     ydb/public/sdk/cpp/src/client/persqueue_public
     ydb/public/sdk/cpp/src/client/proto
+    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
     ydb/public/sdk/cpp/src/client/test_shard
@@ -88,6 +90,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/credentials/login
     ydb/public/sdk/cpp/src/library/operation_id
     yql/essentials/public/decimal
+    yql/essentials/public/udf
 )
 
 IF (NOT OS_WINDOWS)

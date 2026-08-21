@@ -12,6 +12,7 @@
 #include "ydb_service_monitoring.h"
 #include "ydb_service_scheme.h"
 #include "ydb_service_scripting.h"
+#include "ydb_service_session.h"
 #include "ydb_service_table.h"
 #include "ydb_service_topic.h"
 #include "ydb_sql.h"
@@ -240,6 +241,7 @@ TClientCommandRootCommon::TClientCommandRootCommon(const TString& name, const TC
     AddCommand(std::make_unique<TCommandImport>());
     AddCommand(std::make_unique<TCommandMonitoring>());
     AddCommand(std::make_unique<TCommandOperation>());
+    AddCommand(std::make_unique<TCommandSession>());
     AddCommand(std::make_unique<TCommandConfig>(this));
     AddCommand(std::make_unique<TCommandInit>());
     AddCommand(std::make_unique<TCommandSql>());

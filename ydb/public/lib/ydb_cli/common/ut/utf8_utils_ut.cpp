@@ -72,6 +72,45 @@ Y_UNIT_TEST_SUITE(Utf8UtilsTests) {
             }
         }
     }
+
+    Y_UNIT_TEST(SanitizeUtf8ForTerminalPreservesPrintableText) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            SanitizeUtf8ForTerminal("SELECT 'Привет, 👋'"),
+            "SELECT 'Привет, 👋'");
+    }
+
+    Y_UNIT_TEST(SanitizeUtf8ForTerminalReplacesControls) {
+        constexpr char Input[] = "a\0b\tc\nd\x1b[31m\xC2\x9Bred";
+        UNIT_ASSERT_VALUES_EQUAL(
+            SanitizeUtf8ForTerminal(TStringBuf(Input, sizeof(Input) - 1)),
+            "a b c d [31m red");
+    }
+
+    Y_UNIT_TEST(SanitizeUtf8ForTerminalReplacesMalformedUtf8) {
+        const TString input("\xC0\xAF\xED\xA0\x80\xF0\x9F", 7);
+        UNIT_ASSERT_VALUES_EQUAL(SanitizeUtf8ForTerminal(input), "???????");
+    }
+
+    Y_UNIT_TEST(CompactUtf8ForTerminalCollapsesWhitespace) {
+        UNIT_ASSERT_VALUES_EQUAL(
+            CompactUtf8ForTerminal("  SELECT\n  'Привет'\tFROM t  ", 200),
+            "SELECT 'Привет' FROM t");
+        UNIT_ASSERT_VALUES_EQUAL(CompactUtf8ForTerminal("abcd   ", 4), "abcd");
+    }
+
+    Y_UNIT_TEST(CompactUtf8ForTerminalSanitizesInput) {
+        constexpr char Input[] = "SELECT\x1b\n\xC0";
+        UNIT_ASSERT_VALUES_EQUAL(
+            CompactUtf8ForTerminal(TStringBuf(Input, sizeof(Input) - 1), 200),
+            "SELECT ?");
+    }
+
+    Y_UNIT_TEST(CompactUtf8ForTerminalTruncatesOnCharacterBoundary) {
+        UNIT_ASSERT_VALUES_EQUAL(CompactUtf8ForTerminal("абвгд", 4), "а...");
+        UNIT_ASSERT_VALUES_EQUAL(CompactUtf8ForTerminal("абвг", 4), "абвг");
+        UNIT_ASSERT_VALUES_EQUAL(CompactUtf8ForTerminal("abcdef", 2), "..");
+        UNIT_ASSERT_VALUES_EQUAL(CompactUtf8ForTerminal("abcdef", 0), "");
+    }
 }
 
 } // namespace NYdb::NConsoleClient

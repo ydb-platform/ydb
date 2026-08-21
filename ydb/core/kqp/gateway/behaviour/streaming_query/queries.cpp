@@ -1166,7 +1166,7 @@ public:
 
 private:
     void FinishUnderOperation() {
-        Finish(Ydb::StatusIds::ABORTED, TStringBuilder() << "Streaming query " << QueryPath << " already under operation " << PreviousOperationName << " started at " << PreviousOperationStartedAt << ", try repeat request later");
+        Finish(Ydb::StatusIds::PRECONDITION_FAILED, TStringBuilder() << "Streaming query " << QueryPath << " already under operation " << PreviousOperationName << " started at " << PreviousOperationStartedAt << ", try repeat request later");
     }
 
 private:
@@ -1277,7 +1277,7 @@ public:
             YDB_LOG_INFO("[StreamingQueries] Previous query owner is alive",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender});
-            FatalError(Ydb::StatusIds::ABORTED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", try repeat request later")});
+            FatalError(Ydb::StatusIds::PRECONDITION_FAILED, {NYql::TIssue(TStringBuilder() << "Streaming query already under operation " << Info.PreviousOperationName << " started at " << Info.PreviousOperationStartedAt << ", try repeat request later")});
         }
     }
 
@@ -1447,13 +1447,13 @@ public:
                     {"logPrefix", LogPrefix()},
                     {"currentOperationOwner", currentOperationOwner},
                     {"owner", OperationOwner});
-                Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
+                Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
                 return;
             }
         } else {
             YDB_LOG_ERROR("[StreamingQueries] Streaming query lock was lost",
                 {"logPrefix", LogPrefix()});
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
             return;
         }
 
@@ -1547,7 +1547,7 @@ public:
                 {"logPrefix", LogPrefix()},
                 {"currentOwner", currentOwner},
                 {"owner", previousOwner});
-            Finish(Ydb::StatusIds::INTERNAL_ERROR, "Streaming query was changed during operation");
+            Finish(Ydb::StatusIds::PRECONDITION_FAILED, "Streaming query was changed during operation");
             return;
         }
 
@@ -1970,7 +1970,7 @@ private:
         }
 
         // Execution id for streaming queries:
-        // <GUID part>-<GUID part>-<GUID part>-<SS id>-<Path id in SS>-<Path version in SS>
+        // <GUID part>-<GUID part>-<GUID part>-<GUID part>-<SS id>-<Path id in SS>-<Path version in SS>
         // Checkpoint id for streaming queries:
         // <Execution id>-<Query path>
 

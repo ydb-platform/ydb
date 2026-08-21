@@ -1,7 +1,7 @@
 YQL_LIBRARY()
 
 SRCS(
-    generated_column.cpp
+    column_expression.cpp
     read_attributes_utils.cpp
     rewrite_io_utils.cpp
     sql_path_aliases.cpp

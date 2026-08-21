@@ -204,7 +204,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             std::unique_ptr<NDDisk::TEvWrite> ev(new NDDisk::TEvWrite(Creds,
                 {VChunkIndex, offset, size}, {0}));
-            ev->AddPayload(TRope(std::move(buf)));
+            ev->AddPayloadThenChecksum(TRope(std::move(buf)));
             Env.Runtime->Send(new IEventHandle(ServiceId, Edge, ev.release()), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvWriteResult>(Edge, false);
 
@@ -231,7 +231,14 @@ Y_UNIT_TEST_SUITE(DDisk) {
             UNIT_ASSERT_VALUES_EQUAL(rr2.GetPayloadId(), 0);
             TRope rope = res->Get()->GetPayload(0);
             UNIT_ASSERT_VALUES_EQUAL(rope.size(), size);
-            UNIT_ASSERT_VALUES_EQUAL(rope.ConvertToString(), Surface.substr(offset, size));
+            const TString expected = Surface.substr(offset, size);
+            UNIT_ASSERT_VALUES_EQUAL(rope.ConvertToString(), expected);
+            const ui32 expectedChecksumCount = size / BlockSize;
+            UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(rr.ChecksumsSize()), expectedChecksumCount);
+            for (ui32 i = 0; i < expectedChecksumCount; ++i) {
+                UNIT_ASSERT_VALUES_EQUAL(rr.GetChecksums(i),
+                    NDDisk::CalculateRawChecksum(expected.data() + i * BlockSize, BlockSize));
+            }
         }
 
         void ListPB() {
@@ -291,7 +298,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             std::unique_ptr<NDDisk::TEvWritePersistentBuffer> ev(new NDDisk::TEvWritePersistentBuffer(
                 PBCreds[tabletIdx], {VChunkIndex, offset, size}, lsn, {0}));
-            ev->AddPayload(TRope(std::move(update)));
+            ev->AddPayloadThenChecksum(TRope(std::move(update)));
             Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, ev.release()), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBufferResult>(Edge, false);
             UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
@@ -380,7 +387,7 @@ Y_UNIT_TEST_SUITE(DDisk) {
 
             std::unique_ptr<NDDisk::TEvWritePersistentBuffer> ev(new NDDisk::TEvWritePersistentBuffer(
                 creds, {VChunkIndex, offset, size}, lsn, {0}));
-            ev->AddPayload(TRope(std::move(update)));
+            ev->AddPayloadThenChecksum(TRope(std::move(update)));
             Env.Runtime->Send(new IEventHandle(PBServiceId, Edge, ev.release()), Edge.NodeId());
             auto res = Env.WaitForEdgeActorEvent<NDDisk::TEvWritePersistentBufferResult>(Edge, false);
             UNIT_ASSERT(res->Get()->Record.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK);

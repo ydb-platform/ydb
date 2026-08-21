@@ -335,7 +335,9 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
             bool found = false;
             for (const auto& idx : d.GetPathDescription().GetTable().GetTableIndexes()) {
                 if (idx.GetName() == "json_idx") {
-                    UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeGlobalJson);
+                    UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()
+                        ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                        : NKikimrSchemeOp::EIndexTypeGlobalJson);
                     found = true;
                 }
             }
@@ -414,15 +416,18 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
                 op.DebugString());
         }
 
-        // The JSON posting impl-table must be keyed by [__ydb_token, __ydb_row_id], not by [__ydb_token, pk].
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        if (!runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            // The JSON posting impl-table must be keyed by [__ydb_token, __ydb_row_id], not by [__ydb_token, pk].
+            // But with the compact index, the posting table doesn't differ.
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_idx/" + TString(NTableIndex::ImplTable)), {
+                NLs::PathExist,
+                NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true),
+            });
+        }
     }
 
     Y_UNIT_TEST(RowIdOptIn_RejectsIfRowIdWrongType) {
@@ -516,15 +521,18 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
 
-        // The JSON posting impl-table is keyed by [__ydb_token, __ydb_row_id].
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        if (!runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            // The JSON posting impl-table is keyed by [__ydb_token, __ydb_row_id].
+            // But with the compact index, it doesn't differ.
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_idx/" + TString(NTableIndex::ImplTable)), {
+                NLs::PathExist,
+                NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true),
+            });
+        }
     }
 
     Y_UNIT_TEST(RowIdOptIn_CompactBuildsOverCustomPkAndDropsRowIdSrc) {
@@ -615,14 +623,17 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
             NLs::PathExist,
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_two/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+
+        if (!runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/json_two/" + TString(NTableIndex::ImplTable)), {
+                NLs::PathExist,
+                NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true),
+            });
+        }
     }
 
     Y_UNIT_TEST(AutoProvision_SingleIntegerPkUnaffected) {
@@ -650,14 +661,16 @@ Y_UNIT_TEST_SUITE(JsonIndexBuildTest) {
             NLs::PathNotExist,
         });
 
-        // The JSON impl-table is keyed by [__ydb_token, id] (the integer PK), not __ydb_row_id.
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/table/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, "id" },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, "id" },
-                /*strictCount=*/ true),
-        });
+        if (!runtime.GetAppData().FeatureFlags.GetEnableCompactFulltextIndex()) {
+            // The JSON impl-table is keyed by [__ydb_token, id] (the integer PK), not __ydb_row_id.
+            TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/table/json_idx/" + TString(NTableIndex::ImplTable)), {
+                NLs::PathExist,
+                NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, "id" },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, "id" },
+                    /*strictCount=*/ true),
+            });
+        }
     }
 }

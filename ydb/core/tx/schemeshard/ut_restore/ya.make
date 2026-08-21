@@ -14,6 +14,7 @@ ELSE()
 ENDIF()
 
 PEERDIR(
+    contrib/libs/apache/arrow
     contrib/libs/double-conversion
     library/cpp/streams/zstd
     library/cpp/string_utils/quote
@@ -31,6 +32,7 @@ PEERDIR(
 SRCS(
     ut_restore.cpp
     ut_restore_fs.cpp
+    ut_restore_data_format.cpp
 )
 
 YQL_LAST_ABI_VERSION()

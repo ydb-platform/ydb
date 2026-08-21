@@ -1,4 +1,4 @@
-#include "kqp_opt_generated_columns.h"
+#include "kqp_opt_column_expressions.h"
 
 #include "kqp_opt_impl.h"
 
@@ -18,7 +18,7 @@ using namespace NYql::NNodes;
 namespace {
 
 bool IsVirtualGeneratedColumn(const TKikimrColumnMetadata* column) {
-    return column && column->IsDefaultFromExpression() && !column->DefaultExpression->Stored;
+    return column && column->IsDefaultFromExpression() && !column->DefaultExpression->IsStored();
 }
 
 TVector<TString> GetMissingStoredGeneratedDeps(const TVector<const TKikimrColumnMetadata*>& generatedColumns,
@@ -376,7 +376,7 @@ TVector<const TKikimrColumnMetadata*> CollectStoredGeneratedColumns(const TKikim
     TVector<const TKikimrColumnMetadata*> generatedColumns;
     for (const auto& name : table.Metadata->ColumnOrder) {
         const auto* colMeta = table.Metadata->Columns.FindPtr(name);
-        if (colMeta && colMeta->IsDefaultFromExpression() && colMeta->DefaultExpression->Stored) {
+        if (colMeta && colMeta->IsDefaultFromExpression() && colMeta->DefaultExpression->IsGenerated() && colMeta->DefaultExpression->IsStored()) {
             generatedColumns.push_back(colMeta);
         }
     }
@@ -629,6 +629,68 @@ TBuildWriteInputResult ExtendInputRowsWithStoredGeneratedColumns(const TKiWriteT
 
     auto [rewritten, columns] = BuildStoredGeneratedColumnsInline(input, inputColumns, generatedColumns, table, pos, ctx);
     return { .Input=rewritten, .Columns=columns, .EmittedStreamLookup=false };
+}
+
+std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithDefaultExpressionColumns(const TExprBase& input,
+    const TCoAtomList& inputColumns, const TCoAtomList& defaultExprColumns, const TKikimrTableDescription& table,
+    TPositionHandle pos, TExprContext& ctx)
+{
+    if (defaultExprColumns.Ref().ChildrenSize() == 0) {
+        return {input, inputColumns};
+    }
+
+    auto rowArg = Build<TCoArgument>(ctx, pos).Name("row").Done();
+
+    TVector<TCoAtom> allColumns;
+    TVector<TExprBase> allMembers;
+
+    for (const auto& col : inputColumns) {
+        allColumns.push_back(col);
+        allMembers.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name(col)
+                .Value<TCoMember>()
+                    .Struct(rowArg)
+                    .Name().Build(col.Value())
+                    .Build()
+                .Done());
+    }
+
+    // A DEFAULT expression cannot reference columns, so it is applied to an empty row
+    auto emptyRow = Build<TCoAsStruct>(ctx, pos).Done();
+
+    for (const auto& col : defaultExprColumns) {
+        const TString colName(col.Value());
+        const auto* colMeta = table.Metadata->Columns.FindPtr(colName);
+        YQL_ENSURE(colMeta && colMeta->IsDefaultFromExpression(), "Column " << colName << " has no DEFAULT expression");
+        YQL_ENSURE(colMeta->DefaultExpression->Expr, "DEFAULT expression of column " << colName << " is not compiled");
+
+        allColumns.push_back(col);
+        allMembers.push_back(
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name(col)
+                .Value<TExprApplier>()
+                    .Apply(TCoLambda(colMeta->DefaultExpression->Expr))
+                    .With(0, emptyRow)
+                    .Build()
+                .Done());
+    }
+
+    auto writeData = Build<TCoMap>(ctx, pos)
+        .Input(input)
+        .Lambda()
+            .Args({rowArg})
+            .Body<TCoAsStruct>()
+                .Add(allMembers)
+                .Build()
+            .Build()
+        .Done();
+
+    auto columnList = Build<TCoAtomList>(ctx, pos)
+        .Add(allColumns)
+        .Done();
+
+    return {writeData, columnList};
 }
 
 }   // namespace NKikimr::NKqp::NOpt

@@ -19,6 +19,9 @@ inputs:
   build_preset:
     required: false
     description: "build preset like relwithdebinfo"
+  target_platform:
+    required: false
+    description: "target platform name"
 runs:
   using: "composite"
   steps:
@@ -49,26 +52,53 @@ runs:
     - name: export s3 path variables
       shell: bash
       if: inputs.build_preset
+      env:
+        INPUT_BUILD_PRESET: ${{ inputs.build_preset }}
+        INPUT_TARGET_PLATFORM: ${{ inputs.target_platform }}
+        INPUT_S3_BUCKET: ${{ inputs.s3_bucket }}
+        INPUT_S3_ENDPOINT: ${{ inputs.s3_endpoint }}
+        INPUT_FOLDER_PREFIX: ${{ inputs.folder_prefix }}
       run: |
-        folder="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
+        export_github_env() {
+          local name="$1"
+          local value="$2"
+
+          case "$value" in
+            *$'\n'*|*$'\r'*)
+              printf 'Cannot export %s: value contains a newline\n' "$name" >&2
+              return 1
+              ;;
+          esac
+
+          printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
+        }
+
+        if [[ -n "$INPUT_TARGET_PLATFORM" ]]; then
+          folder="$INPUT_TARGET_PLATFORM"
+        else
+          case "$RUNNER_ARCH" in
+            X64) folder="x86-64" ;;
+            ARM64) folder="arm64" ;;
+            *) folder="unknown" ;;
+          esac
+        fi
         
-        BUILD_PRESET="${{ inputs.build_preset }}"
-        
-        case "$BUILD_PRESET" in
+        case "$INPUT_BUILD_PRESET" in
           relwithdebinfo)
             ;;
           debug)
             folder+="-debug"
             ;;
           release*)
-            folder+="-${BUILD_PRESET/release-/}"
+            folder+="-${INPUT_BUILD_PRESET/release-/}"
             ;;
           *)
-            echo "Invalid preset: ${{ inputs.build_preset }}"
+            echo "Invalid preset: $INPUT_BUILD_PRESET"
             exit 1
             ;;
         esac
-        echo "S3_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_TEST_ARTIFACTS_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_TEST_ARTIFACTS_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
+
+        export_github_env S3_BUCKET_PATH "s3://${INPUT_S3_BUCKET}/${GITHUB_REPOSITORY}/${GITHUB_WORKFLOW}/${GITHUB_RUN_ID}/${INPUT_FOLDER_PREFIX}${folder}"
+        export_github_env S3_URL_PREFIX "${INPUT_S3_ENDPOINT}/${INPUT_S3_BUCKET}/${GITHUB_REPOSITORY}/${GITHUB_WORKFLOW}/${GITHUB_RUN_ID}/${INPUT_FOLDER_PREFIX}${folder}"
+        export_github_env S3_TEST_ARTIFACTS_BUCKET_PATH "s3://${INPUT_S3_BUCKET}/testing_out_stuff/${GITHUB_REPOSITORY}/${GITHUB_WORKFLOW}/${GITHUB_RUN_ID}/${INPUT_FOLDER_PREFIX}${folder}"
+        export_github_env S3_TEST_ARTIFACTS_URL_PREFIX "${INPUT_S3_ENDPOINT}/${INPUT_S3_BUCKET}/testing_out_stuff/${GITHUB_REPOSITORY}/${GITHUB_WORKFLOW}/${GITHUB_RUN_ID}/${INPUT_FOLDER_PREFIX}${folder}"

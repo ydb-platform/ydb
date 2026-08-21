@@ -6,6 +6,10 @@ inputs:
     description: "limit build and test to specific target"
   build_preset:
     type: string
+  target_platform:
+    default: ""
+    description: "target platform"
+    type: string
   run_build:
     type: boolean
     default: true
@@ -91,6 +95,7 @@ runs:
           # If the branch name is not provided, use a default prefix
           FOLDER_PREFIX='ya-'
         fi
+        
         # Output the folder_prefix for use in subsequent steps
         echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
 
@@ -103,6 +108,7 @@ runs:
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
         folder_prefix: ${{ env.folder_prefix }}
         build_preset: ${{ inputs.build_preset }}
+        target_platform: ${{ inputs.target_platform }}
 
     - name: Run build and tests
       id: build
@@ -110,6 +116,7 @@ runs:
       with:
         build_target: ${{ inputs.build_target }}
         build_preset: ${{ inputs.build_preset }}
+        target_platform: ${{ inputs.target_platform }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
         run_tests: ${{ inputs.run_tests }}

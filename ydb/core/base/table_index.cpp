@@ -42,6 +42,8 @@ bool ContainsSystemColumn(const auto& columns) {
 
 const TString ImplTables[] = {
     ImplTable,
+    TString{ImplTable} + NFulltext::RowIdSrcBuildSuffix,
+    TString{ImplTable} + NKMeans::BuildSuffix0,
     NKMeans::LevelTable,
     NKMeans::PostingTable,
     NKMeans::PrefixTable,

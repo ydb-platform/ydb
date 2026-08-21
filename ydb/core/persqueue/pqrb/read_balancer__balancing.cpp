@@ -264,6 +264,7 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
 
             Status = EStatus::Free;
             AfterRelease();
+            AttachReadyWantedPartitions(ctx);
 
             return true;
 

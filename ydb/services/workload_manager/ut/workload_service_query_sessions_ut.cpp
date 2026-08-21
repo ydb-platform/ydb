@@ -194,16 +194,16 @@ public:
         : Ydb(ydb)
     {}
 
-    void FetchAll(const TString& query) {
+    void FetchAll(TStringBuf query) {
         Fetch(TStringBuilder() << "Query = '" << query << "'");
     }
 
-    void FetchBySessionId(const TString& sessionId) {
+    void FetchBySessionId(TStringBuf sessionId) {
         Fetch(TStringBuilder() << "SessionId = '" << sessionId << "'");
     }
 
 private:
-    void Fetch(const TString& predicate) {
+    void Fetch(TStringBuf predicate) {
         using namespace fmt::literals;
 
         Results.clear();
@@ -404,15 +404,19 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
 
     ///
     /// RFC C3.1: request that hits the default pool through the classifier fallback
-    /// must show WmClassifiedBy = "NONE".
+    /// must show WmClassifiedBy = "NONE". Uses TableClient because IYdbSetup's
+    /// runner always attaches a PoolId to the request; TableClient sends no
+    /// PoolId, letting the classifier reach its Default branch.
     ///
     Y_UNIT_TEST(TestStateExecutingDefaultPool) {
+        using namespace NYdb::NTable;
         TQuerySessionTestFixture f(NResourcePool::DEFAULT_POOL_ID, ISessionUpdater::EXITED);
         const TString& query = TSampleQueries::TSelect42::Query;
         TActorId edge = f.SetupInterceptor(query);
         auto& runtime = *f.GetYdb()->GetRuntime();
 
-        auto future = f.GetYdb()->ExecuteQueryAsync(query);  // no explicit pool -> default
+        auto session = f.GetYdb()->GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto future = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx());
         auto ev = runtime.GrabEdgeEvent<NWorkloadManager::TEvContinueRequest>(edge);
 
         TQuerySessionReader reader(f.GetYdb());
@@ -423,7 +427,7 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         UNIT_ASSERT_VALUES_EQUAL(reader[0].WmClassifiedBy, "NONE");
 
         runtime.Send(new IEventHandle(ev->Sender, edge, ev->Release().Release()));
-        TSampleQueries::TSelect42::CheckResult(future.GetResult());
+        UNIT_ASSERT(future.GetValueSync().IsSuccess());
     }
 
     ///
@@ -485,9 +489,9 @@ Y_UNIT_TEST_SUITE(KqpWorkloadServiceQuerySessions) {
         for (auto state : {ISessionUpdater::NONE, ISessionUpdater::PENDING, ISessionUpdater::EXITED}) {
             auto reader = ReadQuerySessionAfterState(state);
             UNIT_ASSERT_VALUES_EQUAL(reader.Size(), 1);
-            UNIT_ASSERT_C(!reader[0].WmState,     "WmState must be NULL for state=" << state);
-            UNIT_ASSERT_C(!reader[0].WmEnterTime, "WmEnterTime must be NULL for state=" << state);
-            UNIT_ASSERT_C(!reader[0].WmExitTime,  "WmExitTime must be NULL for state=" << state);
+            UNIT_ASSERT_C(!reader[0].WmState,     "WmState must be NULL for state=" << ui32(state));
+            UNIT_ASSERT_C(!reader[0].WmEnterTime, "WmEnterTime must be NULL for state=" << ui32(state));
+            UNIT_ASSERT_C(!reader[0].WmExitTime,  "WmExitTime must be NULL for state=" << ui32(state));
         }
     }
 }

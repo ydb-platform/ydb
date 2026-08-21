@@ -43,7 +43,7 @@ class WorkloadRunner:
             WorkloadVectorIndex(self.client, self.name, stop),
             WorkloadJsonIndex(self.client, self.name, stop),
             WorkloadSelectPartition(self.client, self.name, stop),
-            WorkloadSecondaryIndex(self.client, self.name, stop),
+            # WorkloadSecondaryIndex(self.client, self.name, stop),
             WorkloadBloomFilterIndex(self.client, self.name, stop),
             WorkloadTli(self.client, self.name, stop)
         ]

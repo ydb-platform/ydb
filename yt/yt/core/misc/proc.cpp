@@ -1806,8 +1806,7 @@ std::vector<int> ParseLinuxKernelVersion()
 
     std::vector<int> parsedVersion;
 
-    TStringBuf significantVersion, remainder;
-    TStringBuf(version).Split('-', significantVersion, remainder);
+    auto significantVersion = version.substr(0, version.find_first_not_of("0123456789."));
 
     StringSplitter(significantVersion).Split('.').ParseInto(&parsedVersion);
 

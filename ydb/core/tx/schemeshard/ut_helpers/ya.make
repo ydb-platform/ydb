@@ -31,6 +31,7 @@ SRCS(
     failing_mtpq.cpp
     helpers.cpp
     helpers.h
+    helpers_flags_n.h
     ls_checks.cpp
     ls_checks.h
     shred_helpers.cpp

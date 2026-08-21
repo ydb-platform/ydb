@@ -1275,6 +1275,229 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         NKikimr::ShutdownAwsAPI();
     }
 
+    // TTestEnv already enables EnableFulltextIndex / EnableAddUniqueIndex by default; we only need the
+    // compact-index flag so a fulltext_plain build proto is materialized as a compact (rowid-mode) index.
+    // The schemeshard caches EnableCompactFulltextIndex at activation (it read appData before this runs),
+    // so reboot it to pick up the updated value.
+    void EnableCompactAutoProvisionFlags(TTestActorRuntime& runtime) {
+        auto& appData = runtime.GetAppData();
+        appData.FeatureFlags.SetEnableFulltextIndex(true);
+        appData.FeatureFlags.SetEnableCompactFulltextIndex(true);
+        appData.FeatureFlags.SetEnableAddUniqueIndex(true);
+        appData.FeatureFlags.SetEnableUniqConstraint(true);
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+    }
+
+    void SetCompactFulltextFlag(TTestBasicRuntime& runtime, bool enabled) {
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        auto& flags = *request->Record.MutableConfig()->MutableFeatureFlags();
+        // A console feature-flags item is a complete snapshot, not a field-level patch. Keep the
+        // dependencies enabled while changing only the compact-layout selection under test.
+        flags.SetEnableFulltextIndex(true);
+        flags.SetEnableCompactFulltextIndex(enabled);
+        flags.SetEnableAddUniqueIndex(true);
+        flags.SetEnableUniqConstraint(true);
+        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(request));
+    }
+
+    Y_UNIT_TEST(PublicBuildUsesLiveSchemeShardCompactFlag) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        // Start with the legacy layout and some data, then deliver each SchemeShard config update
+        // synchronously (SetConfig waits for TEvConfigNotificationResponse) before starting the next
+        // public BuildIndex operation. This makes the physical-type decision deterministic.
+        DoCreateTextTableAndIndex(runtime, env, txId, /*relevance*/ false,
+            [](Ydb::Table::TableIndex& index) { index.add_data_columns("data"); });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        DoCheckPlainIndexTable(runtime, "/MyRoot/texts/fulltext_idx");
+
+        SetCompactFulltextFlag(runtime, true);
+        auto compact = FulltextIndexConfig(/*relevance*/ false);
+        compact.set_name("compact_idx");
+        const ui64 compactBuildTx = ++txId;
+        TestBuildIndex(runtime, compactBuildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", compact);
+        env.TestWaitNotification(runtime, compactBuildTx);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/compact_idx"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/compact_idx/indexImplTable"), {
+            NLs::PathExist,
+            NLs::CheckColumns("indexImplTable",
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
+                  NTableIndex::NFulltext::SegmentColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn },
+                /*strictCount=*/ true),
+        });
+
+        // Switching back affects only future builds. Both already-built physical layouts remain
+        // independently describable and droppable; no reinterpretation through the current flag occurs.
+        SetCompactFulltextFlag(runtime, false);
+        auto legacyAfterToggle = FulltextIndexConfig(/*relevance*/ false);
+        legacyAfterToggle.set_name("legacy_after_toggle");
+        legacyAfterToggle.add_data_columns("data");
+        const ui64 legacyBuildTx = ++txId;
+        TestBuildIndex(runtime, legacyBuildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", legacyAfterToggle);
+        env.TestWaitNotification(runtime, legacyBuildTx);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/legacy_after_toggle"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        DoCheckPlainIndexTable(runtime, "/MyRoot/texts/legacy_after_toggle");
+
+        for (const TStringBuf index : {TStringBuf("compact_idx"), TStringBuf("fulltext_idx")}) {
+            TestDropTableIndex(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot", Sprintf(R"(
+                TableName: "texts"
+                IndexName: "%s"
+            )", index.data()));
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts/" << index), {NLs::PathNotExist});
+        }
+    }
+
+    void RebootTableShardsAndAssertPartitions(TTestBasicRuntime& runtime, const TString& path,
+        ui32 expectedPartitions)
+    {
+        const auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard,
+            path, /*returnPartitioning=*/ true, /*returnBoundaries=*/ true, /*showPrivate=*/ true);
+        const auto& partitions = describe.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT_VALUES_EQUAL_C(partitions.size(), expectedPartitions, path);
+        for (const auto& partition : partitions) {
+            RebootTablet(runtime, partition.GetDatashardId(), runtime.AllocateEdgeActor());
+        }
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_CompactTopologySplitRebootAndRebuild) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableCompactAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        auto initialIndex = FulltextIndexConfig(/*relevance=*/ false);
+        const ui64 initialBuildTx = ++txId;
+        TestBuildIndex(runtime, initialBuildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", initialIndex);
+        env.TestWaitNotification(runtime, initialBuildTx);
+        const auto initialBuild = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard,
+            "/MyRoot", initialBuildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(initialBuild.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, initialBuild.DebugString());
+
+        const TString compactImpl = "/MyRoot/texts/fulltext_idx/indexImplTable";
+        const TString rowIdImpl = TStringBuilder() << "/MyRoot/texts/"
+            << NTableIndex::NFulltext::RowIdUniqueIndexName << "/" << NTableIndex::ImplTable;
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts"), {
+            NLs::CheckColumns("texts",
+                {"pk", "text", "data", NTableIndex::NFulltext::RowIdColumn},
+                {}, {"pk"}, /*strictCount=*/ true),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, compactImpl), {
+            NLs::CheckColumns("indexImplTable",
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
+                  NTableIndex::NFulltext::SegmentColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
+                  NTableIndex::NFulltext::GenColumn },
+                /*strictCount=*/ true),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, compactImpl), 7u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
+
+        auto split = [&](const TString& path, const TString& boundary) {
+            const auto before = DescribePath(runtime, TTestTxConfig::SchemeShard,
+                path, /*returnPartitioning=*/ true, /*returnBoundaries=*/ true, /*showPrivate=*/ true);
+            const auto& partitions = before.GetPathDescription().GetTablePartitions();
+            UNIT_ASSERT_VALUES_EQUAL_C(partitions.size(), 1u, path);
+            TestSplitTable(runtime, TTestTxConfig::SchemeShard, ++txId, path,
+                Sprintf(R"(
+                    SourceTabletId: %lu
+                    SplitBoundary { KeyPrefix { %s } }
+                )", partitions[0].GetDatashardId(), boundary.c_str()));
+            env.TestWaitNotification(runtime, txId);
+            TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard,
+                path, true, true, true), {
+                NLs::PathExist,
+                NLs::PartitionCount(2),
+            });
+        };
+
+        // Special compact and unique implementation tables follow the same explicit split contract as
+        // ordinary index implementation tables. Every operation is fenced by its SchemeShard notification.
+        split("/MyRoot/texts", R"(Tuple { Optional { Text: "ptwo" } })");
+        split(compactImpl, R"(Tuple { Optional { Bytes: "red" } })");
+        split(rowIdImpl, R"(Tuple { Optional { Uint64: 9223372036854775808 } })");
+
+        RebootTableShardsAndAssertPartitions(runtime, "/MyRoot/texts", 2);
+        RebootTableShardsAndAssertPartitions(runtime, compactImpl, 2);
+        RebootTableShardsAndAssertPartitions(runtime, rowIdImpl, 2);
+
+        // Reads are the post-reboot readiness barrier and prove split/reboot preserved every physical row.
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, compactImpl), 7u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
+
+        // Low-level MiniKQL intentionally bypasses index maintenance in this harness. Update an existing
+        // row (so its provisioned row id remains intact), then rebuild a second compact index: its exact
+        // token oracle proves the post-split main-table DML was visible to a distributed build scan.
+        const auto main = DescribePath(runtime, "/MyRoot/texts", true, true);
+        const ui64 firstShard = main.GetPathDescription().GetTablePartitions(0).GetDatashardId();
+        NKikimrMiniKQL::TResult updateResult;
+        TString updateError;
+        const auto updateStatus = LocalMiniKQL(runtime, firstShard, R"(
+            (
+                (let key '( '('pk (Utf8 'pone) ) ) )
+                (let row '( '('text (String '"topology kiwi") )
+                             '('data (String '"updated") ) ) )
+                (return (AsList (UpdateRow '__user__texts key row) ))
+            )
+        )", updateResult, updateError);
+        UNIT_ASSERT_VALUES_EQUAL_C(updateStatus, NKikimrProto::EReplyStatus::OK, updateError);
+
+        auto rebuiltIndex = FulltextIndexConfig(/*relevance=*/ false);
+        rebuiltIndex.set_name("after_split_idx");
+        const ui64 rebuildTx = ++txId;
+        TestBuildIndex(runtime, rebuildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", rebuiltIndex);
+        env.TestWaitNotification(runtime, rebuildTx);
+        const auto rebuild = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", rebuildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(rebuild.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, rebuild.DebugString());
+
+        const TString rebuiltImpl = "/MyRoot/texts/after_split_idx/indexImplTable";
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rebuiltImpl), 8u);
+        TString physicalRows;
+        for (const auto& shard : ReadShards(runtime, TTestTxConfig::SchemeShard, rebuiltImpl)) {
+            physicalRows += shard;
+        }
+        UNIT_ASSERT_C(physicalRows.Contains("topology"), physicalRows);
+        UNIT_ASSERT_C(physicalRows.Contains("kiwi"), physicalRows);
+    }
+
     TString RowIdSrcTablePath(const TString& indexPath) {
         return TStringBuilder() << indexPath << "/"
             << NTableIndex::ImplTable << NTableIndex::NFulltext::RowIdSrcBuildSuffix;

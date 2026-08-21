@@ -5,6 +5,8 @@
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
 #include <ydb/core/tx/schemeshard/index/build_index.h>
@@ -980,6 +982,8 @@ static TKikimrRunner KikimrPrefix(bool compact) {
     featureFlags.SetEnableFulltextIndex(true);
     featureFlags.SetEnableCompactFulltextIndex(compact);
     featureFlags.SetEnableFulltextIndexPrefix(true);
+    featureFlags.SetEnableTableDatetime64(true);
+    featureFlags.SetEnableUuidAsPrimaryKey(true);
     return Kikimr(std::move(featureFlags));
 }
 
@@ -3764,6 +3768,34 @@ Y_UNIT_TEST(AddFulltextIndexAutoProvisionsRowId) {
     }
 }
 
+void UpdateFulltextPrefixFlag(TKikimrRunner& kikimr, bool enabled) {
+    auto& runtime = *kikimr.GetTestServer().GetRuntime();
+    const auto edge = runtime.AllocateEdgeActor();
+
+    NKikimrConfig::TAppConfig config;
+    auto* flags = config.MutableFeatureFlags();
+    flags->SetEnableFulltextIndex(true);
+    flags->SetEnableFulltextIndexPrefix(enabled);
+    flags->SetEnableTableDatetime64(true);
+    flags->SetEnableUuidAsPrimaryKey(true);
+    config.MutableTableServiceConfig()->SetBackportMode(
+        NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+
+    // FeatureFlagsConfigurator updates AppData before subscribers consume the same snapshot.
+    runtime.GetAppData().UpdateRuntimeFlags(*flags);
+    for (const auto& service : {
+            MakeKqpProxyID(runtime.GetNodeId()),
+            MakeKqpCompileServiceID(runtime.GetNodeId())}) {
+        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+        *request->Record.MutableConfig() = config;
+        runtime.Send(service, edge, request.Release());
+        auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+            edge, TDuration::Seconds(10));
+        UNIT_ASSERT_C(response, "KQP service must acknowledge fulltext-prefix flag update");
+    }
+
+}
+
 Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixed, Compact) {
     auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
@@ -3869,6 +3901,76 @@ Y_UNIT_TEST(CreatePrefixedFulltextIndexDisabled) {
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, result.GetIssues().ToString());
     UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Prefixed fulltext/json index support is disabled");
+}
+
+Y_UNIT_TEST(PrefixedIndexSurvivesRuntimeFlagToggle) {
+    auto kikimr = KikimrPrefix(false);
+    auto db = kikimr.GetQueryClient();
+
+    auto exec = [&](const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    };
+    exec(R"sql(
+        CREATE TABLE `/Root/FlagDocs` (
+            Key Uint64, UserId Uint64, Text Utf8, PRIMARY KEY (Key)
+        );
+    )sql");
+    exec(R"sql(
+        UPSERT INTO `/Root/FlagDocs` (Key, UserId, Text) VALUES
+            (1, 10, "cats before toggle"),
+            (3, 10, "cats delete me");
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/FlagDocs` ADD INDEX idx_before
+            GLOBAL USING fulltext_plain ON (UserId, Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+
+    UpdateFulltextPrefixFlag(kikimr, false);
+
+    // The gate controls creation only. Existing reads, maintenance writes and DROP remain valid.
+    exec(R"sql(
+        SELECT Key FROM `/Root/FlagDocs` VIEW idx_before
+        WHERE UserId = 10 AND FulltextMatch(Text, "cats") ORDER BY Key;
+    )sql");
+    exec(R"sql(
+        INSERT INTO `/Root/FlagDocs` (Key, UserId, Text) VALUES (2, 10, "cats while disabled");
+        UPDATE `/Root/FlagDocs` SET Text = "dogs after update" WHERE Key = 1;
+        DELETE FROM `/Root/FlagDocs` WHERE Key = 3;
+    )sql");
+    {
+        auto result = db.ExecuteQuery(R"sql(
+            SELECT Key FROM `/Root/FlagDocs` VIEW idx_before
+            WHERE UserId = 10 AND FulltextMatch(Text, "cats") ORDER BY Key;
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[[2u]]]", FormatResultSetYson(result.GetResultSet(0)));
+    }
+    {
+        auto result = db.ExecuteQuery(R"sql(
+            ALTER TABLE `/Root/FlagDocs` ADD INDEX idx_disabled
+                GLOBAL USING fulltext_plain ON (UserId, Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(),
+            "Prefixed fulltext/json index support is disabled");
+    }
+    exec(R"sql(ALTER TABLE `/Root/FlagDocs` DROP INDEX idx_before;)sql");
+
+    UpdateFulltextPrefixFlag(kikimr, true);
+    exec(R"sql(
+        ALTER TABLE `/Root/FlagDocs` ADD INDEX idx_after
+            GLOBAL USING fulltext_plain ON (UserId, Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+    auto result = db.ExecuteQuery(R"sql(
+        SELECT Key FROM `/Root/FlagDocs` VIEW idx_after
+        WHERE UserId = 10 AND FulltextMatch(Text, "cats") ORDER BY Key;
+    )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    CompareYson("[[[2u]]]", FormatResultSetYson(result.GetResultSet(0)));
 }
 
 Y_UNIT_TEST(CreatePrefixedFulltextIndexOnPrimaryKey) {
@@ -4359,7 +4461,7 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedKeyTypeBoundaries, Compact) {
     // family used by prefixed indexes, including values whose byte representation is easy to get
     // wrong (signed minima, unsigned maxima, empty/long strings and non-ASCII Utf8). The same
     // ALTER ADD INDEX build and equality lookup oracle is used for legacy and compact postings.
-    auto kikimr = Compact ? KikimrPrefixCompact() : KikimrPrefix();
+    auto kikimr = KikimrPrefix(Compact);
     auto db = kikimr.GetQueryClient();
 
     struct TCase {
@@ -4370,14 +4472,28 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedKeyTypeBoundaries, Compact) {
 
     const TString longValue(1024, 'x');
     const TVector<TCase> cases = {
+        {"Int8", "Int8", {"CAST(\"-128\" AS Int8)", "CAST(\"127\" AS Int8)"}},
+        {"Uint8", "Uint8", {"CAST(\"0\" AS Uint8)", "CAST(\"255\" AS Uint8)"}},
+        {"Int16", "Int16", {"CAST(\"-32768\" AS Int16)", "CAST(\"32767\" AS Int16)"}},
+        {"Uint16", "Uint16", {"CAST(\"0\" AS Uint16)", "CAST(\"65535\" AS Uint16)"}},
         {"Int32", "Int32", {"CAST(\"-2147483648\" AS Int32)", "CAST(\"2147483647\" AS Int32)"}},
         {"Int64", "Int64", {"CAST(\"-9223372036854775808\" AS Int64)", "CAST(\"9223372036854775807\" AS Int64)"}},
         {"Uint32", "Uint32", {"CAST(\"0\" AS Uint32)", "CAST(\"4294967295\" AS Uint32)"}},
         {"Uint64", "Uint64", {"CAST(\"0\" AS Uint64)", "CAST(\"18446744073709551615\" AS Uint64)"}},
         {"Bool", "Bool", {"false", "true"}},
         {"Date", "Date", {"Date(\"1970-01-01\")", "Date(\"2105-12-31\")"}},
+        {"Datetime", "Datetime", {"Datetime(\"1970-01-01T00:00:00Z\")", "Datetime(\"2105-12-31T23:59:59Z\")"}},
+        {"Timestamp", "Timestamp", {"Timestamp(\"1970-01-01T00:00:00.000000Z\")", "Timestamp(\"2105-12-31T23:59:59.999999Z\")"}},
+        {"Interval", "Interval", {"Interval(\"P1D\")", "Interval(\"P365D\")"}},
+        {"Date32", "Date32", {"Date32(\"-9999-01-01\")", "Date32(\"9999-12-31\")"}},
+        {"Datetime64", "Datetime64", {"Datetime64(\"-9999-01-01T00:00:00Z\")", "Datetime64(\"9999-12-31T23:59:59Z\")"}},
+        {"Timestamp64", "Timestamp64", {"Timestamp64(\"-9999-01-01T00:00:00.000000Z\")", "Timestamp64(\"9999-12-31T23:59:59.999999Z\")"}},
+        {"Interval64", "Interval64", {"Interval64(\"P1D\")", "Interval64(\"P10000D\")"}},
         {"Utf8", "Utf8", {"Utf8(\"\")", "Utf8(\"Москва-日本-🙂\")", TStringBuilder() << "Utf8(\"" << longValue << "\")"}},
         {"String", "String", {"\"\"", "\"Москва-日本-🙂\"", TStringBuilder() << "\"" << longValue << "\""}},
+        {"Decimal", "Decimal(22, 9)", {"CAST(\"-9999999999999.123456789\" AS Decimal(22, 9))", "CAST(\"9999999999999.123456789\" AS Decimal(22, 9))"}},
+        {"DyNumber", "DyNumber", {"DyNumber(\"-1e100\")", "DyNumber(\"1e100\")"}},
+        {"Uuid", "Uuid", {"Uuid(\"00000000-0000-0000-0000-000000000000\")", "Uuid(\"ffffffff-ffff-ffff-ffff-ffffffffffff\")"}},
     };
 
     auto exec = [&](const TString& query) {
@@ -4417,6 +4533,116 @@ Y_UNIT_TEST_TWIN(SelectWithFulltextMatchPrefixedKeyTypeBoundaries, Compact) {
                 NYdb::FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+}
+
+Y_UNIT_TEST(PrefixedRejectsNonKeyTypes) {
+    auto kikimr = KikimrPrefix(false);
+    auto db = kikimr.GetQueryClient();
+
+    // Keep this list aligned with the native (non-PG) exclusions in IsAllowedKeyType().
+    for (const TString& type : {
+            TString("Float"), TString("Double"), TString("Yson"), TString("Json"), TString("JsonDocument")}) {
+        const TString table = TStringBuilder() << "/Root/BadPrefix" << type;
+        auto create = db.ExecuteQuery(TStringBuilder() << "CREATE TABLE `" << table << "` ("
+            << "Key Uint64, Prefix " << type << ", Text Utf8, PRIMARY KEY (Key));",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(create.GetStatus(), EStatus::SUCCESS, create.GetIssues().ToString());
+
+        auto add = db.ExecuteQuery(TStringBuilder() << "ALTER TABLE `" << table << "` ADD INDEX fulltext_idx "
+            << "GLOBAL USING fulltext_plain ON (Prefix, Text) "
+            << "WITH (tokenizer=standard, use_filter_lowercase=true);",
+            NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_C(!add.IsSuccess(), type << ": " << add.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS_C(add.GetIssues().ToString(), "wrong key type", type);
+    }
+}
+
+Y_UNIT_TEST_TWIN(PrefixedOneTwoThreeColumnsParameterizedOracle, Compact) {
+    auto kikimr = KikimrPrefix(Compact);
+    auto db = kikimr.GetQueryClient();
+
+    auto exec = [&](const TString& query) {
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    };
+    exec(R"sql(
+        CREATE TABLE `/Root/PrefixArity` (
+            Key Uint64,
+            P1 Int16,
+            P2 Utf8,
+            P3 Uint8,
+            Text Utf8,
+            PRIMARY KEY (Key)
+        );
+    )sql");
+    exec(R"sql(
+        UPSERT INTO `/Root/PrefixArity` (Key, P1, P2, P3, Text) VALUES
+            (1, 7, "blue", 3, "cats exact one"),
+            (2, 7, "blue", 4, "cats exact two"),
+            (3, 7, "red",  3, "cats exact three"),
+            (4, 8, "blue", 3, "cats exact four"),
+            (5, 7, "blue", 3, "dogs control");
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/PrefixArity` ADD INDEX idx1
+            GLOBAL USING fulltext_plain ON (P1, Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/PrefixArity` ADD INDEX idx2
+            GLOBAL USING fulltext_plain ON (P1, P2, Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+    exec(R"sql(
+        ALTER TABLE `/Root/PrefixArity` ADD INDEX idx3
+            GLOBAL USING fulltext_plain ON (P1, P2, P3, Text)
+            WITH (tokenizer=standard, use_filter_lowercase=true);
+    )sql");
+
+    auto params = TParamsBuilder()
+        .AddParam("$p1").Int16(7).Build()
+        .AddParam("$p2").Utf8("blue").Build()
+        .AddParam("$p3").Uint8(3).Build()
+        .Build();
+    auto compareWithPrimary = [&](const TString& indexed, const TString& primary) {
+        auto indexResult = db.ExecuteQuery(indexed, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(indexResult.GetStatus(), EStatus::SUCCESS, indexResult.GetIssues().ToString());
+        auto primaryResult = db.ExecuteQuery(primary, NYdb::NQuery::TTxControl::NoTx(), params).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(primaryResult.GetStatus(), EStatus::SUCCESS, primaryResult.GetIssues().ToString());
+        CompareYson(FormatResultSetYson(primaryResult.GetResultSet(0)),
+            FormatResultSetYson(indexResult.GetResultSet(0)));
+    };
+
+    // Parameter declarations and predicates are intentionally in reverse prefix order.
+    compareWithPrimary(R"sql(
+        DECLARE $p3 AS Uint8; DECLARE $p2 AS Utf8; DECLARE $p1 AS Int16;
+        SELECT Key FROM `/Root/PrefixArity` VIEW idx1
+        WHERE P1 = $p1 AND FulltextMatch(Text, "cats") ORDER BY Key;
+    )sql", R"sql(
+        DECLARE $p3 AS Uint8; DECLARE $p2 AS Utf8; DECLARE $p1 AS Int16;
+        SELECT Key FROM `/Root/PrefixArity` VIEW PRIMARY KEY
+        WHERE P1 = $p1 AND Text LIKE "%cats%" ORDER BY Key;
+    )sql");
+    compareWithPrimary(R"sql(
+        DECLARE $p3 AS Uint8; DECLARE $p2 AS Utf8; DECLARE $p1 AS Int16;
+        SELECT Key FROM `/Root/PrefixArity` VIEW idx2
+        WHERE P2 = $p2 AND P1 = $p1 AND FulltextMatch(Text, "cats") ORDER BY Key;
+    )sql", R"sql(
+        DECLARE $p3 AS Uint8; DECLARE $p2 AS Utf8; DECLARE $p1 AS Int16;
+        SELECT Key FROM `/Root/PrefixArity` VIEW PRIMARY KEY
+        WHERE P2 = $p2 AND P1 = $p1 AND Text LIKE "%cats%" ORDER BY Key;
+    )sql");
+    compareWithPrimary(R"sql(
+        DECLARE $p3 AS Uint8; DECLARE $p2 AS Utf8; DECLARE $p1 AS Int16;
+        SELECT Key FROM `/Root/PrefixArity` VIEW idx3
+        WHERE P3 = $p3 AND P2 = $p2 AND P1 = $p1
+            AND FulltextMatch(Text, "cats") ORDER BY Key;
+    )sql", R"sql(
+        DECLARE $p3 AS Uint8; DECLARE $p2 AS Utf8; DECLARE $p1 AS Int16;
+        SELECT Key FROM `/Root/PrefixArity` VIEW PRIMARY KEY
+        WHERE P3 = $p3 AND P2 = $p2 AND P1 = $p1
+            AND Text LIKE "%cats%" ORDER BY Key;
+    )sql");
 }
 
 Y_UNIT_TEST(SelectWithFulltextRelevancePrefixedPerPrefixStats) {

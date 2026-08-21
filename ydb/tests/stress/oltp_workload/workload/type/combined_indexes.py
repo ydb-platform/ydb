@@ -76,9 +76,9 @@ class WorkloadCombinedIndexes(WorkloadBase):
         # The kmeans build needs a non-empty training set; fulltext build also backfills these rows and
         # auto-provisions __ydb_row_id because the primary key is Utf8. Keep ephemeral rows pre-created:
         # a Query Service transaction that DELETEs a missing row and UPSERTs a new row after row-id
-        # provisioning currently reproduces kqp_write_actor::HandleGenSequence task bookkeeping panic.
-        # UPDATE below still exercises DML generations and row-id stability without masking that separate
-        # production bug inside a nightly workload that must remain runnable.
+        # provisioning historically exposed kqp_write_actor::HandleGenSequence task bookkeeping. That
+        # lifecycle now has a focused C++ regression test; UPDATE below keeps this mixed nightly workload
+        # deterministic while exercising DML generations and row-id stability.
         self._create_fulltext_index(table)
         self._create_vector_index(table)
 

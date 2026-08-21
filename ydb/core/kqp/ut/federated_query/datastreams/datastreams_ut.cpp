@@ -1614,7 +1614,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "pq_source"_a = sourceName
         ));
 
-        // Check successful EDS creation with overriden RESOURCE_ID
+        // Check successful EDS creation with overridden RESOURCE_ID
         ExecQuery(fmt::format(
                 R"(
                 CREATE EXTERNAL DATA SOURCE `{pq_source}` WITH (

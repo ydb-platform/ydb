@@ -126,7 +126,8 @@ public:
                                    const TString& host, const TString& date, const TString& userAgent,
                                    const TString& acceptEncoding,
                                    const IOutputStream::TPart& body, const TString& authorizationStr,
-                                   const TString& contentType = "application/json");
+                                   const TString& contentType = "application/json",
+                                   const TVector<std::pair<TString, TString>>& extraHeaders = {});
 
     THttpResult SendHttpRequest(const TString& handler, const TString& target, NJson::TJsonValue value,
                                 const TString& authorizationStr,
@@ -140,7 +141,8 @@ public:
     THttpResult SendHttpRequestSpecified(const TString& handler, const TString& target, NJson::TJsonValue value,
                                 const TString& host, const TString& date, const TString& userAgent,
                                 const TString& acceptEncoding, const TString& authorizationStr,
-                                const TString& contentType = "application/json");
+                                const TString& contentType = "application/json",
+                                const TVector<std::pair<TString, TString>>& extraHeaders = {});
 
     THttpResult SendPing();
 

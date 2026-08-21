@@ -2669,9 +2669,10 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 .EndStruct();
         };
         addRow(1, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
-        addRow(2, std::numeric_limits<float>::infinity(), std::numeric_limits<double>::infinity());
-        addRow(3, -std::numeric_limits<float>::infinity(), -std::numeric_limits<double>::infinity());
-        addRow(4, -0.0f, -0.0);
+        addRow(2, -std::numeric_limits<float>::quiet_NaN(), -std::numeric_limits<double>::quiet_NaN());
+        addRow(3, std::numeric_limits<float>::infinity(), std::numeric_limits<double>::infinity());
+        addRow(4, -std::numeric_limits<float>::infinity(), -std::numeric_limits<double>::infinity());
+        addRow(5, -0.0f, -0.0);
 
         auto upsertResult = tableClient.BulkUpsert(table, rowsBuilder.EndList().Build()).ExtractValueSync();
         UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
@@ -2704,6 +2705,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             return std::pair(*floatValue, *doubleValue);
         };
 
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT(std::isnan(floatValue));
+            UNIT_ASSERT(std::isnan(doubleValue));
+        }
         {
             const auto [floatValue, doubleValue] = readValues();
             UNIT_ASSERT(std::isnan(floatValue));

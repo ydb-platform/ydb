@@ -26,15 +26,15 @@ struct TEvDbsControllerPrivate
         EvGetPartitionsForNodeRequest,
         EvGetPartitionsForNodeResponse,
 
-        EvGetNodesForPartitionRequest,
-        EvGetNodesForPartitionResponse,
+        EvRemoveTabletDDiskMapRequest,
+        EvRemoveTabletDDiskMapResponse,
 
         EvEnd,
     };
 
     BLOCKSTORE_DECLARE_PROTO_EVENTS(UpdateDDiskMap)
     BLOCKSTORE_DECLARE_PROTO_EVENTS(GetPartitionsForNode)
-    BLOCKSTORE_DECLARE_PROTO_EVENTS(GetNodesForPartition)
+    BLOCKSTORE_DECLARE_PROTO_EVENTS(RemoveTabletDDiskMap)
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -67,8 +67,8 @@ private:
         const TEvDbsControllerPrivate::TEvUpdateDDiskMapRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
-    void HandleGetNodesForPartitionRequest(
-        const TEvDbsControllerPrivate::TEvGetNodesForPartitionRequest::TPtr& ev,
+    void HandleRemoveTabletDDiskMapRequest(
+        const TEvDbsControllerPrivate::TEvRemoveTabletDDiskMapRequest::TPtr& ev,
         const NActors::TActorContext& ctx);
 
     void HandleGetPartitionsForNodeRequest(

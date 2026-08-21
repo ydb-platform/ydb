@@ -6,7 +6,7 @@ namespace NKikimr::NConveyorComposite {
 
 TDuration TWorker::GetWakeupDuration() const {
     AFL_VERIFY(ExecutionDuration);
-    return (*ExecutionDuration) * (1 - CPUSoftLimit) / CPUSoftLimit;
+    return (*ExecutionDuration) * (1 - CPULimit) / CPULimit;
 }
 
 void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
@@ -19,33 +19,29 @@ void TWorker::ExecuteTask(std::vector<TWorkerTask>&& workerTasks) {
         t.GetTask()->Execute(t.GetTaskSignals(), t.GetTask());
         results.emplace_back(t.GetResult(start, TMonotonic::Now()));
     }
-    if (CPUSoftLimit < 1) {
+    if (CPULimit < 1) {
         YDB_LOG_DEBUG("",
             {"action", "to_wait_result"},
             {"id", SelfId()},
             {"count", workerTasks.size()});
         ExecutionDuration = TMonotonic::Now() - startGlobal;
         Results = std::move(results);
-        Schedule(GetWakeupDuration(), new NActors::TEvents::TEvWakeup(CPULimitGeneration));
+        Schedule(GetWakeupDuration(), new NActors::TEvents::TEvWakeup());
         WaitWakeUp = true;
     } else {
         AFL_VERIFY(!!ForwardDuration);
         YDB_LOG_DEBUG("",
             {"action", "to_result"},
             {"id", SelfId()},
-            {"count", Results.size()},
+            {"count", results.size()},
             {"d", TMonotonic::Now() - startGlobal});
         TBase::Sender<TEvInternal::TEvTaskProcessedResult>(std::move(results), *ForwardDuration, WorkerIdx, WorkersPoolId).SendTo(DistributorId);
         ForwardDuration.reset();
     }
 }
 
-void TWorker::HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev) {
-    const auto evGeneration = ev->Get()->Tag;
-    AFL_VERIFY(evGeneration <= CPULimitGeneration);
-    if (evGeneration == CPULimitGeneration) {
-        OnWakeup();
-    }
+void TWorker::HandleMain(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
+    OnWakeup();
 }
 
 void TWorker::OnWakeup() {
@@ -62,13 +58,46 @@ void TWorker::OnWakeup() {
     ExecutionDuration.reset();
 
     WaitWakeUp = false;
+    if (StopRequested) {
+        Stop();
+    }
 }
 
 void TWorker::HandleMain(TEvInternal::TEvNewTask::TPtr& ev) {
     AFL_VERIFY(!WaitWakeUp);
+    AFL_VERIFY(!StopRequested);
     const TMonotonic now = TMonotonic::Now();
     ForwardDuration = now - ev->Get()->GetConstructInstant();
     ExecuteTask(ev->Get()->ExtractTasks());
+}
+
+void TWorker::HandleMain(TEvInternal::TEvUpdateWorkerCPULimit::TPtr& ev) {
+    const double newLimit = ev->Get()->NewLimit;
+    AFL_VERIFY(0 < newLimit && newLimit <= 1)("new_limit", newLimit);
+    CPULimit = newLimit;
+    Send(DistributorId, new TEvInternal::TEvWorkerCPULimitUpdated(WorkersPoolId, WorkerIdx));
+}
+
+void TWorker::HandleMain(TEvInternal::TEvRetireWorker::TPtr& /*ev*/) {
+    if (StopRequested) {
+        return;
+    }
+
+    StopRequested = true;
+    if (!WaitWakeUp) {
+        Stop();
+    }
+}
+
+void TWorker::Stop() {
+    AFL_VERIFY(StopRequested);
+    AFL_VERIFY(!WaitWakeUp);
+    AFL_VERIFY(!ExecutionDuration);
+    AFL_VERIFY(Results.empty());
+    AFL_VERIFY(!ForwardDuration);
+
+    Send(DistributorId, new TEvInternal::TEvWorkerStopped(WorkersPoolId, WorkerIdx));
+    PassAway();
 }
 
 }

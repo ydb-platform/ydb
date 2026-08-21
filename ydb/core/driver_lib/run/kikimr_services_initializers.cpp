@@ -2734,7 +2734,7 @@ TCompositeConveyorInitializer::TCompositeConveyorInitializer(const TKikimrRunCon
 }
 
 void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    const NKikimrConfig::TCompositeConveyorConfig protoConfig = [&]() {
+    NKikimrConfig::TCompositeConveyorConfig protoConfig = [&]() {
         if (Config.HasCompositeConveyorConfig()) {
             return Config.GetCompositeConveyorConfig();
         }
@@ -2833,7 +2833,8 @@ void TCompositeConveyorInitializer::InitializeServices(NActors::TActorSystemSetu
     if (serviceConfig.IsFail()) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "cannot parse composite conveyor config")("action", "default_usage")(
             "error", serviceConfig.GetErrorMessage())("default", NConveyorComposite::NConfig::TConfig::BuildDefault().DebugString());
-        serviceConfig = NConveyorComposite::NConfig::TConfig::BuildDefault();
+        protoConfig = NConveyorComposite::NConfig::TConfig::BuildDefaultProto();
+        serviceConfig = NConveyorComposite::NConfig::TConfig::BuildFromProto(protoConfig);
     }
     AFL_VERIFY(!serviceConfig.IsFail());
 

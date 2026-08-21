@@ -19,9 +19,6 @@ TDistributor::TDistributor(const NConfig::TConfig& config, TIntrusivePtr<::NMoni
     , Counters(ConveyorName, conveyorSignals) {
 }
 
-TDistributor::~TDistributor() {
-}
-
 void TDistributor::Bootstrap() {
     NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YDB_CONVEYOR_COMPOSITE_PROVIDER));
     Manager = std::make_unique<TTasksManager>(ConveyorName, Config, SelfId(), Counters);
@@ -32,6 +29,138 @@ void TDistributor::Bootstrap() {
         {"actorId", SelfId()},
         {"manager", Manager->DebugString()});
     Become(&TDistributor::StateMain);
+    SubscribeToCompositeConveyorConfig();
+}
+
+void TDistributor::SubscribeToCompositeConveyorConfig() {
+    Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
+        new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+            (ui32)NKikimrConsole::TConfigItem::CompositeConveyorConfigItem),
+        NActors::IEventHandle::FlagTrackDelivery);
+}
+
+void TDistributor::ScheduleConfigSubscriptionRetry() {
+    Schedule(TDuration::Seconds(1), new TEvInternal::TEvRetryConfigSubscription());
+}
+
+void TDistributor::HandleMain(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr& /*ev*/) {
+    YDB_LOG_DEBUG("",
+        {"name", ConveyorName},
+        {"action", "subscribed_for_composite_conveyor_config"});
+}
+
+void TDistributor::HandleMain(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    auto& record = ev->Get()->Record;
+    const auto& appConfig = record.GetConfig();
+
+    if (!appConfig.HasCompositeConveyorConfig()) {
+        ReplyConfigNotification(ev);
+        return;
+    }
+
+    const auto& candidateProto = appConfig.GetCompositeConveyorConfig();
+    YDB_LOG_INFO("",
+        {"name", ConveyorName},
+        {"action", "composite_conveyor_config_received"},
+        {"hasConfig", true});
+
+    auto configConclusion = NConfig::TConfig::BuildFromProto(candidateProto);
+    if (configConclusion.IsFail()) {
+        YDB_LOG_ERROR("",
+            {"name", ConveyorName},
+            {"action", "composite_conveyor_config_rejected"},
+            {"error", configConclusion.GetErrorMessage()});
+        ReplyConfigNotification(ev);
+        return;
+    }
+
+    auto desiredConfig = configConclusion.DetachResult();
+    auto validation = Manager->ValidateConfigUpdate(desiredConfig);
+    if (validation.IsFail()) {
+        YDB_LOG_ERROR("",
+            {"name", ConveyorName},
+            {"action", "composite_conveyor_config_update_rejected"},
+            {"error", validation.GetErrorMessage()});
+        ReplyConfigNotification(ev);
+        return;
+    }
+
+    if (PendingConfigNotification) {
+        YDB_LOG_INFO("",
+            {"name", ConveyorName},
+            {"action", "composite_conveyor_config_update_queued"});
+        QueuedConfigNotification = std::move(ev);
+        return;
+    }
+    PendingConfigNotification = std::move(ev);
+    if (Manager->StartConfigUpdate(desiredConfig, SelfId(), Counters)) {
+        CompleteConfigUpdate();
+    }
+    Y_UNUSED(Manager->DrainTasks());
+}
+
+void TDistributor::ReplyConfigNotification(const NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
+    auto response = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(ev->Get()->Record);
+    Send(ev->Sender, response.Release(), NActors::IEventHandle::FlagTrackDelivery, ev->Cookie);
+}
+
+void TDistributor::CompleteConfigUpdate() {
+    AFL_VERIFY(PendingConfigNotification);
+    AFL_VERIFY(!Manager->HasWorkersUpdateInProgress());
+
+    if (QueuedConfigNotification) {
+        PendingConfigNotification.Reset();
+        auto queuedConfigNotification = std::move(QueuedConfigNotification);
+        HandleMain(queuedConfigNotification);
+        return;
+    }
+
+    ReplyConfigNotification(PendingConfigNotification);
+    PendingConfigNotification.Reset();
+}
+
+void TDistributor::HandleMain(NActors::TEvents::TEvUndelivered::TPtr& ev) {
+    switch (ev->Get()->SourceType) {
+        case NConsole::TEvConfigsDispatcher::EvSetConfigSubscriptionRequest:
+            YDB_LOG_WARN("",
+                {"name", ConveyorName},
+                {"action", "composite_conveyor_config_subscription_undelivered"});
+            ScheduleConfigSubscriptionRetry();
+            break;
+        case NConsole::TEvConsole::EvConfigNotificationResponse:
+            YDB_LOG_WARN("",
+                {"name", ConveyorName},
+                {"action", "composite_conveyor_config_response_undelivered"});
+            ScheduleConfigSubscriptionRetry();
+            break;
+        default:
+            YDB_LOG_WARN("",
+                {"name", ConveyorName},
+                {"action", "unexpected_undelivered_event"},
+                {"sourceType", ev->Get()->SourceType});
+            break;
+    }
+}
+
+void TDistributor::HandleMain(TEvInternal::TEvRetryConfigSubscription::TPtr& /*ev*/) {
+    YDB_LOG_WARN("",
+        {"name", ConveyorName},
+        {"action", "retry_composite_conveyor_config_subscription"});
+    SubscribeToCompositeConveyorConfig();
+}
+
+void TDistributor::HandleMain(TEvInternal::TEvWorkerCPULimitUpdated::TPtr& ev) {
+    if (Manager->OnWorkerCPULimitUpdated(*ev->Get())) {
+        CompleteConfigUpdate();
+    }
+    Y_UNUSED(Manager->DrainTasks());
+}
+
+void TDistributor::HandleMain(TEvInternal::TEvWorkerStopped::TPtr& ev) {
+    if (Manager->OnWorkerStopped(*ev->Get())) {
+        CompleteConfigUpdate();
+    }
+    Y_UNUSED(Manager->DrainTasks());
 }
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
@@ -55,11 +184,9 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
     workersPool.GetCounters()->SendFwdDuration->Add(ev.GetForwardSendDuration().MicroSeconds());
 
     workersPool.AddDeliveryDuration(ev.GetForwardSendDuration() + backSendDuration);
-    workersPool.ReleaseWorker(ev.GetWorkerIdx());
     workersPool.PutTaskResults(ev.DetachResults(), ev.GetWorkersPoolId(), ev.GetWorkerIdx());
-    if (workersPool.HasTasks()) {
-        AFL_VERIFY(workersPool.DrainTasks());
-    }
+    workersPool.ReleaseWorker(ev.GetWorkerIdx());
+    Y_UNUSED(Manager->DrainTasks());
 }
 
 void TDistributor::HandleMain(TEvExecution::TEvRegisterProcess::TPtr& ev) {

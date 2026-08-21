@@ -4,6 +4,7 @@
 #include "helpers/writer.h"
 
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <util/generic/size_literals.h>
 #include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
@@ -744,6 +745,59 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         ExecuteScanQuery(tableClient, "SELECT * FROM `/Root/olapStore/olapTable`");
+    }
+
+    // 257 indexes on a single-shard table: every index is emitted per source chunk under the testing blob
+    // limit, the portion metadata holds blob references only.
+    Y_UNIT_TEST(ManyIndexesOnOneShardAreSplit) {
+        constexpr ui32 IndexesCount = 257;
+        constexpr ui32 FilterSize = 1_MB;
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        olapHelper.CreateTestOlapTable("olapTable", "olapStore", 1, 1);
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+        for (ui32 i = 0; i < IndexesCount; ++i) {
+            auto alterQuery = TStringBuilder()
+                << "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_split_" << i
+                << ", TYPE=BLOOM_NGRAMM_FILTER, FEATURES=`{\"column_name\" : \"uid\", \"ngramm_size\" : 3, \"hashes_count\" : 2, "
+                << "\"filter_size_bytes\" : " << FilterSize << ", \"records_count\" : 1000000}`);";
+            auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
+        }
+
+        for (ui64 i = 0; i < 10; ++i) {
+            WriteTestData(testHelper.GetKikimr(), DEFAULT_TABLE_PATH, 0, 3600000000 + i * 10000, 1000);
+        }
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        testHelper.SetTiering(DEFAULT_TABLE_PATH, DEFAULT_TIER_PATH, DEFAULT_COLUMN_NAME);
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier(DEFAULT_TIER_PATH);
+
+        {
+            auto selectQuery = TStringBuilder() << R"(
+                SELECT EntityName, MAX(Chunks) AS MaxChunks FROM (
+                    SELECT EntityName, TabletId, PortionId, COUNT(*) AS Chunks
+                    FROM `/Root/olapStore/olapTable/.sys/primary_index_stats`
+                    WHERE Activity == 1 AND EntityName LIKE "index_split_%"
+                    GROUP BY EntityName, TabletId, PortionId
+                ) GROUP BY EntityName
+            )";
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), IndexesCount);
+            for (auto& row : rows) {
+                UNIT_ASSERT_GT(GetUint64(row.at("MaxChunks")), 1);
+            }
+        }
+        auto total = ExecuteScanQuery(tableClient, "SELECT COUNT(*) AS Cnt FROM `/Root/olapStore/olapTable`");
+        auto matched = ExecuteScanQuery(tableClient, "SELECT COUNT(*) AS Cnt FROM `/Root/olapStore/olapTable` WHERE uid LIKE \"%uid_%\"");
+        UNIT_ASSERT_VALUES_EQUAL(GetUint64(matched[0].at("Cnt")), GetUint64(total[0].at("Cnt")));
     }
 
     Y_UNIT_TEST_DUO(MinMaxIndexInheritsTiering, InheritPortionStorage) {

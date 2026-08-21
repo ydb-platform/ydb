@@ -11,7 +11,7 @@
 #include <library/cpp/string_utils/quote/quote.h>
 
 #include <limits>
-#include <cmath>
+#include <type_traits>
 
 namespace NYdb::NBackup {
 
@@ -44,6 +44,18 @@ TString TQueryBuilder::BuildQuery(const TString &path) {
 
 template<typename T>
 T TryParse(const TStringBuf& buf) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (buf == "nan" || buf == "-nan") {
+            return std::numeric_limits<T>::quiet_NaN();
+        }
+        if (buf == "inf") {
+            return std::numeric_limits<T>::infinity();
+        }
+        if (buf == "-inf") {
+            return -std::numeric_limits<T>::infinity();
+        }
+    }
+
     T tmp;
     TMemoryInput stream(buf);
     stream >> tmp;
@@ -69,40 +81,6 @@ TInstant TryParse(const TStringBuf& buf) {
 template<>
 bool TryParse(const TStringBuf& buf) {
     return TryParse<ui32>(buf) ? true : false;
-}
-
-template<>
-float TryParse(const TStringBuf& buf) {
-    if (buf == "nan" || buf == "-nan") {
-        return std::numeric_limits<float>::quiet_NaN();
-    }
-    if (buf == "inf") {
-        return std::numeric_limits<float>::infinity();
-    }
-    if (buf == "-inf") {
-        return -std::numeric_limits<float>::infinity();
-    }
-    float tmp;
-    TMemoryInput stream(buf);
-    stream >> tmp;
-    return tmp;
-}
-
-template<>
-double TryParse(const TStringBuf& buf) {
-    if (buf == "nan" || buf == "-nan") {
-        return std::numeric_limits<double>::quiet_NaN();
-    }
-    if (buf == "inf") {
-        return std::numeric_limits<double>::infinity();
-    }
-    if (buf == "-inf") {
-        return -std::numeric_limits<double>::infinity();
-    }
-    double tmp;
-    TMemoryInput stream(buf);
-    stream >> tmp;
-    return tmp;
 }
 
 void TQueryBuilder::AddPrimitiveMember(EPrimitiveType type, TStringBuf buf) {

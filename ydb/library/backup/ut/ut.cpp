@@ -369,7 +369,7 @@ Y_UNIT_TEST(ResultSetFloatPrintTest) {
 
 Y_UNIT_TEST(ParseFloatNanInfFromString) {
     // Verify that ydb tools restore can parse float/double special values
-    // produced by ydb tools dump (nan, -nan, inf, -inf)
+    // produced by ydb tools dump (nan, -nan, inf, -inf, -0.0)
     auto tableDesc = NTable::TTableBuilder()
         .AddNullableColumn("ColFloat", EPrimitiveType::Float)
         .AddNullableColumn("ColDouble", EPrimitiveType::Double)
@@ -382,6 +382,7 @@ Y_UNIT_TEST(ParseFloatNanInfFromString) {
     qb.AddLine("-nan,-nan");
     qb.AddLine("inf,inf");
     qb.AddLine("-inf,-inf");
+    qb.AddLine("-0.0,-0.0");
     qb.AddLine("1.5,2.5");
     TParams params = qb.EndAndGetResultingParams();
 
@@ -445,7 +446,24 @@ Y_UNIT_TEST(ParseFloatNanInfFromString) {
     parser.CloseOptional();
     parser.CloseStruct();
 
-    // Row 4: 1.5, 2.5
+    // Row 4: -0.0, -0.0
+    UNIT_ASSERT(parser.TryNextListItem());
+    parser.OpenStruct();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    const auto floatValue = parser.GetFloat();
+    UNIT_ASSERT_EQUAL(floatValue, 0.0f);
+    UNIT_ASSERT(std::signbit(floatValue));
+    parser.CloseOptional();
+    UNIT_ASSERT(parser.TryNextMember());
+    parser.OpenOptional();
+    const auto doubleValue = parser.GetDouble();
+    UNIT_ASSERT_EQUAL(doubleValue, 0.0);
+    UNIT_ASSERT(std::signbit(doubleValue));
+    parser.CloseOptional();
+    parser.CloseStruct();
+
+    // Row 5: 1.5, 2.5
     UNIT_ASSERT(parser.TryNextListItem());
     parser.OpenStruct();
     UNIT_ASSERT(parser.TryNextMember());

@@ -38,6 +38,10 @@
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 
+#include <cmath>
+#include <limits>
+#include <utility>
+
 using namespace NYdb;
 using namespace NYdb::NOperation;
 using namespace NYdb::NRateLimiter;
@@ -2631,6 +2635,104 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
             CompareResults(newContent, originalContent);
         }
+    }
+
+    Y_UNIT_TEST(BackupFloatSpecialValues) {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        constexpr const char* dbPath = "/Root";
+        constexpr const char* table = "/Root/table";
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    FloatValue Float,
+                    DoubleValue Double,
+                    PRIMARY KEY (Key)
+                )
+            )", table
+        ));
+
+        TValueBuilder rowsBuilder;
+        rowsBuilder.BeginList();
+        const auto addRow = [&rowsBuilder](ui32 key, float floatValue, double doubleValue) {
+            rowsBuilder.AddListItem()
+                .BeginStruct()
+                    .AddMember("Key").Uint32(key)
+                    .AddMember("FloatValue").Float(floatValue)
+                    .AddMember("DoubleValue").Double(doubleValue)
+                .EndStruct();
+        };
+        addRow(1, std::numeric_limits<float>::quiet_NaN(), std::numeric_limits<double>::quiet_NaN());
+        addRow(2, -std::numeric_limits<float>::quiet_NaN(), -std::numeric_limits<double>::quiet_NaN());
+        addRow(3, std::numeric_limits<float>::infinity(), std::numeric_limits<double>::infinity());
+        addRow(4, -std::numeric_limits<float>::infinity(), -std::numeric_limits<double>::infinity());
+        addRow(5, -0.0f, -0.0);
+
+        auto upsertResult = tableClient.BulkUpsert(table, rowsBuilder.EndList().Build()).ExtractValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Dump(dbPath, pathToBackup, NDump::TDumpSettings().Database(dbPath));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                DROP TABLE `%s`;
+            )", table
+        ));
+
+        {
+            const auto result = backupClient.Restore(pathToBackup, dbPath);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const auto content = GetTableContent(session, table);
+        TResultSetParser parser(content.GetResultSet(0));
+
+        const auto readValues = [&parser]() {
+            UNIT_ASSERT(parser.TryNextRow());
+            const auto floatValue = parser.ColumnParser("FloatValue").GetOptionalFloat();
+            const auto doubleValue = parser.ColumnParser("DoubleValue").GetOptionalDouble();
+            UNIT_ASSERT(floatValue);
+            UNIT_ASSERT(doubleValue);
+            return std::pair(*floatValue, *doubleValue);
+        };
+
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT(std::isnan(floatValue));
+            UNIT_ASSERT(std::isnan(doubleValue));
+        }
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT(std::isnan(floatValue));
+            UNIT_ASSERT(std::isnan(doubleValue));
+        }
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT(std::isinf(floatValue) && floatValue > 0);
+            UNIT_ASSERT(std::isinf(doubleValue) && doubleValue > 0);
+        }
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT(std::isinf(floatValue) && floatValue < 0);
+            UNIT_ASSERT(std::isinf(doubleValue) && doubleValue < 0);
+        }
+        {
+            const auto [floatValue, doubleValue] = readValues();
+            UNIT_ASSERT_EQUAL(floatValue, 0.0f);
+            UNIT_ASSERT_EQUAL(doubleValue, 0.0);
+            UNIT_ASSERT(std::signbit(floatValue));
+            UNIT_ASSERT(std::signbit(doubleValue));
+        }
+        UNIT_ASSERT(!parser.TryNextRow());
     }
 
     // TO DO: test index impl table split boundaries restoration from a backup

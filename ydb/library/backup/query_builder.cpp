@@ -10,6 +10,9 @@
 #include <util/string/builder.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
+#include <limits>
+#include <type_traits>
+
 namespace NYdb::NBackup {
 
 static constexpr i64 METERING_ROW_PRECISION = 1024;
@@ -41,6 +44,18 @@ TString TQueryBuilder::BuildQuery(const TString &path) {
 
 template<typename T>
 T TryParse(const TStringBuf& buf) {
+    if constexpr (std::is_floating_point_v<T>) {
+        if (buf == "nan" || buf == "-nan") {
+            return std::numeric_limits<T>::quiet_NaN();
+        }
+        if (buf == "inf") {
+            return std::numeric_limits<T>::infinity();
+        }
+        if (buf == "-inf") {
+            return -std::numeric_limits<T>::infinity();
+        }
+    }
+
     T tmp;
     TMemoryInput stream(buf);
     stream >> tmp;
@@ -262,7 +277,12 @@ void TQueryBuilder::AddLine(TStringBuf line) {
         Y_ENSURE(tok, "Empty token on line");
         TTypeParser type(col.Type);
         Value.AddMember(col.Name);
-        AddMemberFromString(type, TString{col.Name}, tok);
+        try {
+            AddMemberFromString(type, TString{col.Name}, tok);
+        } catch (const std::exception& e) {
+            throw yexception() << "Failed to parse value " << TString{tok}.Quote()
+                << " for column " << TString{col.Name}.Quote() << ": " << e.what();
+        }
     }
     Value.EndStruct();
 }

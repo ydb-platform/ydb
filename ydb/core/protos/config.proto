@@ -1734,6 +1734,8 @@ message TImmediateControlsConfig {
 
         optional TRequestReportingSettings RequestReportingSettings = 12;
 
+        reserved 17; // optional uint64 EnableChecksumCalcAndValidationOnDsProxy
+        reserved "EnableChecksumCalcAndValidationOnDsProxy";
     }
 
     message TPDiskControls {

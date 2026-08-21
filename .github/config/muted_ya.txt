@@ -12,6 +12,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics-ColumnStore
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/persqueue/public/mlp/ut TMLPChangerTests.CommitTest
 ydb/core/persqueue/public/schema/ut DlqAcl.AlterTopicWithMlpConsumerFailsWhenDlqIsACdcStream
+ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithSqsStyleDlqSkipsSchemeCheck
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterCdcAllowsRetentionAndWriteLimits
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMessagesPerSecond
 ydb/core/persqueue/public/schema/ut SchemaOps.CannotChangeConsumerType

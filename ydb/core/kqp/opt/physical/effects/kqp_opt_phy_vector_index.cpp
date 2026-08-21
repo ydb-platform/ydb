@@ -70,8 +70,11 @@ TExprBase BuildVectorIndexPostingRows(const TKikimrTableDescription& table,
         .Done();
 }
 
-TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription& table,
-    const TIndexDescription* indexDesc) {
+TVector<TStringBuf> BuildVectorIndexPostingColumns(
+    const TKikimrTableDescription& table,
+    const TKikimrTableDescription& postingTable,
+    const TIndexDescription* indexDesc)
+{
     TVector<TStringBuf> indexTableColumns;
     THashSet<TStringBuf> indexTableColumnSet;
 
@@ -82,6 +85,13 @@ TVector<TStringBuf> BuildVectorIndexPostingColumns(const TKikimrTableDescription
         if (indexTableColumnSet.insert(column).second) {
             indexTableColumns.emplace_back(column);
         }
+    }
+
+    YQL_ENSURE(!indexDesc->KeyColumns.empty());
+    const auto& embeddingColumn = indexDesc->KeyColumns.back();
+    if (postingTable.Metadata->Columns.contains(embeddingColumn)
+            && indexTableColumnSet.insert(embeddingColumn).second) {
+        indexTableColumns.emplace_back(embeddingColumn);
     }
 
     for (const auto& column : indexDesc->DataColumns) {

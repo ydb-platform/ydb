@@ -456,6 +456,10 @@ struct TUserTable : public TThrRefBase {
     ui32 ShadowTid = 0;
     TString Name;
     TString Path;
+    TPathId VectorIndexTablePathId;
+    TString VectorIndexTablePath;
+    TPathId VectorIndexPathId;
+    TString VectorIndexPath;
     TMap<ui32, TStorageRoom::TPtr> Rooms;
     TMap<ui32, TUserFamily> Families;
     TMap<ui32, TUserColumn> Columns;

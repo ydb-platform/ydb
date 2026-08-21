@@ -90,7 +90,7 @@ public:
 
         const auto& embedding = request.GetEmbeddingColumn();
         NTable::TPos dataPos = 0;
-        ScanTags = MakeScanTags(table, embedding, {}, false, EmbeddingPos, dataPos, InForeign ? &IsForeignPos : nullptr);
+        ScanTags = MakeScanTags(table, embedding, {}, EmbeddingPos, dataPos, InForeign ? &IsForeignPos : nullptr);
         Lead.SetTags(ScanTags);
     }
 

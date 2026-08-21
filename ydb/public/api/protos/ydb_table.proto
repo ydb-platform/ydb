@@ -90,6 +90,16 @@ message VectorIndexSettings {
     optional VectorType vector_type = 2;
 
     optional uint32 vector_dimension = 3;
+
+    // HNSW is used only for partitions with at least this many rows. Smaller
+    // partitions are searched by brute force. The default is 10000 rows.
+    optional uint64 hnsw_min_rows = 4;
+
+    // M, efConstruction and efSearch in nmslib terminology. Defaults preserve
+    // the historical fixed values.
+    optional uint32 hnsw_connectivity = 5;
+    optional uint32 hnsw_construction_candidates = 6;
+    optional uint32 hnsw_search_candidates = 7;
 }
 
 message KMeansTreeSettings {

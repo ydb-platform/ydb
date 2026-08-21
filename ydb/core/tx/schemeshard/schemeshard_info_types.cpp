@@ -1018,6 +1018,28 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->MutableIncrementalBackupConfig()->CopyFrom(cfg);
     }
 
+    // Carried only by the alter that publishes a vector index posting table, so
+    // that FillAlterTableTxBody can forward it to the shard, which needs it to
+    // build an in-memory HNSW index (see FinalizeIndexImplTable).
+    if (op.HasVectorIndexKmeansTreeDescription()) {
+        alterData->TableDescriptionFull->MutableVectorIndexKmeansTreeDescription()->CopyFrom(
+            op.GetVectorIndexKmeansTreeDescription());
+        alterData->TableDescriptionFull->SetVectorIndexEmbeddingColumn(
+            op.GetVectorIndexEmbeddingColumn());
+        if (op.HasVectorIndexEmbeddingColumnId()) {
+            alterData->TableDescriptionFull->SetVectorIndexEmbeddingColumnId(
+                op.GetVectorIndexEmbeddingColumnId());
+        }
+        alterData->TableDescriptionFull->MutableVectorIndexTablePathId()->CopyFrom(
+            op.GetVectorIndexTablePathId());
+        alterData->TableDescriptionFull->SetVectorIndexTablePath(
+            op.GetVectorIndexTablePath());
+        alterData->TableDescriptionFull->MutableVectorIndexPathId()->CopyFrom(
+            op.GetVectorIndexPathId());
+        alterData->TableDescriptionFull->SetVectorIndexPath(
+            op.GetVectorIndexPath());
+    }
+
     alterData->IsBackup = op.GetIsBackup();
     alterData->IsRestore = op.GetIsRestore();
 

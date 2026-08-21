@@ -247,7 +247,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardFilterKMeansScan) {
 
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto posting = DoFilterKMeans(server, sender, NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING, maxBatchRows);
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 1, data = one\n"
                 "__ydb_parent = 41, key = 2, data = two\n"
                 "__ydb_parent = 41, key = 3, data = three\n"
@@ -267,7 +267,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardFilterKMeansScan) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto posting = DoFilterKMeans(server, sender, NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING, maxBatchRows,
                 firstKeyRows);
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 2, data = two\n"
                 "__ydb_parent = 41, key = 3, data = three\n"
 
@@ -285,7 +285,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardFilterKMeansScan) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto posting = DoFilterKMeans(server, sender, NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING, maxBatchRows,
                 {}, lastKeyRows);
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 1, data = one\n"
                 "__ydb_parent = 41, key = 2, data = two\n"
                 "__ydb_parent = 41, key = 3, data = three\n"
@@ -303,7 +303,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardFilterKMeansScan) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto posting = DoFilterKMeans(server, sender, NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING, maxBatchRows,
                 firstKeyRows, lastKeyRows);
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 2, data = two\n"
                 "__ydb_parent = 41, key = 3, data = three\n"
 
@@ -385,7 +385,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardFilterKMeansScan) {
 
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto posting = DoFilterKMeans(server, sender, NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, maxBatchRows);
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 1, __ydb_foreign = 1, embedding = \x10\x80\x02, data = one\n"
                 "__ydb_parent = 41, key = 2, __ydb_foreign = 0, embedding = \x80\x10\x02, data = two\n"
                 "__ydb_parent = 41, key = 3, __ydb_foreign = 0, embedding = \x10\x10\x02, data = three\n"
@@ -405,7 +405,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardFilterKMeansScan) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto posting = DoFilterKMeans(server, sender, NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, maxBatchRows,
                 firstKeyRows);
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 2, __ydb_foreign = 0, embedding = \x80\x10\x02, data = two\n"
                 "__ydb_parent = 41, key = 3, __ydb_foreign = 0, embedding = \x10\x10\x02, data = three\n"
 
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardFilterKMeansScan) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto posting = DoFilterKMeans(server, sender, NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, maxBatchRows,
                 {}, lastKeyRows);
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 1, __ydb_foreign = 1, embedding = \x10\x80\x02, data = one\n"
                 "__ydb_parent = 41, key = 2, __ydb_foreign = 0, embedding = \x80\x10\x02, data = two\n"
                 "__ydb_parent = 41, key = 3, __ydb_foreign = 0, embedding = \x10\x10\x02, data = three\n"
@@ -441,7 +441,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardFilterKMeansScan) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto posting = DoFilterKMeans(server, sender, NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, maxBatchRows,
                 firstKeyRows, lastKeyRows);
-            UNIT_ASSERT_VALUES_EQUAL(posting,
+            AssertPostingTableEqual(posting,
                 "__ydb_parent = 41, key = 2, __ydb_foreign = 0, embedding = \x80\x10\x02, data = two\n"
                 "__ydb_parent = 41, key = 3, __ydb_foreign = 0, embedding = \x10\x10\x02, data = three\n"
 

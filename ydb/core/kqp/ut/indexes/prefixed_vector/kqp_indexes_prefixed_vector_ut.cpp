@@ -389,6 +389,77 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(HnswCacheHonorsPrefixRange) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableDataShardConfig()->SetVectorIndexHnswCacheMaxSize(64_MB);
+        TKikimrRunner kikimr{TKikimrSettings(appConfig)};
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteSchemeQuery(Q_(R"(
+            CREATE TABLE `/Root/HnswPrefix` (
+                pk Int64 NOT NULL,
+                user String NOT NULL,
+                emb String NOT NULL,
+                PRIMARY KEY (pk)
+            );
+        )")).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteDataQuery(Q_(R"(
+            UPSERT INTO `/Root/HnswPrefix` (pk, user, emb) VALUES
+                (1, "user_a", Untag(Knn::ToBinaryStringFloat([-1.0f, 0.0f]), "FloatVector")),
+                (2, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (3, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (4, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (5, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (6, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (7, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (8, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (9, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (10, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (11, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (12, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (13, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (14, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (15, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (16, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (17, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (18, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (19, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector")),
+                (20, "user_b", Untag(Knn::ToBinaryStringFloat([ 1.0f, 0.0f]), "FloatVector"));
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        result = session.ExecuteSchemeQuery(Q_(R"(
+            ALTER TABLE `/Root/HnswPrefix`
+                ADD INDEX index
+                GLOBAL USING vector_kmeans_tree
+                ON (user, emb)
+                WITH (similarity=cosine, vector_type="float", vector_dimension=2,
+                      levels=1, clusters=2, hnsw_min_rows=1);
+        )")).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const TString query(Q_(R"(
+            $target = Knn::ToBinaryStringFloat([1.0f, 0.0f]);
+            SELECT pk FROM `/Root/HnswPrefix` VIEW index
+            WHERE user = "user_a"
+            ORDER BY Knn::CosineDistance(emb, $target)
+            LIMIT 1;
+        )"));
+
+        // There are more closer out-of-prefix rows than the default efSearch.
+        // A restricted read must use the exact range iterator rather than
+        // assuming Search(k = index size) exhausts the HNSW graph.
+        for (ui32 attempt = 0; attempt < 3; ++attempt) {
+            auto queryResult = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_C(queryResult.IsSuccess(), queryResult.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(NYdb::FormatResultSetYson(queryResult.GetResultSet(0)), "[[1]]");
+            Sleep(TDuration::MilliSeconds(500));
+        }
+    }
+
     void DoCheckOverlap(TSession& session, const TString& indexName) {
         // Check number of rows in the posting table (should be 2x input rows)
         {
@@ -977,9 +1048,7 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
             }
         } else {
             const TString updated = ReadTablePartToYson(session, TString(PostingTablePath));
-            if (flags & F_COVERING) {
-                SubstGlobal(orig, "\"\x76\x76\\2\"];[\"19", "\"\x76\x75\\2\"];[\"19");
-            }
+            SubstGlobal(orig, "[91];[\"\x76\x76\\2\"]", "[91];[\"\x76\x75\\2\"]");
             UNIT_ASSERT_STRINGS_EQUAL(orig, updated);
         }
     }

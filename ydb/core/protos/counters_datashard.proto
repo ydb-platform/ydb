@@ -161,6 +161,16 @@ enum ECumulativeCounters {
     COUNTER_CHANGE_QUEUE_OVERFLOW_REJECTS = 116           [(CounterOpts) = {Name: "ChangeQueueOverflowRejects"}];
 }
 
+enum EHnswLabeledCounters {
+    option (GlobalGroupNamesOpts) = {
+        Names: "table_path"
+        Names: "index_path"
+    };
+
+    COUNTER_HNSW_CACHE_HITS = 0   [(LabeledCounterOpts) = {Name: "HnswCacheHits" AggrFunc: EAF_SUM Type: CT_DERIV}];
+    COUNTER_HNSW_CACHE_MISSES = 1 [(LabeledCounterOpts) = {Name: "HnswCacheMisses" AggrFunc: EAF_SUM Type: CT_DERIV}];
+}
+
 enum EPercentileCounters {
     option (GlobalCounterOpts) = {
         Ranges: { Value: 500         Name: "(1) < 500 us"      }

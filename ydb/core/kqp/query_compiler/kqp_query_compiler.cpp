@@ -3029,6 +3029,7 @@ private:
                 copyColumns.insert(keyColumn);
             }
             if (vectorResolve.WithData() == "true") {
+                copyColumns.insert(vectorColumn);
                 for (const auto& dataColumn : indexDesc->DataColumns) {
                     copyColumns.insert(dataColumn);
                 }

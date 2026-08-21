@@ -12,6 +12,8 @@
 
 namespace NKikimr {
 
+void AssertPostingTableEqual(TString actual, const TString& expected);
+
 template <class TResponse>
 typename TResponse::TPtr DoBadRequest(Tests::TServer::TPtr server, TActorId sender,
     std::unique_ptr<NActors::IEventBase> ev, ui64 tabletId,

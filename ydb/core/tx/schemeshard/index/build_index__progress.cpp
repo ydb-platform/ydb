@@ -360,7 +360,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
     NKikimrSchemeOp::TModifyScheme indexBuildProto;
     buildInfo.SerializeToProto(ss, indexBuildProto.MutableInitiateIndexBuild());
     const auto& indexDesc = indexBuildProto.GetInitiateIndexBuild().GetIndex();
-    const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+    THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+    const auto indexColumns = NTableIndex::ExtractInfo(indexDesc);
+    Y_ENSURE(!indexColumns.KeyColumns.empty());
+    indexDataColumns.insert(indexColumns.KeyColumns.back());
 
     auto addCreateTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
         implTableDesc.MutablePartitionConfig()->SetShadowData(true);
@@ -472,9 +475,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     if (buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1 && buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
         // When OverlapClusters is active, first build table for each level contains 2 additional columns: __ydb_distance and __ydb_foreign,
         // and its primary key has different order - original table's primary key comes first and the cluster ID comes next
-        if (buildInfo.KMeans.Level >= buildInfo.KMeans.Levels) {
-            indexDataColumns = THashSet<TString>(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
-        }
         op = NTableIndex::CalcVectorKmeansTreeBuildOverlapTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix);
         // Prevent merging partitions
         auto& policy = *resetPartitionsSettings();

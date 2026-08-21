@@ -91,6 +91,16 @@ namespace {
         return result;
     }
 
+    ui64 ParseUInt64(const TString& name, const TString& value, ui64 minValue, ui64 maxValue, TString& error) {
+        ui64 result = 0;
+        if (!TryFromString(value, result)) {
+            error = TStringBuilder() << "Invalid " << name << ": " << value;
+            return result;
+        }
+        ValidateSettingInRange(name, result, minValue, maxValue, error);
+        return result;
+    }
+
     double ParseDouble(const TString& name, const TString& value, TString& error) {
         double result = 0;
         if (!TryFromString(value, result)) {
@@ -711,6 +721,19 @@ namespace {
             return false;
         }
 
+        if (settings.has_hnsw_connectivity()
+            && !ValidateSettingInRange("hnsw_connectivity", settings.hnsw_connectivity(), 1, MaxHnswConnectivity, error)) {
+            return false;
+        }
+        if (settings.has_hnsw_construction_candidates()
+            && !ValidateSettingInRange("hnsw_construction_candidates", settings.hnsw_construction_candidates(), 1, MaxHnswConstructionCandidates, error)) {
+            return false;
+        }
+        if (settings.has_hnsw_search_candidates()
+            && !ValidateSettingInRange("hnsw_search_candidates", settings.hnsw_search_candidates(), 1, MaxHnswSearchCandidates, error)) {
+            return false;
+        }
+
         if (partial) {
             if (settings.has_vector_type()) {
                 if (settings.vector_type() == Ydb::Table::VectorIndexSettings::VECTOR_TYPE_UNSPECIFIED) {
@@ -1109,6 +1132,18 @@ bool FillSetting(Ydb::Table::KMeansTreeSettings& settings, const TString& nameLo
         settings.set_overlap_ratio(ParseDouble(nameLower, value, error));
     } else if (nameLower == "adaptive_clusters") {
         settings.set_adaptive_clusters(ParseBool(nameLower, value, error));
+    } else if (nameLower == "hnsw_min_rows") {
+        settings.mutable_settings()->set_hnsw_min_rows(
+            ParseUInt64(nameLower, value, 0, Max<ui64>(), error));
+    } else if (nameLower == "hnsw_connectivity") {
+        settings.mutable_settings()->set_hnsw_connectivity(
+            ParseUInt32(nameLower, value, 1, MaxHnswConnectivity, error));
+    } else if (nameLower == "hnsw_construction_candidates") {
+        settings.mutable_settings()->set_hnsw_construction_candidates(
+            ParseUInt32(nameLower, value, 1, MaxHnswConstructionCandidates, error));
+    } else if (nameLower == "hnsw_search_candidates") {
+        settings.mutable_settings()->set_hnsw_search_candidates(
+            ParseUInt32(nameLower, value, 1, MaxHnswSearchCandidates, error));
     } else {
         error = TStringBuilder() << "Unknown index setting: " << nameLower;
         return false;

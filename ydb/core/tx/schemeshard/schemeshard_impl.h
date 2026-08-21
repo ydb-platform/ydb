@@ -1056,9 +1056,9 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriberFromMonitoring(
         const TString& subscriberId, TActorId replyTo);
     void Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx);
-    // Deletes (oldMinOrder, newMinOrder] up to `limit` rows per tx. Sets
-    // hasMore if the cap was hit; returns false if the rowset is not ready.
-    bool DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldMinOrder, ui64 newMinOrder,
+    // Deletes (SchemeChangeFloorOrder, newMinOrder] up to `limit` rows per tx.
+    // Sets hasMore if the cap was hit; returns false if the rowset is not ready.
+    bool DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 newMinOrder,
         ui64 limit, bool& hasMore);
     // Schedules a follow-up cleanup tx after SchemeChangeCleanupInterval.
     void EnqueueSchemeChangeRecordsCleanup(const TActorContext& ctx);

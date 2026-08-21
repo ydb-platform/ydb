@@ -10,6 +10,9 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+// Recursively clears all fields marked (Ydb.sensitive) in-place.
+void ClearSensitiveFields(google::protobuf::Message* message);
+
 class TPathDescriber {
     void FillPathDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElement::TPtr pathEl,
         TPathElement::EPathSubType subType = TPathElement::EPathSubType::EPathSubTypeEmpty);

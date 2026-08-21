@@ -49,24 +49,14 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
         return false;
     }
 
-    // Redact secrets before persisting: TSecretSchemaOp.Value must never
-    // reach the outbox or subscribers.
-    NKikimrSchemeOp::TModifyScheme redacted;
-    const NKikimrSchemeOp::TModifyScheme* toPersist = &userTx;
-    if (userTx.HasCreateSecret() || userTx.HasAlterSecret()) {
-        redacted = userTx;
-        if (redacted.HasCreateSecret()) {
-            redacted.MutableCreateSecret()->ClearValue();
-        }
-        if (redacted.HasAlterSecret()) {
-            redacted.MutableAlterSecret()->ClearValue();
-        }
-        toPersist = &redacted;
-    }
+    // Redact every (Ydb.sensitive) field before persisting: passwords, access
+    // keys, and secret values must never reach the outbox or subscribers.
+    NKikimrSchemeOp::TModifyScheme redacted = userTx;
+    ClearSensitiveFields(&redacted);
 
     TString body;
     {
-        bool ok = toPersist->SerializeToString(&body);
+        bool ok = redacted.SerializeToString(&body);
         Y_DEBUG_ABORT_UNLESS(ok);
     }
 
@@ -213,18 +203,16 @@ void TSchemeShard::PersistSchemeChangeRecord(NIceDb::TNiceDb& db, const TSchemeC
     }
 }
 
-bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldMinOrder, ui64 newMinOrder,
+bool TSchemeShard::DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 newMinOrder,
         ui64 limit, bool& hasMore) {
     hasMore = false;
-    if (newMinOrder <= oldMinOrder) {
+    // SchemeChangeFloorOrder is the only sound lower bound: it is what was
+    // actually deleted, not a retention watermark that a prior pass may not
+    // have fully drained.
+    if (newMinOrder <= SchemeChangeFloorOrder) {
         return true;
     }
-    // Resume above whatever is already physically gone; restarting at order 1
-    // is quadratic on a backlog.
-    const ui64 from = Max(oldMinOrder, SchemeChangeFloorOrder) + 1;
-    if (newMinOrder < from) {
-        return true;
-    }
+    const ui64 from = SchemeChangeFloorOrder + 1;
     // Bound both ends: an unbounded GreaterOrEqual().Select() would precharge
     // the whole tail of the table.
     auto logRowset = db.Table<Schema::SchemeChangeRecords>()

@@ -2554,4 +2554,129 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_VALUES_EQUAL_C(bodies->Record.EntriesSize(), 0u,
             "a refused request must not carry a partial result");
     }
+
+    Y_UNIT_TEST(ReplicationPasswordNotPersistedInSchemeChangeRecord) {
+        // Only CreateSecret/AlterSecret.Value used to be redacted; every other
+        // (Ydb.sensitive) field, e.g. TStaticCredentials.Password, was
+        // serialized into the outbox body in cleartext.
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        opts.InitYdbDriver(true);
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "repl:sub", regHandle);
+
+        const TString password = "s3cr3t-replication-pwd";
+        TestCreateReplication(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "Replication"
+            Config {
+              SrcConnectionParams {
+                StaticCredentials {
+                  User: "user"
+                  Password: "%s"
+                }
+              }
+              Specific {
+                Targets {
+                  SrcPath: "/MyRoot1/Table"
+                  DstPath: "/MyRoot2/Table"
+                }
+              }
+            }
+        )", password.c_str()));
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        UNIT_ASSERT_C(!entries.empty(),
+            "creating a replication must produce at least one record for this test to mean anything");
+        bool sawReplicationOp = false;
+        for (const auto& rec : entries) {
+            TString serializedBody;
+            UNIT_ASSERT(rec.Body.SerializeToString(&serializedBody));
+            if (rec.OperationType == (ui32)NKikimrSchemeOp::ESchemeOpCreateReplication) {
+                sawReplicationOp = true;
+                UNIT_ASSERT_C(!serializedBody.empty(),
+                    "the CreateReplication record must carry a non-empty body for this test to mean anything");
+            }
+            UNIT_ASSERT_C(!serializedBody.Contains(password),
+                "the plaintext replication password must not appear in a persisted record body");
+            UNIT_ASSERT_C(!rec.Description.Contains(password),
+                "the plaintext replication password must not appear in a persisted description");
+        }
+        UNIT_ASSERT_C(sawReplicationOp,
+            "the CreateReplication op must itself be among the records checked");
+    }
+
+    // DeleteAckedSchemeChangeRecords used to accept an oldMinOrder watermark
+    // from the caller and resume above it. But the subscriber's LastAckedOrder
+    // (which feeds oldMinOrder on the *next* call) advances immediately, even
+    // when the batch limit stops physical deletion short. A second call with a
+    // higher watermark then starts above the undeleted gap and never revisits
+    // it: the rows are orphaned forever. SchemeChangeFloorOrder -- what was
+    // actually deleted -- is the only sound resume point.
+    Y_UNIT_TEST(CleanupNeverOrphansRowsAcrossSuccessiveWatermarkAdvances) {
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "gap:sub", regHandle);
+
+        const ui32 total = 10;
+        for (ui32 i = 0; i < total; ++i) {
+            TestMkDir(runtime, ++txId, "/MyRoot", Sprintf("Dir%u", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+        const ui64 tail = schemeshard->NextSchemeChangeOrder;
+        UNIT_ASSERT_C(tail >= total, "precondition: records must exist");
+
+        // Small enough that a single Ack's inline delete pass cannot drain a
+        // 5-row range in one shot.
+        schemeshard->SchemeChangeCleanupBatchSize = 2;
+
+        // Rows [1..5] and [6..7] are both physically present beforehand.
+        auto before = ProbeRecordOrdersPresent(runtime, "gap:sub", {1, 2, 3, 4, 5, 6, 7});
+        UNIT_ASSERT_VALUES_EQUAL_C(before.size(), 7u,
+            "all seven probed rows must exist before any cleanup runs");
+
+        // First Ack: deletes only the first batch (orders 1-2) inline, then
+        // stops with hasMore=true. No SimulateSleep is called here, so the
+        // scheduled follow-up cleanup tx (10ms later) has not run yet and
+        // cannot mask the bug by draining the gap on its own before the
+        // second Ack below observes the (already advanced) watermark.
+        TAutoPtr<IEventHandle> ack1Handle;
+        AckSchemeChangeRecords(runtime, "gap:sub", 5, ack1Handle);
+
+        // Positive companion: orders 3-5 are still physically present right
+        // after the first, batch-capped Ack -- the gap this bug orphans.
+        auto midGap = ProbeRecordOrdersPresent(runtime, "gap:sub", {3, 4, 5});
+        UNIT_ASSERT_VALUES_EQUAL_C(midGap.size(), 3u,
+            "precondition: the batch limit must actually leave 3-5 undeleted "
+            "after the first Ack, or this test proves nothing");
+
+        // Second Ack: LastAckedOrder is already 5 from the call above, so the
+        // buggy code would resume cleanup at order 6, permanently skipping
+        // whatever remains undeleted in [3..5].
+        TAutoPtr<IEventHandle> ack2Handle;
+        AckSchemeChangeRecords(runtime, "gap:sub", 7, ack2Handle);
+
+        // Let any remaining scheduled continuations finish draining. This
+        // cannot paper over the bug: once the buggy Ack(7) call above jumps
+        // the floor straight to 7, rows 3-5 are below the floor and no later
+        // pass -- scheduled or not -- ever selects them again.
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto after = ProbeRecordOrdersPresent(runtime, "gap:sub", {1, 2, 3, 4, 5, 6, 7});
+        UNIT_ASSERT_C(after.empty(),
+            "every acked row through order 7 must eventually be deleted; "
+            << after.size() << " still present");
+    }
 }

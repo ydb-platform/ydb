@@ -18,7 +18,7 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
         if (minOrder == 0) {
             return true;
         }
-        return Self->DeleteAckedSchemeChangeRecords(db, 0, minOrder,
+        return Self->DeleteAckedSchemeChangeRecords(db, minOrder,
             Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup);
     }
 
@@ -70,8 +70,6 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
             return true;
         }
 
-        const ui64 oldMinOrder = Self->GetMinSubscriberOrder(ctx.Now());
-
         const ui64 oldOrder = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
         // Use the visible tail, not the reserved one: the cursor must not sit
         // above a record an in-flight operation has yet to finalise.
@@ -97,7 +95,7 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
             it->second.LastActivityAt = now;
         }
 
-        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder(ctx.Now()),
+        if (!Self->DeleteAckedSchemeChangeRecords(db, Self->GetMinSubscriberOrder(ctx.Now()),
                 Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup)) {
             return false;
         }

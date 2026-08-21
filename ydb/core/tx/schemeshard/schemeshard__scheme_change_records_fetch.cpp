@@ -343,8 +343,6 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             newOrder = Self->GetVisibleSchemeChangeTail();
         }
 
-        const ui64 oldMinOrder = Self->GetMinSubscriberOrder(ctx.Now());
-
         const TInstant now = ctx.Now();
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
             NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(newOrder),
@@ -356,7 +354,7 @@ struct TTxAckSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBase<
             it->second.LastActivityAt = now;
         }
 
-        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder(ctx.Now()),
+        if (!Self->DeleteAckedSchemeChangeRecords(db, Self->GetMinSubscriberOrder(ctx.Now()),
                 Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup)) {
             return false;
         }
@@ -407,12 +405,10 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
             return true;
         }
 
-        const ui64 oldMinOrder = Self->GetMinSubscriberOrder(ctx.Now());
-
         db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Delete();
         Self->Subscribers.erase(subscriberId);
 
-        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder(ctx.Now()),
+        if (!Self->DeleteAckedSchemeChangeRecords(db, Self->GetMinSubscriberOrder(ctx.Now()),
                 Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup)) {
             return false;
         }

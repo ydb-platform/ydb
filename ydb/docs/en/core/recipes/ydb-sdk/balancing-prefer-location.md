@@ -1,6 +1,6 @@
 # Prefer a specific availability zone
 
-Below are code examples for setting the "prefer availability zone" balancing algorithm option in different {{ ydb-short-name }} SDKs.
+Below are code examples for setting the balancing algorithm option "prefer availability zone" in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
 
@@ -44,9 +44,9 @@ Below are code examples for setting the "prefer availability zone" balancing alg
 
   - database/sql
 
-    Client-side balancing in the `database/sql` driver for {{ ydb-short-name }} is performed only when a new connection is established (in terms of `database/sql`), which is a {{ ydb-short-name }} session on a specific node. After the session is created, all queries on that session are directed to the node where the session was created. Balancing of queries on the same {{ ydb-short-name }} session between different {{ ydb-short-name }} nodes does not occur.
+    Client-side balancing in the `database/sql` driver for {{ ydb-short-name }} is performed only when a new connection is established (in terms of `database/sql`), which is a {{ ydb-short-name }} session on a specific node. Once the session is created, all queries on that session are directed to the node where the session was created. Query balancing on the same {{ ydb-short-name }} session between different {{ ydb-short-name }} nodes does not occur.
 
-    Code example for setting the "prefer availability zone" balancing algorithm:
+    Code example for setting the balancing algorithm "prefer availability zone":
 
 
     ```go
@@ -92,9 +92,9 @@ Below are code examples for setting the "prefer availability zone" balancing alg
 
   {% endlist %}
 
-- with++
+- C++
 
-  In the C++ SDK, you can select only one availability zone as the preferred one.
+  In the C++ SDK, you can select only one availability zone as preferred.
 
 
   ```cpp
@@ -142,7 +142,7 @@ Below are code examples for setting the "prefer availability zone" balancing alg
 
   - JDBC
 
-    Check the supported availability zone parameters in the [JDBC driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md) or set the balancing via the native API when embedding the driver.
+    Check the supported availability zone parameters in the [JDBC driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md) or set balancing via the native API when embedding the driver.
 
     In Spring Boot, ORM, and other third-party frameworks around JDBC, pass the same JDBC URL and availability zone parameters as for a direct connection (for example, in `spring.datasource.url` or pool properties).
 

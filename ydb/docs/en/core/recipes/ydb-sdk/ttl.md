@@ -1,12 +1,24 @@
-# Configuring Time to Live (TTL)
+# Configuring Time to Live (TTL) for a table
 
-This section contains recipes for configuration of table's TTL with {{ ydb-short-name }} SDK.
+This section contains recipes for configuring TTL for a table using {{ ydb-short-name }} SDK.
 
 ## Enabling TTL for an existing table {#enable-on-existent-table}
 
-In the example below, the items of the `mytable` table will be deleted an hour after the time set in the `created_at` column:
+In the example below, the rows of the `mytable` table will be deleted an hour after the time set in the `created_at` column:
 
 {% list tabs group=tool %}
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
 
 - 
 
@@ -64,9 +76,21 @@ In the example below, the items of the `mytable` table will be deleted an hour a
 
 {% endlist %}
 
-The example below shows how to use the `modified_at` column with a numeric type (`Uint32`) as a TTL column. The column value is interpreted as the number of seconds since the Unix epoch:
+The example below shows how to use the `modified_at` column of numeric type (`Uint32`) as a TTL column. The column value is interpreted as the number of seconds since the Unix epoch:
 
 {% list tabs group=tool %}
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
 
 - 
 
@@ -132,11 +156,23 @@ The example below shows how to use the `modified_at` column with a numeric type 
 
 {% include [OLTP_not_allow_note](../../_includes/not_allow_for_oltp_note.md) %}
 
-To enable eviction, you need an [external data source](../../concepts/datamodel/external_data_source.md) object that describes a connection to external storage. You can create an external data source object via [YQL](../../yql/reference/recipes/ttl.md#enable-tiering-on-existing-tables) and the {{ ydb-short-name }} CLI.
+To enable eviction, you need an [external data source](../../concepts/datamodel/external_data_source.md) that describes a connection to external storage. You can create an external data source via [YQL](../../yql/reference/recipes/ttl.md#enable-tiering-on-existing-tables) and the {{ ydb-short-name }} CLI.
 
-In the following example, rows of the table `mytable` will be moved to the bucket described in the external data source `/Root/s3_cold_data` one hour after the time recorded in the column `created_at` and will be deleted after 24 hours:
+In the following example, the rows from the `mytable` table will be moved to the bucket described in the external data source `/Root/s3_cold_data` one hour after the time recorded in the column `created_at` and will be deleted after 24 hours:
 
 {% list tabs group=tool %}
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
 
 - 
 
@@ -189,6 +225,18 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 For a newly created table, you can pass TTL settings along with the table description:
 
 {% list tabs group=tool %}
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
 
 - 
 
@@ -273,6 +321,18 @@ For a newly created table, you can pass TTL settings along with the table descri
 
 - 
 
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
   {% if oss == true %}
 
   - C++
@@ -324,6 +384,18 @@ For a newly created table, you can pass TTL settings along with the table descri
 The current TTL settings can be obtained from the table description:
 
 {% list tabs group=tool %}
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
+
+- 
 
 - 
 

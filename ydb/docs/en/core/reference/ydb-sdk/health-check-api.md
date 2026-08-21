@@ -166,7 +166,6 @@ message IssueLog {
 
 
 ### Response field descriptions {#fields-Описание}
-
 | Field | Description |
 | :--- | :--- |
 | `self_check_result` | enum field which contains the [database check result](#selfcheck-result) |
@@ -208,7 +207,7 @@ Status (severity) of the current issue:
 
 | Field | Description |
 | :--- | :--- |
-| `GREY` | Unable to determine the status (an issue with the self-diagnostic subsystem). |
+| `GREY` | Degradation of at least one of the database systems was detected, but the database is still functioning (for example, allowable disk loss). |
 | `GREEN` | No issues detected. |
 | `BLUE` | Temporary minor degradation that does not affect database availability; the system is expected to return to `GREEN`. |
 | `YELLOW` | A minor issue with no risks to availability. It is recommended to continue monitoring the issue. |
@@ -285,11 +284,12 @@ Status (severity) of the current issue:
 
 #### VDisk is not available
 
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Actions when triggered:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### VDisk is being initialized
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Description:** Initialization of the virtual disk is in progress.
+**Actions when triggered:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### Replication in progress
 
@@ -297,7 +297,7 @@ Status (severity) of the current issue:
 
 #### VDisk have space issue
 
-**Description:** These issues depend solely on the underlying `PDISK` layer.
+**Description:** Depends on the underlying `PDISK` layer.
 
 ### PDISK
 
@@ -313,7 +313,7 @@ Status (severity) of the current issue:
 #### Available size is less than 12%, Available size is less than 9%, Available size is less than 6%
 
 **Description:** The physical disk is running out of free space.
-**Actions on trigger:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set the `Nodes` and `Out of Space` filters, and using the known `id` of the node and PDisk, view the available space.
+**Actions when triggered:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set the `Nodes` and `Out of Space` filters, and using the known `id` of the node and PDisk, view the available space.
 
 #### PDisk is not available
 
@@ -372,6 +372,7 @@ Status (severity) of the current issue:
 
 #### Tablets/Followers are dead
 
+**Description:** Tablets are not running (or cannot be started).
 **Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
 
 ### LOAD_AVERAGE
@@ -395,22 +396,26 @@ Load Information:
 
 #### Pool usage is over than 90%, Pool usage is over than 95%, Pool usage is over than 99%
 
+**Description:** One of the CPU pools is overloaded.
 **Actions:** Add cores to the configuration of the actor system for the corresponding CPU pool.
 
 ### NODE_UPTIME
 
 #### The number of node restarts has increased
 
+**Description:** The number of node restarts has exceeded the threshold. By default, this is 10 restarts per hour.
 **Actions:** Check the logs to determine the reasons for the process restarts.
 
 #### Node is restarting too often
 
+**Description:** Nodes are restarting too frequently. By default, this is 30 restarts per hour.
 **Actions:** Check the logs to determine the reasons for the process restarts.
 
 ### NODES_TIME_DIFFERENCE
 
 #### Node is ... ms behind peer [id], Node is ... ms ahead of peer [id]
 
+**Description:** Time discrepancy on nodes, which can lead to problems with coordinating distributed transactions. The problem starts to manifest at a discrepancy of 5 ms.
 **Actions:** Check for discrepancies in system time between the nodes listed in the alert, and verify the operation of the time synchronization process.
 
 ## Examples {#examples}

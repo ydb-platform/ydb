@@ -1,10 +1,10 @@
-# Configuring row TTL (TTL) for a table
+# Configuring table row TTL
 
 This section provides examples of configuring TTL for row and column tables using the {{ ydb-short-name }} SDK.
 
 ## Enabling TTL for existing row and column tables {#enable-on-existent-table}
 
-In the example below, rows of table `mytable` will be deleted one hour after the timestamp stored in column `created_at`:
+In the example below, rows of the `mytable` table will be deleted one hour after the time recorded in the `created_at` column:
 
 {% list tabs group=tool %}
 
@@ -43,9 +43,6 @@ In the example below, rows of table `mytable` will be deleted one hour after the
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_date_type_column('created_at', 3600))
   ```
 
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -61,7 +58,7 @@ In the example below, rows of table `mytable` will be deleted one hour after the
 
 {% endlist %}
 
-The following example demonstrates using column `modified_at` with a numeric type (`Uint32`) as the TTL column. The column value is interpreted as seconds since the Unix epoch:
+The following example demonstrates using the `modified_at` column with a numeric type (`Uint32`) as a TTL column. The column value is interpreted as seconds since the Unix epoch:
 
 {% list tabs group=tool %}
 
@@ -100,9 +97,6 @@ The following example demonstrates using column `modified_at` with a numeric typ
   session.alter_table('mytable', set_ttl_settings=ydb.TtlSettings().with_value_since_unix_epoch('modified_at', UNIT_SECONDS, 3600))
   ```
 
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -122,13 +116,13 @@ The following example demonstrates using column `modified_at` with a numeric typ
 
 {% endlist %}
 
-## Enabling eviction to external S3-compatible storage {#enable-tiering-on-existing-tables}
+## Enabling eviction to an external S3-compatible storage {#enable-tiering-on-existing-tables}
 
 {% include [OLTP_not_allow_note](../../_includes/not_allow_for_oltp_note.md) %}
 
-To enable eviction, an [external data source](../../concepts/datamodel/external_data_source.md) object describing the connection to the external storage is required. Creating an external data source object is possible via [YQL](../../yql/reference/recipes/ttl.md#enable-tiering-on-existing-tables) and the {{ ydb-short-name }} CLI.
+To enable eviction, you need an [external data source](../../concepts/datamodel/external_data_source.md) object that describes a connection to external storage. You can create an external data source object via [YQL](../../yql/reference/recipes/ttl.md#enable-tiering-on-existing-tables) and the {{ ydb-short-name }} CLI.
 
-In the next example, rows of table `mytable` will be moved to the bucket described by external data source `/Root/s3_cold_data` one hour after the timestamp stored in column `created_at`, and will be deleted after 24 hours:
+In the following example, rows of the `mytable` table will be moved to the bucket described in the external data source `/Root/s3_cold_data` one hour after the time recorded in the `created_at` column, and will be deleted after 24 hours:
 
 {% list tabs group=tool %}
 
@@ -159,9 +153,6 @@ In the next example, rows of table `mytable` will be moved to the bucket describ
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Python
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-- C#
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Java
@@ -222,55 +213,21 @@ For a newly created table, you can pass TTL settings together with its descripti
   )
   ```
 
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - Java
 
-  TTL for a table is set in `TableDescription` at creation. You can check the settings via `describeTable`.
-
 
   ```java
-  import tech.ydb.core.grpc.GrpcTransport;
-  import tech.ydb.table.TableClient;
-  import tech.ydb.table.description.TableDescription;
-  import tech.ydb.table.description.TableTtl;
-  import tech.ydb.table.session.SessionRetryContext;
-  import tech.ydb.table.values.PrimitiveType;
+  TableDescription description = TableDescription.newBuilder()
+          .addNullableColumn("id", PrimitiveType.Uint64)
+          .addNullableColumn("expire_at", PrimitiveType.Timestamp)
+          .setPrimaryKey("id")
+          .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
+          .build();
 
-  public class TtlCreateTableExample {
-
-      private static final String TABLE_NAME = "mytable";
-
-      public static void main(String[] args) {
-          String connectionString = System.getenv().getOrDefault(
-                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
-
-          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-               TableClient tableClient = TableClient.newClient(transport).build()) {
-
-              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-              String tablePath = transport.getDatabase() + "/" + TABLE_NAME;
-
-              TableDescription description = TableDescription.newBuilder()
-                      .addNullableColumn("id", PrimitiveType.Uint64)
-                      .addNullableColumn("expire_at", PrimitiveType.Timestamp)
-                      .setPrimaryKey("id")
-                      .setTtlSettings(TableTtl.dateTimeColumn("expire_at", 0))
-                      .build();
-
-              retryCtx.supplyStatus(session -> session.createTable(tablePath, description))
-                      .join().expectSuccess("create table failed");
-
-              TableTtl ttl = retryCtx.supplyResult(session -> session.describeTable(tablePath))
-                      .join().getValue().getTableDescription().getTableTtl();
-              System.out.println("TTL column: " + ttl.getColumnName());
-          }
-      }
-  }
+  session.createTable("mytable", description).join().expectSuccess();
   ```
 
 {% endlist %}
@@ -312,9 +269,6 @@ For a newly created table, you can pass TTL settings together with its descripti
   session.alter_table('mytable', drop_ttl_settings=True)
   ```
 
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -332,7 +286,7 @@ For a newly created table, you can pass TTL settings together with its descripti
 
 ## Getting TTL settings {#describe}
 
-Current TTL settings can be obtained from the table description:
+You can get the current TTL settings from the table description:
 
 {% list tabs group=tool %}
 
@@ -367,9 +321,6 @@ Current TTL settings can be obtained from the table description:
   ttl = desc.ttl_settings
   ```
 
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 - JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -377,31 +328,9 @@ Current TTL settings can be obtained from the table description:
 
 
   ```java
-  import tech.ydb.core.grpc.GrpcTransport;
-  import tech.ydb.table.TableClient;
-  import tech.ydb.table.description.TableTtl;
-  import tech.ydb.table.session.SessionRetryContext;
-
-  public class TtlDescribeExample {
-
-      public static void main(String[] args) {
-          String connectionString = System.getenv().getOrDefault(
-                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
-
-          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-               TableClient tableClient = TableClient.newClient(transport).build()) {
-
-              SessionRetryContext retryCtx = SessionRetryContext.create(tableClient).build();
-              String tablePath = transport.getDatabase() + "/mytable";
-
-              TableTtl ttl = retryCtx.supplyResult(session -> session.describeTable(tablePath))
-                      .join().getValue().getTableDescription().getTableTtl();
-
-              System.out.println("TTL enabled: " + ttl.isEnabled());
-              System.out.println("TTL column: " + ttl.getColumnName());
-          }
-      }
-  }
+  TableTtl ttl = session.describeTable("mytable").join().getValue().getTableDescription().getTableTtl();
   ```
+
+{% endlist %}
 
 {% endlist %}

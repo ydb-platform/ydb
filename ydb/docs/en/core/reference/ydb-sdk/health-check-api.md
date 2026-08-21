@@ -6,54 +6,50 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
 {% list tabs group=lang %}
 
+- Go
+
+  This functionality is not currently supported in the Go SDK.
 - C++
 
   App code snippet for creating a client:
+
 
   ```cpp
   auto client = NYdb::NMonitoring::TMonitoringClient(driver);
   ```
 
+
   Calling `SelfCheck` method:
 
-  ```cpp
+
+  ```c++
   auto settings = TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
 
-- Go
-
-  This functionality is not currently supported.
-
 - Java
 
   This functionality is not currently supported.
-
 - Python
 
   This functionality is not currently supported.
-
 - JavaScript
 
   This functionality is not currently supported in the JavaScript SDK. You can create a monitoring client and call health-check APIs yourself:
+
 
   ```javascript
   const monitoring = driver.createClient(MonitoringServiceDefinition);
   await monitoring.selfCheck();
   ```
 
-- Rust
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
-
 {% endlist %}
 
 ## Call parameters {#call-parameters}
 
 `SelfCheck` method provides information in the form of a [set of issues](#example-emergency) which could look like this:
+
 
 ```json
 {
@@ -75,13 +71,18 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 }
 ```
 
+
 This is a short messages each about a single issue. All parameters will affect the amount of information the service returns for the specified database.
 
 The complete list of extra parameters is presented below:
 
 {% list tabs group=lang %}
 
+- Go
+
+  This functionality is not currently supported in the Go SDK.
 - C++
+
 
   ```c++
   struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
@@ -91,40 +92,30 @@ The complete list of extra parameters is presented below:
   };
   ```
 
-- Go
-
-  This functionality is not currently supported.
-
 - Java
 
-  This functionality is not currently supported.
+Not currently supported.
 
 - Python
 
   This functionality is not currently supported.
-
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
-- Rust
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-  Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
-
 {% endlist %}
 
 | Parameter | Type | Description |
-|:----|:----|:----|
-| `ReturnVerboseStatus` | `bool`         | If `ReturnVerboseStatus` is specified, the response will also include a summary of the overall health of the database in the `database_status` field ([Example](#example-verbose)). Default is false. |
-| `MinimumStatus`       | [EStatusFlag] (#issue-status) | Each issue has a `status` field. If `minimum_status` is specified, issues with a higher `status` will be discarded. By default, all issues will be listed. |
-| `MaximumLevel`        | `int32`        | Each issue has a `level` field. If `maximum_level` is specified, issues with deeper levels will be discarded. By default, all issues will be listed. |
+| :--- | :--- | :--- |
+| `ReturnVerboseStatus` | `bool` | If `ReturnVerboseStatus` is specified, the response will also include a summary of the overall health of the database in the `database_status` field ([Example](#example-verbose)). Default is false. |
+| `MinimumStatus` | [EStatusFlag] (#issue-status) | Each issue has a `status` field. If `minimum_status` is specified, issues with a higher `status` will be discarded. By default, all issues will be listed. |
+| `MaximumLevel` | `int32` | Each issue has a `level` field. If `maximum_level` is specified, issues with deeper levels will be discarded. By default, all issues will be listed. |
 
 ## Response structure {#response-structure}
 
-For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
+For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository.
 Calling the `SelfCheck` method will return the following message:
+
 
 ```protobuf
 message SelfCheckResult {
@@ -135,9 +126,11 @@ message SelfCheckResult {
 }
 ```
 
+
 The shortest `HealthCheck` response looks like [this](#examples) . It is returned if there is nothing wrong with the database.
 
 If any issues are detected, the `issue_log` field will contain descriptions of the issues with the following structure:
+
 
 ```protobuf
 message IssueLog {
@@ -155,17 +148,17 @@ message IssueLog {
 ### Description of fields in the response {#fields-description}
 
 | Field | Description |
-|:----|:----|
+| :--- | :--- |
 | `self_check_result` | enum field which contains the [database check result](#selfcheck-result) |
 | `issue_log` | A list of issues; each entry describes a problem at a particular level of the system. |
 | `issue_log.id` | A unique issue ID within this response. |
-| `issue_log.status` |  enum field which contains the [issue status](#issue-status) |
+| `issue_log.status` | enum field which contains the [issue status](#issue-status) |
 | `issue_log.message` | Text that describes the issue. |
 | `issue_log.location` | Location of the issue. This can be a physical location or an execution context. |
 | `issue_log.reason` | This is a set of elements, each of which describes an issue in the system at a certain level. |
 | `issue_log.type` | Issue category (by subsystem). Each type is at a certain level and interconnected with others through a [rigid hierarchy](#issues-hierarchy) (as shown in the picture above). |
 | `issue_log.level` | Issue [nesting depth](#issues-hierarchy). |
-| `database_status` | If the settings include `ReturnVerboseStatus` parameter, the `database_status` field will be populated. <br/>This field offers a comprehensive summary of the overall health of the database. <br/>It is designed to provide a quick overview of the database's condition, helping to assess its health and identify any major issues at a high level. [Example](#example-verbose). For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository. |
+| `database_status` | If the settings include `ReturnVerboseStatus` parameter, the `database_status` field will be populated. <br/>This field offers a comprehensive summary of the overall health of the database. <br/>It is designed to provide a quick overview of the database's condition, helping to assess its health and identify any major issues at a high level. [Example](#example-verbose). For the full response structure, see the [ydb_monitoring.proto](https://github.com/ydb-platform/ydb/public/api/protos/ydb_monitoring.proto) file in the {{ ydb-short-name }} Git repository. |
 | `location` | Contains information about the host, where the `HealthCheck` service was called |
 
 ### Issues hierarchy {#issues-hierarchy}
@@ -180,10 +173,10 @@ Each issue has a nesting `level`. The higher the `level`, the deeper the issue i
 
 #### Database check result {#selfcheck-result}
 
-The most general status of the database `self_check_result` can have the following values:
+The most general database status can take the following values:
 
 | Value | Description |
-|:----|:----|
+| :--- | :--- |
 | `GOOD` | No issues were detected. |
 | `DEGRADED` | Degradation of at least one of the database systems was detected, but the database is still functioning (for example, allowable disk loss). |
 | `MAINTENANCE_REQUIRED` | Significant degradation was detected, there is a risk of database unavailability, and human intervention is required. |
@@ -191,10 +184,10 @@ The most general status of the database `self_check_result` can have the followi
 
 #### Issue status {#issue-status}
 
-The status (severity) of the current issue `issue_log.status`:
+Status (severity) of the current issue:
 
 | Value | Description |
-|:----|:----|
+| :--- | :--- |
 | `GREY` | Unable to determine the status (an issue with the self-diagnostic subsystem). |
 | `GREEN` | No issues detected. |
 | `BLUE` | Temporary minor degradation that does not affect database availability; the system is expected to return to `GREEN`. |
@@ -395,7 +388,6 @@ The status (severity) of the current issue `issue_log.status`:
 
   - Source: `/proc/loadavg`
   - The first number of the three represents the average load over the last 1 minute.
-
 - Logical Cores Information:
 
   - Primary Source: `/sys/fs/cgroup/cpu.max`
@@ -439,15 +431,18 @@ The number of cores is calculated by dividing the quota by the period $(quota / 
 
 The shortest `HealthCheck` response looks like this. It is returned if there is nothing wrong with the database:
 
+
 ```json
 {
   "self_check_result": "GOOD"
 }
 ```
 
+
 ### Verbose example {#example-verbose}
 
 `GOOD` response with `verbose` parameter:
+
 
 ```json
 {
@@ -695,9 +690,11 @@ The shortest `HealthCheck` response looks like this. It is returned if there is 
 }
 ```
 
+
 ### Emergency example {#example-emergency}
 
 Response with `EMERGENCY` status:
+
 
 ```json
 {

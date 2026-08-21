@@ -29,6 +29,7 @@ ydb/public/sdk/cpp/tests/integration/topic/with_direct_read gtest.[*/*] chunk
 ydb/tests/compatibility/indexes py3test.[test_vector_index.py */*] chunk
 ydb/tests/compatibility/indexes test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-3-1_to_prestable-26-4]
 ydb/tests/compatibility/indexes test_vector_index.py.TestVectorIndex.test_vector_index[rolling_stable-26-3-1_to_prestable-26-4]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-3-1_to_prestable-26-4-False]
 ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_batch_written_with_topic_protocol_is_fetched_after_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_plain_and_batched_messages_survive_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]
 ydb/tests/compatibility/topics test_kafka_topic.py.TestKafkaTopicMessagesBatchingDisabledRead.test_kafka_written_messages_are_read_after_batching_flag_disable[restart_prestable-26-4_to_prestable-26-4]

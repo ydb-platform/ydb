@@ -19,6 +19,7 @@ namespace NKikimr::NKqp {
         TString DatabaseId;
         TString SessionId;
         TString CurrentExecutionId;
+        i64 CurrentExecutionGeneration = 0;
         TString CustomerSuppliedId;
         NActors::TActorId RunScriptActorId;
         TString PoolId;

@@ -1,4 +1,5 @@
 import logging
+import os
 import random
 import threading
 import time
@@ -14,13 +15,16 @@ logger = logging.getLogger("CombinedIndexesWorkload")
 class WorkloadCombinedIndexes(WorkloadBase):
     """Deterministic cross-feature workload for unique, compact fulltext and hybrid search."""
 
-    SEED = 20260820
+    DEFAULT_SEED = 20260820
     CORE_KEYS = {"doc-a", "doc-b", "doc-c", "doc-d"}
     MARKER_KEYS = {"doc-a", "doc-c"}
 
-    def __init__(self, client, prefix, stop):
+    def __init__(self, client, prefix, stop, seed=None):
         super().__init__(client, prefix, "combined_indexes", stop)
-        self._rng = random.Random(self.SEED)
+        self.seed = seed if seed is not None else int(
+            os.getenv("YDB_COMBINED_INDEX_SEED", str(self.DEFAULT_SEED)), 0
+        )
+        self._rng = random.Random(self.seed)
         self._stats_lock = threading.Lock()
         self._iterations = 0
         self._unique_conflicts = 0
@@ -35,7 +39,10 @@ class WorkloadCombinedIndexes(WorkloadBase):
         )
 
     def _create_tables(self, table, unique_table):
-        logger.info("combined-index seed=%d hybrid_table=%s unique_table=%s", self.SEED, table, unique_table)
+        logger.info(
+            "combined-index seed=%d hybrid_table=%s unique_table=%s replay='YDB_COMBINED_INDEX_SEED=%d'",
+            self.seed, table, unique_table, self.seed,
+        )
         self.client.query(
             f"""
             CREATE TABLE `{table}` (
@@ -246,7 +253,7 @@ class WorkloadCombinedIndexes(WorkloadBase):
     def get_stat(self):
         with self._stats_lock:
             return (
-                f"seed={self.SEED}, iterations={self._iterations}, "
+                f"seed={self.seed}, iterations={self._iterations}, "
                 f"unique_conflicts={self._unique_conflicts}, rebuilds={self._rebuilds}"
             )
 

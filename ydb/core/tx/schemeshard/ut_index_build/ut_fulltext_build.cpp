@@ -1381,7 +1381,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         }
     }
 
-    Y_UNIT_TEST(RowIdOptIn_CompactTopologySplitRebootAndRebuild) {
+    Y_UNIT_TEST(RowIdOptIn_CompactTopologyImplSplitMainMergeRebootAndRebuild) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableCompactAutoProvisionFlags(runtime);
@@ -1427,6 +1427,8 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, compactImpl), 7u);
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
+        const TString mainRowsBeforeTopology = ReadShards(
+            runtime, TTestTxConfig::SchemeShard, "/MyRoot/texts").at(0);
 
         auto split = [&](const TString& path, const TString& boundary) {
             const auto before = DescribePath(runtime, TTestTxConfig::SchemeShard,
@@ -1456,14 +1458,54 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         RebootTableShardsAndAssertPartitions(runtime, compactImpl, 2);
         RebootTableShardsAndAssertPartitions(runtime, rowIdImpl, 2);
 
-        // Reads are the post-reboot readiness barrier and prove split/reboot preserved every physical row.
+        // Split children initially borrow parts from their common source. Materialize those parts on both
+        // main-table children before merge; otherwise flat executor correctly rejects a back-borrow chain.
+        const auto mainAfterReboot = DescribePath(runtime, TTestTxConfig::SchemeShard,
+            "/MyRoot/texts", /*returnPartitioning=*/ true, /*returnBoundaries=*/ true,
+            /*showPrivate=*/ true);
+        const auto& mainChildren = mainAfterReboot.GetPathDescription().GetTablePartitions();
+        UNIT_ASSERT_VALUES_EQUAL(mainChildren.size(), 2u);
+        const auto& mainSelf = mainAfterReboot.GetPathDescription().GetSelf();
+        const TTableId mainTableId(mainSelf.GetSchemeshardId(), mainSelf.GetPathId());
+        for (const auto& child : mainChildren) {
+            const auto result = CompactTable(runtime, child.GetDatashardId(), mainTableId,
+                /*compactBorrowed=*/ true, /*compactSinglePartedShards=*/ true);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(),
+                NKikimrTxDataShard::TEvCompactTableResult::OK, result.DebugString());
+        }
+
+        // Merging special compact/unique implementation tables is not supported by the current DataShard
+        // borrow logic: it aborts on back-borrowed parts ("must not back-borrow parts"). Keep their
+        // supported split+reboot transition covered, and merge only the ordinary main table.
+        const auto compactRowsAfterSplit = ReadShards(runtime, TTestTxConfig::SchemeShard, compactImpl);
+        const auto rowIdRowsAfterSplit = ReadShards(runtime, TTestTxConfig::SchemeShard, rowIdImpl);
+        TestSplitTable(runtime, TTestTxConfig::SchemeShard, ++txId, "/MyRoot/texts",
+            Sprintf(R"(
+                SourceTabletId: %lu
+                SourceTabletId: %lu
+            )", mainChildren[0].GetDatashardId(), mainChildren[1].GetDatashardId()));
+        env.TestWaitNotification(runtime, txId);
+        TestDescribeResult(DescribePath(runtime, TTestTxConfig::SchemeShard,
+            "/MyRoot/texts", true, true, true), {
+            NLs::PathExist,
+            NLs::PartitionCount(1),
+        });
+
+        // Exact physical-data oracles: the merged main table returns to its original one-shard image,
+        // while a main-table merge must not mutate either still-split implementation table.
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, compactImpl), 7u);
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard,
+            "/MyRoot/texts").at(0), mainRowsBeforeTopology);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard,
+            compactImpl), compactRowsAfterSplit);
+        UNIT_ASSERT_VALUES_EQUAL(ReadShards(runtime, TTestTxConfig::SchemeShard,
+            rowIdImpl), rowIdRowsAfterSplit);
 
         // Low-level MiniKQL intentionally bypasses index maintenance in this harness. Update an existing
         // row (so its provisioned row id remains intact), then rebuild a second compact index: its exact
-        // token oracle proves the post-split main-table DML was visible to a distributed build scan.
+        // token oracle proves the post-topology main-table DML was visible to a build scan.
         const auto main = DescribePath(runtime, "/MyRoot/texts", true, true);
         const ui64 firstShard = main.GetPathDescription().GetTablePartitions(0).GetDatashardId();
         NKikimrMiniKQL::TResult updateResult;
@@ -1479,7 +1521,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(updateStatus, NKikimrProto::EReplyStatus::OK, updateError);
 
         auto rebuiltIndex = FulltextIndexConfig(/*relevance=*/ false);
-        rebuiltIndex.set_name("after_split_idx");
+        rebuiltIndex.set_name("after_topology_idx");
         const ui64 rebuildTx = ++txId;
         TestBuildIndex(runtime, rebuildTx, TTestTxConfig::SchemeShard,
             "/MyRoot", "/MyRoot/texts", rebuiltIndex);
@@ -1488,7 +1530,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         UNIT_ASSERT_VALUES_EQUAL_C(rebuild.GetIndexBuild().GetState(),
             Ydb::Table::IndexBuildState::STATE_DONE, rebuild.DebugString());
 
-        const TString rebuiltImpl = "/MyRoot/texts/after_split_idx/indexImplTable";
+        const TString rebuiltImpl = "/MyRoot/texts/after_topology_idx/indexImplTable";
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rebuiltImpl), 8u);
         TString physicalRows;
         for (const auto& shard : ReadShards(runtime, TTestTxConfig::SchemeShard, rebuiltImpl)) {
@@ -1501,6 +1543,129 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     TString RowIdSrcTablePath(const TString& indexPath) {
         return TStringBuilder() << indexPath << "/"
             << NTableIndex::ImplTable << NTableIndex::NFulltext::RowIdSrcBuildSuffix;
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_CompactQuotaRejectionIsAtomicAndRetryable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
+        EnableCompactAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        const auto before = DescribePath(runtime, "/MyRoot/texts");
+        const auto& domain = before.GetPathDescription().GetDomainDescription();
+        const ui64 pathsBefore = domain.GetPathsInside();
+        const ui64 shardsBefore = domain.GetShardsInside();
+
+        // Leave no room for any of the row-id column/sequence/unique/compact implementation objects.
+        // The whole public request must be rejected before the first provisioning sub-operation commits.
+        TSchemeLimits limits;
+        // MaxPaths is enforced against the operation's table subtree, not DomainDescription.PathsInside.
+        // One path is enough for the existing table itself but not for any provisioning child.
+        limits.MaxPaths = 1;
+        limits.MaxShards = shardsBefore + 100;
+        SetSchemeshardSchemaLimits(runtime, limits);
+
+        const ui64 rejectedTx = ++txId;
+        TestBuildIndex(runtime, rejectedTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false),
+            Ydb::StatusIds::PRECONDITION_FAILED);
+        env.TestWaitNotification(runtime, rejectedTx);
+
+        const auto afterReject = DescribePath(runtime, "/MyRoot/texts");
+        UNIT_ASSERT_VALUES_EQUAL(
+            afterReject.GetPathDescription().GetDomainDescription().GetPathsInside(), pathsBefore);
+        UNIT_ASSERT_VALUES_EQUAL(
+            afterReject.GetPathDescription().GetDomainDescription().GetShardsInside(), shardsBefore);
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdSequenceName), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/fulltext_idx")), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts"), {
+            NLs::CheckColumns("texts", {"pk", "text", "data"}, {}, {"pk"}, /*strictCount=*/ true),
+        });
+
+        // Raising the quota must make the identical request succeed; rejection must not poison its name
+        // or leave an invisible build record/schema transaction behind.
+        limits.MaxPaths = pathsBefore + 100;
+        limits.MaxShards = shardsBefore + 100;
+        SetSchemeshardSchemaLimits(runtime, limits);
+        const ui64 retryTx = ++txId;
+        TestBuildIndex(runtime, retryTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
+        env.TestWaitNotification(runtime, retryTx);
+        const auto retry = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", retryTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(retry.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, retry.DebugString());
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), 7u);
+    }
+
+    Y_UNIT_TEST(RowIdOptIn_CancelCompactPostingScanCleansUpAndAllowsRetry) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableCompactAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        // This target is reached only after provisioning and the transient row-id source prepass have
+        // completed, so cancellation exercises the deeper compact posting-scan cleanup boundary.
+        TBlockEvents<TEvDataShard::TEvBuildFulltextIndexResponse> postingBlocker(runtime);
+
+        const ui64 buildTx = ++txId;
+        TestBuildIndex(runtime, buildTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
+        runtime.WaitFor("compact posting scan response", [&]{ return postingBlocker.size() > 0; });
+
+        TestCancelBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+        postingBlocker.Stop().Unblock();
+        env.TestWaitNotification(runtime, buildTx);
+        const auto cancelled = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(cancelled.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_CANCELLED, cancelled.DebugString());
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx"), {NLs::PathNotExist});
+        TestDescribeResult(DescribePrivatePath(runtime, RowIdSrcTablePath("/MyRoot/texts/fulltext_idx")), {
+            NLs::PathNotExist,
+        });
+        TestDescribeResult(DescribePrivatePath(runtime,
+            TStringBuilder() << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        const ui64 retryTx = ++txId;
+        TestBuildIndex(runtime, retryTx, TTestTxConfig::SchemeShard,
+            "/MyRoot", "/MyRoot/texts", FulltextIndexConfig(/*relevance=*/ false));
+        env.TestWaitNotification(runtime, retryTx);
+        const auto retry = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", retryTx);
+        UNIT_ASSERT_VALUES_EQUAL_C(retry.GetIndexBuild().GetState(),
+            Ydb::Table::IndexBuildState::STATE_DONE, retry.DebugString());
+
+        const TString rowIdImpl = TStringBuilder() << "/MyRoot/texts/"
+            << NTableIndex::NFulltext::RowIdUniqueIndexName << "/" << NTableIndex::ImplTable;
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts"), 4u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), 7u);
+        UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, rowIdImpl), 4u);
     }
 
     Y_UNIT_TEST(RowIdOptIn_CancelCompactPrepassThenRestartAndRetryReusesInfra) {

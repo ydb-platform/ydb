@@ -33,9 +33,10 @@ void ExecuteSuccess(TQueryClient& db, const std::string& query) {
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 }
 
-void UpdateJsonFeatureFlags(TKikimrRunner& kikimr, bool enableJsonIndex, bool enableAutoSelect) {
+void UpdateJsonFeatureFlagsOnNodes(TKikimrRunner& kikimr, bool enableJsonIndex, bool enableAutoSelect,
+    const TVector<ui32>& nodeIndexes)
+{
     auto& runtime = *kikimr.GetTestServer().GetRuntime();
-    const auto edgeActor = runtime.AllocateEdgeActor();
 
     NKikimrConfig::TAppConfig config;
     auto* featureFlags = config.MutableFeatureFlags();
@@ -44,20 +45,37 @@ void UpdateJsonFeatureFlags(TKikimrRunner& kikimr, bool enableJsonIndex, bool en
     config.MutableTableServiceConfig()->SetBackportMode(
         NKikimrConfig::TTableServiceConfig_EBackportMode_All);
 
-    // In production the FeatureFlagsConfigurator updates AppData before KQP subscribers process the
-    // same dispatcher snapshot. This direct service-level test mirrors that ordering explicitly.
-    runtime.GetAppData().UpdateRuntimeFlags(*featureFlags);
+    for (const ui32 nodeIndex : nodeIndexes) {
+        UNIT_ASSERT_C(nodeIndex < runtime.GetNodeCount(), "invalid node index " << nodeIndex);
+        const auto edgeActor = runtime.AllocateEdgeActor(nodeIndex);
+        const auto nodeId = runtime.GetNodeId(nodeIndex);
 
-    for (const auto& service : {
-            MakeKqpProxyID(runtime.GetNodeId()),
-            MakeKqpCompileServiceID(runtime.GetNodeId())}) {
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-        *request->Record.MutableConfig() = config;
-        runtime.Send(service, edgeActor, request.Release());
-        auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
-            edgeActor, TDuration::Seconds(10));
-        UNIT_ASSERT_C(response, "KQP service must acknowledge the FeatureFlags update");
+        // In production the FeatureFlagsConfigurator updates node-local AppData before subscribers
+        // consume the same dispatcher snapshot. Mirror that ordering on every selected node.
+        runtime.GetAppData(nodeIndex).UpdateRuntimeFlags(*featureFlags);
+
+        for (const auto& service : {
+                MakeKqpProxyID(nodeId),
+                MakeKqpCompileServiceID(nodeId)}) {
+            auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
+            *request->Record.MutableConfig() = config;
+            runtime.Send(service, edgeActor, request.Release());
+            auto response = runtime.GrabEdgeEvent<NConsole::TEvConsole::TEvConfigNotificationResponse>(
+                edgeActor, TDuration::Seconds(10));
+            UNIT_ASSERT_C(response,
+                "KQP service must acknowledge the FeatureFlags update on node " << nodeIndex);
+        }
     }
+}
+
+void UpdateJsonFeatureFlags(TKikimrRunner& kikimr, bool enableJsonIndex, bool enableAutoSelect) {
+    TVector<ui32> nodeIndexes;
+    const ui32 nodeCount = kikimr.GetTestServer().GetRuntime()->GetNodeCount();
+    nodeIndexes.reserve(nodeCount);
+    for (ui32 nodeIndex = 0; nodeIndex < nodeCount; ++nodeIndex) {
+        nodeIndexes.push_back(nodeIndex);
+    }
+    UpdateJsonFeatureFlagsOnNodes(kikimr, enableJsonIndex, enableAutoSelect, nodeIndexes);
 }
 
 void UpdateJsonAutoSelectConfig(TKikimrRunner& kikimr, bool enabled) {
@@ -1095,6 +1113,92 @@ Y_UNIT_TEST_SUITE(KqpJsonIndexesAutoSelect) {
         ValidateLifecycleResults(db);
         ValidateLifecycleResults(db);
         ValidateAutoSelect(db, R"(JSON_EXISTS(Text, '$.tag'))", "json_idx");
+    }
+
+    Y_UNIT_TEST(DynamicFlagInvalidatesCompileCacheOnEveryNode) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableJsonIndex(true);
+        featureFlags.SetEnableJsonIndexAutoSelect(true);
+        auto settings = TKikimrSettings()
+            .SetFeatureFlags(featureFlags)
+            .SetNodeCount(2);
+        settings.AppConfig.MutableTableServiceConfig()->SetBackportMode(
+            NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+
+        ExecuteSuccess(db, R"(
+            CREATE TABLE TestTable (
+                Key Uint64,
+                Text JsonDocument,
+                PRIMARY KEY (Key),
+                INDEX json_idx GLOBAL USING json ON (Text)
+            );
+        )");
+        ExecuteSuccess(db, R"(
+            UPSERT INTO TestTable (Key, Text) VALUES
+                (1, JsonDocument('{"tag":"red"}')),
+                (2, JsonDocument('{"other":1}')),
+                (3, JsonDocument('{"tag":"blue"}'));
+        )");
+
+        const TString query = R"(
+            SELECT Key FROM TestTable
+            WHERE JSON_EXISTS(Text, '$.tag')
+            ORDER BY Key;
+        )";
+        const TString expected = R"([[[1u]];[[3u]]])";
+
+        const auto assertSession = [&](TSession& session, bool expectIndex) {
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+
+            const auto explainSettings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+            auto explain = session.ExecuteQuery(query, TTxControl::NoTx(), explainSettings).ExtractValueSync();
+            UNIT_ASSERT_C(explain.IsSuccess(), explain.GetIssues().ToString());
+            NJson::TJsonValue planJson;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(*explain.GetStats()->GetPlan(), &planJson, true),
+                "failed to parse JSON auto-select plan");
+            const int indexReads = CountPlanNodesByKv(planJson, "Index", "json_idx");
+            UNIT_ASSERT_VALUES_EQUAL_C(indexReads, expectIndex ? 1 : 0,
+                "unexpected plan after a multi-node feature flag update: "
+                    << *explain.GetStats()->GetPlan());
+        };
+
+        auto firstSessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_C(firstSessionResult.IsSuccess(), firstSessionResult.GetIssues().ToString());
+        auto firstSession = firstSessionResult.GetSession();
+        auto secondSessionResult = db.GetSession().ExtractValueSync();
+        UNIT_ASSERT_C(secondSessionResult.IsSuccess(), secondSessionResult.GetIssues().ToString());
+        auto secondSession = secondSessionResult.GetSession();
+
+        // Warm identical successful plans in old sessions. Depending on session placement these populate
+        // one or both node-local caches; invalidation is nevertheless delivered and acknowledged on both.
+        assertSession(firstSession, /*expectIndex=*/true);
+        assertSession(firstSession, /*expectIndex=*/true);
+        assertSession(secondSession, /*expectIndex=*/true);
+
+        // Deliver OFF in reverse node order. Only after both nodes acknowledge it may any session be used:
+        // this models asynchronous dispatcher delivery without making an assertion inside the skew window.
+        UpdateJsonFeatureFlagsOnNodes(kikimr, true, false, {1, 0});
+        assertSession(firstSession, /*expectIndex=*/false);
+        assertSession(secondSession, /*expectIndex=*/false);
+        auto disabledClient = kikimr.GetQueryClient();
+        auto disabledSessionResult = disabledClient.GetSession().ExtractValueSync();
+        UNIT_ASSERT_C(disabledSessionResult.IsSuccess(), disabledSessionResult.GetIssues().ToString());
+        auto disabledSession = disabledSessionResult.GetSession();
+        assertSession(disabledSession, /*expectIndex=*/false);
+
+        // Re-enable in the opposite order and verify both old sessions and a newly allocated session.
+        UpdateJsonFeatureFlagsOnNodes(kikimr, true, true, {0, 1});
+        assertSession(firstSession, /*expectIndex=*/true);
+        assertSession(secondSession, /*expectIndex=*/true);
+        auto enabledClient = kikimr.GetQueryClient();
+        auto enabledSessionResult = enabledClient.GetSession().ExtractValueSync();
+        UNIT_ASSERT_C(enabledSessionResult.IsSuccess(), enabledSessionResult.GetIssues().ToString());
+        auto enabledSession = enabledSessionResult.GetSession();
+        assertSession(enabledSession, /*expectIndex=*/true);
     }
 
     Y_UNIT_TEST(DynamicCreationGatePreservesExistingIndex) {

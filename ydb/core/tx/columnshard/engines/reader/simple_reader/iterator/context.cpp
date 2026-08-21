@@ -118,21 +118,13 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
     return std::move(acc).Build();
 }
 
-void TSpecialReadContext::RegisterActors(const NCommon::ISourcesConstructor& sources) {
+void TSpecialReadContext::RegisterActors(NCommon::ISourcesConstructor& sources) {
     TGuard<TSpinLock> g(DuplicatesManagerLock);
     AFL_VERIFY(!DuplicatesManager);
     if (NeedDuplicateFiltering()) {
-        const auto* casted_sources = dynamic_cast<const NCommon::TSourcesConstructorWithAccessors<TSourceConstructor>*>(&sources);
+        auto* casted_sources = dynamic_cast<TPortionsSources*>(&sources);
         AFL_VERIFY(casted_sources);
-        // we do not pass conflicting portions of concurrent txs to the duplicate filter because they are invisible for the given tx
-        std::deque<std::shared_ptr<TPortionInfo>> portionsToDuplicateFilter;
-        casted_sources->ForEachConstructor([&](const TSourceConstructor& constructor) {
-            const auto info = constructor.GetPortion();
-            auto state = GetPortionStateAtScanStart(*info);
-            if (!state.Conflicting) {
-                portionsToDuplicateFilter.emplace_back(std::move(info));
-            }
-        });
+        auto portionsToDuplicateFilter = casted_sources->ExtractDuplicateFilterPortions();
         DuplicateFilterPortionCount = portionsToDuplicateFilter.size();
         DuplicatesManager = NActors::TActivationContext::Register(new NDuplicateFiltering::TDuplicateManager(*this, portionsToDuplicateFilter));
     }

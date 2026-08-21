@@ -3,6 +3,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/data_locks/locks/list.h>
+#include <ydb/core/tx/columnshard/engines/column_engine_logs.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/engines/reader/plain_reader/iterator/constructors.h>
@@ -11,7 +12,109 @@
 #include <ydb/core/tx/columnshard/transactions/locks/read_finished.h>
 #include <ydb/core/tx/columnshard/transactions/locks/read_start.h>
 
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/struct_log/log_stack.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_SCAN
+
 namespace NKikimr::NOlap::NReader::NCommon {
+
+namespace {
+TString SortingName(const ERequestSorting sorting) {
+    switch (sorting) {
+        case ERequestSorting::NONE:
+            return "NONE";
+        case ERequestSorting::ASC:
+            return "ASC";
+        case ERequestSorting::DESC:
+            return "DESC";
+    }
+    return "UNKNOWN";
+}
+
+TString CursorDebugString(const TReadDescription& read) {
+    const auto& cursor = read.GetScanCursorVerified();
+    if (!cursor || !cursor->IsInitialized()) {
+        return "none";
+    }
+    return cursor->SerializeToProto().ShortDebugString();
+}
+
+bool GranuleHasIntervalTree(const NColumnShard::TColumnShard* owner, const TReadDescription& read) {
+    if (!owner->HasIndex()) {
+        return false;
+    }
+    const auto pathId = read.TableMetadataAccessor->GetPathId();
+    if (!pathId) {
+        return false;
+    }
+    const auto internal = pathId->GetInternalPathIdOptional();
+    if (!internal) {
+        return false;
+    }
+    const auto granule = owner->GetIndexAs<TColumnEngineForLogs>().GetGranuleOptional(*internal);
+    return granule && granule->HasPortionIntervalTree();
+}
+
+// TEMPORARY DEBUG: dump selected constructors in heap pop order. Remove after SCAN_SET_DUMP investigation.
+// portions format: "<idx>:<portionId>[C|V][c|u]n<records>cs=<commit|->rs=<remove|->as=<appearance|-> ..."
+// C=conflicting V=visible, c=committed u=uncommitted; snapshots as planStep:txId (or -)
+// Split like leaked-blobs normalizer (chunkIdx/chunksTotal) so a truncated line does not drop the rest.
+void DumpScanSet(const TReadDescription& read, ISourcesConstructor& sources, const NColumnShard::TColumnShard* owner) {
+    const TString lockMode = read.LockMode ? NKikimrDataEvents::ELockMode_Name(*read.LockMode) : "none";
+    const auto entries = sources.DebugPopOrderEntries();
+    static constexpr ui32 ChunkSize = 50;
+    const ui32 count = entries.size();
+    const ui32 chunksTotal = count ? (count + ChunkSize - 1) / ChunkSize : 1;
+    const TString cursor = CursorDebugString(read);
+    const TString snapshot = read.GetSnapshot().DebugString();
+    const TString table = read.TableMetadataAccessor->GetTablePath();
+    for (ui32 chunkIdx = 0; chunkIdx < chunksTotal; ++chunkIdx) {
+        const ui32 begin = chunkIdx * ChunkSize;
+        const ui32 end = Min<ui32>(begin + ChunkSize, count);
+        TStringBuilder portions;
+        for (ui32 i = begin; i < end; ++i) {
+            if (i > begin) {
+                portions << " ";
+            }
+            portions << entries[i];
+        }
+        YDB_LOG_WARN("",
+            {"event", "SCAN_SET_DUMP"},
+            {"tablet", read.GetTabletId()},
+            {"txId", read.TxId},
+            {"scanId", read.ScanId},
+            {"gen", read.ScanGeneration},
+            {"table", table},
+            {"snapshot", snapshot},
+            {"lockTxId", read.LockId.value_or(0)},
+            {"lockMode", lockMode},
+            {"sorting", SortingName(read.GetSorting())},
+            {"fakeSort", read.GetFakeSort()},
+            {"dedup", read.DeduplicationPolicy == EDeduplicationPolicy::PREVENT_DUPLICATES},
+            {"readConflicting", read.readConflictingPortions},
+            {"hasTree", GranuleHasIntervalTree(owner, read)},
+            {"rangeEmpty", !read.PKRangesFilter || read.PKRangesFilter->IsEmpty()},
+            {"cursor", cursor},
+            {"count", count},
+            {"chunkIdx", chunkIdx},
+            {"chunksTotal", chunksTotal},
+            {"chunkSize", end - begin},
+            {"portions", portions});
+    }
+}
+
+// TEMPORARY DEBUG: put scan identity into TlsLogContext so AFL_VERIFY/Y_ABORT carries join keys.
+template <typename TFunc>
+void WithScanCursorLogContext(const TReadDescription& read, TFunc&& func) {
+    const TString lockMode = read.LockMode ? NKikimrDataEvents::ELockMode_Name(*read.LockMode) : "none";
+    NActors::TLogContextGuard g(NActors::TLogContextBuilder::Build()("event", "SCAN_CURSOR_INIT")("tablet", read.GetTabletId())(
+        "txId", read.TxId)("scanId", read.ScanId)("gen", read.ScanGeneration)("table", read.TableMetadataAccessor->GetTablePath())(
+        "snapshot", read.GetSnapshot().DebugString())("lockTxId", read.LockId.value_or(0))("lockMode", lockMode)(
+        "readConflicting", read.readConflictingPortions)("sorting", SortingName(read.GetSorting()))("cursor", CursorDebugString(read)));
+    func();
+}
+}   // namespace
 
 TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, const TReadDescription& read, const EReaderClass readerClass) {
     SetPKRangesFilter(read.PKRangesFilter);
@@ -39,7 +142,10 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
                 SourcesConstructor = NReader::NTrivial::TPortionsSources::BuildEmpty();
                 break;
         }
-        SourcesConstructor->InitCursor(nullptr);
+        WithScanCursorLogContext(read, [&] {
+            DumpScanSet(read, *SourcesConstructor, owner);
+            SourcesConstructor->InitCursor(nullptr);
+        });
         return TConclusionStatus::Success();
     }
 
@@ -51,7 +157,10 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
         return TConclusionStatus::Fail("cannot build sources constructor for " + read.TableMetadataAccessor->GetTablePath());
     }
 
-    SourcesConstructor->InitCursor(read.GetScanCursorVerified());
+    WithScanCursorLogContext(read, [&] {
+        DumpScanSet(read, *SourcesConstructor, owner);
+        SourcesConstructor->InitCursor(read.GetScanCursorVerified());
+    });
 
     {
         auto customConclusion = DoInitCustom(owner, read);
@@ -61,7 +170,6 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
     }
 
     StatsMode = read.StatsMode;
-    DeduplicationPolicy = read.DeduplicationPolicy;
     GroupedMemoryLimiterOperator = read.GroupedMemoryLimiterOperator;
 
     if (read.readConflictingPortions) {
@@ -93,6 +201,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
 TReadMetadata::TReadMetadata(const std::shared_ptr<const TVersionedIndex>& schemaIndex, const TReadDescription& read)
     : TBase(schemaIndex, read.GetSorting(), read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(),
           read.GetScanCursorVerified(), read.GetTabletId())
+    , DuplicateFilteringNeeded(read.NeedDuplicateFiltering())
     , TableMetadataAccessor(read.TableMetadataAccessor)
     , ReadStats(std::make_shared<TReadStats>())
 {

@@ -1,5 +1,7 @@
 #include "extension_whoami.h"
 
+#include <ydb/library/security/util.h>
+
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/protobuf/json/proto2json.h>
 
@@ -55,7 +57,7 @@ void TExtensionWhoamiWorker::PatchResponse(NJson::TJsonValue& json, NJson::TJson
     SetCORS(Context->Params.Request, Context->Params.HeadersOverride.Get());
     Context->Params.HeadersOverride->Set("Content-Type", "application/json; charset=utf-8");
 
-    if (json.Has(USER_SID)) {
+    if (json.Has(USER_SID) && json.Has(ORIGINAL_USER_TOKEN)) {
         statusOverride = "200";
         messageOverride = "OK";
         if (errorJson.Has(EXTENDED_ERRORS)) {
@@ -154,6 +156,16 @@ void TExtensionWhoamiWorker::ApplyExtension() {
         SetExtendedError(errorJson, "Iam", "ResponseStatus", error->Get()->Status);
         SetExtendedError(errorJson, "Iam", "ResponseMessage", error->Get()->Message);
         SetExtendedError(errorJson, "Iam", "ResponseDetails", error->Get()->Details);
+    }
+
+    // Masked, not raw: the session cookie is httpOnly on purpose, so the token it is exchanged
+    // for must not be usable from JS. Kept for access debuggability until observability improves,
+    // then this whole block should go away.
+    if (!json.Has(ORIGINAL_USER_TOKEN)) {
+        TStringBuf tail;
+        if (TStringBuf(AuthHeader).AfterPrefix(IAM_TOKEN_SCHEME, tail)) {
+            json[ORIGINAL_USER_TOKEN] = NKikimr::MaskTicket(tail);
+        }
     }
 
     PatchResponse(json, errorJson);

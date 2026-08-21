@@ -12,7 +12,14 @@
     * [Создать]({{ yandex_docs }}/cli/quickstart#initialize) профиль
 
 1. [Создать]({{ yandex_docs }}/tutorials/infrastructure-management/terraform-quickstart#get-credentials) сервисный аккаунт с помощью CLI.
-1. [Сгенерировать]({{ yandex_docs }}/cli/operations/authentication/service-account#auth-as-sa) авторизованный ключ в JSON формате для подключения Terraform к облаку с помощью CLI: `yc iam key create --service-account-name <acc name> --output <file name> --folder-id <cloud folder id>`. В терминал будет выведена информация о созданном ключе:
+1. [Сгенерировать]({{ yandex_docs }}/cli/operations/authentication/service-account#auth-as-sa) авторизованный ключ в JSON формате для подключения Terraform к облаку с помощью CLI:
+
+```bash
+yc iam key create --service-account-name <acc name> \
+  --output <file name> --folder-id <cloud folder id>
+```
+
+В терминал будет выведена информация о созданном ключе:
 
     ```text
     id: ajenap572v8e1l...

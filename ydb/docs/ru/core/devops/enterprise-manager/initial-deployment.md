@@ -44,7 +44,7 @@ Gateway, Control Plane | {{ ydb-short-name }} | 2135 | gRPC | Подключен
 
 Версия | Ссылка
 --- | ---
-`<VERSION>` | `https://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz`
+`<VERSION>` | [Скачать архив](https://binaries.ydbem.website.yandexcloud.net/builds/<VERSION>/ydb-em-<VERSION>-stable-linux-amd64.tar.xz)
 
 Распакуйте скачанный архив в рабочую директорию (замените `<VERSION>` на актуальную версию):
 

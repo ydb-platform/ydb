@@ -20,11 +20,68 @@
 #include <util/datetime/base.h>
 #include <limits>
 
+#include <memory>
+#include <optional>
+
 #include <util/generic/overloaded.h>
 
 namespace NKikimr::NKqp {
 
 using TNodeId = ui32;
+
+class TProxyUserFacingTraceContext {
+public:
+    enum class EOwner {
+        Proxy,
+        Session,
+        Finished,
+    };
+
+    explicit TProxyUserFacingTraceContext(const NPrivateEvents::TEvQueryRequest& request)
+        : TraceId(request.GetUserFacingWilsonTraceId())
+        , Seed(request.GetProxyTraceSeed())
+        , Action(request.GetAction())
+    {}
+
+    TProxyUserFacingTraceContext(const TProxyUserFacingTraceContext&) = delete;
+    TProxyUserFacingTraceContext& operator=(const TProxyUserFacingTraceContext&) = delete;
+    TProxyUserFacingTraceContext(TProxyUserFacingTraceContext&&) = default;
+    TProxyUserFacingTraceContext& operator=(TProxyUserFacingTraceContext&&) = default;
+
+    void TransferToSession() {
+        if (Owner == EOwner::Proxy) {
+            Owner = EOwner::Session;
+        }
+    }
+
+    void ReclaimByProxy() {
+        if (Owner == EOwner::Session) {
+            Owner = EOwner::Proxy;
+        }
+    }
+
+    NWilson::TTraceId TakeIfProxyOwned() {
+        if (Owner != EOwner::Proxy) {
+            return {};
+        }
+        Owner = EOwner::Finished;
+        return std::move(TraceId);
+    }
+
+    const auto& GetSeed() const {
+        return Seed;
+    }
+
+    NKikimrKqp::EQueryAction GetAction() const {
+        return Action;
+    }
+
+private:
+    NWilson::TTraceId TraceId;
+    std::optional<NPrivateEvents::TEvQueryRequest::TProxyTraceSeed> Seed;
+    NKikimrKqp::EQueryAction Action;
+    EOwner Owner = EOwner::Proxy;
+};
 
 struct TKqpProxyRequest {
     TActorId Sender;
@@ -33,6 +90,7 @@ struct TKqpProxyRequest {
     ui32 EventType;
     TString SessionId;
     TKqpDbCountersPtr DbCounters;
+    std::unique_ptr<TProxyUserFacingTraceContext> UserFacingTrace;
 
     TKqpProxyRequest(const TActorId& sender, ui64 senderCookie, const TString& traceId,
         ui32 eventType)
@@ -46,6 +104,24 @@ struct TKqpProxyRequest {
     void SetSessionId(const TString& sessionId, TKqpDbCountersPtr dbCounters) {
         SessionId = sessionId;
         DbCounters = dbCounters;
+    }
+
+    void SetUserFacingTrace(const NPrivateEvents::TEvQueryRequest& request) {
+        if (request.Record.HasUserFacingTraceId()) {
+            UserFacingTrace = std::make_unique<TProxyUserFacingTraceContext>(request);
+        }
+    }
+
+    void TransferUserFacingTrace() {
+        if (UserFacingTrace) {
+            UserFacingTrace->TransferToSession();
+        }
+    }
+
+    void ReclaimUserFacingTrace() {
+        if (UserFacingTrace) {
+            UserFacingTrace->ReclaimByProxy();
+        }
     }
 };
 
@@ -69,9 +145,31 @@ public:
         return PendingRequests.FindPtr(requestId);
     }
 
+    TKqpProxyRequest* FindPtr(ui64 requestId) {
+        return PendingRequests.FindPtr(requestId);
+    }
+
+    void SetUserFacingTrace(ui64 requestId, const NPrivateEvents::TEvQueryRequest& request) {
+        if (auto* ptr = PendingRequests.FindPtr(requestId)) {
+            ptr->SetUserFacingTrace(request);
+        }
+    }
+
     void SetSessionId(ui64 requestId, const TString& sessionId, TKqpDbCountersPtr dbCounters) {
         TKqpProxyRequest* ptr = PendingRequests.FindPtr(requestId);
         ptr->SetSessionId(sessionId, dbCounters);
+    }
+
+    void TransferUserFacingTrace(ui64 requestId) {
+        if (auto* ptr = PendingRequests.FindPtr(requestId)) {
+            ptr->TransferUserFacingTrace();
+        }
+    }
+
+    void ReclaimUserFacingTrace(ui64 requestId) {
+        if (auto* ptr = PendingRequests.FindPtr(requestId)) {
+            ptr->ReclaimUserFacingTrace();
+        }
     }
 
     void Erase(ui64 requestId) {

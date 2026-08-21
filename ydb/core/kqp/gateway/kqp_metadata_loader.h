@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/simple/temp_tables.h>
+#include <ydb/core/kqp/common/compilation/compile_diagnostics.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
@@ -10,6 +11,10 @@
 #include <library/cpp/threading/future/core/future.h>
 
 #include <util/system/mutex.h>
+
+#include <memory>
+#include <utility>
+#include <vector>
 
 namespace NKikimr::NKqp {
 
@@ -26,13 +31,15 @@ public:
         NYql::TKikimrConfiguration::TPtr config,
         bool needCollectSchemeData = false,
         TKqpTempTablesState::TConstPtr tempTablesState = nullptr,
-        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt)
+        const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup = std::nullopt,
+        std::shared_ptr<ICompileDependencyDiagnostics> compileDiagnostics = {})
         : Cluster(cluster)
         , NeedCollectSchemeData(needCollectSchemeData)
         , ActorSystem(actorSystem)
         , Config(config)
         , TempTablesState(std::move(tempTablesState))
         , FederatedQuerySetup(federatedQuerySetup)
+        , CompileDiagnostics(std::move(compileDiagnostics))
     {}
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
@@ -76,6 +83,7 @@ private:
     NYql::TKikimrConfiguration::TPtr Config;
     TKqpTempTablesState::TConstPtr TempTablesState;
     std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
+    std::shared_ptr<ICompileDependencyDiagnostics> CompileDiagnostics;
 };
 
 } // namespace NKikimr::NKqp

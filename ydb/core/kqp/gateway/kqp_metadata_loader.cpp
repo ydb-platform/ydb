@@ -17,6 +17,9 @@
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
+#include <atomic>
+#include <functional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_GATEWAY
 
 namespace NKikimr::NKqp {
@@ -100,10 +103,39 @@ ui64 GetExpectedVersion(const TString&) {
 
 template<typename TRequest, typename TResponse, typename TResult>
 TFuture<TResult> SendActorRequest(TActorSystem* actorSystem, const TActorId& actorId, TRequest* request,
-    typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback)
+    typename TActorRequestHandler<TRequest, TResponse, TResult>::TCallbackFunc callback,
+    std::shared_ptr<ICompileDependencyDiagnostics> diagnostics = {},
+    ECompileDependency dependency = ECompileDependency::SchemeCache,
+    TString target = {},
+    std::function<ECompileDependencyStatus(const TResponse&)> extractStatus = {})
 {
     auto promise = NewPromise<TResult>();
-    IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(actorId, request, promise, callback);
+    if (!diagnostics) {
+        IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(
+            actorId, request, promise, std::move(callback));
+        actorSystem->Register(requestHandler, TMailboxType::HTSwap,
+            actorSystem->AppData<TAppData>()->UserPoolId);
+        return promise.GetFuture();
+    }
+
+    auto diagnostic = diagnostics->Begin(dependency, std::move(target));
+    auto diagnosticFinished = std::make_shared<std::atomic<bool>>(false);
+    auto finishDiagnostic = [diagnostics, diagnostic, diagnosticFinished](ECompileDependencyStatus status) mutable {
+        if (diagnostics && !diagnosticFinished->exchange(true, std::memory_order_relaxed)) {
+            diagnostics->Finish(std::move(diagnostic), status);
+        }
+    };
+    auto tracedCallback = [callback = std::move(callback), finishDiagnostic,
+            extractStatus = std::move(extractStatus)]
+            (TPromise<TResult> promise, TResponse&& response) mutable {
+        finishDiagnostic(extractStatus ? extractStatus(response) : ECompileDependencyStatus::Unknown);
+        callback(std::move(promise), std::move(response));
+    };
+    auto failedCallback = [finishDiagnostic = std::move(finishDiagnostic)]() mutable {
+        finishDiagnostic(ECompileDependencyStatus::Error);
+    };
+    IActor* requestHandler = new TActorRequestHandler<TRequest, TResponse, TResult>(
+        actorId, request, promise, std::move(tracedCallback), std::move(failedCallback));
     actorSystem->Register(requestHandler, TMailboxType::HTSwap, actorSystem->AppData<TAppData>()->UserPoolId);
     return promise.GetFuture();
 }
@@ -1436,6 +1468,18 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
             } catch (const yexception& e) {
                 promise.SetValue(ResultFromException<TResult>(e));
             }
+        },
+        CompileDiagnostics, ECompileDependency::SchemeCache, table,
+        [](const TResponse& response) {
+            if (!response.Request || response.Request->ResultSet.empty()) {
+                return ECompileDependencyStatus::Error;
+            }
+            for (const auto& entry : response.Request->ResultSet) {
+                if (entry.Status != EStatus::Ok) {
+                    return ECompileDependencyStatus::Error;
+                }
+            }
+            return ECompileDependencyStatus::Ok;
         }
     );
 
@@ -1448,7 +1492,7 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
 
     TActorSystem* actorSystem = ActorSystem;
 
-    return future.Apply([actorSystem, database](const TFuture<TTableMetadataResult>& f) {
+    return future.Apply([actorSystem, database, table, diagnostics = CompileDiagnostics](const TFuture<TTableMetadataResult>& f) {
         auto result = f.GetValue();
         if (!result.Success()) {
             return MakeFuture(result);
@@ -1487,6 +1531,10 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
                 result.Metadata->DataSize = s.BytesSize;
                 result.Metadata->StatsLoaded = response.Success;
                 promise.SetValue(result);
+        }, diagnostics, ECompileDependency::StatisticsService, table,
+        [](const NStat::TEvStatistics::TEvGetStatisticsResult& response) {
+            return response.Success && !response.StatResponses.empty()
+                ? ECompileDependencyStatus::Ok : ECompileDependencyStatus::Error;
         });
     });
 }

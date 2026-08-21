@@ -19,7 +19,6 @@ struct TKqpQueryStats {
     ui64 LocksBrokenAsVictim = 0;
 
     TVector<NYql::NDqProto::TDqExecutionStats> Executions;
-
     const TVector<NYql::NDqProto::TDqExecutionStats>& GetExecutions() const;
     ui64 GetWorkerCpuTimeUs() const;
 

@@ -1,6 +1,7 @@
 #include "kqp_read_actor.h"
 
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
+#include <ydb/core/kqp/common/kqp_runtime_diagnostics.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
@@ -872,6 +873,9 @@ public:
     }
 
     void StartRead(TShardState* state) {
+        if (Settings->GetCollectDiagnostics()) {
+            ShardReadDiagnostics.OnStart(state->TabletId);
+        }
         TMaybe<ui64> limit;
         if (Settings->GetItemsLimit()) {
             limit = Settings->GetItemsLimit() - Min(Settings->GetItemsLimit(), ReceivedRowCount);
@@ -1035,6 +1039,13 @@ public:
         if (!Reads[id] || Reads[id].Finished) {
             // dropped read
             return;
+        }
+
+        if (Settings->GetCollectDiagnostics()) {
+            ShardReadDiagnostics.OnFinish(Reads[id].Shard->TabletId, record.GetRowCount(),
+                Reads[id].Shard->RetryAttempt,
+                Reads[id].Shard->NodeId ? *Reads[id].Shard->NodeId : 0,
+                record.GetStatus().GetCode(), record.GetFinished());
         }
 
         TStringBuilder txLocks;
@@ -1584,13 +1595,19 @@ public:
             //tableStats->SetAffectedPartitions(tableStats->GetAffectedPartitions() + InFlightShards.Size());
 
             // Add lock stats for broken locks from read operations
-            if (!BrokenLocks.empty()) {
+            if (!BrokenLocks.empty() || (Settings->GetCollectDiagnostics()
+                    && (TotalRetries > 0 || !ShardReadDiagnostics.Empty()))) {
                 NKqpProto::TKqpTaskExtraStats extraStats;
                 if (stats->HasExtra()) {
                     stats->GetExtra().UnpackTo(&extraStats);
                 }
-                extraStats.MutableLockStats()->SetBrokenAsVictim(
-                    extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                if (!BrokenLocks.empty()) {
+                    extraStats.MutableLockStats()->SetBrokenAsVictim(
+                        extraStats.GetLockStats().GetBrokenAsVictim() + BrokenLocks.size());
+                }
+                if (Settings->GetCollectDiagnostics()) {
+                    ShardReadDiagnostics.Export(extraStats, TotalRetries);
+                }
                 stats->MutableExtra()->PackFrom(extraStats);
             }
         }
@@ -1620,6 +1637,10 @@ public:
     }
 
     void RuntimeError(const TString& message, NYql::NDqProto::StatusIds::StatusCode statusCode, const NYql::TIssues& subIssues = {}) {
+        if (Settings->GetCollectDiagnostics()) {
+            ShardReadDiagnostics.OnError(statusCode == NYql::NDqProto::StatusIds::CANCELLED
+                ? Ydb::StatusIds::CANCELLED : Ydb::StatusIds::ABORTED);
+        }
         NYql::TIssue issue(message);
         for (const auto& i : subIssues) {
             issue.AddSubIssue(MakeIntrusive<NYql::TIssue>(i));
@@ -1755,6 +1776,7 @@ private:
     NActors::TActorId PipeCacheId;
 
     size_t TotalRetries = 0;
+    TShardReadDiagnosticsCollector ShardReadDiagnostics;
 
     bool FirstShardStarted = false;
 

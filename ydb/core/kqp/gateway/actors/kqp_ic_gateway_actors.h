@@ -8,6 +8,9 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <functional>
+#include <utility>
+
 
 namespace NKikimr::NKqp {
 
@@ -15,6 +18,7 @@ template<typename TDerived, typename TRequest, typename TResponse, typename TRes
 class TRequestHandlerBase: public TActorBootstrapped<TDerived> {
 public:
     using TCallbackFunc = std::function<void(NThreading::TPromise<TResult>, TResponse&&)>;
+    using TFailureCallbackFunc = std::function<void()>;
     using TBase = TRequestHandlerBase<TDerived, TRequest, TResponse, TResult>;
 
 public:
@@ -22,12 +26,16 @@ public:
         return NKikimrServices::TActivity::KQP_REQUEST_HANDLER;
     }
 
-    TRequestHandlerBase(TRequest* request, NThreading::TPromise<TResult> promise, TCallbackFunc callback)
+    TRequestHandlerBase(TRequest* request, NThreading::TPromise<TResult> promise, TCallbackFunc callback,
+            TFailureCallbackFunc failureCallback = {})
         : Request(request)
         , Promise(promise)
-        , Callback(callback) {}
+        , Callback(callback)
+        , FailureCallback(std::move(failureCallback))
+    {}
 
     void HandleError(const TString &error, const TActorContext &ctx) {
+        NotifyFailure();
         Promise.SetValue(NYql::NCommon::ResultFromError<TResult>(error));
         this->Die(ctx);
     }
@@ -42,6 +50,7 @@ public:
             {"requestType", requestType},
             {"eventType", eventType});
 
+        NotifyFailure();
         Promise.SetValue(NYql::NCommon::ResultFromError<TResult>(YqlIssue({}, NYql::TIssuesIds::UNEXPECTED, TStringBuilder()
             << "Unexpected event in " << requestType << ": " << eventType)));
         this->PassAway();
@@ -49,6 +58,7 @@ public:
 
     void Handle(NKikimr::TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         if (ev->Get()->Status != NKikimrProto::OK) {
+            NotifyFailure();
             Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                 TStringBuilder() << "Tablet not available, status: " << (ui32)ev->Get()->Status, {}));
             this->Die(ctx);
@@ -57,6 +67,7 @@ public:
 
     void Handle(NKikimr::TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
+        NotifyFailure();
         Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             "Connection to tablet was lost.", {}));
         this->Die(ctx);
@@ -64,6 +75,7 @@ public:
 
     void Handle(TEvents::TEvUndelivered::TPtr &ev, const TActorContext &ctx) {
         Y_UNUSED(ev);
+        NotifyFailure();
         Promise.SetValue(NYql::NCommon::ResultFromIssues<TResult>(NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
             "Failed to deliver request to destination.", {}));
         this->Die(ctx);
@@ -71,6 +83,7 @@ public:
 
     ~TRequestHandlerBase() override {
         if (Promise.Initialized() && !Promise.IsReady()) {
+            NotifyFailure();
             Promise.TrySetValue(NYql::NCommon::ResultFromIssues<TResult>(
                 NYql::TIssuesIds::KIKIMR_OPERATION_ABORTED,
                 "Shutting down.", {}));
@@ -78,11 +91,20 @@ public:
     }
 
 protected:
+    void NotifyFailure() {
+        if (FailureCallback) {
+            auto callback = std::move(FailureCallback);
+            FailureCallback = {};
+            callback();
+        }
+    }
+
     THolder<TRequest> Request;
     // Note: Promise must be moved into Callback to avoid racing with
     // the destructor.
     NThreading::TPromise<TResult> Promise;
     TCallbackFunc Callback;
+    TFailureCallbackFunc FailureCallback;
 };
 
 template<typename TRequest, typename TResponse, typename TResult>
@@ -96,8 +118,9 @@ public:
     using TBase = typename TActorRequestHandler::TBase;
     using TCallbackFunc = typename TBase::TCallbackFunc;
 
-    TActorRequestHandler(TActorId actorId, TRequest* request, NThreading::TPromise<TResult> promise, TCallbackFunc callback)
-        : TBase(request, promise, callback)
+    TActorRequestHandler(TActorId actorId, TRequest* request, NThreading::TPromise<TResult> promise,
+            TCallbackFunc callback, typename TBase::TFailureCallbackFunc failureCallback = {})
+        : TBase(request, promise, callback, std::move(failureCallback))
         , ActorId(actorId) {}
 
     void Bootstrap(const TActorContext& ctx) {

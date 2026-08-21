@@ -1,6 +1,7 @@
 #pragma once
 
 #include "kqp_query_stats.h"
+#include "kqp_user_facing_tracing.h"
 #include "kqp_worker_common.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -106,6 +107,12 @@ public:
         QueryType = RequestEv->GetType();
 
         SetQueryDeadlines(tableServiceConfig, queryServiceConfig);
+
+        if (NWilson::TTraceId traceId = RequestEv->GetUserFacingWilsonTraceId()) {
+            UserFacingTrace = std::make_unique<TUserFacingTraceContext>(std::move(traceId),
+                StartTime, RequestEv->Record.GetProxyRequestHops());
+        }
+
         KqpSessionSpan = NWilson::TSpan(
             TWilsonKqp::KqpSession, std::move(ev->TraceId),
             "Session.query." + NKikimrKqp::EQueryAction_Name(QueryAction), NWilson::EFlags::AUTO_END);
@@ -191,6 +198,7 @@ public:
 
     NLWTrace::TOrbit Orbit;
     NWilson::TSpan KqpSessionSpan;
+    std::unique_ptr<TUserFacingTraceContext> UserFacingTrace;
     ETableReadType MaxReadType = ETableReadType::Other;
 
     TQueryTxId TxId; // User tx

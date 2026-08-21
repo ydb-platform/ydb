@@ -3,6 +3,10 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/kqp_stats.pb.h>
 
+#include <algorithm>
+#include <numeric>
+#include <tuple>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -16,6 +20,115 @@ ui64 NonZeroMin(ui64 a, ui64 b) {
 
 ui64 ExportMinStats(std::vector<ui64>& data);
 ui64 ExportMaxStats(std::vector<ui64>& data);
+
+namespace {
+
+TTaskTraceSnapshot MakeTaskTraceSnapshot(const NYql::NDqProto::TDqTaskStats& task) {
+    TTaskTraceSnapshot snapshot;
+    snapshot.TaskId = task.GetTaskId();
+    snapshot.NodeId = task.GetNodeId();
+    const ui64 startMs = task.GetStartTimeMs() ? task.GetStartTimeMs() : task.GetCreateTimeMs();
+    const ui64 finishMs = task.GetFinishTimeMs() ? task.GetFinishTimeMs() : task.GetUpdateTimeMs();
+    if (startMs && finishMs >= startMs) {
+        snapshot.Window = {
+            TInstant::MilliSeconds(startMs),
+            TInstant::MilliSeconds(finishMs),
+        };
+    }
+    if (task.GetCreateTimeMs() && task.GetStartTimeMs() > task.GetCreateTimeMs()) {
+        snapshot.QueueDelayUs = (task.GetStartTimeMs() - task.GetCreateTimeMs()) * 1000;
+    }
+    snapshot.ComputeCpuUs = task.GetComputeCpuTimeUs();
+    snapshot.BuildCpuUs = task.GetBuildCpuTimeUs();
+    snapshot.InputRows = task.GetInputRows();
+    snapshot.OutputRows = task.GetOutputRows();
+    snapshot.WaitUs = task.GetWaitInputTimeUs() + task.GetWaitOutputTimeUs();
+    snapshot.SpilledBytes = task.GetSpillingComputeWriteBytes() + task.GetSpillingChannelWriteBytes();
+
+    if (task.HasExtra()) {
+        NKqpProto::TKqpTaskExtraStats extra;
+        if (task.GetExtra().UnpackTo(&extra)) {
+            snapshot.ReadRetries = extra.GetReadRetriesCount() + extra.GetScanTaskExtraStats().GetRetriesCount();
+            const size_t count = Min<size_t>(extra.GetShardReads().size(), MaxShardReadDiagnostics);
+            snapshot.Shards.assign(extra.GetShardReads().begin(), extra.GetShardReads().begin() + count);
+            snapshot.ShardsTruncated = extra.GetShardReadsTruncated() + extra.GetShardReads().size() - count;
+        }
+    }
+    for (const auto& source : task.GetSources()) {
+        for (const auto& partition : source.GetExternalPartitions()) {
+            ui64 shardId = 0;
+            if (!TryFromString(partition.GetPartitionId(), shardId)) {
+                continue;
+            }
+            if (snapshot.Shards.size() >= MaxShardReadDiagnostics) {
+                ++snapshot.ShardsTruncated;
+                continue;
+            }
+            auto& shard = snapshot.Shards.emplace_back();
+            shard.SetShardId(shardId);
+            shard.SetStartTimeMs(partition.GetFirstMessageMs());
+            shard.SetFinishTimeMs(partition.GetLastMessageMs());
+            shard.SetRows(partition.GetExternalRows());
+            shard.SetTiming(NKqpProto::TKqpShardReadStats::FIRST_TO_LAST_MESSAGE);
+        }
+    }
+
+    auto shardRank = [](const NKqpProto::TKqpShardReadStats& shard) {
+        const bool failed = shard.GetStatus() != Ydb::StatusIds::STATUS_CODE_UNSPECIFIED
+            && shard.GetStatus() != Ydb::StatusIds::SUCCESS;
+        const ui64 durationMs = shard.GetStartTimeMs()
+                && shard.GetFinishTimeMs() >= shard.GetStartTimeMs()
+            ? shard.GetFinishTimeMs() - shard.GetStartTimeMs() : 0;
+        return std::tuple(failed, shard.GetRetries() > 0, durationMs);
+    };
+    for (const auto& shard : snapshot.Shards) {
+        if (!shard.GetStartTimeMs() || shard.GetFinishTimeMs() < shard.GetStartTimeMs()) {
+            continue;
+        }
+        const TInstant shardStart = TInstant::MilliSeconds(shard.GetStartTimeMs());
+        const TInstant shardEnd = TInstant::MilliSeconds(shard.GetFinishTimeMs());
+        snapshot.Window.Start = snapshot.Window.Start == TInstant::Zero()
+            ? shardStart : Min(snapshot.Window.Start, shardStart);
+        snapshot.Window.End = Max(snapshot.Window.End, shardEnd);
+    }
+    std::sort(snapshot.Shards.begin(), snapshot.Shards.end(), [&](const auto& lhs, const auto& rhs) {
+        return shardRank(lhs) > shardRank(rhs);
+    });
+    if (snapshot.Shards.size() > MaxInterestingShardsPerTask) {
+        snapshot.ShardsTruncated += snapshot.Shards.size() - MaxInterestingShardsPerTask;
+        snapshot.Shards.resize(MaxInterestingShardsPerTask);
+    }
+    return snapshot;
+}
+
+bool LessInteresting(const TTaskTraceSnapshot& lhs, const TTaskTraceSnapshot& rhs) {
+    return std::tuple(lhs.HasAnomaly(), lhs.DurationUs())
+        < std::tuple(rhs.HasAnomaly(), rhs.DurationUs());
+}
+
+void KeepInterestingTask(TStageTraceSnapshot& stage, TTaskTraceSnapshot&& task) {
+    auto& tasks = stage.InterestingTasks;
+    if (auto it = std::find_if(tasks.begin(), tasks.end(), [&](const auto& item) {
+            return item.TaskId == task.TaskId;
+        }); it != tasks.end()) {
+        *it = std::move(task);
+        return;
+    }
+    if (tasks.size() < MaxInterestingTasksPerStage) {
+        tasks.push_back(std::move(task));
+        return;
+    }
+    auto least = std::min_element(tasks.begin(), tasks.end(), LessInteresting);
+    if (least != tasks.end() && LessInteresting(*least, task)) {
+        *least = std::move(task);
+    }
+}
+
+ui64 Sum(const std::vector<ui64>& values) {
+    return std::accumulate(values.begin(), values.end(), ui64{0});
+}
+
+} // namespace
 
 void TMinStats::Resize(ui32 count) {
     Values.resize(count);
@@ -1074,6 +1187,16 @@ void TQueryExecutionStats::AddDatashardStats(NKikimrQueryStats::TTxStats&& txSta
 void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskStats) {
     NKqpProto::TKqpTaskExtraStats extraStats;
     if (taskStats.GetExtra().UnpackTo(&extraStats)) {
+        if (CollectBufferLookupDiagnostics) {
+            for (const auto& shard : extraStats.GetShardReads()) {
+                if (BufferLookupDiagnostics.Shards.size() >= MaxShardReadDiagnostics) {
+                    ++BufferLookupDiagnostics.ShardsTruncated;
+                    continue;
+                }
+                BufferLookupDiagnostics.Shards.push_back(shard);
+            }
+            BufferLookupDiagnostics.ShardsTruncated += extraStats.GetShardReadsTruncated();
+        }
         LocksBrokenAsBreaker += extraStats.GetLockStats().GetBrokenAsBreaker();
         LocksBrokenAsVictim += extraStats.GetLockStats().GetBrokenAsVictim();
         for (auto id : extraStats.GetLockStats().GetBreakerQuerySpanIds()) {
@@ -1261,21 +1384,59 @@ void TQueryExecutionStats::UpdateTaskStats(ui32 nodeId, ui64 taskId, const NYql:
                     nodeStats.UpdateStats(taskStats, state, stats.GetMemoryUsage(), stats.GetMaxMemoryUsage());
                 }
 
-                /* if (CollectProfileStats(StatsMode)) {
+                auto taskDuration = TDuration::MilliSeconds(
+                    taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
+                    ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
+                    : 0);
+                auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
+                if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
+                    CollectStatsByLongTasks = true;
+                    longestTaskDuration = taskDuration;
+                    stageStats.ComputeActors.clear();
                     stageStats.ComputeActors[taskId].CopyFrom(stats);
-                } else */ {
-                    auto taskDuration = TDuration::MilliSeconds(
-                        taskStats.GetStartTimeMs() != 0 && taskStats.GetFinishTimeMs() >= taskStats.GetStartTimeMs()
-                        ? taskStats.GetFinishTimeMs() - taskStats.GetStartTimeMs()
-                        : 0);
-                    auto& longestTaskDuration = LongestTaskDurations[taskStats.GetStageId()];
-                    if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
-                        CollectStatsByLongTasks = true;
-                        longestTaskDuration = taskDuration;
-                        stageStats.ComputeActors.clear();
-                        stageStats.ComputeActors[taskId].CopyFrom(stats);
-                    }
                 }
+            }
+            if (CollectTraceDiagnostics) {
+                auto task = MakeTaskTraceSnapshot(taskStats);
+                task.Failed = state == NYql::NDqProto::COMPUTE_STATE_FAILURE;
+                auto& stage = TraceStages[taskStats.GetStageId()];
+                stage.StageId = taskStats.GetStageId();
+                if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED || task.Failed) {
+                    auto nodeIt = std::find_if(stage.TasksByNode.begin(), stage.TasksByNode.end(), [&](const auto& item) {
+                        return item.first == nodeId;
+                    });
+                    if (nodeIt == stage.TasksByNode.end()
+                            && stage.TasksByNode.size() < MaxStageNodeDiagnostics) {
+                        stage.TasksByNode.emplace_back(nodeId, 1);
+                    } else if (nodeIt != stage.TasksByNode.end()) {
+                        ++nodeIt->second;
+                    }
+                    const ui64 durationUs = task.DurationUs();
+                    auto& durations = stage.Durations;
+                    if (durations.Count == 0 || durationUs < durations.MinUs) {
+                        durations.MinUs = durationUs;
+                        stage.FastestTaskNode = nodeId;
+                    }
+                    if (durations.Count == 0 || durationUs >= durations.MaxUs) {
+                        durations.MaxUs = durationUs;
+                        stage.SlowestTaskNode = nodeId;
+                    }
+                    durations.SumUs += durationUs;
+                    ++durations.Count;
+                    ++stage.Tasks;
+                    stage.FailedTasks += task.Failed;
+                    stage.CpuUs += task.ComputeCpuUs + task.BuildCpuUs;
+                    stage.InputRows += task.InputRows;
+                    stage.OutputRows += task.OutputRows;
+                    stage.WaitUs += task.WaitUs;
+                    stage.SpilledBytes += task.SpilledBytes;
+                }
+                if (task.Window) {
+                    stage.Window.Start = stage.Window.Start == TInstant::Zero()
+                        ? task.Window.Start : Min(stage.Window.Start, task.Window.Start);
+                    stage.Window.End = Max(stage.Window.End, task.Window.End);
+                }
+                KeepInterestingTask(stage, std::move(task));
             }
         }
     }
@@ -1519,8 +1680,68 @@ void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     metrics->OutputBytes = outputBytes;
 }
 
-void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats) {
-    switch (StatsMode) {
+void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& stats,
+        Ydb::Table::QueryStatsCollection::Mode exportMode) {
+    ExportExecStatsImpl(stats, exportMode);
+}
+
+void TQueryExecutionStats::ExportTraceSnapshot(TExecutionTraceSnapshot& snapshot) {
+    snapshot.CpuUs = StorageCpuTimeUs + ComputeCpuTimeUs.Sum;
+    for (const auto& [stageId, stageInfo] : TasksGraph->GetStagesInfo()) {
+        if (stageId.TxId != 0) {
+            continue;
+        }
+        auto stage = std::move(TraceStages[stageId.StageId]);
+        stage.StageId = stageId.StageId;
+
+        if (const auto statsIt = StageStats.find(stageId); statsIt != StageStats.end()) {
+            const auto& stats = statsIt->second;
+            stage.Tasks = stats.Task2Index.size();
+            stage.CpuUs = stats.CpuTimeUs.Sum;
+            stage.InputRows = Sum(stats.InputRows);
+            stage.OutputRows = Sum(stats.OutputRows);
+            stage.WaitUs = stats.WaitInputTimeUs.Sum + stats.WaitOutputTimeUs.Sum;
+            stage.SpilledBytes = stats.SpillingComputeBytes.Sum + stats.SpillingChannelBytes.Sum;
+
+            if (!stats.Joins.empty()) {
+                stage.Operation = EStageOperation::Join;
+            } else if (!stats.Aggregations.empty()) {
+                stage.Operation = EStageOperation::Aggregate;
+            } else if (!stats.Filters.empty()) {
+                stage.Operation = EStageOperation::Filter;
+            } else if (!stats.Tables.empty()) {
+                const auto& [tablePath, table] = *stats.Tables.begin();
+                stage.TablePath = tablePath;
+                stage.Operation = Sum(table.WriteRows) + Sum(table.EraseRows) > 0
+                    ? EStageOperation::Write : EStageOperation::Read;
+            }
+        }
+        if (!stage.TablePath && stageInfo.Meta.TablePath) {
+            stage.TablePath = stageInfo.Meta.TablePath;
+            stage.Operation = stageInfo.Meta.HasWrites() ? EStageOperation::Write : EStageOperation::Read;
+        }
+        std::sort(stage.TasksByNode.begin(), stage.TasksByNode.end(), [](const auto& lhs, const auto& rhs) {
+            return lhs.second > rhs.second;
+        });
+        std::sort(stage.InterestingTasks.begin(), stage.InterestingTasks.end(), [](const auto& lhs, const auto& rhs) {
+            return LessInteresting(rhs, lhs);
+        });
+        snapshot.Stages.push_back(std::move(stage));
+    }
+    std::sort(snapshot.Stages.begin(), snapshot.Stages.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.StageId < rhs.StageId;
+    });
+    snapshot.BufferLookup = std::move(BufferLookupDiagnostics);
+    if (snapshot.BufferLookup.Shards.size() > MaxInterestingShardsPerTask) {
+        snapshot.BufferLookup.ShardsTruncated +=
+            snapshot.BufferLookup.Shards.size() - MaxInterestingShardsPerTask;
+        snapshot.BufferLookup.Shards.resize(MaxInterestingShardsPerTask);
+    }
+}
+
+void TQueryExecutionStats::ExportExecStatsImpl(NYql::NDqProto::TDqExecutionStats& stats,
+        Ydb::Table::QueryStatsCollection::Mode mode) {
+    switch (mode) {
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE:
             [[fallthrough]];
         case Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL: {
@@ -1617,7 +1838,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                     stageStats.AddComputeActors()->Swap(&caStats);
                 }
 
-                if (CollectProfileStats(StatsMode)) {
+                if (CollectProfileStats(mode)) {
                     auto it = ShardsCountByNode.find(stageId.StageId);
                     if (it != ShardsCountByNode.end()) {
                         NKqpProto::TKqpStageExtraStats extraStats;
@@ -1631,7 +1852,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 }
             }
 
-            if (CollectProfileStats(StatsMode)) {
+            if (CollectProfileStats(mode)) {
                 for (auto& [nodeId, nodeStat] : NodeStats) {
                     auto& nodeStats = *stats.AddNodes();
                     nodeStats.SetNodeId(nodeId);

@@ -3346,6 +3346,7 @@ public:
         : SessionActorId(settings.SessionActorId)
         , MessageSettings(GetWriteActorSettings())
         , TxManager(settings.TxManager)
+        , CollectLookupDiagnostics(settings.CollectDiagnostics)
         , Alloc(settings.Alloc)
         , TypeEnv(std::make_shared<NKikimr::NMiniKQL::TTypeEnvironment>(*Alloc))
         , MemInfo("TKqpBufferWriteActor")
@@ -3648,6 +3649,7 @@ public:
             .Counters = Counters,
 
             .ParentTraceId = BufferWriteActorStateSpan.GetTraceId(),
+            .CollectDiagnostics = CollectLookupDiagnostics,
         });
 
         TActorId id = RegisterWithSameMailbox(actor);
@@ -4516,6 +4518,9 @@ public:
     bool Prepare(std::optional<NWilson::TTraceId> traceId) {
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
+        if (CollectTimeline) {
+            CommitDiagnostics.PrepareShards.Start = OperationStartTime;
+        }
 
         YDB_LOG_DEBUG("Start prepare for distributed commit",
             {"logPrefix", this->LogPrefix});
@@ -4544,6 +4549,9 @@ public:
         Counters->BufferActorImmediateCommits->Inc();
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
+        if (CollectTimeline) {
+            CommitDiagnostics.ApplyShards.Start = OperationStartTime;
+        }
 
         YDB_LOG_DEBUG("Start immediate commit",
             {"logPrefix", this->LogPrefix});
@@ -4568,6 +4576,10 @@ public:
     void DistributedCommit() {
         Counters->BufferActorDistributedCommits->Inc();
         OperationStartTime = TInstant::Now();
+        if (CollectTimeline) {
+            CommitDiagnostics.PrepareShards.End = OperationStartTime;
+            CommitDiagnostics.Coordinator.Start = OperationStartTime;
+        }
 
         YDB_LOG_DEBUG("Start distributed commit with",
             {"logPrefix", this->LogPrefix},
@@ -4935,6 +4947,10 @@ public:
             case TEvTxProxy::TEvProposeTransactionStatus::EStatus::StatusPlanned:
                 TxProxyMon->ClientTxStatusPlanned->Inc();
                 TxPlanned = true;
+                if (CollectTimeline) {
+                    CommitDiagnostics.Coordinator.End = TInstant::Now();
+                    CommitDiagnostics.ApplyShards.Start = CommitDiagnostics.Coordinator.End;
+                }
                 if (TxManager->GetIsolationLevel() == NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE) {
                     AFL_ENSURE(res->Record.HasStepId());
                     AFL_ENSURE(res->Record.HasTxId());
@@ -5275,6 +5291,8 @@ public:
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
+        CollectTimeline = ev->Get()->CollectTimeline;
+        CollectShards = ev->Get()->CollectShards;
         for (auto& [_, writeTask] : WriteTasks) {
             AFL_ENSURE(writeTask.IsClosed());
         }
@@ -5722,6 +5740,9 @@ public:
     }
 
     void OnPrepared(IKqpTransactionManager::TPrepareResult&& preparedInfo, ui64) override {
+        if (CollectShards && preparedInfo.ShardId) {
+            PreparedShardDiagnostics.OnAck(preparedInfo.ShardId);
+        }
         if (HandleDeferredLocksBrokenOnPrepare()) return;
         if (!preparedInfo.Coordinator || (TxManager->GetCoordinator() && preparedInfo.Coordinator != TxManager->GetCoordinator())) {
             YDB_LOG_ERROR("Handle TEvWriteResult: unable to select coordinator. Tx canceled, previously selected coordinator selected at propose",
@@ -5759,6 +5780,9 @@ public:
                 ("writeResult", writeResultTimestamp->TxId)
                 ("shardId", shardId);
         }
+        if (CollectShards && shardId) {
+            CommittedShardDiagnostics.OnAck(shardId);
+        }
         if (PendingCommitShards > 0) {
             --PendingCommitShards;
         }
@@ -5768,10 +5792,11 @@ public:
                 {"logPrefix", this->LogPrefix},
                 {"txId", TxId.value_or(0)});
             OnOperationFinished(Counters->BufferActorCommitLatencyHistogram);
-            Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
-                BuildStats(),
-                std::move(CommitTimestamp)
-            });
+            auto result = std::make_unique<TEvKqpBuffer::TEvResult>(BuildStats(), std::move(CommitTimestamp));
+            if (CollectTimeline || CollectShards) {
+                result->CommitDiagnostics = FinishCommitDiagnostics(TInstant::Now());
+            }
+            Send<ESendingType::Tail>(ExecuterActorId, result.release());
             ExecuterActorId = {};
             AFL_ENSURE(GetTotalMemory() == 0);
             PassAway();
@@ -6034,6 +6059,26 @@ public:
         });
     }
 
+    TCommitDiagnostics FinishCommitDiagnostics(TInstant end) {
+        if (CollectTimeline) {
+            auto close = [end](TTimeWindow& window) {
+                if (window.Start != TInstant::Zero() && window.End == TInstant::Zero()) {
+                    window.End = end;
+                }
+            };
+            close(CommitDiagnostics.PrepareShards);
+            close(CommitDiagnostics.Coordinator);
+            close(CommitDiagnostics.ApplyShards);
+        }
+        if (CollectShards) {
+            CommitDiagnostics.PreparedShards = PreparedShardDiagnostics.Shards();
+            CommitDiagnostics.CommittedShards = CommittedShardDiagnostics.Shards();
+            CommitDiagnostics.PreparedShardsTruncated = PreparedShardDiagnostics.Dropped();
+            CommitDiagnostics.CommittedShardsTruncated = CommittedShardDiagnostics.Dropped();
+        }
+        return std::move(CommitDiagnostics);
+    }
+
     void ReplyErrorImpl(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
         YDB_LOG_ERROR("Buffer write actor is replying with error to session.",
             {"logPrefix", this->LogPrefix},
@@ -6045,10 +6090,15 @@ public:
         CancelProposal();
         Become(&TKqpBufferWriteActor::StateError);
 
+        TCommitDiagnostics diagnostics;
+        if (CollectTimeline || CollectShards) {
+            diagnostics = FinishCommitDiagnostics(TInstant::Now());
+        }
         Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
             statusCode,
             std::move(issues),
-            BuildStats()
+            BuildStats(),
+            std::move(diagnostics)
         });
 
         Clear();
@@ -6171,6 +6221,12 @@ private:
     bool TxPlanned = false;
     std::optional<ui64> Coordinator;
     std::optional<TCommitTimestamp> CommitTimestamp;
+    bool CollectTimeline = false;
+    bool CollectShards = false;
+    bool CollectLookupDiagnostics = false;
+    TShardAckDiagnosticsCollector PreparedShardDiagnostics;
+    TShardAckDiagnosticsCollector CommittedShardDiagnostics;
+    TCommitDiagnostics CommitDiagnostics;
 
     ui64 LocksBrokenAsBreaker = 0;
     ui64 LocksBrokenAsVictim = 0;

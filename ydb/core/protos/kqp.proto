@@ -251,6 +251,13 @@ message TRlPath {
     optional string ResourcePath = 2;
 }
 
+message TProxyRequestHop {
+    optional uint32 NodeId = 1;
+    optional uint32 TargetNodeId = 2;
+    optional uint64 DurationUs = 3;
+    reserved 4;
+}
+
 message TEvQueryRequest {
     optional TQueryRequest Request = 1;
     optional string TraceId = 2;
@@ -262,6 +269,9 @@ message TEvQueryRequest {
     repeated Ydb.Issue.IssueMessage QueryIssues = 7;
     optional Ydb.StatusIds.StatusCode YdbStatus = 8;
     optional NActorsProto.TActorId CancelationActor = 9;
+    optional NActorsProto.TTraceId UserFacingTraceId = 10;
+    reserved 11;
+    repeated TProxyRequestHop ProxyRequestHops = 12;
 }
 
 message TParameterBinding {
@@ -965,6 +975,7 @@ message TKqpStreamLookupSettings {
     // Gated by the EnableStreamLookupJoinCookieV2 feature flag so the new format
     // is only emitted once every node in the cluster understands it.
     optional uint32 CookieFormatVersion = 23 [default = 0];
+    optional bool CollectDiagnostics = 24 [default = false];
 }
 
 message TKqpFullTextSourceSettings {
@@ -1019,6 +1030,7 @@ message TKqpFullTextSourceSettings {
     optional string Mode = 16;
 
     optional NKqpProto.EKqpFullTextIndexType IndexType = 17;
+    optional bool CollectDiagnostics = 20 [default = false];
 };
 
 message TKqpSysViewSourceSettings {

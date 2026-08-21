@@ -303,7 +303,7 @@ void TQueryBuilder::AddLine(TStringBuf line) {
             AddMemberFromString(type, TString{col.Name}, tok);
         } catch (const std::exception& e) {
             throw yexception() << "Failed to parse value " << TString{tok}.Quote()
-                << " for column " << col.Name.Quote() << ": " << e.what();
+                << " for column " << TString{col.Name}.Quote() << ": " << e.what();
         }
     }
     Value.EndStruct();

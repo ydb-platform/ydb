@@ -176,6 +176,33 @@ Y_UNIT_TEST(ParseValuesFromFile) {
     UNIT_ASSERT(rowsRead == RowSize);
 }
 
+Y_UNIT_TEST(ParseErrorFromFileIncludesLocationAndColumn) {
+    TTempDir tempDir;
+    const TString dataFileName = tempDir.Name() + "data_00.csv";
+    {
+        TFile dataFile(dataFileName, CreateAlways | WrOnly);
+        const TString data = "1.0\nnot-a-float\n";
+        dataFile.Write(data.data(), data.size());
+    }
+
+    auto tableDesc = NTable::TTableBuilder()
+        .AddNullableColumn("ColFloat", EPrimitiveType::Float)
+        .Build();
+
+    NBackup::TQueryFromFileIterator it("table_path", dataFileName, tableDesc.GetColumns(), 4096, 1, 0);
+    it.ReadNextGetParams();
+
+    try {
+        it.ReadNextGetParams();
+        UNIT_FAIL("Expected a float parsing error");
+    } catch (const std::exception& e) {
+        const TString message = e.what();
+        UNIT_ASSERT_C(message.find(TStringBuilder() << dataFileName << ":2:") != TString::npos, message);
+        UNIT_ASSERT_C(message.find("Failed to parse value \"not-a-float\"") != TString::npos, message);
+        UNIT_ASSERT_C(message.find("for column \"ColFloat\"") != TString::npos, message);
+    }
+}
+
 Y_UNIT_TEST(ResultSetBoolPrintTest) {
     TString resultSetStr = R"_(
         columns:{

@@ -14,7 +14,7 @@ Recovering system tablets is a critical operation that may result in data loss. 
 
 ## Step 1. Put the tablet into Recovery mode {#enable-recovery-mode}
 
-The tablet to be recovered must be put into Recovery mode. In this mode, the tablet starts and is accessible via the [Embedded UI](../../reference/embedded-ui/index.md), but **does not work normally** and **does not read data from the distributed storage**, allowing recovery operations to be performed. Other tablets will continue to operate normally, allowing the cluster to keep functioning, but some control-plane operations may be unavailable.
+The tablet to be recovered must be put into Recovery mode. In this mode, the tablet starts and is accessible via the [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md), but **does not work normally** and **does not read data from the distributed storage**, allowing recovery operations to be performed. Other tablets will continue to operate normally, allowing the cluster to keep functioning, but some control-plane operations may be unavailable.
 
 {% note warning %}
 
@@ -22,7 +22,7 @@ If recovery is performed after a complete loss of the [static group](../../conce
 
 {% endnote %}
 
-1. Determine the ID of the system tablet to be recovered. The tablet ID can be found in the Tablets section of the [Embedded UI](../../reference/embedded-ui/index.md).
+1. Determine the ID of the system tablet to be recovered. The tablet ID can be found in the Tablets section of the [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md).
 2. Determine the list of nodes where the system tablet to be recovered can run. This list is located in the `bootstrap_config` section of the corresponding tablet in the [cluster configuration](../../devops/configuration-management/index.md). If the `bootstrap_config` section is missing from the configuration, use the list of all [static nodes](../../concepts/glossary.md#static-node) of the cluster specified in the `hosts` section of the cluster configuration.
 3. Modify the configuration by adding `boot_mode: RECOVERY` to the `bootstrap_config` section of the tablet being recovered.
 
@@ -71,7 +71,7 @@ If recovery is performed after a complete loss of the [static group](../../conce
 
    - There are no issues with the tablet in [HealthCheck](../../reference/ydb-sdk/health-check-api.md).
    - The tablet is not restarting.
-   - The recovery form is available in the tablet's App in the [Embedded UI](../../reference/embedded-ui/index.md).
+   - The recovery form is available in the tablet's App in the [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md).
 
 ## Step 2. Find the backup files {#find-backup-files}
 
@@ -125,7 +125,7 @@ If recovery is performed after a complete loss of the [static group](../../conce
 
 ## Step 3. Transfer the backup files {#transfer-backup-files}
 
-1. Determine which host the tablet is running on in Recovery mode. To do this, open the [Embedded UI](../../reference/embedded-ui/index.md) and find the node where the tablet is running.
+1. Determine which host the tablet is running on in Recovery mode. To do this, open the [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) and find the node where the tablet is running.
 2. If the backup files are on a different host, copy them to the host with the tablet in Recovery mode using `scp`, `rsync`, or any other available tool:
 
 
@@ -138,7 +138,7 @@ If recovery is performed after a complete loss of the [static group](../../conce
 
 ## Step 4. Perform the recovery {#perform-recovery}
 
-1. Open the App of the tablet being restored in the [Embedded UI](../../reference/embedded-ui/index.md).
+1. Open the App of the tablet being restored in the [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md).
 2. In the recovery form, specify the full path to the directory with the backup files, for example:
 
 
@@ -209,4 +209,4 @@ After successful recovery:
 
    - There are no issues with the tablet in [HealthCheck](../../reference/ydb-sdk/health-check-api.md).
    - The tablet does not restart.
-   - The recovery form is absent in the tablet's App in [Embedded UI](../../reference/embedded-ui/index.md).
+   - The recovery form is absent in the tablet's App in [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md).

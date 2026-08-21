@@ -113,4 +113,4 @@ config:
 
 ## Checking the result {#verify-result}
 
-You can check that the changes have been applied in the `CMS` section of the cluster [Embedded UI](../../reference/embedded-ui/index.md) (available on port 8765): go to the `Sentinel` tab to view the status of Sentinel and Self Heal State Storage.
+You can check that the changes have been applied in the `CMS` section of the cluster [{{ ydb-ui-name }}](../../reference/ydb-ui/index.md) (available on port 8765): go to the `Sentinel` tab to view the status of Sentinel and Self Heal State Storage.

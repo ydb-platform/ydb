@@ -122,7 +122,7 @@ template <ui32 TRpcId, typename TReq, typename TResp>
 void TGRpcRequestBiStreamWrapper<TRpcId, TReq, TResp>::RefreshToken(const TString& token, const TActorContext& ctx, TActorId id, NWilson::TTraceId traceId) {
     using TSelf = typename std::remove_pointer<decltype(this)>::type;
     using TRefreshToken = typename TRefreshTokenTypeForRequest<TSelf>::type;
-    RefreshTokenSendRequest(ctx, new TRefreshToken(token, GetDatabaseName().GetOrElse(""), id), std::move(traceId));
+    RefreshTokenSendRequest(ctx, new TRefreshToken(token, GetDatabaseName().GetOrElse(""), GetPeerName(), id), std::move(traceId));
 }
 
 template <ui32 TRpcId>

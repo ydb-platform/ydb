@@ -652,6 +652,120 @@ Y_UNIT_TEST(SessionClosedBeforeSecondParentFinished) {
     env.Finish(remaining, 1);
     env.AssertLocked(2);
 }
+Y_UNIT_TEST(ChildNotLockedUntilBothParentsFinished_TwoSessions) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.RegisterSession("session-1");
+    env.AssertLocked(0);
+    env.AssertLocked(1);
+    UNIT_ASSERT_VALUES_UNEQUAL(env.SessionOf(0), env.SessionOf(1));
+
+    env.Merge(0, 1);
+    env.AssertNotLocked(2);
+
+    const TString session0 = env.SessionOf(0);
+    env.Finish(session0, 0);
+    env.AssertNotLocked(2);
+
+    const TString session1 = env.SessionOf(1);
+    env.Finish(session1, 1);
+    env.AssertLocked(2);
+    env.AssertSameSession({0, 1, 2});
+}
+
+Y_UNIT_TEST(ResetMergeAttachesChildWhenTargetFamilyDied) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.Merge(0, 1);
+    env.RegisterSession("session-0", {1});
+    env.RegisterSession("session-1", {2, 3});
+    env.AssertLocked(0, "session-0");
+    env.AssertLocked(1, "session-1");
+    env.AssertNotLocked(2);
+
+    env.Finish("session-0", 0);
+    env.Finish("session-1", 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    auto pending = env.WaitRelease();
+    UNIT_ASSERT_C(pending, "second finished parent must trigger a family release to merge");
+    const TString releasing = pending->Session;
+    const TString target = releasing == "session-0" ? "session-1" : "session-0";
+    UNIT_ASSERT_C(env.Pipes.contains(releasing), "releasing session must still be connected");
+
+    env.CloseSession(target);
+    env.RegisterSession("session-keep");
+
+    auto pipeIt = env.Pipes.find(releasing);
+    UNIT_ASSERT(pipeIt != env.Pipes.end());
+    env.AckRelease(pipeIt->second, pending->Partition, releasing);
+    env.Pump();
+
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(DelayedMergeDisconnectTargetBeforeUnlockLocksChild) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    auto [s0, s1] = env.TwoSessionsOnParents();
+    env.Merge(0, 1);
+
+    env.Finish(s0, 0);
+    env.Finish(s1, 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    auto pending = env.WaitRelease();
+    UNIT_ASSERT_C(pending, "second finished parent must trigger a family release to merge");
+    const TString releasing = pending->Session;
+    const TString target = releasing == s0 ? s1 : s0;
+    UNIT_ASSERT_C(env.Pipes.contains(releasing), "releasing session must still be connected");
+
+    env.CloseSession(target);
+
+    auto pipeIt = env.Pipes.find(releasing);
+    UNIT_ASSERT(pipeIt != env.Pipes.end());
+    env.AckRelease(pipeIt->second, pending->Partition, releasing);
+    env.Pump();
+
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(PipeBreakDuringReleaseOfMergedFamily) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    auto [s0, s1] = env.TwoSessionsOnParents();
+    env.Merge(0, 1);
+
+    env.Finish(s0, 0);
+    env.Finish(s1, 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    auto pending = env.WaitRelease();
+    UNIT_ASSERT_C(pending, "second finished parent must trigger a family release to merge");
+    env.CloseSession(pending->Session);
+
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(PipeBreakOfTargetFamilyDuringRelease) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    auto [s0, s1] = env.TwoSessionsOnParents();
+    env.Merge(0, 1);
+
+    env.Finish(s0, 0);
+    env.Finish(s1, 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    auto pending = env.WaitRelease();
+    UNIT_ASSERT_C(pending, "second finished parent must trigger a family release to merge");
+    const TString target = pending->Session == s0 ? s1 : s0;
+    env.CloseSession(target);
+    env.CloseSession(pending->Session);
+
+    env.RegisterSession("session-new");
+    env.Finish("session-new", 0);
+    env.AssertNotLocked(2);
+    env.Finish("session-new", 1);
+    env.AssertLocked(2, "session-new");
+}
 } // Y_UNIT_TEST_SUITE(TPqrbMergeBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbSplitBalancing) {

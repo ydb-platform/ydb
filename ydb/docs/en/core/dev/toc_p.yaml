@@ -24,8 +24,6 @@ items:
   href: query-plans-optimization.md
 - name: Resource consumption management
   href: resource-consumption-management.md  
-- name: Query hints
-  href: query-hints.md
 - name: Batch upload
   href: batch-upload.md
 - name: Paging

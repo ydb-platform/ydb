@@ -209,6 +209,7 @@ bool ResidualIsValid(
 
 bool TPushMapElementsThroughUnionAllRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Map &&
+        CastOperator<TOpMap>(input)->NeedsToBePushed &&
         input->Children.front()->Kind == EOperator::UnionAll;
 }
 
@@ -219,7 +220,7 @@ TPushMapElementsThroughUnionAllRule::SimpleMatchAndApply(const TIntrusivePtr<IOp
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    if (topMap->MapElements.empty()) {
+    if (!topMap->NeedsToBePushed || topMap->MapElements.empty()) {
         return input;
     }
 

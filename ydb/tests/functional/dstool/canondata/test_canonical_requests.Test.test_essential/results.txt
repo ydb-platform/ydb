@@ -19,7 +19,8 @@ dstool
 │  ├─ stop                              Stop PDisk
 │  ├─ restart                           Restart PDisk
 │  ├─ readonly                          Change PDisk read-only status
-│  └─ move                              Move PDisk
+│  ├─ move                              Move PDisk
+│  └─ populate                          Populate pdisk with selected vdisks
 ├─ vdisk
 │  ├─ evict                             Relocate vdisks to other pdisks
 │  ├─ list                              List vdisks

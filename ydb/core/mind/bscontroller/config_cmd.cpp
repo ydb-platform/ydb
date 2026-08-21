@@ -397,6 +397,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(StopPDisk)
                     HANDLE_COMMAND(GetInterfaceVersion)
                     HANDLE_COMMAND(MovePDisk)
+                    HANDLE_COMMAND(PopulatePDisk)
                     HANDLE_COMMAND(UpdateBridgeGroupInfo)
                     HANDLE_COMMAND(ReconfigureVirtualGroup)
                     HANDLE_COMMAND(RecommissionGroups)

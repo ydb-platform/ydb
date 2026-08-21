@@ -1,3 +1,16 @@
+[project]
+name = "gh-runner-controller"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "requests==2.34.2",
+    "yandexcloud==0.395.0",
+    "PyYAML==6.0.1",
+]
+
+[tool.uv]
+package = false
+
 [tool.black]
 line-length=120
 target-version = ["py312"]

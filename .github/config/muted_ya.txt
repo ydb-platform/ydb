@@ -18,6 +18,7 @@ ydb/core/persqueue/public/schema/ut DlqAcl.CreateTopicWithSqsStyleDlqSkipsScheme
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterCdcAllowsRetentionAndWriteLimits
 ydb/core/persqueue/public/schema/ut SchemaOps.AlterMessagesPerSecond
 ydb/core/persqueue/public/schema/ut SchemaOps.CannotChangeConsumerType
+ydb/core/persqueue/public/schema/ut SchemaOps.CreateAlterDropSmoke
 ydb/core/persqueue/public/schema/ut unittest.sole chunk
 ydb/core/tx/schemeshard/ut_set_column_constraint_reboots SetNotNullReboots.SetNotNullOnSingleColumn[TabletReboots]
 ydb/core/tx/schemeshard/ut_set_column_constraint_reboots unittest.[*/*] chunk

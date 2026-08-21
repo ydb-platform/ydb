@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(TMonRenderTest)
             .LocalDb =
                 TLocalDbContents{
                     .VolumeConfig = "DiskId: vol-1",
-                    .VChunkConfigs = {TVChunkConfig::MakeDefault(3, 5, 3)},
+                    .VChunkConfigs = {{3, TVChunkConfig::MakeDefault(3, 5, 3)}},
                 },
         };
 

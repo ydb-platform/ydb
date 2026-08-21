@@ -21,7 +21,7 @@ bool LoadState(
     NKikimr::NTable::TDatabase& db,
     TMaybe<NKikimrBlockStore::TVolumeConfig>& volumeConfig,
     TMaybe<TDirectBlockGroupsConnections>& directBlockGroupsConnections,
-    TVector<TVChunkConfig>& vChunkConfigs)
+    TVChunkConfigs& vChunkConfigs)
 {
     TPartitionDatabase partitionDb(db);
     return partitionDb.ReadVolumeConfig(volumeConfig) &&
@@ -95,7 +95,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
                 TMaybe<TDirectBlockGroupsConnections> connections;
-                TVector<TVChunkConfig> vChunkConfigs;
+                TVChunkConfigs vChunkConfigs;
                 UNIT_ASSERT(
                     LoadState(db, volumeConfig, connections, vChunkConfigs));
                 UNIT_ASSERT(!volumeConfig.Defined());
@@ -122,7 +122,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
                 TMaybe<TDirectBlockGroupsConnections> connections;
-                TVector<TVChunkConfig> vChunkConfigs;
+                TVChunkConfigs vChunkConfigs;
                 UNIT_ASSERT(
                     LoadState(db, volumeConfig, connections, vChunkConfigs));
                 UNIT_ASSERT(volumeConfig.Defined());
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
                 TMaybe<TDirectBlockGroupsConnections> connections;
-                TVector<TVChunkConfig> vChunkConfigs;
+                TVChunkConfigs vChunkConfigs;
                 UNIT_ASSERT(
                     LoadState(db, volumeConfig, connections, vChunkConfigs));
                 UNIT_ASSERT(!volumeConfig.Defined());
@@ -253,7 +253,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
                 TMaybe<TDirectBlockGroupsConnections> connections;
-                TVector<TVChunkConfig> vChunkConfigs;
+                TVChunkConfigs vChunkConfigs;
                 UNIT_ASSERT(
                     LoadState(db, volumeConfig, connections, vChunkConfigs));
                 UNIT_ASSERT(!volumeConfig.Defined());
@@ -293,6 +293,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
 
     Y_UNIT_TEST(ShouldOverwriteVChunkConfigOnRepeatedStore)
     {
+        const ui32 vChunkIndex = 11;
         TTestExecutor executor;
 
         executor.WriteTx(
@@ -301,13 +302,13 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 TPartitionDatabase partitionDb(db);
                 partitionDb.InitSchema();
                 partitionDb.StoreVChunkConfig(TVChunkConfig::MakeDefault(
-                    5,
+                    vChunkIndex,
                     DirectBlockGroupHostCount,
                     DefaultPrimaryCount));
             });
 
         auto updated = TVChunkConfig::MakeDefault(
-            5,
+            vChunkIndex,
             DirectBlockGroupHostCount,
             DefaultPrimaryCount);
         updated.EvacuateHost(0);
@@ -323,11 +324,11 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             [&](NKikimr::NTable::TDatabase& db)
             {
                 TPartitionDatabase partitionDb(db);
-                TVector<TVChunkConfig> vChunkConfigs;
+                TVChunkConfigs vChunkConfigs;
                 UNIT_ASSERT(partitionDb.ReadAllVChunkConfigs(vChunkConfigs));
                 UNIT_ASSERT_VALUES_EQUAL(1u, vChunkConfigs.size());
 
-                const auto& stored = vChunkConfigs[0];
+                const auto& stored = vChunkConfigs[vChunkIndex];
                 UNIT_ASSERT(
                     updated.GetDesiredPBuffers() ==
                     stored.GetDesiredPBuffers());
@@ -370,7 +371,7 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TMaybe<NKikimrBlockStore::TVolumeConfig> volumeConfig;
                 TMaybe<TDirectBlockGroupsConnections> connections;
-                TVector<TVChunkConfig> vChunkConfigs;
+                TVChunkConfigs vChunkConfigs;
                 UNIT_ASSERT(
                     LoadState(db, volumeConfig, connections, vChunkConfigs));
                 UNIT_ASSERT(volumeConfig.Defined());

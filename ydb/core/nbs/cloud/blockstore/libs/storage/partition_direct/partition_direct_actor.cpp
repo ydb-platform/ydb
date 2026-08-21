@@ -365,7 +365,8 @@ TString TPartitionActor::GetSocketPath() const
 void TPartitionActor::Start(
     const NActors::TActorContext& ctx,
     TDirectBlockGroupsConnections directBlockGroupsConnections,
-    TVector<TVChunkConfig> vChunkConfigs)
+    const TVChunkConfigs& vChunkConfigs,
+    const TDirtyMapStateProtos& dirtyMapStates)
 {
     LogTitle.SetDiskId(VolumeConfig.GetDiskId());
     LogTitle.SetGeneration(Executor()->Generation());
@@ -384,12 +385,6 @@ void TPartitionActor::Start(
     Y_ABORT_UNLESS(nbsService->Scheduler);
     Y_ABORT_UNLESS(nbsService->Timer);
 
-    TVChunkConfigByIndex vChunkConfigsByIndex;
-    vChunkConfigsByIndex.reserve(vChunkConfigs.size());
-    for (const auto& cfg: vChunkConfigs) {
-        vChunkConfigsByIndex[cfg.GetVChunkIndex()] = cfg;
-    }
-
     DirectBlockGroupsConnections = directBlockGroupsConnections;
 
     const ui64 blockCount = VolumeConfig.GetPartitions(0).GetBlockCount();
@@ -400,7 +395,8 @@ void TPartitionActor::Start(
         blockCount,
         VolumeConfig.GetBlockSize(),
         CreateDirectBlockGroups(std::move(directBlockGroupsConnections)),
-        std::move(vChunkConfigsByIndex),
+        vChunkConfigs,
+        dirtyMapStates,
         StorageConfig,
         nbsService->Scheduler,
         nbsService->Timer,

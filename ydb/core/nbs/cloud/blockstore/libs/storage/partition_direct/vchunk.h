@@ -42,6 +42,7 @@ public:
         IPartitionDirectService* partitionDirectService,
         const TDiskDescription& diskDescription,
         const TVChunkConfig& vChunkConfig,
+        const TDirtyMapStateProto& dirtyMapState,
         IDirectBlockGroupPtr directBlockGroup,
         ui32 syncRequestsBatchSize,
         ui64 vChunkSize,

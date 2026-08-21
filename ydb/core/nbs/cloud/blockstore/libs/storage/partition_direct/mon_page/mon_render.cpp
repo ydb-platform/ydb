@@ -529,7 +529,7 @@ void RenderLocalDb(IOutputStream& str, const TLocalDbContents& db)
                 }
             }
             TABLEBODY () {
-                for (const auto& config: db.VChunkConfigs) {
+                for (const auto& [vChunkIndex, config]: db.VChunkConfigs) {
                     TABLER () {
                         TABLED () {
                             str << config.GetVChunkIndex();

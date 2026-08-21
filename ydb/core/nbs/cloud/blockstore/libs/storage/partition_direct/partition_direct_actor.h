@@ -264,7 +264,8 @@ private:
     void Start(
         const NActors::TActorContext& ctx,
         TDirectBlockGroupsConnections directBlockGroupsConnections,
-        TVector<TVChunkConfig> vChunkConfigs);
+        const TVChunkConfigs& vChunkConfigs,
+        const TDirtyMapStateProtos& dirtyMapStates);
 
     TVector<IDirectBlockGroupPtr> CreateDirectBlockGroups(
         TDirectBlockGroupsConnections directBlockGroupsConnections);

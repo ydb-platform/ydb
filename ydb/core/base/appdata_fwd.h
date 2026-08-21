@@ -58,6 +58,7 @@ namespace NKikimrConfig {
     class TMeteringConfig;
     class TSqsConfig;
     class TKafkaProxyConfig;
+    class THttpProxyConfig;
     class TAuthConfig;
 
     class THiveConfig;
@@ -249,6 +250,7 @@ struct TAppData {
     NKikimrPQ::TPQConfig& PQConfig;
     NKikimrPQ::TPQClusterDiscoveryConfig& PQClusterDiscoveryConfig;
     NKikimrConfig::TKafkaProxyConfig& KafkaProxyConfig;
+    NKikimrConfig::THttpProxyConfig& HttpProxyConfig;
     NKikimrNetClassifier::TNetClassifierConfig& NetClassifierConfig;
     NKikimrNetClassifier::TNetClassifierDistributableConfig& NetClassifierDistributableConfig;
     NKikimrConfig::TSqsConfig& SqsConfig;

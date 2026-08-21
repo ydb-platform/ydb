@@ -4,6 +4,7 @@
 #include "json_proto_conversion.h"
 #include "custom_metrics.h"
 #include "exceptions_mapping.h"
+#include "utils.h"
 
 #include <ydb/library/actors/http/http_proxy.h>
 #include <library/cpp/cgiparam/cgiparam.h>
@@ -1127,6 +1128,9 @@ namespace NKikimr::NHttpProxy {
                 TMap<TString, TString> peerMetadata {
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
                 };
+                if (TString requestEndpoint = MakeSqsRequestEndpoint(HttpContext)) {
+                    peerMetadata[TString{NSqsTopic::REQUEST_ENDPOINT_METADATA_KEY}] = std::move(requestEndpoint);
+                }
 
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
                     std::move(Request),

@@ -32,47 +32,6 @@ using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
 
-namespace {
-
-// Captures a pointer to the live TColumnShard so tests can inspect TablesManager state directly.
-class TShardCapturingController: public TDefaultTestsController {
-private:
-    mutable TMutex ShardMutex;
-    const TColumnShard* Shard = nullptr;
-
-public:
-    void DoOnTabletInitCompleted(const TColumnShard& shard) override {
-        TDefaultTestsController::DoOnTabletInitCompleted(shard);
-        TGuard<TMutex> g(ShardMutex);
-        Shard = &shard;
-    }
-
-    void DoOnTabletStopped(const TColumnShard& shard) override {
-        TDefaultTestsController::DoOnTabletStopped(shard);
-        TGuard<TMutex> g(ShardMutex);
-        if (Shard == &shard) {
-            Shard = nullptr;
-        }
-    }
-
-    const TColumnShard* GetShard() const {
-        TGuard<TMutex> g(ShardMutex);
-        return Shard;
-    }
-};
-
-const TColumnShard* WaitForShard(TShardCapturingController& controller, TTestBasicRuntime& runtime) {
-    const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
-    while (!controller.GetShard() && TInstant::Now() < deadline) {
-        runtime.SimulateSleep(TDuration::MilliSeconds(50));
-    }
-    const auto* shard = controller.GetShard();
-    UNIT_ASSERT(shard);
-    return shard;
-}
-
-}   // namespace
-
 Y_UNIT_TEST_SUITE(TruncateTable) {
     Y_UNIT_TEST(EmptyTable) {
         TTestBasicRuntime runtime;
@@ -221,13 +180,12 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
 
         const ui64 pathId = 1;
         TestTableDescription testTable{};
-        auto planStep = PrepareTablet(runtime, pathId, testTable.Schema, 1, true);
+        Y_UNUSED(PrepareTablet(runtime, pathId, testTable.Schema, 1, true));
 
         const ui64 absentPathId = 111;
         ui64 txId = 10;
         // Truncation of absent table is rejected at propose time.
         ProposeSchemaTxFail(runtime, sender, TTestSchema::TruncateTableTxBody(absentPathId, 1), ++txId);
-
     }
 
     Y_UNIT_TEST(MultipleTruncates) {
@@ -315,7 +273,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
     Y_UNIT_TEST(TruncatePreservesTtl) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
-        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TShardCapturingController>();
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         TActorId sender = runtime.AllocateEdgeActor();
 
         const ui64 pathId = 1;
@@ -330,7 +288,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         Y_UNUSED(planStep);
 
         auto& csController = *csControllerGuard.operator->();
-        const auto* shard = WaitForShard(csController, runtime);
+        const auto* shard = csController.GetTheOnlyShard();
 
         // Sanity: TTL is present for the original generation.
         {
@@ -343,7 +301,7 @@ Y_UNIT_TEST_SUITE(TruncateTable) {
         planStep = ProposeSchemaTx(runtime, sender, TTestSchema::TruncateTableTxBody(pathId, 1), ++txId);
         PlanSchemaTx(runtime, sender, { planStep, txId });
 
-        shard = WaitForShard(csController, runtime);
+        shard = csController.GetTheOnlyShard();
 
         // After TRUNCATE the freshly generated InternalPathId must still carry the TTL settings.
         {

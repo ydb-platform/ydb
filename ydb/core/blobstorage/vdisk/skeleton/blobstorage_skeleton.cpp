@@ -417,7 +417,6 @@ namespace NKikimr {
         struct TVPutInfo {
             TRope Buffer;
             std::optional<ui64> Checksum;
-            std::optional<NKikimrBlobStorage::TChecksumType> ChecksumType;
             TLogoBlobID BlobId;
             TIngress Ingress;
             TLsnSeg Lsn;
@@ -429,12 +428,10 @@ namespace NKikimr {
             TWriteSource WriteSource = UnknownWriteSource();
 
             TVPutInfo(TLogoBlobID blobId, TRope &&buffer, std::optional<ui64> checksum,
-                    std::optional<NKikimrBlobStorage::TChecksumType> checksumType,
                     NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck> *extraBlockChecks,
                     TWriteSource writeSource, NWilson::TTraceId traceId)
                 : Buffer(std::move(buffer))
                 , Checksum(checksum)
-                , ChecksumType(checksumType)
                 , BlobId(blobId)
                 , HullStatus({NKikimrProto::UNKNOWN, "", false})
                 , TraceId(std::move(traceId))
@@ -514,8 +511,7 @@ namespace NKikimr {
         }
 
         THullCheckStatus ValidateVPut(const TActorContext &ctx, TString evPrefix,
-                TLogoBlobID id, const TRope& buffer, const std::optional<ui64>& checksum,
-                const std::optional<NKikimrBlobStorage::TChecksumType>& checksumType,
+                TLogoBlobID id, const TRope& buffer,
                 bool ignoreBlock,
                 const NProtoBuf::RepeatedPtrField<NKikimrBlobStorage::TEvVPut::TExtraBlockCheck>& extraBlockChecks,
                 bool *writtenBeyondBarrier)
@@ -562,24 +558,14 @@ namespace NKikimr {
                 return {NKikimrProto::ERROR, "empty TabletID"};
             }
 
-            if (static_cast<bool>(Config->EnableChecksumWriteValidationOnVDisk)) {
-                const bool checksumValid = [&] {
-                    if (!checksum) {
-                        return !checksumType || *checksumType == NKikimrBlobStorage::TChecksumType::NoChecksum;
-                    }
-                    if (checksumType.value_or(NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob)
-                            != NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob) {
-                        return false;
-                    }
-                    return *checksum == CalculateXxh3Hash(buffer.Begin(), buffer.GetSize()).second;
-                }();
-                if (!checksumValid) {
-                    LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix
-                        << evPrefix << ": buffer checksum mismatch;"
-                        << " id# " << id
-                        << " Marker# BSVS45");
-                    return {NKikimrProto::ERROR, "buffer checksum mismatch"};
-                }
+            if (LogoBlobCrcModeHasXxh3WholePartChecksum(id)
+                    && static_cast<bool>(Config->EnableChecksumWriteValidationOnVDisk)
+                    && !CheckCrcAtTheEnd(static_cast<TErasureType::ECrcMode>(id.CrcMode()), buffer)) {
+                LOG_ERROR_S(ctx, BS_VDISK_PUT, VCtx->VDiskLogPrefix
+                    << evPrefix << ": buffer checksum mismatch;"
+                    << " id# " << id
+                    << " Marker# BSVS45");
+                return {NKikimrProto::ERROR, "buffer checksum mismatch"};
             }
 
             auto status = Hull->CheckLogoBlob(ctx, id, ignoreBlock, extraBlockChecks, writtenBeyondBarrier);
@@ -633,9 +619,7 @@ namespace NKikimr {
             for (ui64 itemIdx = 0; itemIdx < record.ItemsSize(); ++itemIdx) {
                 auto &item = *record.MutableItems(itemIdx);
                 TLogoBlobID blobId = LogoBlobIDFromLogoBlobID(item.GetBlobID());
-                putsInfo.emplace_back(blobId, ev->Get()->GetItemBuffer(itemIdx), item.HasChecksum() ?
-                    std::make_optional(item.GetChecksum()) : std::nullopt, item.HasChecksumType() ?
-                    std::make_optional(item.GetChecksumType()) : std::nullopt, item.MutableExtraBlockChecks(),
+                putsInfo.emplace_back(blobId, ev->Get()->GetItemBuffer(itemIdx), std::nullopt, item.MutableExtraBlockChecks(),
                     WriteSourceFromProto(item.GetWriteSourceOp()),
                     item.HasTraceId() ? item.GetTraceId() : NWilson::TTraceId());
                 TVPutInfo &info = putsInfo.back();
@@ -653,7 +637,7 @@ namespace NKikimr {
                 }
 
                 if (info.HullStatus.Status == NKikimrProto::UNKNOWN) {
-                    info.HullStatus = ValidateVPut(ctx, "TEvVMultiPut", blobId, info.Buffer, info.Checksum, info.ChecksumType,
+                    info.HullStatus = ValidateVPut(ctx, "TEvVMultiPut", blobId, info.Buffer,
                         ignoreBlock, info.ExtraBlockChecks, &info.WrittenBeyondBarrier);
                 }
 
@@ -780,8 +764,7 @@ namespace NKikimr {
             const TLogoBlobID id = LogoBlobIDFromLogoBlobID(record.GetBlobID());
             LWTRACK(VDiskSkeletonVPutRecieved, ev->Get()->Orbit, VCtx->NodeId, VCtx->GroupId.GetRawId(),
                    VCtx->Top->GetFailDomainOrderNumber(VCtx->ShortSelfVDisk), id.TabletID(), id.BlobSize());
-            TVPutInfo info(id, ev->Get()->GetBuffer(), record.HasChecksum() ? std::make_optional(record.GetChecksum()) :
-                std::nullopt, record.HasChecksumType() ? std::make_optional(record.GetChecksumType()) : std::nullopt,
+            TVPutInfo info(id, ev->Get()->GetBuffer(), std::nullopt,
                 record.MutableExtraBlockChecks(),
                 WriteSourceFromProto(record.GetWriteSourceOp()),
                 std::move(ev->TraceId));
@@ -810,7 +793,7 @@ namespace NKikimr {
                 return;
             }
 
-            info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, info.Buffer, info.Checksum, info.ChecksumType,
+            info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, info.Buffer,
                 ignoreBlock, info.ExtraBlockChecks, ev->Get()->RewriteBlob ? nullptr : &info.WrittenBeyondBarrier);
             if (info.HullStatus.Status != NKikimrProto::OK) {
                 ReplyError(info.HullStatus, ev, ctx, now);

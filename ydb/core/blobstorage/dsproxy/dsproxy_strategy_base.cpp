@@ -255,8 +255,9 @@ std::optional<EStrategyOutcome> TStrategyBase::ProcessPessimistic(const TBlobSto
     return std::nullopt;
 }
 
-void TStrategyBase::AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests, TLogoBlobID &fullId,
-        ui32 partIdx, TBlobState::TDisk &disk, TIntervalSet<i32> &intervalSet, const char *logMarker) {
+void TStrategyBase::AddGetRequest(TLogContext &logCtx, TGroupDiskRequests &groupDiskRequests,
+        TLogoBlobID &fullId, ui32 partIdx, TBlobState::TDisk &disk,
+        TIntervalSet<i32> &intervalSet, const char *logMarker) {
     TLogoBlobID id(fullId, partIdx + 1);
     DSP_LOG_DEBUG_SX(logCtx, logMarker, "AddGet disk# " << disk.OrderNumber
             << " Id# " << id.ToString()

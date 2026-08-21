@@ -42,7 +42,6 @@ private:
     ui32 VMultiPutResponses = 0;
     NActors::NLog::EPriority ResultPriority = NActors::NLog::PRI_DEBUG;
     bool EnableRequestMod3x3ForMinLatecy = false;
-    bool EnableChecksumCalcAndValidation = false;
 
     const TEvBlobStorage::TEvPut::ETactic Tactic;
 
@@ -113,7 +112,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TEvBlobStorage::TEvPut *ev, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             bool enableRequestMod3x3ForMinLatecy, TActorId recipient, ui64 cookie, NWilson::TTraceId traceId,
-            const TAccelerationParams& accelerationParams, bool enableChecksumCalcAndValidation)
+            const TAccelerationParams& accelerationParams)
         : Info(info)
         , Blackboard(info, state, ev->HandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(1)
@@ -122,7 +121,6 @@ public:
         , ApproximateFreeSpaceShare(0.f)
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
-        , EnableChecksumCalcAndValidation(enableChecksumCalcAndValidation)
         , Tactic(ev->Tactic)
         , AccelerationParams(accelerationParams)
         , History(Info)
@@ -139,7 +137,7 @@ public:
     TPutImpl(const TIntrusivePtr<TBlobStorageGroupInfo> &info, const TIntrusivePtr<TGroupQueues> &state,
             TBatchedVec<TEvBlobStorage::TEvPut::TPtr> &events, const TIntrusivePtr<TBlobStorageGroupProxyMon> &mon,
             NKikimrBlobStorage::EPutHandleClass putHandleClass, TEvBlobStorage::TEvPut::ETactic tactic,
-            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams, bool enableChecksumCalcAndValidation)
+            bool enableRequestMod3x3ForMinLatecy, const TAccelerationParams& accelerationParams)
         : Info(info)
         , Blackboard(info, state, putHandleClass, NKikimrBlobStorage::EGetHandleClass::AsyncRead)
         , IsDone(events.size())
@@ -148,7 +146,6 @@ public:
         , ApproximateFreeSpaceShare(0.f)
         , Mon(mon)
         , EnableRequestMod3x3ForMinLatecy(enableRequestMod3x3ForMinLatecy)
-        , EnableChecksumCalcAndValidation(enableChecksumCalcAndValidation)
         , Tactic(tactic)
         , AccelerationParams(accelerationParams)
         , History(Info)
@@ -238,14 +235,11 @@ public:
             Y_ABORT_UNLESS(it == begin);
 
             const TVDiskID vdiskId = Info->GetVDiskId(it->first);
-            const bool checksumming = EnableChecksumCalcAndValidation && Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
-                TGroupQueues::TVDisk::TQueues::VDiskQueueId(Blackboard.PutHandleClass));
-
             if (std::next(it) == end) { // TEvVPut
                 auto [orderNumber, ptr] = *it++;
                 TBlobInfo& blob = Blobs[ptr->BlobIdx];
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(ptr->Id, ptr->Buffer, vdiskId, false, nullptr,
-                    blob.Deadline, Blackboard.PutHandleClass, checksumming, blob.WriteSource);
+                    blob.Deadline, Blackboard.PutHandleClass, blob.WriteSource);
 
                 auto& record = ev->Record;
                 for (const auto& [tabletId, generation] : blob.ExtraBlockChecks) {
@@ -277,7 +271,7 @@ public:
                     auto [orderNumber, ptr] = *it++;
                     TBlobInfo& blob = Blobs[ptr->BlobIdx];
                     ev->AddVPut(ptr->Id, TRcBuf(ptr->Buffer), nullptr, &blob.ExtraBlockChecks,
-                        blob.Span.GetTraceId(), blob.WriteSource, checksumming);
+                        blob.Span.GetTraceId(), blob.WriteSource);
                     HandoffPartsSent += ptr->IsHandoff;
                     vput.AddSubrequest(ptr->Id);
                 }

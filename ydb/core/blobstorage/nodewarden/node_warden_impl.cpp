@@ -85,7 +85,6 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ReportingControllerBucketSize(1, 1, 100'000)
     , ReportingControllerLeakDurationMs(60'000, 1, 3'600'000)
     , ReportingControllerLeakRate(1, 1, 100'000)
-    , EnableChecksumCalcAndValidationOnDsProxy(0, 0, 1)
     , EnableDeepScrubbing(false, false, true)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
@@ -418,7 +417,6 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(MaxInProgressSyncCount, "VDiskControls.MaxInProgressSyncCount");
         icb->RegisterSharedControl(EnableChecksumReadValidationOnVDisk, "VDiskControls.EnableChecksumReadValidationOnVDisk");
         icb->RegisterSharedControl(EnableChecksumWriteValidationOnVDisk, "VDiskControls.EnableChecksumWriteValidationOnVDisk");
-
         icb->RegisterSharedControl(MaxInProgressStartupDataSyncCount, "VDiskControls.MaxInProgressStartupDataSyncCount");
         icb->RegisterSharedControl(MaxInProgressStartupDataSyncPerPDiskCount, "VDiskControls.MaxInProgressStartupDataSyncPerPDiskCount");
         icb->RegisterSharedControl(MaxInProgressLocalRecoveryCount, "VDiskControls.MaxInProgressLocalRecoveryCount");
@@ -458,8 +456,6 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ReportingControllerLeakDurationMs, "DSProxyControls.RequestReportingSettings.LeakDurationMs");
         icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
 
-        icb->RegisterSharedControl(EnableChecksumCalcAndValidationOnDsProxy,
-            "DSProxyControls.EnableChecksumCalcAndValidationOnDsProxy");
         icb->RegisterSharedControl(EnableDeepScrubbing, "VDiskControls.EnableDeepScrubbing");
     }
 

@@ -262,7 +262,7 @@ namespace NKikimr {
                 Y_ABORT_UNLESS(WriteRestoredParts);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, buffer, vdiskId, true, &index, Deadline,
                     NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
-                    VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER, TWriteSource::RestoredCorruptedBlob);
+                    TWriteSource::RestoredCorruptedBlob);
                 ev->RewriteBlob = true;
                 Send(SkeletonId, ev.release());
                 ++WritesPending;

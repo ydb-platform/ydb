@@ -29,7 +29,7 @@ public:
         for (auto it = DataSetPtr->First(); it->IsValid(); it->Next()) {
             const auto &x = *it->Get();
             ctx.Send(VDiskInfo.ActorID, new TEvBlobStorage::TEvVPut(x.Id, TRope(x.Data),
-                    VDiskInfo.VDiskID, false, nullptr, TInstant::Max(), x.HandleClass, false));
+                    VDiskInfo.VDiskID, false, nullptr, TInstant::Max(), x.HandleClass));
         }
         Become(&TThis::StateFunc);
     }
@@ -54,4 +54,3 @@ using namespace NKikimr;
 void TWriteAndExpectError::operator ()(TConfiguration *conf) {
     conf->ActorSystem1->Register(new TWriteAndExpectErrorActor(conf));
 }
-

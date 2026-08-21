@@ -146,11 +146,6 @@ namespace NKikimr {
 
                 case EBlobHeaderMode::NO_HEADER:
                     break;
-
-                case EBlobHeaderMode::XXH3_64BIT_HEADER:
-                    Y_ABORT_UNLESS(!offset);
-                    Y_ABORT_UNLESS(TDiskBlob::ValidateChecksum(data));
-                    break;
             }
 
             TRope rope(std::move(data));
@@ -168,7 +163,7 @@ namespace NKikimr {
             auto msgSize = rope.size();
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),
                 SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
-                DCtx->VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER, TWriteSource::DefragRewrite);
+                TWriteSource::DefragRewrite);
             writeEvent->RewriteBlob = true;
             TEventsQuoter::QuoteMessage(DCtx->Throttler, std::make_unique<IEventHandle>(DCtx->SkeletonId, SelfId(), writeEvent.release()),
                 msgSize, DCtx->VCfg->DefragThrottlerBytesRate);

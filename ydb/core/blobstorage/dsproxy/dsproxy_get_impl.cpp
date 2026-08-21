@@ -12,31 +12,9 @@
 #include "dsproxy_strategy_get_min_iops_block.h"
 #include "dsproxy_strategy_get_min_iops_mirror.h"
 
-#include <ydb/core/blobstorage/base/blobstorage_checksum.h>
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo_sets.h>
 
 namespace NKikimr {
-
-namespace NDsProxyGetImpl {
-
-bool ValidateVDiskGetResponseChecksum(NKikimrProto::EReplyStatus replyStatus,
-        const NKikimrBlobStorage::TQueryResult& result,
-        const TRope& resultBuffer) {
-    if (replyStatus != NKikimrProto::OK) {
-        return true;
-    }
-
-    switch (result.GetChecksumType()) {
-        case NKikimrBlobStorage::TChecksumType::NoChecksum:
-            return true;
-        case NKikimrBlobStorage::TChecksumType::XXH3_64BitBlob:
-            return result.HasChecksum() && result.GetChecksum() == CalculateXxh3Hash(resultBuffer.Begin(), resultBuffer.GetSize()).second;
-        default:
-            return false;
-    }
-}
-
-} // namespace NDsProxyGetImpl
 
 void TGetImpl::PrepareReply(NKikimrProto::EReplyStatus status, TString errorReason, TLogContext &logCtx,
         TAutoPtr<TEvBlobStorage::TEvGetResult> &outGetResult) {
@@ -273,6 +251,12 @@ void TGetImpl::PrepareRequests(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBl
     TStackVec<std::unique_ptr<TEvBlobStorage::TEvVGet>, TypicalDisksInGroup> gets(Info->GetTotalVDisksNum());
 
     for (auto& get : Blackboard.GroupDiskRequests.GetsPending) {
+        if (LogoBlobCrcModeHasXxh3WholePartChecksum(get.Id)
+                && get.Shift == 0
+                && get.Size == Info->Type.PartUserSize(get.Id.BlobSize())) {
+            get.Size = Info->Type.PartSize(get.Id);
+        }
+
         auto& vget = gets[get.OrderNumber];
         if (!vget) {
             const TVDiskID vdiskId = Info->GetVDiskId(get.OrderNumber);
@@ -321,10 +305,8 @@ void TGetImpl::PrepareVPuts(TLogContext &logCtx, TDeque<std::unique_ptr<TEvBlobS
         const TVDiskID vdiskId = Info->GetVDiskId(put.OrderNumber);
         Y_DEBUG_ABORT_UNLESS(Info->Type.GetErasure() != TBlobStorageGroupType::ErasureMirror3of4 ||
             put.Id.PartId() != 3 || put.Buffer.IsEmpty());
-        const bool checksumming = EnableChecksumCalcAndValidationOnDsProxy && Blackboard.GroupQueues->ChecksumExpected(Info->GetTopology(), vdiskId,
-            TGroupQueues::TVDisk::TQueues::VDiskQueueId(Blackboard.PutHandleClass));
         auto vput = std::make_unique<TEvBlobStorage::TEvVPut>(put.Id, put.Buffer, vdiskId, true, nullptr, Deadline,
-            Blackboard.PutHandleClass, checksumming, TWriteSource::DSProxyGetAccelerate);
+            Blackboard.PutHandleClass, TWriteSource::DSProxyGetAccelerate);
         DSP_LOG_DEBUG_SX(logCtx, "BPG15", "Send put to orderNumber# " << put.OrderNumber << " vput# " << vput->ToString());
         History.AddVPutToWaitingList(put.Id, put.OrderNumber);
         outVPuts.push_back(std::move(vput));

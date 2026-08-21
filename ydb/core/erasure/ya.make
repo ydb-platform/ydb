@@ -11,7 +11,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/util
     library/cpp/containers/stack_vector
-    library/cpp/digest/crc32c
+    contrib/libs/xxhash
     library/cpp/digest/old_crc
     ydb/core/debug
 )

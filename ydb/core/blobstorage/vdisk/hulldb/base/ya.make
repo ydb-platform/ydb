@@ -9,7 +9,6 @@ PEERDIR(
 )
 
 SRCS(
-    blobstorage_blob.cpp
     blobstorage_blob.h
     blobstorage_hulldefs.cpp
     blobstorage_hulldefs.h

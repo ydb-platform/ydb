@@ -594,11 +594,11 @@ namespace NKikimr {
 
         TEvVPut(const TLogoBlobID &logoBlobId, TRope buffer, const TVDiskID &vdisk,
                 const bool ignoreBlock, const ui64 *cookie, TInstant deadline,
-                NKikimrBlobStorage::EPutHandleClass cls, bool checksumming,
+                NKikimrBlobStorage::EPutHandleClass cls,
                 TWriteSource writeSource = UnknownWriteSource())
         {
             InitWithoutBuffer(logoBlobId, vdisk, ignoreBlock, cookie, deadline, cls, writeSource);
-            StorePayload(std::move(buffer), checksumming);
+            StorePayload(std::move(buffer));
         }
 
         void InitWithoutBuffer(const TLogoBlobID &logoBlobId, const TVDiskID &vdisk, const bool ignoreBlock,
@@ -639,7 +639,7 @@ namespace NKikimr {
             return Record.HasBuffer() ? TRope(Record.GetBuffer()) : GetPayload(0);
         }
 
-        void StorePayload(TRope&& buffer, bool checksumming);
+        void StorePayload(TRope&& buffer);
 
         ui64 GetBufferBytes() const {
             ui64 sizeBytes = 0;
@@ -889,22 +889,22 @@ namespace NKikimr {
             return sum;
         }
 
-        void StorePayload(const TRcBuf &buffer, NKikimrBlobStorage::TVMultiPutItem *item, bool checksumming);
+        void StorePayload(const TRcBuf& buffer);
 
         TRope GetItemBuffer(ui64 itemIdx) const;
 
         void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie,
-                std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId, bool checksumming) {
-            AddVPut(logoBlobId, buffer, cookie, extraBlockChecks, std::move(traceId), UnknownWriteSource(), checksumming);
+                std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId) {
+            AddVPut(logoBlobId, buffer, cookie, extraBlockChecks, std::move(traceId), UnknownWriteSource());
         }
 
         void AddVPut(const TLogoBlobID &logoBlobId, const TRcBuf &buffer, ui64 *cookie,
                 std::vector<std::pair<ui64, ui32>> *extraBlockChecks, NWilson::TTraceId traceId,
-                TWriteSource writeSource, bool checksumming) {
+                TWriteSource writeSource) {
             NKikimrBlobStorage::TVMultiPutItem *item = Record.AddItems();
             LogoBlobIDFromLogoBlobID(logoBlobId, item->MutableBlobID());
             item->SetFullDataSize(logoBlobId.BlobSize());
-            StorePayload(buffer, item, checksumming);
+            StorePayload(buffer);
             item->SetFullDataSize(logoBlobId.BlobSize());
             if (cookie) {
                 item->SetCookie(*cookie);
@@ -1370,9 +1370,7 @@ namespace NKikimr {
 
         void AddResult(NKikimrProto::EReplyStatus status, const TLogoBlobID &logoBlobId, ui64 sh,
                        std::variant<TRope, ui32> dataOrSize, const ui64 *cookie = nullptr,
-                       const ui64 *ingress = nullptr, bool keep = false, bool doNotKeep = false,
-                       const ui64 *checksum = nullptr,
-                       NKikimrBlobStorage::TChecksumType checksumType = NKikimrBlobStorage::TChecksumType::NoChecksum) {
+                       const ui64 *ingress = nullptr, bool keep = false, bool doNotKeep = false) {
             TRope *data = nullptr;
             ui32 size = 0;
 
@@ -1403,10 +1401,6 @@ namespace NKikimr {
             }
             if (doNotKeep) {
                 r->SetDoNotKeep(true);
-            }
-            if (checksum) {
-                r->SetChecksum(*checksum);
-                r->SetChecksumType(checksumType);
             }
             Y_DEBUG_ABORT_UNLESS(keep + doNotKeep <= 1);
         }
@@ -2607,11 +2601,11 @@ namespace NKikimr {
     {
         TEvVCheckReadinessResult() = default;
 
-        TEvVCheckReadinessResult(NKikimrProto::EReplyStatus status, bool checksumming) {
+        TEvVCheckReadinessResult(NKikimrProto::EReplyStatus status) {
             Record.SetStatus(status);
             Record.SetExtraBlockChecksSupport(true);
-            Record.SetChecksumming(checksumming);
         }
+
     };
 
     struct TEvBlobStorage::TEvVCompact

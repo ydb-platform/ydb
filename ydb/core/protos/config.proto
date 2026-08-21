@@ -1648,6 +1648,7 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+
     }
 
     message TTabletControls {
@@ -1733,11 +1734,8 @@ message TImmediateControlsConfig {
 
         optional TRequestReportingSettings RequestReportingSettings = 12;
 
-        optional uint64 EnableChecksumCalcAndValidationOnDsProxy = 17 [(ControlOptions) = {
-            Description: "Enable checksum calculation and validation on DSProxy read and write paths",
-            MinValue: 0,
-            MaxValue: 1,
-            DefaultValue: 0 }];
+        reserved 17; // optional uint64 EnableChecksumCalcAndValidationOnDsProxy
+        reserved "EnableChecksumCalcAndValidationOnDsProxy";
     }
 
     message TPDiskControls {

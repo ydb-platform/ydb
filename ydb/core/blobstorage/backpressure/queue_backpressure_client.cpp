@@ -72,7 +72,6 @@ class TVDiskBackpressureClientActor : public TActorBootstrapped<TVDiskBackpressu
     }
 
     bool ExtraBlockChecksSupport = false;
-    bool Checksumming = false;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
@@ -468,7 +467,7 @@ private:
             case EState::READY:
                 QLOG_INFO_S("BSQ96", "connection lost status# " << NKikimrProto::EReplyStatus_Name(status)
                     << " errorReason# " << errorReason << " timeout# " << timeout);
-                ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false, false, nullptr));
+                ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, false, false, nullptr));
                 Drain(ctx, status, errorReason);
                 break;
         }
@@ -579,7 +578,6 @@ private:
         const auto& record = ev->Get()->Record;
         if (record.GetStatus() != NKikimrProto::NOTREADY) {
             ExtraBlockChecksSupport = record.GetExtraBlockChecksSupport();
-            Checksumming = record.GetChecksumming();
             if (record.HasExpectedMsgId()) {
                 Queue.SetMessageId(NBackpressure::TMessageId(record.GetExpectedMsgId()));
             }
@@ -587,7 +585,7 @@ private:
                 Queue.UpdateCostModel(ctx.Now(), record.GetCostSettings(), GType);
             }
             ctx.Send(BlobStorageProxy, new TEvProxyQueueState(VDiskId, QueueId, true, ExtraBlockChecksSupport,
-                Checksumming, Queue.GetCostModel()));
+                Queue.GetCostModel()));
             Queue.OnConnect();
             State = EState::READY;
         } else {
@@ -826,7 +824,7 @@ private:
             << " VDiskId# " << VDiskId
             << " IsConnected# " << isConnected);
         ctx.Send(ev->Sender, new TEvProxyQueueState(VDiskId, QueueId, isConnected, isConnected && ExtraBlockChecksSupport,
-            isConnected && Checksumming, Queue.GetCostModel()));
+            Queue.GetCostModel()));
     }
 
 #define QueueRequestHFunc(TEvType) \

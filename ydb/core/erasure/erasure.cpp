@@ -3,7 +3,9 @@
 #include <util/generic/yexception.h>
 #include <util/system/unaligned_mem.h>
 #include <library/cpp/containers/stack_vector/stack_vec.h>
-#include <library/cpp/digest/crc32c/crc32c.h>
+
+#define XXH_INLINE_ALL
+#include <contrib/libs/xxhash/xxhash.h>
 
 #define MAX_TOTAL_PARTS 8
 #define MAX_LINES_IN_BLOCK 8
@@ -111,13 +113,13 @@ static const std::array<TErasureParameters, TErasureType::ErasureSpeciesCount> E
     ,{TErasureType::ErasureMirror,       1, 2, 1} // 18 = ErasureSpicies::ErasureMirror3of4
 }};
 
-void PadAndCrcAtTheEnd(char *data, ui64 dataSize, ui64 bufferSize) {
-    ui64 marginSize = bufferSize - dataSize - sizeof(ui32);
+void PadAndChecksumAtTheEnd(char *data, ui64 dataSize, ui64 bufferSize) {
+    ui64 marginSize = bufferSize - dataSize - sizeof(ui64);
     if (marginSize) {
         memset(data + dataSize, 0, marginSize);
     }
-    ui32 hash = Crc32c(data, dataSize);
-    memcpy(data + bufferSize - sizeof(ui32), &hash, sizeof(ui32));
+    ui64 hash = XXH3_64bits(data, dataSize);
+    memcpy(data + bufferSize - sizeof(ui64), &hash, sizeof(ui64));
 }
 
 bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf) {
@@ -126,13 +128,13 @@ bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TContiguousSpan& buf
         return true;
     case TErasureType::CrcModeWholePart:
         if (buf.size() == 0) {
-                return true;
+            return true;
         } else {
-            Y_ABORT_UNLESS(buf.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
-                    " is less then crcSize# %" PRIu64, (ui64)buf.size(), (ui64)sizeof(ui32));
-            ui32 crc = Crc32c(buf.data(), buf.size() - sizeof(ui32));
-            ui32 expectedCrc = ReadUnaligned<ui32>(buf.data() + buf.size() - sizeof(ui32));
-            return crc == expectedCrc;
+            Y_ABORT_UNLESS(buf.size() > sizeof(ui64), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
+                    " is less then checksumSize# %" PRIu64, (ui64)buf.size(), (ui64)sizeof(ui64));
+            ui64 checksum = XXH3_64bits(buf.data(), buf.size() - sizeof(ui64));
+            ui64 expectedChecksum = ReadUnaligned<ui64>(buf.data() + buf.size() - sizeof(ui64));
+            return checksum == expectedChecksum;
         }
     }
     ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
@@ -146,25 +148,26 @@ bool CheckCrcAtTheEnd(TErasureType::ECrcMode crcMode, const TRope& rope) {
             if (rope.IsEmpty()) {
                 return true;
             } else {
-                Y_ABORT_UNLESS(rope.size() > sizeof(ui32), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
-                        " is less then crcSize# %" PRIu64, (ui64)rope.size(), (ui64)sizeof(ui32));
+                Y_ABORT_UNLESS(rope.size() > sizeof(ui64), "Error in CheckWholeBlobCrc: blob part size# %" PRIu64
+                        " is less then checksumSize# %" PRIu64, (ui64)rope.size(), (ui64)sizeof(ui64));
 
-                size_t bytesRemain = rope.size() - sizeof(ui32);
-                ui32 crc = 0;
+                size_t bytesRemain = rope.size() - sizeof(ui64);
+                XXH3_state_t state;
+                XXH3_64bits_reset(&state);
 
                 auto iter = rope.begin();
                 while (bytesRemain) {
                     const char *data = iter.ContiguousData();
                     const size_t size = std::min(bytesRemain, iter.ContiguousSize());
-                    crc = Crc32cExtend(crc, data, size);
+                    XXH3_64bits_update(&state, data, size);
                     iter += size;
                     bytesRemain -= size;
                 }
 
-                ui32 expectedCrc;
-                iter.ExtractPlainDataAndAdvance(&expectedCrc, sizeof(expectedCrc));
+                ui64 expectedChecksum;
+                iter.ExtractPlainDataAndAdvance(&expectedChecksum, sizeof(expectedChecksum));
 
-                return crc == expectedCrc;
+                return XXH3_64bits_digest(&state) == expectedChecksum;
             }
     }
     ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
@@ -1377,7 +1380,7 @@ public:
             return;
         case TErasureType::CrcModeWholePart:
             if (DataSize) {
-                PadAndCrcAtTheEnd(inOutPartSet.Parts[partIdx].GetDataAt(0), PartUserSize, PartContainerSize);
+                PadAndChecksumAtTheEnd(inOutPartSet.Parts[partIdx].GetDataAt(0), PartUserSize, PartContainerSize);
             } else {
                 memset(inOutPartSet.Parts[partIdx].GetDataAt(0), 0, PartContainerSize);
             }
@@ -1397,7 +1400,7 @@ void PadAndCrcParts(TErasureType::ECrcMode crcMode, const TBlockParams &p, TData
     case TErasureType::CrcModeWholePart:
         if (p.DataSize) {
             for (ui32 i = 0; i < p.TotalParts; ++i) {
-                PadAndCrcAtTheEnd(inOutPartSet.Parts[i].GetDataAt(0), p.PartUserSize, p.PartContainerSize);
+                PadAndChecksumAtTheEnd(inOutPartSet.Parts[i].GetDataAt(0), p.PartUserSize, p.PartContainerSize);
             }
         } else {
             for (ui32 i = 0; i < p.TotalParts; ++i) {
@@ -2095,7 +2098,7 @@ ui64 TErasureType::PartSize(ECrcMode crcMode, ui64 dataSize) const {
             return dataSize;
         case CrcModeWholePart:
             if (dataSize) {
-                return dataSize + sizeof(ui32);
+                return dataSize + sizeof(ui64);
             } else {
                 return 0;
             }
@@ -2111,7 +2114,7 @@ ui64 TErasureType::PartSize(ECrcMode crcMode, ui64 dataSize) const {
             case CrcModeNone:
                 return partSize;
             case CrcModeWholePart:
-                return partSize + sizeof(ui32);
+                return partSize + sizeof(ui64);
             }
             ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
         }
@@ -2127,10 +2130,10 @@ ui64 TErasureType::SuggestDataSize(ECrcMode crcMode, ui64 partSize, bool roundDo
         case CrcModeNone:
             return partSize;
         case CrcModeWholePart:
-            if (partSize < sizeof(ui32)) {
+            if (partSize < sizeof(ui64)) {
                 return 0;
             }
-            return partSize - sizeof(ui32);
+            return partSize - sizeof(ui64);
         }
         ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
     case TErasureType::ErasureParityStripe:
@@ -2145,10 +2148,10 @@ ui64 TErasureType::SuggestDataSize(ECrcMode crcMode, ui64 partSize, bool roundDo
                 combinedDataSize = partSize * erasure.DataParts;
                 break;
             case CrcModeWholePart:
-                if (partSize < sizeof(ui32)) {
+                if (partSize < sizeof(ui64)) {
                     return 0;
                 }
-                combinedDataSize = (partSize - sizeof(ui32)) * erasure.DataParts;
+                combinedDataSize = (partSize - sizeof(ui64)) * erasure.DataParts;
             }
             if (combinedDataSize == 0) {
                 ythrow TWithBackTrace<yexception>() << "Unknown crcMode = " << (i32)crcMode;
@@ -2554,9 +2557,9 @@ void MirrorSplit(TErasureType::ECrcMode crcMode, const TErasureType &type, TRope
             part.GrowBack(partSize - buffer.GetSize());
             char *dst = part.GetContiguousSpanMut().data();
             if (buffer.size() || part.size()) {
-                Y_ABORT_UNLESS(part.size() >= buffer.size() + sizeof(ui32), "Part size too small, buffer size# %" PRIu64
+                Y_ABORT_UNLESS(part.size() >= buffer.size() + sizeof(ui64), "Part size too small, buffer size# %" PRIu64
                         " partSize# %" PRIu64, (ui64)buffer.size(), (ui64)partSize);
-                PadAndCrcAtTheEnd(dst, buffer.size(), part.size());
+                PadAndChecksumAtTheEnd(dst, buffer.size(), part.size());
             }
             for (ui32 partIdx = 0; partIdx <= parityParts; ++partIdx) {
                 outPartSet.Parts[partIdx].ReferenceTo(part);

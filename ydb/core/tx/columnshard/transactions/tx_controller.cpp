@@ -174,7 +174,16 @@ bool TTxController::CompleteOnCancel(const ui64 txId, const TActorContext& ctx) 
 
     opIt->second->CompleteOnAbort(Owner, ctx);
 
+<<<<<<< HEAD
+    if (opIt->second->GetTxInfo().MaxStep != Max<ui64>()) {
+        DeadlineQueue.erase(TPlanQueueItem(opIt->second->GetTxInfo().MaxStep, txId));
+    }
     AFL_WARN(NKikimrServices::TX_COLUMNSHARD_TX)("event", "cancel_tx")("tx_id", txId);
+=======
+    YDB_LOG_WARN("",
+        {"event", "cancel_tx"},
+        {"txId", txId});
+>>>>>>> b3e871033d3 (fix a couple of races TTxProposeCancel vs TTxPlanStep vs AbortTx (#50379))
     OnTxCompleted(txId);
     return true;
 }

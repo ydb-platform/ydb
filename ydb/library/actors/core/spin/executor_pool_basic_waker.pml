@@ -16,19 +16,23 @@
 #define WORK 3
 #define BLOCKING 4
 #define NEED 5
-#define NEED_FROM_SLEEP 6
-#define NEED_FROM_BLOCKING 7
-#define WAKER 8
+#define NEED_FROM_SPIN 6
+#define NEED_FROM_SLEEP 7
+#define NEED_FROM_BLOCKING 8
+#define WAKER 9
 
-#define IS_NEED(s) ((s) == NEED || \
+#define IS_NEED(s) ((s) == NEED || (s) == NEED_FROM_SPIN || \
     (s) == NEED_FROM_SLEEP || (s) == NEED_FROM_BLOCKING)
-#define IS_SPIN(s) ((s) == SPIN)
+#define IS_SPIN(s) ((s) == SPIN || (s) == NEED_FROM_SPIN)
 #define IS_SLEEP(s) ((s) == SLEEP || (s) == NEED_FROM_SLEEP)
 #define IS_BLOCKING(s) ((s) == BLOCKING || (s) == NEED_FROM_BLOCKING)
 #define IS_PARKED(s) ((s) == SLEEP || (s) == BLOCKING)
 #define ALL_WORKERS_PARKED \
     (worker_parked[0] && IS_PARKED(worker_state[0]) && \
         worker_parked[1] && IS_PARKED(worker_state[1]))
+#define ALL_WORKERS_SLEEPING \
+    (worker_parked[0] && worker_state[0] == SLEEP && \
+        worker_parked[1] && worker_state[1] == SLEEP)
 
 #define INVALID_WAKER N
 #define REDUCTION_WAKER_BIT 4
@@ -82,7 +86,7 @@ inline try_request_waker(candidate, notified, require_sleepers) {
             :: worker_state[candidate] == WAKER || IS_NEED(worker_state[candidate]) ->
                 notified = true
             :: worker_state[candidate] == SPIN ->
-                worker_state[candidate] = NEED;
+                worker_state[candidate] = NEED_FROM_SPIN;
                 notified = true
             :: worker_state[candidate] == SLEEP ->
                 worker_state[candidate] = NEED_FROM_SLEEP;
@@ -176,10 +180,16 @@ inline reconcile_workers(id, resume_state) {
             resume_state = NONE
         :: waker_i != id && IS_SPIN(worker_state[waker_i]) ->
             if
-            :: waker_budget > 0 ->
+            :: waker_remaining_reductions > 0 ->
+                worker_state[waker_i] = SLEEP;
+                waker_remaining_reductions--;
+                assert(awake_workers > 0);
+                awake_workers--;
+                sleep_workers++
+            :: waker_remaining_reductions == 0 && waker_budget > 0 ->
                 worker_state[waker_i] = NONE;
                 waker_budget--
-            :: waker_budget == 0 ->
+            :: waker_remaining_reductions == 0 && waker_budget == 0 ->
                 worker_state[waker_i] = SLEEP;
                 assert(awake_workers > 0);
                 awake_workers--;
@@ -188,9 +198,15 @@ inline reconcile_workers(id, resume_state) {
             fi
         :: waker_i == id && IS_SPIN(resume_state) ->
             if
-            :: waker_budget > 0 ->
+            :: waker_remaining_reductions > 0 ->
+                resume_state = SLEEP;
+                waker_remaining_reductions--;
+                assert(awake_workers > 0);
+                awake_workers--;
+                sleep_workers++
+            :: waker_remaining_reductions == 0 && waker_budget > 0 ->
                 resume_state = NONE;
-            :: waker_budget == 0 ->
+            :: waker_remaining_reductions == 0 && waker_budget == 0 ->
                 resume_state = SLEEP;
                 assert(awake_workers > 0);
                 awake_workers--;
@@ -357,7 +373,8 @@ inline run_waker(id, resume_state) {
             if
             :: IS_SLEEP(worker_state[id]) -> resume_state = SLEEP
             :: IS_BLOCKING(worker_state[id]) -> resume_state = BLOCKING
-            :: worker_state[id] == NONE || worker_state[id] == SPIN || worker_state[id] == NEED -> resume_state = NONE
+            :: worker_state[id] == NONE || worker_state[id] == NEED -> resume_state = NONE
+            :: IS_SPIN(worker_state[id]) -> resume_state = SPIN
             :: else -> skip
             fi;
             worker_state[id] = WAKER
@@ -394,6 +411,8 @@ inline run_waker(id, resume_state) {
                 worker_state[id] = SLEEP;
             :: worker_state[id] == NEED_FROM_BLOCKING ->
                 worker_state[id] = BLOCKING
+            :: worker_state[id] == NEED_FROM_SPIN ->
+                worker_state[id] = SPIN
             :: worker_state[id] == NEED ->
                 worker_state[id] = NONE
             fi
@@ -483,7 +502,7 @@ pop_activation:
             atomic {
                 if
                 :: worker_state[id] == SPIN ->
-                    worker_state[id] = NEED
+                    worker_state[id] = NEED_FROM_SPIN
                 :: worker_state[id] == SLEEP ->
                     worker_state[id] = NEED_FROM_SLEEP
                 :: worker_state[id] == NONE ->
@@ -515,17 +534,21 @@ settle_waker_state:
                 fi
             }
         :: activation_credits == 0 ->
-            worker_state[id] != SPIN || activation_credits > 0 || reductions > 0
+            worker_state[id] != SPIN || activation_credits > 0 ||
+                (reductions & REDUCTION_WAKER_BIT);
             if
-            :: reductions > 0 ->
+            :: reductions & REDUCTION_WAKER_BIT ->
                 atomic {
                     if
-                    :: worker_state[id] == BLOCKING || worker_state[id] == SPIN -> worker_state[id] = NONE
-                    :: worker_state[id] == SLEEP -> goto sleep_state_label
-                    :: IS_NEED(worker_state[id]) -> goto settle_waker_state
+                    :: worker_state[id] == SPIN ->
+                        worker_state[id] = NONE
+                    :: worker_state[id] == SLEEP ->
+                        goto sleep_state_label
+                    :: IS_NEED(worker_state[id]) ->
+                        goto settle_waker_state
                     :: else -> skip
                     fi
-                }
+                };
                 goto check_blocking
             :: else -> goto settle_waker_state
             fi
@@ -708,6 +731,12 @@ proctype FinalStateChecker() {
     ([] ((waker_pending && producer_epoch == p) -> \
         <> (!waker_pending || producer_epoch != p)))
 
+#define ZERO_ACTIVATIONS_SETTLES_WITH_EPOCHS(p, c) \
+    ([] ((activation_credits == 0 && producer_epoch == p && \
+            controller_epoch == c) -> \
+        <> (ALL_WORKERS_SLEEPING || activation_credits != 0 || \
+            producer_epoch != p || controller_epoch != c)))
+
 ltl live_resize_reconciles {
     RESIZE_RECONCILES_WITH_EPOCHS(false, false) &&
     RESIZE_RECONCILES_WITH_EPOCHS(false, true) &&
@@ -729,6 +758,13 @@ ltl live_queue_changes {
 ltl live_waker_pending_clears {
     WAKER_PENDING_CLEARS_WITH_PRODUCER_EPOCH(false) &&
     WAKER_PENDING_CLEARS_WITH_PRODUCER_EPOCH(true)
+}
+
+ltl live_zero_activations_sleep {
+    ZERO_ACTIVATIONS_SETTLES_WITH_EPOCHS(false, false) &&
+    ZERO_ACTIVATIONS_SETTLES_WITH_EPOCHS(false, true) &&
+    ZERO_ACTIVATIONS_SETTLES_WITH_EPOCHS(true, false) &&
+    ZERO_ACTIVATIONS_SETTLES_WITH_EPOCHS(true, true)
 }
 
 init {

@@ -86,6 +86,7 @@ public:
     FEATURE_FLAG_SETTER(EnableSecureScriptExecutions)
     FEATURE_FLAG_SETTER(DisableMissingDefaultColumnsInBulkUpsert)
     FEATURE_FLAG_SETTER(EnableTopicAutopartitioningForReplication)
+    FEATURE_FLAG_SETTER(EnableAccessToIndexImplTables)
 
     #undef FEATURE_FLAG_SETTER
 };

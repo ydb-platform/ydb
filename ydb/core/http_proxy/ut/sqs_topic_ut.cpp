@@ -104,6 +104,30 @@ namespace {
         return GetPathFromFullQueueUrl(url);
     }
 
+    NJson::TJsonMap SendSqsJsonWithHost(
+        THttpProxyTestMock& fixture,
+        const TString& host,
+        const TString& method,
+        NJson::TJsonMap request,
+        const TVector<std::pair<TString, TString>>& extraHeaders = {})
+    {
+        auto res = fixture.SendHttpRequestSpecified(
+            "/Root",
+            TStringBuilder() << "AmazonSQS." << method,
+            request,
+            host,
+            "20150830T123600Z",
+            "sqs-topic-ut",
+            "identity",
+            "",
+            "application/json",
+            extraHeaders);
+        UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+        NJson::TJsonMap json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+        return json;
+    }
+
     NYdb::TDriverConfig MakeDriverConfig(std::derived_from<THttpProxyTestMock> auto& fixture) {
         NYdb::TDriverConfig config;
         config.SetEndpoint("localhost:" + ToString(fixture.KikimrGrpcPort));
@@ -388,6 +412,56 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
             json = GetQueueUrl({{"QueueName", queueName}, {"WrongParameter", "some-value"}}, 400);
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "InvalidArgumentException");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlUsesRequestHost, TNoAuthFixture) {
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString host = "sqs.ydb.test:8443";
+            auto json = SendSqsJsonWithHost(*this, host, "GetQueueUrl", {{"QueueName", topicName}});
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetByPath<TString>(json, "QueueUrl"),
+                TStringBuilder() << "http://" << host << expectedPath);
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlUsesForwardedHost, TNoAuthFixture) {
+            auto driver = MakeDriver(*this);
+            const TString topicName = "ExampleQueueName";
+            const TString consumer = "ydb-sqs-consumer";
+            Y_ENSURE(CreateTopic(driver, topicName, consumer));
+
+            const TString backendHost = "vla5-2135.lbkx.example.net:8771";
+            const TString publicHost = "lbkx.example.net:8443";
+            auto json = SendSqsJsonWithHost(
+                *this,
+                backendHost,
+                "GetQueueUrl",
+                {{"QueueName", topicName}},
+                {
+                    {"X-Forwarded-Host", publicHost},
+                    {"X-Forwarded-Proto", "HTTPS, http"},
+                });
+            const TString expectedPath = std::format(
+                "/v1/5//Root/{}/{}/{}/{}",
+                topicName.size(), topicName.c_str(), consumer.size(), consumer.c_str());
+            UNIT_ASSERT_VALUES_EQUAL(
+                GetByPath<TString>(json, "QueueUrl"),
+                TStringBuilder() << "https://" << publicHost << expectedPath);
+        }
+
+        Y_UNIT_TEST_F(TestCreateQueueUsesRequestHost, TNoAuthFixture) {
+            const TString queueName = "CreateQueueHost";
+            const TString host = "sqs.ydb.test:8443";
+            auto json = SendSqsJsonWithHost(*this, host, "CreateQueue", {{"QueueName", queueName}});
+            const TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+            UNIT_ASSERT(queueUrl.StartsWith(TStringBuilder() << "http://" << host << "/v1/"));
+            UNIT_ASSERT(queueUrl.Contains(queueName));
         }
 
         Y_UNIT_TEST_F(TestGetQueueUrlOfNotExistingQueue, TFixture) {
@@ -1084,6 +1158,22 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 TString queueUrl2 = GetPathFromFullQueueUrl(json["QueueUrls"][0]);
                 UNIT_ASSERT_VALUES_UNEQUAL(queueUrl1, queueUrl2);
             }
+        }
+
+        Y_UNIT_TEST_F(TestListQueuesConvertsConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            CreateFederationTopicWithConsumer(*this);
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            auto json = FederationSqsRequest(*this, database, "ListQueues", {});
+            const auto& urls = json["QueueUrls"].GetArray();
+            UNIT_ASSERT_VALUES_EQUAL(urls.size(), 1);
+            const TString listPath = GetPathFromFullQueueUrl(urls[0]);
+            UNIT_ASSERT(listPath.Contains("my/consumer"));
+            UNIT_ASSERT(!listPath.Contains("my@consumer"));
+
+            auto getJson = FederationSqsRequest(*this, database, "GetQueueUrl", {
+                {"QueueName", "my_topic@my/consumer"},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(listPath, GetPathFromQueueUrlMap(getJson));
         }
 
         struct TSqsTopicPaths {

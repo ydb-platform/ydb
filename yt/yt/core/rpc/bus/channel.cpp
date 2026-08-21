@@ -1174,11 +1174,11 @@ private:
             YT_VERIFY(responseHandler);
 
             auto detailedError = error
-                << TErrorAttribute("realm_id", requestControl->GetRealmId())
-                << TErrorAttribute("service", requestControl->GetService())
-                << TErrorAttribute("method", requestControl->GetMethod())
-                << TErrorAttribute("request_id", requestControl->GetRequestId())
-                << Bus_->GetEndpointAttributes();
+                .With("realm_id", requestControl->GetRealmId())
+                .With("service", requestControl->GetService())
+                .With("method", requestControl->GetMethod())
+                .With("request_id", requestControl->GetRequestId())
+                .With(Bus_->GetEndpointAttributes());
 
             if (requestControl->GetTimeout()) {
                 detailedError = detailedError

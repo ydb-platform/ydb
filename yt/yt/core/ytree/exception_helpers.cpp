@@ -106,7 +106,7 @@ void ThrowMethodNotSupported(TStringBuf method, const std::optional<std::string>
         "%Qv method is not supported",
         method);
     if (resolveType) {
-        error <<= TErrorAttribute("resolve_type", *resolveType);
+        error.Add("resolve_type", *resolveType);
     }
     THROW_ERROR(error);
 }

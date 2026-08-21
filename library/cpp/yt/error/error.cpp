@@ -711,19 +711,21 @@ void TError::AddAttribute(const TErrorAttribute& attribute)
     MutableAttributes()->SetAttribute(attribute);
 }
 
+void TError::AddAttributes(TAnyMergeableDictionaryRef attributes)
+{
+    MutableAttributes()->MergeFrom(attributes);
+}
+
 void TError::AddInnerError(const TError& innerError)
 {
-    if (innerError.IsOK()) {
-        return;
-    }
+    // NB: |operator <<=| stays lenient by design: #Wrap of an OK error relies on OK inner errors being dropped.
+    YT_VERIFY(!innerError.IsOK());
     MutableInnerErrors()->push_back(innerError);
 }
 
 void TError::AddInnerError(TError&& innerError)
 {
-    if (innerError.IsOK()) {
-        return;
-    }
+    YT_VERIFY(!innerError.IsOK());
     MutableInnerErrors()->push_back(std::move(innerError));
 }
 
@@ -737,6 +739,19 @@ TError TError::With(const TErrorAttribute& attribute) const &
 TError&& TError::With(const TErrorAttribute& attribute) &&
 {
     AddAttribute(attribute);
+    return std::move(*this);
+}
+
+TError TError::With(TAnyMergeableDictionaryRef attributes) const &
+{
+    auto result = TError(*this);
+    result.AddAttributes(attributes);
+    return result;
+}
+
+TError&& TError::With(TAnyMergeableDictionaryRef attributes) &&
+{
+    AddAttributes(attributes);
     return std::move(*this);
 }
 
@@ -764,6 +779,30 @@ TError&& TError::With(TError&& innerError) &&
 {
     AddInnerError(std::move(innerError));
     return std::move(*this);
+}
+
+TError& TError::Add(const TErrorAttribute& attribute) &
+{
+    AddAttribute(attribute);
+    return *this;
+}
+
+TError& TError::Add(TAnyMergeableDictionaryRef attributes) &
+{
+    AddAttributes(attributes);
+    return *this;
+}
+
+TError& TError::Add(const TError& innerError) &
+{
+    AddInnerError(innerError);
+    return *this;
+}
+
+TError& TError::Add(TError&& innerError) &
+{
+    AddInnerError(std::move(innerError));
+    return *this;
 }
 
 TError& TError::operator <<= (const TErrorAttribute& attribute) &
@@ -809,7 +848,7 @@ TError& TError::operator <<= (std::vector<TError>&& innerErrors) &
 
 TError& TError::operator <<= (TAnyMergeableDictionaryRef attributes) &
 {
-    MutableAttributes()->MergeFrom(attributes);
+    AddAttributes(attributes);
     return *this;
 }
 

@@ -745,11 +745,11 @@ private:
             }
 
             auto detailedError = error
-                << TErrorAttribute("realm_id", Request_->GetRealmId())
-                << TErrorAttribute("service", Request_->GetService())
-                << TErrorAttribute("method", Request_->GetMethod())
-                << TErrorAttribute("request_id", Request_->GetRequestId())
-                << Owner_->GetEndpointAttributes();
+                .With("realm_id", Request_->GetRealmId())
+                .With("service", Request_->GetService())
+                .With("method", Request_->GetMethod())
+                .With("request_id", Request_->GetRequestId())
+                .With(Owner_->GetEndpointAttributes());
             if (Options_.Timeout) {
                 detailedError = detailedError
                     .With("timeout", Options_.Timeout);

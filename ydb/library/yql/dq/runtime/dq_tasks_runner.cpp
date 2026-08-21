@@ -1124,6 +1124,7 @@ private:
             wideBuffer.resize(AllocatedHolder->OutputWideType->GetElementsCount());
         }
         bool dataConsumed = false;
+	(void)dataConsumed;
         while (AllocatedHolder->Output->GetFillLevel() == NoLimit) {
             NUdf::TUnboxedValue value;
             NUdf::EFetchStatus fetchStatus = NUdf::EFetchStatus::Finish;
@@ -1186,17 +1187,17 @@ private:
                     if (LangVer >= MakeLangVersion(2025, 4)) {
                         AllocatedHolder->CheckForNotConsumedLinear();
                     }
-                    if (dataConsumed) {
-                        AllocatedHolder->Output->Flush();
-                    }
+                    // if (dataConsumed) {
+                    //     AllocatedHolder->Output->Flush();
+                    // }
                     return status;
                 }
             }
         }
 
-        if (dataConsumed) {
-            AllocatedHolder->Output->Flush();
-        }
+        // if (dataConsumed) {
+        //     AllocatedHolder->Output->Flush();
+        // }
         return ERunStatus::PendingOutput;
     }
 

@@ -701,14 +701,19 @@ TDqPhyStage RebuildStageInputsAsWide(const TDqPhyStage& stage, TExprContext& ctx
                     builder.Add<TCoAtom>().Build(ToString(idx));
                 }
 
-                newInputs.push_back(Build<TDqCnHashShuffle>(ctx, conn.Pos())
+                auto newShuffle = Build<TDqCnHashShuffle>(ctx, conn.Pos())
                     .Output<TDqOutput>()
                         .InitFrom(conn.Output())
                         .Stage(newStage)
                     .Build()
                     .KeyColumns(builder.Build().Value())
-                    .UseSpilling(shuffle.UseSpilling())
-                    .Done().Ptr());
+                    .UseSpilling(shuffle.UseSpilling());
+
+                if (shuffle.HashFunc().IsValid()) {
+                    newShuffle.HashFunc(shuffle.HashFunc().Cast());
+                }
+
+                newInputs.push_back(newShuffle.Done().Ptr());
             } else if (conn.Maybe<TDqCnMerge>()) {
                 auto merge = conn.Maybe<TDqCnMerge>().Cast();
                 auto builder = Build<TDqSortColumnList>(ctx, merge.SortColumns().Pos());

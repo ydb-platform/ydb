@@ -333,6 +333,8 @@ private:
     bool EnableStreamingQueriesCounters = false;
     bool CreateSessionScheduled = false;
 
+    TMaybe<TStatus> ErrorStatus;
+
 public:
     TTopicSession(
         const TString& readGroup,
@@ -414,7 +416,7 @@ private:
         IgnoreFunc(NFq::TEvPrivate::TEvPqEventsReady);
         IgnoreFunc(NFq::TEvPrivate::TEvCreateSession);
         IgnoreFunc(TEvRowDispatcher::TEvGetNextBatch);
-        IgnoreFunc(NFq::TEvRowDispatcher::TEvStartSession);
+        hFunc(NFq::TEvRowDispatcher::TEvStartSession, Handle);
         IgnoreFunc(NFq::TEvRowDispatcher::TEvStopSession);
         IgnoreFunc(NFq::TEvPrivate::TEvSendStatistic);
         IgnoreFunc(NFq::TEvPrivate::TEvReconnectSession);
@@ -908,6 +910,11 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
+    if (CurrentStateFunc() == &TThis::ErrorState) {
+        Y_ENSURE(ErrorStatus, "ErrorStatus should be set in ErrorState");
+        SendSessionError(ev->Sender, ErrorStatus.GetRef(), true);
+        return;
+    }
     auto offset = GetOffset(ev->Get()->Record);
     const auto& source = ev->Get()->Record.GetSource();
     YDB_LOG_INFO("New client: read actor id watermark",
@@ -1034,9 +1041,10 @@ void TTopicSession::FatalError(const TStatus& status) {
         YDB_LOG_DEBUG("Send TEvSessionError",
             {"logPrefix", LogPrefix},
             {"readActorId", readActorId});
-        SendSessionError(readActorId, status, true);
-    }
+            SendSessionError(readActorId, status, true);
+        }
     StopReadSession();
+    ErrorStatus = status;
     Become(&TTopicSession::ErrorState);
 }
 

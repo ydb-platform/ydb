@@ -67,7 +67,7 @@ public:
                    << " at tabletId# " << ssId);
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
-        TOlapStoreInfo::TPtr pendingInfo = context.SS->OlapStores[txState->TargetPathId];
+        auto pendingInfo = context.SS->OlapStores.at(txState->TargetPathId);
         Y_ABORT_UNLESS(pendingInfo);
         Y_ABORT_UNLESS(pendingInfo->AlterData);
         TOlapStoreInfo::TPtr storeInfo = pendingInfo->AlterData;
@@ -160,11 +160,11 @@ public:
         path->StepCreated = step;
         context.SS->PersistCreateStep(db, pathId, step);
 
-        TOlapStoreInfo::TPtr pending = context.SS->OlapStores[pathId];
+        auto pending = context.SS->OlapStores.at(pathId);
         Y_ABORT_UNLESS(pending);
         TOlapStoreInfo::TPtr store = pending->AlterData;
         Y_ABORT_UNLESS(store);
-        context.SS->OlapStores[pathId] = store;
+        context.SS->OlapStores.SetUntracked(pathId, store);
 
         context.SS->PersistOlapStoreAlterRemove(db, pathId);
         context.SS->PersistOlapStore(db, pathId, *store);
@@ -448,12 +448,14 @@ public:
             }
         }
 
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        dstPath.MaterializeLeaf(owner, pathId);
+        result->SetPathId(pathId.LocalPathId);
 
         context.SS->TabletCounters->Simple()[COUNTER_OLAP_STORE_COUNT].Add(1);
 
-        TPathId pathId = dstPath.Base()->PathId;
         TTxState& txState = context.SS->CreateTx(OperationId, TTxState::TxCreateOlapStore, pathId);
 
         ApplySharding(OperationId.GetTxId(), pathId, storeInfo, channelsBindings, txState, context.SS);
@@ -462,10 +464,9 @@ public:
 
         TOlapStoreInfo::TPtr pending = std::make_shared<TOlapStoreInfo>();
         pending->AlterData = storeInfo;
-        context.SS->OlapStores[pathId] = pending;
+        context.SS->OlapStores.Set({.Path = pathId, .Value = pending, .Changes = context.MemChanges});
         context.SS->PersistOlapStore(db, pathId, *pending);
         context.SS->PersistOlapStoreAlter(db, pathId, *storeInfo);
-        context.SS->IncrementPathDbRefCount(pathId);
 
         for (auto shard : txState.Shards) {
             Y_ABORT_UNLESS(shard.Operation == TTxState::CreateParts);

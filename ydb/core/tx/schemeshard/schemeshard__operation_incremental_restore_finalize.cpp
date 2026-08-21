@@ -99,7 +99,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     continue;
                 }
 
-                auto table = context.SS->Tables.at(tablePathId);
+                auto& table = context.SS->Tables.UpdateUntracked(tablePathId);
 
                 // InitAlterData() sets AlterVersion = CurrentVersion + 1 and also sets CoordinatedSchemaVersion
                 table->InitAlterData(OperationId);
@@ -140,7 +140,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 // Find which table this shard belongs to
                 TPathId tablePathId;
                 for (const auto& pathId : implTablesToUpdate) {
-                    auto table = context.SS->Tables.at(pathId);
+                    auto table = context.SS->Tables.at(pathId);  // read-only: only iterating partitions
                     for (const auto* partition : table->GetPartitions()) {
                         if (partition->ShardIdx == shardIdx) {
                             tablePathId = pathId;
@@ -273,7 +273,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                     continue;
                 }
 
-                auto table = context.SS->Tables.at(implTablePathId);
+                auto& table = context.SS->Tables.UpdateUntracked(implTablePathId);
                 if (!table->AlterData) {
                     LOG_W("SyncIndexSchemaVersions: No AlterData for table: " << implTablePathId);
                     continue;
@@ -305,13 +305,13 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                 if (indexPath.IsResolved() && indexPath.Base()->PathType == NKikimrSchemeOp::EPathTypeTableIndex) {
                     TPathId indexPathId = indexPath.Base()->PathId;
                     if (context.SS->Indexes.contains(indexPathId)) {
-                        auto oldVersion = context.SS->Indexes[indexPathId]->AlterVersion;
+                        auto oldVersion = context.SS->Indexes.at(indexPathId)->AlterVersion;
 
                         // Use the coordinated version stored before FinishAlter
                         ui64 targetVersion = coordVersion;
 
-                        if (context.SS->Indexes[indexPathId]->AlterVersion < targetVersion) {
-                            auto index = context.SS->Indexes[indexPathId];
+                        if (context.SS->Indexes.at(indexPathId)->AlterVersion < targetVersion) {
+                            auto& index = context.SS->Indexes.UpdateUntracked(indexPathId);
                             index->AlterVersion = targetVersion;
                             if (index->AlterData && index->AlterData->AlterVersion < targetVersion) {
                                 index->AlterData->AlterVersion = targetVersion;
@@ -320,7 +320,7 @@ class TIncrementalRestoreFinalizeOp: public TSubOperationWithContext {
                             context.SS->PersistTableIndexAlterVersion(db, indexPathId, index);
 
                             LOG_I("SyncIndexSchemaVersions: Index AlterVersion updated from "
-                                  << oldVersion << " to " << context.SS->Indexes[indexPathId]->AlterVersion);
+                                  << oldVersion << " to " << context.SS->Indexes.at(indexPathId)->AlterVersion);
 
                             context.OnComplete.PublishToSchemeBoard(OperationId, indexPathId);
 

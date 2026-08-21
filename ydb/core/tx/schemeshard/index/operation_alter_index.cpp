@@ -44,9 +44,9 @@ public:
         TPathElement::TPtr path = context.SS->PathsById.at(pathId);
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(path->PathId));
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(path->PathId);
+        auto indexData = context.SS->Indexes.at(path->PathId);
         context.SS->PersistTableIndex(db, path->PathId);
-        context.SS->Indexes[path->PathId] = indexData->AlterData;
+        context.SS->Indexes.SetUntracked(path->PathId, indexData->AlterData);
 
         context.SS->ClearDescribePathCaches(path);
         context.OnComplete.PublishToSchemeBoard(OperationId, path->PathId);
@@ -188,13 +188,12 @@ public:
         context.MemChanges.GrabPath(context.SS, indexPath->PathId);
         context.MemChanges.GrabPath(context.SS, indexPath->ParentPathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabIndex(context.SS, indexPath->PathId);
 
         context.DbChanges.PersistPath(indexPath->PathId);
         context.DbChanges.PersistAlterIndex(indexPath->PathId);
         context.DbChanges.PersistTxState(OperationId);
 
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(indexPath->PathId);
+        auto& indexData = context.SS->Indexes.Update(indexPath->PathId, context.MemChanges);
         TTableIndexInfo::TPtr newIndexData = indexData->CreateNextVersion();
         Y_ABORT_UNLESS(newIndexData);
         newIndexData->State = tableIndexAlter.GetState();

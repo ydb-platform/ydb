@@ -66,9 +66,9 @@ public:
         txState->PlanStep = step;
         context.SS->PersistTxPlanStep(db, OperationId, step);
 
-        TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(dstPath.Base()->PathId);
+        auto indexData = context.SS->Indexes.at(dstPath.Base()->PathId);
         context.SS->PersistTableIndex(db, dstPath.Base()->PathId);
-        context.SS->Indexes[dstPath.Base()->PathId] = indexData->AlterData;
+        context.SS->Indexes.SetUntracked(dstPath.Base()->PathId, indexData->AlterData);
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);
@@ -484,7 +484,6 @@ public:
         context.MemChanges.GrabPath(context.SS, dstParentPath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(dstParentPath.Base()->PathId);
@@ -514,10 +513,9 @@ public:
 
         const auto srcIndexInfo = context.SS->Indexes.at(srcPath.Base()->PathId);
         auto newIndexData = TTableIndexInfo::NotExistedYet(srcIndexInfo->Type);
-        context.SS->Indexes[dstPath.Base()->PathId] = newIndexData;
+        context.SS->Indexes.Set({.Path = dstPath.Base()->PathId, .Value = newIndexData, .Changes = context.MemChanges});
         newIndexData->AlterData = srcIndexInfo->GetNextVersion();
 
-        context.SS->IncrementPathDbRefCount(dstPath.Base()->PathId);
 
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, srcPath, context.SS, context.OnComplete);

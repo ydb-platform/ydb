@@ -509,7 +509,7 @@ public:
             }
 
             Y_ABORT_UNLESS(context.SS->OlapStores.contains(storePathId));
-            TOlapStoreInfo::TPtr storeInfo = context.SS->OlapStores.at(storePathId);
+            auto& storeInfo = context.SS->OlapStores.UpdateUntracked(storePathId);
 
             Y_ABORT_UNLESS(storeInfo->ColumnTables.contains(path->PathId));
             storeInfo->ColumnTablesUnderOperation.insert(path->PathId);

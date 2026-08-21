@@ -139,9 +139,8 @@ TTxState& PrepareChanges(TOperationId operationId, TPathElement::TPtr parentDir,
 
     TBlockStoreVolumeInfo::TPtr emptyVolume = new TBlockStoreVolumeInfo();
     emptyVolume->Shards.swap(volume->Shards);
-    context.SS->BlockStoreVolumes[pathId] = emptyVolume;
-    context.SS->BlockStoreVolumes[pathId]->AlterData = volume;
-    context.SS->IncrementPathDbRefCount(pathId);
+    context.SS->BlockStoreVolumes.Set({.Path = pathId, .Value = emptyVolume, .Changes = context.MemChanges});
+    context.SS->BlockStoreVolumes.Update(pathId, context.MemChanges)->AlterData = volume;
 
     context.SS->PersistBlockStoreVolume(db, pathId, emptyVolume);
     context.SS->PersistAddBlockStoreVolumeAlter(db, pathId, volume);
@@ -361,8 +360,11 @@ public:
             return result;
         }
 
-        dstPath.MaterializeLeaf(owner);
-        result->SetPathId(dstPath.Base()->PathId.LocalPathId);
+        const TPathId pathId = context.SS->AllocatePathId();
+        context.MemChanges.GrabNewPath(context.SS, pathId);
+        context.MemChanges.GrabPath(context.SS, parentPath.Base()->PathId);
+        dstPath.MaterializeLeaf(owner, pathId);
+        result->SetPathId(pathId.LocalPathId);
 
         context.SS->TabletCounters->Simple()[COUNTER_BLOCKSTORE_VOLUME_COUNT].Add(1);
         domainDir->ChangeVolumeSpaceBegin(volumeSpace, { });

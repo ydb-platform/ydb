@@ -93,10 +93,10 @@ public:
             context.SS->TabletCounters->Simple()[COUNTER_TABLE_INDEXES_COUNT].Add(1);
 
             Y_ABORT_UNLESS(context.SS->Indexes.contains(dstPathId));
-            TTableIndexInfo::TPtr indexData = context.SS->Indexes.at(dstPathId);
+            auto indexData = context.SS->Indexes.at(dstPathId);
             Y_ABORT_UNLESS(indexData->AlterData, "AlterData must be valid after TTableIndexInfo::Create");
             context.SS->PersistTableIndex(db, dstPathId);
-            context.SS->Indexes[dstPathId] = indexData->AlterData;
+            context.SS->Indexes.SetUntracked(dstPathId, indexData->AlterData);
         }
 
         // Drop the source index path (stored in SourcePathId)
@@ -256,7 +256,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Indexes.contains(srcPath.Base()->PathId));
-        TTableIndexInfo::TPtr srcIndexInfo = context.SS->Indexes.at(srcPath.Base()->PathId);
+        auto srcIndexInfo = context.SS->Indexes.at(srcPath.Base()->PathId);
 
         // Verify the column table's schema proto and the scheme tree agree that srcName exists.
         // The TPropose state operation relies on this invariant when renaming the index in schema,
@@ -329,7 +329,6 @@ public:
         context.MemChanges.GrabPath(context.SS, mainTablePath.Base()->PathId);
         context.MemChanges.GrabPath(context.SS, srcPath.Base()->PathId);
         context.MemChanges.GrabNewTxState(context.SS, OperationId);
-        context.MemChanges.GrabNewIndex(context.SS, allocatedPathId);
 
         context.DbChanges.PersistPath(allocatedPathId);
         context.DbChanges.PersistPath(mainTablePath.Base()->PathId);
@@ -355,8 +354,7 @@ public:
         srcPath.Base()->DropTxId = OperationId.GetTxId();
         srcPath.Base()->LastTxId = OperationId.GetTxId();
 
-        context.SS->Indexes[newIndexPath->PathId] = newIndexData;
-        context.SS->IncrementPathDbRefCount(newIndexPath->PathId);
+        context.SS->Indexes.Set({.Path = newIndexPath->PathId, .Value = newIndexData, .Changes = context.MemChanges});
 
         context.OnComplete.ActivateTx(OperationId);
 

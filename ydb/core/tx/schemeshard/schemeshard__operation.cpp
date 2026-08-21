@@ -20,6 +20,7 @@
 #include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/scope.h>
 #include <util/string/builder.h>
 
 namespace NKikimr::NSchemeShard {
@@ -193,6 +194,15 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     using namespace NGenerated;
     THolder<TProposeResponse> response = nullptr;
 
+    // Propose is the only flow that can roll back (via AbortOperationPropose ->
+    // MemChanges.UnDo): arm the changes so their self-ref undos are recorded.
+    // Disarm on every exit: AbortOperationPropose runs while still armed, but the
+    // rest of the propose tx must not read as the mutation phase.
+    context.MemChanges.Arm(context.SS);
+    Y_DEFER {
+        context.MemChanges.Disarm();
+    };
+
     auto selfId = SelfTabletId();
     auto& record = request.Record;
     auto txId = TTxId(record.GetTxId());
@@ -325,6 +335,11 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
     }
 
     context.MemChanges.UnDo(context.SS);
+
+    // Propose-time abort runs before publication (which happens post-plan), so
+    // no publication refs should exist yet and UnDo owns the counter rollback.
+    Y_VERIFY_DEBUG_S(operation->Publications.empty(),
+        "unexpected publication refs on propose abort, tx: " << txId);
 
     // And remove aborted operation from existence
     Operations.erase(txId);
@@ -1730,9 +1745,9 @@ void TOperation::AddPart(ISubOperation::TPtr part) {
     Parts.push_back(part);
 }
 
-bool TOperation::AddPublishingPath(TPathId pathId, ui64 version) {
+bool TOperation::AddPublishingPath(TSchemeShard* ss, TPathId pathId, ui64 version) {
     Y_ABORT_UNLESS(!IsReadyToNotify());
-    return Publications.emplace(pathId, version).second;
+    return Publications.emplace(TPublishPath(pathId, version), TPathDbRef(ss, pathId, "publish path")).second;
 }
 
 bool TOperation::IsPublished() const {

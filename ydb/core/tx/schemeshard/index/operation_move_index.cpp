@@ -76,7 +76,7 @@ public:
             Y_ABORT_UNLESS(path);
 
             Y_ABORT_UNLESS(context.SS->Tables.contains(pathId));
-            TTableInfo::TPtr table = context.SS->Tables.at(pathId);
+            auto table = context.SS->Tables.at(pathId);
             Y_ABORT_UNLESS(table);
 
             auto seqNo = context.SS->StartRound(*txState);
@@ -277,7 +277,7 @@ public:
 
 
         TPath path = TPath::Init(txState->TargetPathId, context.SS);
-        TTableInfo::TPtr table = context.SS->Tables.at(txState->TargetPathId);
+        auto& table = context.SS->Tables.UpdateUntracked(txState->TargetPathId);
 
         Y_ABORT_UNLESS(txState->PlanStep);
 
@@ -407,7 +407,7 @@ public:
         }
 
         Y_ABORT_UNLESS(context.SS->Tables.contains(tablePath.Base()->PathId));
-        TTableInfo::TPtr table = context.SS->Tables.at(tablePath.Base()->PathId);
+        auto table = context.SS->Tables.at(tablePath.Base()->PathId);
 
         Y_ABORT_UNLESS(table->AlterVersion != 0);
 

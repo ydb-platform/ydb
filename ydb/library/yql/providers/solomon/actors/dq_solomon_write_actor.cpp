@@ -123,6 +123,13 @@ public:
     {
         SINK_LOG_D("Init");
         EgressStats.Level = statsLevel;
+        switch (WriteParams.Shard.GetClusterType()) {
+            case NSo::NProto::ESolomonClusterType::CT_SOLOMON:
+            case NSo::NProto::ESolomonClusterType::CT_MONITORING:
+                break;
+            default:
+                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(WriteParams.Shard.GetClusterType()));
+        }
     }
 
     STRICT_STFUNC(StateFunc,
@@ -357,7 +364,7 @@ private:
                 httpRequest->Set(authorizationHeader, "Bearer " + authToken);
                 break;
             default:
-                Y_DEBUG_ABORT("Impossible clusterType");
+                Y_ENSURE(false, "Invalid cluster type " << ToString<ui32>(clusterType));
         }
     }
 

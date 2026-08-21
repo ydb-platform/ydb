@@ -637,6 +637,9 @@ TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalJoin(TExprNode::TPtr leftInpu
 TExprNode::TPtr TPhysicalJoinBuilder::BuildPhysicalOp(TExprNode::TPtr leftInput, TExprNode::TPtr rightInput, bool useBlockHashJoin, const TTypeAnnotationContext& typesCtx) {
     const auto joinKind = to_lower(Join->JoinKind);
     if (joinKind == "cross") {
+        if (useBlockHashJoin) {
+            return BuildPhysicalJoin(leftInput, rightInput, useBlockHashJoin, typesCtx);
+        }
         return BuildCrossJoin(leftInput, rightInput);
     }
 

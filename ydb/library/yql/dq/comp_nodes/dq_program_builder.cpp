@@ -184,9 +184,12 @@ TRuntimeNode TDqProgramBuilder::DqBlockHashJoin(TRuntimeNode leftStream, TRuntim
                                                 const TJoinFilterLambda& rightFilter,
                                                 const TJoinCommonFilterLambda& commonFilter) {
 
-    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    if (joinKind == EJoinKind::Cross) {
+        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
+    } else {
+        MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    }
 
     // A hash table lookup marks the build side rows as matched before the filters run, so unmatched
     // left rows of a LeftIsBuild join could no longer be told apart.
@@ -216,9 +219,12 @@ TRuntimeNode TDqProgramBuilder::DqScalarHashJoin(TRuntimeNode leftFlow, TRuntime
                                                  const TJoinFilterLambda& rightFilter,
                                                  const TJoinCommonFilterLambda& commonFilter) {
 
-    MKQL_ENSURE(joinKind != EJoinKind::Cross, "Unsupported join kind");
     MKQL_ENSURE(leftKeyColumns.size() == rightKeyColumns.size(), "Key column count mismatch");
-    MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    if (joinKind == EJoinKind::Cross) {
+        MKQL_ENSURE(leftKeyColumns.empty(), "Specifying key columns is not allowed for cross join");
+    } else {
+        MKQL_ENSURE(!leftKeyColumns.empty(), "At least one key column must be specified");
+    }
 
     TCallableBuilder callableBuilder(Env, __func__, returnType);
     callableBuilder.Add(leftFlow);

@@ -14,5 +14,7 @@ test_partial_tls() {
         --volume "${certificates}:/partial-certs:ro"
     wait_for_exit "$container"
     [[ "$(docker inspect --format '{{.State.ExitCode}}' "$container")" != "0" ]]
+    assert_logs_contain "$container" 'cert.pem'
+    assert_logs_contain "$container" 'key.pem'
     remove_container "$container"
 }

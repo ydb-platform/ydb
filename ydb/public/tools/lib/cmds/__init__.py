@@ -16,7 +16,7 @@ import yatest
 
 from yql.essentials.providers.common.proto.gateways_config_pb2 import TGenericConnectorConfig
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
-from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.kikimr_config import GRPC_TLS_DATA_FILES, KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.daemon import Daemon
 from ydb.tests.library.harness.util import LogLevels
@@ -24,8 +24,6 @@ from ydb.tests.library.harness.kikimr_port_allocator import KikimrFixedPortAlloc
 from library.python.testing.recipe import set_env
 
 logger = logging.getLogger(__name__)
-
-GRPC_TLS_DATA_FILES = ('ca.pem', 'cert.pem', 'key.pem')
 
 
 class EmptyArguments(object):
@@ -308,30 +306,10 @@ def grpc_tls_data_path(arguments):
     return os.getenv('YDB_GRPC_TLS_DATA_PATH', default_store)
 
 
-def load_existing_grpc_tls_data(tls_data_path):
-    """Load user-provided gRPC TLS data, or return None when no files exist."""
+def has_any_grpc_tls_data_file(tls_data_path):
     if not tls_data_path:
-        return None
-
-    paths = [os.path.join(tls_data_path, filename) for filename in GRPC_TLS_DATA_FILES]
-    existing_paths = [path for path in paths if os.path.lexists(path)]
-    if not existing_paths:
-        return None
-
-    invalid_paths = [path for path in paths if not os.path.isfile(path) or os.path.getsize(path) == 0]
-    if invalid_paths:
-        raise ValueError(
-            'Existing gRPC TLS data requires non-empty regular files {}. Missing or invalid: {}'.format(
-                ', '.join(GRPC_TLS_DATA_FILES),
-                ', '.join(invalid_paths),
-            )
-        )
-
-    tls_data = []
-    for path in paths:
-        with open(path, 'rb') as tls_file:
-            tls_data.append(tls_file.read())
-    return tuple(tls_data)
+        return False
+    return any(os.path.lexists(os.path.join(tls_data_path, filename)) for filename in GRPC_TLS_DATA_FILES)
 
 
 def pq_client_service_types(arguments):
@@ -407,9 +385,13 @@ def deploy(arguments):
         tls_data_path = grpc_tls_data_path(arguments)
         optionals.update({'grpc_tls_data_path': tls_data_path})
         optionals.update({'grpc_ssl_enable': enable_tls()})
-        existing_tls_data = load_existing_grpc_tls_data(os.getenv('YDB_GRPC_TLS_DATA_PATH'))
-        if existing_tls_data is not None:
-            optionals.update({'existing_grpc_tls_data': existing_tls_data})
+        optionals.update(
+            {
+                'generate_grpc_tls_data': not has_any_grpc_tls_data_file(
+                    os.getenv('YDB_GRPC_TLS_DATA_PATH')
+                )
+            }
+        )
     pdisk_store_path = arguments.ydb_working_dir if arguments.ydb_working_dir else None
 
     enable_feature_flags = arguments.enabled_feature_flags.copy()  # type: typing.List[str]
@@ -472,12 +454,10 @@ def deploy(arguments):
         target_config = os.path.join(configs_path, "config.yaml")
         action = resolve_deploy_config_action(config_path, target_config)
         if action == 'copy':
-            self.write_tls_data()
             shutil.copyfile(config_path, target_config)
             return
         if action == 'preserve':
             logger.info('Preserving existing config at %s', target_config)
-            self.write_tls_data()
             return
 
         original_write_proto_configs(configs_path)

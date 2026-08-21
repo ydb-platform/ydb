@@ -1,62 +1,16 @@
 # Distributed lock
 
-Consider a scenario where you need to ensure that only one instance of a client application works with a shared resource at any given time. To implement this, you can use the semaphore mechanism in [coordination nodes {{ ydb-short-name }}](../../reference/ydb-sdk/coordination.md).
+Consider a scenario where it is necessary to ensure that only one instance of a client application accesses a shared resource at any given time. To achieve this, the semaphore mechanism in [{{ ydb-short-name }} coordination nodes](../../reference/ydb-sdk/coordination.md) can be utilized.
 
 ## Semaphore lease mechanism
 
-Unlike local multithreaded programming, clients in distributed systems do not acquire locks or semaphores directly. Instead, they lease them for a specific period that can be extended periodically. Because physical time may differ across machines, clients and the server can end up in a situation where several clients believe their sessions have acquired the same semaphore simultaneously, even though from the server’s perspective this is not the case. To reduce the likelihood of such situations, it is important to configure automatic time synchronization in advance both on the servers hosting client applications and on the {{ ydb-short-name }} side, preferably using a single time source.
+In contrast to local multithreaded programming, clients in distributed systems do not directly acquire locks or semaphores. Instead, they lease them for a specified duration, which can be periodically renewed. Due to reliance on physical time which can vary between machines, clients and the server might encounter situations where multiple clients believe they have acquired the same semaphore simultaneously, even if the server's perspective differs. To reduce the likelihood of such occurrences, it is crucial to configure automatic time synchronization beforehand, both on servers hosting client applications and on the {{ ydb-short-name }} side, ideally using a unified time source.
 
-Thus, implementing a distributed lock using such mechanisms cannot guarantee the absence of concurrent access to the resource, but it can significantly reduce the likelihood of such an event. This can be used as an optimization so that clients do not compete for a shared resource when it does not make sense. Guarantees of no concurrent queries to the resource can be implemented on the resource side itself.
+Therefore, while distributed locking through such mechanisms cannot guarantee the complete absence of simultaneous resource access, it can significantly lower the probability of such events. This approach serves as an optimization to prevent unnecessary competition among clients for a shared resource. Absolute guarantees against concurrent resource requests withould be implemented on the resource side.
 
 ## Code example
 
 {% list tabs %}
-
-- C++
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/coordination/coordination.h>
-
-  void CoordinationExclusiveWork(
-      const NYdb::TDriver& driver,
-      const std::string& nodePath,
-      const std::string& semaphoreName)
-  {
-      using namespace NYdb::NStatusHelpers;
-
-      NYdb::NCoordination::TClient client(driver);
-
-      auto sessionResult = client.StartSession(nodePath).ExtractValueSync();
-      ThrowOnError(sessionResult);
-
-      auto session = sessionResult.ExtractResult();
-
-      auto acquireSettings = NYdb::NCoordination::TAcquireSemaphoreSettings()
-          .Ephemeral(true)
-          .Exclusive()
-          .Timeout(TDuration::Minutes(5));
-
-      auto acquireResult = session.AcquireSemaphore(semaphoreName, acquireSettings).ExtractValueSync();
-      ThrowOnError(acquireResult);
-
-      if (!acquireResult.GetResult()) {
-          // semaphore was not acquired
-          return;
-      }
-
-      // lock acquired, start processing
-
-      auto releaseStatus = session.ReleaseSemaphore(semaphoreName).ExtractValueSync();
-      ThrowOnError(releaseStatus);
-
-      if (!releaseStatus.GetResult()) {
-          // semaphore was not released
-          return;
-      }
-
-      // lock released, end processing
-  }
-  ```
 
 - Go
 
@@ -121,10 +75,6 @@ Thus, implementing a distributed lock using such mechanisms cannot guarantee the
 
   {% endlist %}
 
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
 - JavaScript
 
   ```javascript
@@ -160,58 +110,17 @@ Thus, implementing a distributed lock using such mechanisms cannot guarantee the
 - Java
 
   ```java
-  import java.time.Duration;
+  CoordinationClient client = CoordinationClient.newClient(transport);
+  client.createNode(nodePath).join().expectSuccess();
 
-  import tech.ydb.common.transaction.TxMode;
-  import tech.ydb.coordination.CoordinationClient;
-  import tech.ydb.coordination.CoordinationSession;
-  import tech.ydb.coordination.SemaphoreLease;
-  import tech.ydb.core.grpc.GrpcTransport;
-  import tech.ydb.query.QueryClient;
-  import tech.ydb.query.result.ResultSetReader;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.table.query.Params;
-
-  public class DistributedLockExample {
-
-      private static final String NODE_PATH_SUFFIX = "/my-app-lock";
-      private static final String SEMAPHORE_NAME = "job-lock";
-
-      public static void main(String[] args) {
-          String connectionString = System.getenv().getOrDefault(
-                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
-
-          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-               CoordinationClient coordinationClient = CoordinationClient.newClient(transport).build();
-               QueryClient queryClient = QueryClient.newClient(transport).build()) {
-
-              String nodePath = transport.getDatabase() + NODE_PATH_SUFFIX;
-              coordinationClient.createNode(nodePath).join().expectSuccess("create node failed");
-
-              try (CoordinationSession session = coordinationClient.createSession(nodePath)) {
-                  session.connect().join().expectSuccess("connect failed");
-
-                  SemaphoreLease lease = session.acquireEphemeralSemaphore(
-                          SEMAPHORE_NAME, true, Duration.ofMinutes(5)
-                  ).join().getValue();
-
-                  try {
-                      // exclusive access to the resource
-                      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-                      QueryReader reader = retryCtx.supplyResult(s -> QueryReader.readFrom(
-                              s.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
-                      )).join().getValue();
-
-                      ResultSetReader rs = reader.getResultSet(0);
-                      if (rs.next()) {
-                          System.out.println("Lock acquired, SELECT 1 = " + rs.getColumn("value").getInt32());
-                      }
-                  } finally {
-                      lease.release().join();
-                  }
-              }
-          }
+  try (CoordinationSession session = client.createSession(nodePath)) {
+      session.connect().join().expectSuccess();
+      SemaphoreLease lease = session.acquireEphemeralSemaphore(semaphoreName, true, Duration.ofMinutes(5))
+              .join().getValue();
+      try {
+          // exclusive access to a resource
+      } finally {
+          lease.release().join();
       }
   }
   ```

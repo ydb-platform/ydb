@@ -12,4 +12,4 @@ items:
 - name: Резервное копирование в NFS
   href: nfs-backup/nfs-backup.md
 - name: Импорт и экспорт данных в колоночные таблицы
-  href: import-export-column-tables/import-export-column-tables.md
+  href: import-export-column-tables.md

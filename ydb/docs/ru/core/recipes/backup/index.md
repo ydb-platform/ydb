@@ -7,7 +7,7 @@
 * [{#T}](backup-collections/index.md)
 * [{#T}](system-tablet-backup/index.md)
 * [{#T}](nfs-backup/nfs-backup.md)
-* [{#T}](import-export-column-tables/import-export-column-tables.md)
+* [{#T}](import-export-column-tables.md)
 
 ## См. также
 

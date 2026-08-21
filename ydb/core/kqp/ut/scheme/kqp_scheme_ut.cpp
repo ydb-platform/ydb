@@ -13425,13 +13425,13 @@ END DO)",
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already exists") &&
                     !issues.contains("Scheme transaction ESchemeOpCreateStreamingQuery failed StatusAlreadyExists: execution completed, streaming query /Root/MyFolder/MyStreamingQuery already exists")) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected GENERIC_ERROR error: " << issues);
+                    UNIT_FAIL(TStringBuilder() << "Unexpected SCHEME_ERROR error: " << issues);
                 }
-            } else if (result.GetStatus() == EStatus::ABORTED) {
+            } else if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation CREATE STREAMING QUERY") &&
                     !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected ABORTED error: " << issues);
+                    UNIT_FAIL(TStringBuilder() << "Unexpected PRECONDITION_FAILED error: " << issues);
                 }
             } else {
                 UNIT_FAIL(TStringBuilder() << "Unexpected result status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToOneLineString());
@@ -13620,11 +13620,11 @@ END DO)",
             const auto result = resultFeature.ExtractValueSync();
             if (result.GetStatus() == EStatus::SUCCESS) {
                 ++successCount;
-            } else if (result.GetStatus() == EStatus::ABORTED) {
+            } else if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation ALTER STREAMING QUERY") &&
                     !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected ABORTED error: " << issues);
+                    UNIT_FAIL(TStringBuilder() << "Unexpected PRECONDITION_FAILED error: " << issues);
                 }
             } else {
                 UNIT_FAIL(TStringBuilder() << "Unexpected result status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToOneLineString());
@@ -13752,11 +13752,11 @@ END DO)",
                     !issues.contains("Path `/Root/MyFolder/MyStreamingQuery` does not exist")) {
                     UNIT_FAIL(TStringBuilder() << "Unexpected NOT_FOUND error: " << issues);
                 }
-            } else if (result.GetStatus() == EStatus::ABORTED) {
+            } else if (result.GetStatus() == EStatus::PRECONDITION_FAILED) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery already under operation DROP STREAMING QUERY") &&
                     !(issues.contains("Lock streaming query failed") && issues.contains("Transaction locks invalidated"))) {
-                    UNIT_FAIL(TStringBuilder() << "Unexpected ABORTED error: " << issues);
+                    UNIT_FAIL(TStringBuilder() << "Unexpected PRECONDITION_FAILED error: " << issues);
                 }
             } else {
                 UNIT_FAIL(TStringBuilder() << "Unexpected result status: " << result.GetStatus() << ", issues: " << result.GetIssues().ToOneLineString());
@@ -13766,8 +13766,6 @@ END DO)",
         UNIT_ASSERT_VALUES_EQUAL(successCount, 1);
         CheckObjectNotFound(runtime, "/Root/MyFolder/MyStreamingQuery");
     }
-
-
 
     Y_UNIT_TEST(StreamingQueriesAclValidation) {
         auto kikimr = SetupStreamingSource();

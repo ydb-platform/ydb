@@ -124,7 +124,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         }
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
             if (TrackUsed_) {
-                size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / RowWidth_;
+                const size_t index = Table_.IndexOfPackedRow(tuplePackedData);
                 MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
                 Used_[index] = 1;
             }
@@ -137,7 +137,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         for (size_t i = 0; i < static_cast<size_t>(BuildData_.NTuples); ++i) {
             if (!Used_[i]) {
                 consume(TSingleTuple{
-                    BuildData_.PackedTuples.data() + i * RowWidth_,
+                    Table_.PackedRow(i),
                     BuildData_.Overflow.data()
                 });
             }

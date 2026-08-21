@@ -780,8 +780,12 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                 // Set PlanStep on txState before HandleReply so it's available
                 // for scheme change records persistence (not all operations set it themselves)
                 if (auto* txState = Self->FindTx(opId)) {
+                    // A redelivered plan step (mediator reconnect) must not
+                    // bump the refcount again, or it never comes back down.
+                    if (txState->PlanStep == InvalidStepId) {
+                        Self->AddInFlightPlanStep(ui64(step));
+                    }
                     txState->PlanStep = step;
-                    Self->AddInFlightPlanStep(ui64(step));
                 }
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};

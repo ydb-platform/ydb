@@ -1005,13 +1005,18 @@ public:
 
     // Reserves an order and writes the row with CompletedAtUs = 0, which keeps
     // it hidden from fetch. Returns false if this transaction emits no record.
+    // userSid is the DDL issuer captured at propose; empty if the caller had
+    // no token.
     bool PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx,
-        const NKikimrSchemeOp::TModifyScheme& userTx, TOperation::TSchemeChangeSlot& slot);
+        const NKikimrSchemeOp::TModifyScheme& userTx, TOperation::TSchemeChangeSlot& slot,
+        const TString& userSid = {});
 
     // Fill in what only completion knows: the resolved object's identity and
     // description, and the record's position in the coordinator timeline.
+    // aborted marks a force-aborted operation, so Status is not a false
+    // StatusSuccess for an object that was never actually created.
     void FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorContext& ctx,
-        const TOperation::TSchemeChangeSlot& slot, TStepId planStep);
+        const TOperation::TSchemeChangeSlot& slot, TStepId planStep, bool aborted = false);
     ui64 AllocateSchemeChangeOrder(NIceDb::TNiceDb& db);
     // Caller is responsible for a single PersistUpdateNextSchemeChangeOrder
     // at the end of its tx; use for multi-record batches.

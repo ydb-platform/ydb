@@ -2019,6 +2019,226 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "the record for the rebooted operation must be present and identifiable");
     }
 
+    // A force-drop that aborts an in-flight CreateTable via AbortUnsafe must
+    // not leave the outbox reporting StatusSuccess for an object that was
+    // never actually created.
+    Y_UNIT_TEST(ForceAbortedOperationIsNotRecordedAsSuccess) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "abort:sub", regHandle);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
+        env.TestWaitNotification(runtime, txId);
+
+        const auto dirDesc = DescribePath(runtime, "/MyRoot/DirA");
+        const ui64 dirLocalPathId = dirDesc.GetPathId();
+
+        // Park the CreateTable in flight, then force-drop its parent
+        // directory concurrently: NForceDrop::AbortRelatedOperations calls
+        // AbortUnsafe on the in-flight part, which completes it via
+        // DoneOperation without ever creating the table.
+        TVector<THolder<IEventHandle>> suppressed;
+        auto prevObserver = SetSuppressObserver(runtime, suppressed,
+            TEvDataShard::TEvSchemaChanged::EventType);
+
+        const ui64 createTxId = ++txId;
+        AsyncCreateTable(runtime, createTxId, "/MyRoot/DirA", R"(
+            Name: "Aborted"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        const ui64 dropTxId = ++txId;
+        AsyncForceDropUnsafe(runtime, dropTxId, dirLocalPathId);
+
+        runtime.SetObserverFunc(prevObserver);
+        for (auto& ev : suppressed) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        suppressed.clear();
+        env.TestWaitNotification(runtime, {createTxId, dropTxId});
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* abortedEntry = nullptr;
+        for (const auto& e : entries) {
+            if (e.TxId == createTxId) {
+                abortedEntry = &e;
+            }
+        }
+        UNIT_ASSERT_C(abortedEntry, "the force-aborted CreateTable must still produce a record "
+            "so the stream advances past it");
+        // Positive companion: an ordinary completed op in the same run really
+        // does get StatusSuccess, so this isn't a status field that is always
+        // something else.
+        bool sawOrdinarySuccess = false;
+        for (const auto& e : entries) {
+            if (e.TxId != createTxId && e.Status == (ui32)NKikimrScheme::StatusSuccess) {
+                sawOrdinarySuccess = true;
+            }
+        }
+        UNIT_ASSERT_C(sawOrdinarySuccess,
+            "precondition: a genuinely completed op (the MkDir) must show StatusSuccess");
+        UNIT_ASSERT_C(abortedEntry->Status != (ui32)NKikimrScheme::StatusSuccess,
+            "a force-aborted CreateTable must not be recorded as StatusSuccess; "
+            "the table was never actually created");
+    }
+
+    // A TolerateOrphanedPaths recovery removes an in-flight tx's rows
+    // without finalising its already-reserved outbox row. That row must not
+    // stay at CompletedAtUs = 0 forever, or the fetch stream wedges behind
+    // it permanently -- with a healthy tablet and no way to recover other
+    // than discarding everything above it.
+    Y_UNIT_TEST(OrphanedInFlightRecordDoesNotWedgeStreamForever) {
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "orphan:sub", regHandle);
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "Orphaned");
+        env.TestWaitNotification(runtime, txId);
+        TestMkDir(runtime, ++txId, "/MyRoot", "After");
+        env.TestWaitNotification(runtime, txId);
+
+        auto before = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* orphanedEntry = nullptr;
+        for (const auto& e : before) {
+            if (e.Path == "/MyRoot/Orphaned") {
+                orphanedEntry = &e;
+            }
+        }
+        UNIT_ASSERT_C(orphanedEntry, "precondition: the row to be orphaned must exist and be finalised");
+        UNIT_ASSERT_C(orphanedEntry->CompletedAtUs != 0,
+            "precondition: the row must start out finalised (visible), or reverting it "
+            "to CompletedAtUs = 0 proves nothing about recovery");
+        const ui64 orphanedOrder = orphanedEntry->Order;
+
+        // Reproduce exactly the state a TolerateOrphanedPaths orphan leaves
+        // behind: a table-141 row stuck at CompletedAtUs = 0, plus its
+        // table-144 pending-record row, for a txId with no operation left
+        // anywhere that could ever finalise it (PersistRemoveTx already
+        // dropped the tx). This isolates the damage from finding 6 without
+        // needing to fabricate a live in-flight coordinated op or a
+        // corrupted PathsById to reach the orphan-skip branch itself.
+        const ui64 ghostTxId = 999999;
+        NKikimrMiniKQL::TResult result;
+        TString err;
+        const auto status = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, Sprintf(R"(
+            (
+                (let recKey '('('Order (Uint64 '%lu))))
+                (let recUpdate '('('CompletedAtUs (Uint64 '0))))
+                (let pendingKey '('('TxId (Uint64 '%lu)) '('UserTxIdx (Uint32 '0))))
+                (let pendingUpdate '('('Order (Uint64 '%lu)) '('Path (String '"/MyRoot/Orphaned"))))
+                (return (AsList
+                    (UpdateRow 'SchemeChangeRecords recKey recUpdate)
+                    (UpdateRow 'SchemeChangePendingRecords pendingKey pendingUpdate)
+                ))
+            )
+        )", orphanedOrder, ghostTxId, orphanedOrder), result, err);
+        UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // The orphaned row must not stay a permanent barrier: a fetch must
+        // still be able to reach records above it, the way it would if the
+        // row had been finalised normally.
+        TAutoPtr<IEventHandle> fetchHandle;
+        auto* fetch = FetchSchemeChangeRecords(runtime, "orphan:sub", 0, 100, fetchHandle);
+        bool sawAfter = false;
+        for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
+            if (fetch->Record.GetEntries(i).GetPath() == "/MyRoot/After") {
+                sawAfter = true;
+            }
+        }
+        UNIT_ASSERT_C(sawAfter,
+            "a row orphaned by a TolerateOrphanedPaths recovery must not permanently block "
+            "the fetch stream behind it; the record for a later, unrelated DDL "
+            "(/MyRoot/After) must still be reachable");
+    }
+
+    // A redelivered plan step (mediator reconnect) must not double-count in
+    // the closure index, or ClosedThroughPlanStep freezes below the ceiling
+    // forever and no subscriber can ever close that window again.
+    Y_UNIT_TEST(RedeliveredPlanStepDoesNotFreezeClosureBound) {
+        TSchemeShard* schemeshard = nullptr;
+        auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
+            schemeshard = new TSchemeShard(tablet, info);
+            return schemeshard;
+        };
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts, ssFactory);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "redelivery:sub", regHandle);
+
+        // Park the operation after the coordinator assigns its plan step but
+        // before it completes, same as ClosureBoundHeldBackByInFlightOp: it
+        // reaches ProposedWaitParts and waits on TEvSchemaChanged. Capture
+        // the assigned step and txId while parked.
+        TVector<THolder<IEventHandle>> suppressedSchemaChanged;
+        auto prevObserver = SetSuppressObserver(runtime, suppressedSchemaChanged,
+            TEvDataShard::TEvSchemaChanged::EventType);
+
+        const ui64 opTxId = ++txId;
+        TestCreateTable(runtime, opTxId, "/MyRoot", R"(
+            Name: "Redelivered"
+            Columns { Name: "key" Type: "Uint64" }
+            KeyColumnNames: ["key"]
+        )");
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_C(!schemeshard->InFlightByPlanStep.empty(),
+            "precondition: the op must be in flight WITH a plan step assigned");
+        const ui64 assignedStep = schemeshard->InFlightByPlanStep.begin()->first;
+
+        // Redeliver the plan step in memory, exactly as the mediator would
+        // resend it on pipe reconnect: a fresh TEvPlanStep for the same
+        // step/txId, sent directly to the schemeshard actor.
+        NKikimrTx::TEvMediatorPlanStep record;
+        record.SetStep(assignedStep);
+        auto* txRecord = record.AddTransactions();
+        txRecord->SetTxId(opTxId);
+        txRecord->SetCoordinator(ui64(TTestTxConfig::Coordinator));
+        ActorIdToProto(runtime.AllocateEdgeActor(), txRecord->MutableAckTo());
+
+        auto duplicate = MakeHolder<TEvTxProcessing::TEvPlanStep>();
+        duplicate->Record = record;
+        runtime.Send(new IEventHandle(schemeshard->SelfId(), runtime.AllocateEdgeActor(), duplicate.Release()),
+            0, false);
+        runtime.SimulateSleep(TDuration::MilliSeconds(1));
+
+        // Release the held op and let it finish.
+        runtime.SetObserverFunc(prevObserver);
+        for (auto& ev : suppressedSchemaChanged) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+        suppressedSchemaChanged.clear();
+        env.TestWaitNotification(runtime, opTxId);
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(schemeshard->InFlightByPlanStep.size(), 0u,
+            "the op completed, so the index must not still show it in flight");
+        UNIT_ASSERT_C(schemeshard->GetClosedThroughPlanStep() >= schemeshard->LastAssignedPlanStep,
+            "the redelivered step must not leave a phantom refcount behind: closed="
+                << schemeshard->GetClosedThroughPlanStep()
+                << " ceiling=" << schemeshard->LastAssignedPlanStep);
+    }
+
     Y_UNIT_TEST(RecordIsWrittenAtProposeTime) {
         TSchemeShard* schemeshard = nullptr;
         auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {

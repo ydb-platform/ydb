@@ -210,6 +210,26 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         auto fetch = FetchSchemeChangeRecords(runtime, "test:sub:1", 0, 100, fetchHandle);
         UNIT_ASSERT(fetch->Record.EntriesSize() >= 1);
 
+        // T1's order, needed for the physical-row probe below.
+        ui64 t1Order = 0;
+        for (size_t i = 0; i < static_cast<size_t>(fetch->Record.EntriesSize()); ++i) {
+            if (fetch->Record.GetEntries(i).GetPath() == "/MyRoot/T1") {
+                t1Order = fetch->Record.GetEntries(i).GetOrder();
+            }
+        }
+        UNIT_ASSERT_C(t1Order != 0, "precondition: T1's record must be present before unregister");
+
+        // Positive companion, via the cursor-independent physical-row probe
+        // (point lookup by order, gated only on subscriber existence -- see
+        // RecordIsWrittenAtProposeTime for the same technique): T1's row must
+        // actually exist on disk before the last subscriber unregisters.
+        {
+            TAutoPtr<IEventHandle> bodiesHandle;
+            auto* bodies = FetchSchemeChangeRecordBodies(runtime, "test:sub:1", {t1Order}, bodiesHandle);
+            UNIT_ASSERT_VALUES_EQUAL_C(bodies->Record.EntriesSize(), 1,
+                "precondition: T1's row must physically exist before unregister");
+        }
+
         // Unregister
         TAutoPtr<IEventHandle> unregHandle;
         UnregisterSubscriber(runtime, "test:sub:1", unregHandle);
@@ -222,20 +242,30 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsProtocolTests) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Re-register to check
-        TAutoPtr<IEventHandle> reg2Handle;
-        RegisterSubscriber(runtime, "test:sub:2", reg2Handle);
+        // Probe again with a throwaway subscriber. A cursor-based fetch
+        // cannot tell "swept" from "outside a fresh cursor's window" here: a
+        // newly registered subscriber starts at the tail regardless of what
+        // was deleted, so it would prove nothing either way. The physical-row
+        // probe is a direct point lookup by order, independent of any cursor.
+        TAutoPtr<IEventHandle> probeRegHandle;
+        RegisterSubscriberAt(runtime, "probe:sub", 0, probeRegHandle);
 
-        TAutoPtr<IEventHandle> fetch2Handle;
-        auto fetch2 = FetchSchemeChangeRecords(runtime, "test:sub:2", 0, 100, fetch2Handle);
         // Unregistering the last subscriber drops all retained records: with
         // no subscribers, GetMinSubscriberOrder() collapses to
         // NextSchemeChangeOrder and inline cleanup deletes everything.
-        for (int i = 0; i < (int)fetch2->Record.EntriesSize(); ++i) {
-            const auto& e = fetch2->Record.GetEntries(i);
-            UNIT_ASSERT_C(e.GetPath() != "T1",
-                "T1 record must be dropped when the last subscriber unregisters");
-            UNIT_ASSERT_C(e.GetPath() != "T2",
+        TAutoPtr<IEventHandle> afterHandle;
+        auto* after = FetchSchemeChangeRecordBodies(runtime, "probe:sub", {t1Order}, afterHandle);
+        UNIT_ASSERT_VALUES_EQUAL_C(after->Record.EntriesSize(), 0,
+            "T1's row must be physically gone once the last subscriber unregisters");
+
+        // T2 never got a chance to be recorded in the first place (no
+        // subscriber existed when it was created), so its order was never
+        // even allocated; confirm the outbox produced nothing for it via a
+        // wide fetch from a subscriber positioned at the very start.
+        TAutoPtr<IEventHandle> afterFetchHandle;
+        auto* afterFetch = FetchSchemeChangeRecords(runtime, "probe:sub", 0, 100, afterFetchHandle);
+        for (size_t i = 0; i < static_cast<size_t>(afterFetch->Record.EntriesSize()); ++i) {
+            UNIT_ASSERT_C(afterFetch->Record.GetEntries(i).GetPath() != "/MyRoot/T2",
                 "T2 record must not exist (created after last subscriber unregistered)");
         }
     }

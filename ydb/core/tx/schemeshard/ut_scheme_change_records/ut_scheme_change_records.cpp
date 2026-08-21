@@ -139,6 +139,100 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_C(alterCount >= 1, "ALTER TABLE entry not found in notification log");
     }
 
+    // UserSID must record who issued the DDL, not who owns the target object.
+    // A ModifyACL changes the owner without the owner ever issuing anything;
+    // a later ALTER by a different (here: anonymous-token) issuer must not be
+    // attributed to that owner.
+    Y_UNIT_TEST(UserSIDRecordsIssuerNotOwner) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // Positive companion: the owner is genuinely changed to someone who
+        // never issues the later ALTER, so a later match can't be coincidence.
+        TestModifyACL(runtime, ++txId, "/MyRoot", "Table1", "", "bob@builtin");
+        env.TestWaitNotification(runtime, txId);
+
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "extra" Type: "Uint32" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* alterEntry = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterTable
+                && e.Body.GetAlterTable().GetName() == "Table1") {
+                alterEntry = &e;
+            }
+        }
+        UNIT_ASSERT_C(alterEntry, "ALTER TABLE entry not found in notification log");
+        // The test issues the ALTER with no user token, so the true issuer
+        // SID is empty -- never "bob@builtin", the object's owner.
+        UNIT_ASSERT_VALUES_EQUAL_C(alterEntry->UserSID, "",
+            "UserSID must reflect the DDL issuer (empty, no token supplied here), "
+            "not the target's owner (\"bob@builtin\"); got \"" << alterEntry->UserSID << "\"");
+    }
+
+    // TCreateCdcStream has no top-level "Name" field (the target is nested
+    // under TableName/StreamDescription.Name), so the reflection scan finds
+    // nothing and must not fall back to stamping the record with the parent
+    // directory's identity -- that directory did not change.
+    Y_UNIT_TEST(CdcStreamRecordDoesNotImpersonateParentDirectory) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "test:sub", regHandle);
+
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table1"
+            Columns { Name: "key"   Type: "Uint64" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateCdcStream(runtime, ++txId, "/MyRoot", R"(
+            TableName: "Table1"
+            StreamDescription {
+                Name: "Stream1"
+                Mode: ECdcStreamModeKeysOnly
+                Format: ECdcStreamFormatProto
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto entries = ReadSchemeChangeRecords(runtime);
+        const TSchemeChangeRecordEntry* cdcEntry = nullptr;
+        for (const auto& e : entries) {
+            if (e.Body.GetOperationType() == NKikimrSchemeOp::ESchemeOpCreateCdcStream) {
+                cdcEntry = &e;
+            }
+        }
+        UNIT_ASSERT_C(cdcEntry, "CREATE CDC STREAM entry not found in notification log");
+        // Positive companion: the body is unaffected and still names the
+        // real target, so this is purely a metadata-attribution bug.
+        UNIT_ASSERT_VALUES_EQUAL_C(cdcEntry->Body.GetCreateCdcStream().GetTableName(), "Table1",
+            "precondition: the body must still carry the real target");
+        UNIT_ASSERT_C(cdcEntry->Path != "/MyRoot",
+            "the record must not be stamped with the parent directory's identity "
+            "(\"/MyRoot\") when no top-level Name field is found; got \"" << cdcEntry->Path << "\"");
+    }
+
     Y_UNIT_TEST(DropTableWritesLogEntry) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -855,6 +949,62 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_C(schemeshard->SchemeChangeCleanupTxCount >= 3,
             "Expected >=3 continuation cleanup txs for " << kRecords
             << " records at batch size 3, got " << schemeshard->SchemeChangeCleanupTxCount);
+    }
+
+    // Bounding the fetch scan by NextSchemeChangeOrder must not change which
+    // records are returned. This does NOT prove the precharge cost bound --
+    // charge counters stay at 0 in this in-memory test regardless of range
+    // width, so the cost effect is unobservable here. It only proves the
+    // upper bound is not off-by-one at the boundary or under a maxCount cap.
+    Y_UNIT_TEST(FetchUpperBoundDoesNotChangeResults) {
+        TTestBasicRuntime runtime;
+        TTestEnvOptions opts;
+        TTestEnv env(runtime, opts);
+        ui64 txId = 100;
+
+        TAutoPtr<IEventHandle> regHandle;
+        RegisterSubscriber(runtime, "bound:sub", regHandle);
+
+        constexpr int kRecords = 10;
+        for (int i = 0; i < kRecords; ++i) {
+            TestMkDir(runtime, ++txId, "/MyRoot", Sprintf("Bound%d", i));
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // Ground truth: a fetch wide enough to cover everything at once. The
+        // boundary/capped cases below are checked against this, not against
+        // an independent oracle -- ReadSchemeChangeRecords is itself built on
+        // this same fetch path, so it cannot serve as an independent check.
+        TAutoPtr<IEventHandle> fullHandle;
+        auto* full = FetchSchemeChangeRecords(runtime, "bound:sub", 0, 1000, fullHandle);
+        UNIT_ASSERT_C(full->Record.EntriesSize() >= kRecords,
+            "precondition: the unbounded fetch must see all " << kRecords << " records");
+        TVector<ui64> allOrders;
+        ui64 maxOrder = 0;
+        for (size_t i = 0; i < static_cast<size_t>(full->Record.EntriesSize()); ++i) {
+            const ui64 order = full->Record.GetEntries(i).GetOrder();
+            allOrders.push_back(order);
+            maxOrder = Max(maxOrder, order);
+        }
+
+        // Boundary case: AfterOrder pinned one below the true max, so the
+        // query's GreaterOrEqual/LessOrEqual window collapses to exactly the
+        // last row. An off-by-one bound would return zero entries here.
+        TAutoPtr<IEventHandle> boundaryHandle;
+        auto* boundary = FetchSchemeChangeRecords(runtime, "bound:sub", maxOrder - 1, 1000, boundaryHandle);
+        UNIT_ASSERT_VALUES_EQUAL_C(boundary->Record.EntriesSize(), 1,
+            "the last record must still be reachable right at the upper bound");
+        UNIT_ASSERT_VALUES_EQUAL(boundary->Record.GetEntries(0).GetOrder(), maxOrder);
+
+        // Count-capped case: maxCount stops the scan before the bound would.
+        // Same leading records as the unbounded fetch, in the same order.
+        TAutoPtr<IEventHandle> cappedHandle;
+        auto* capped = FetchSchemeChangeRecords(runtime, "bound:sub", 0, 3, cappedHandle);
+        UNIT_ASSERT_VALUES_EQUAL(capped->Record.EntriesSize(), 3);
+        UNIT_ASSERT_C(capped->Record.GetHasMore(), "capped fetch must report more entries remain");
+        for (int i = 0; i < 3; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(capped->Record.GetEntries(i).GetOrder(), allOrders[i]);
+        }
     }
 
     Y_UNIT_TEST(PersistsNextSchemeChangeOrderOncePerBatch) {

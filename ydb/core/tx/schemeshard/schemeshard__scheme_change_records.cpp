@@ -44,7 +44,8 @@ TString ExtractSchemeChangeTargetName(const NKikimrSchemeOp::TModifyScheme& tx) 
 } // namespace
 
 bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx,
-        const NKikimrSchemeOp::TModifyScheme& userTx, TOperation::TSchemeChangeSlot& slot) {
+        const NKikimrSchemeOp::TModifyScheme& userTx, TOperation::TSchemeChangeSlot& slot,
+        const TString& userSid) {
     if (IsChurnOp(userTx.GetOperationType())) {
         return false;
     }
@@ -60,9 +61,12 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
         Y_DEBUG_ABORT_UNLESS(ok);
     }
 
+    // If no target name is found, leave path empty rather than falling back
+    // to WorkingDir: an unset target is honest, the parent directory is not.
     const TString targetName = ExtractSchemeChangeTargetName(userTx);
-    TString path = userTx.GetWorkingDir();
+    TString path;
     if (!targetName.empty()) {
+        path = userTx.GetWorkingDir();
         if (path.empty() || path.back() != '/') path += '/';
         path += targetName;
     }
@@ -77,6 +81,7 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
         NIceDb::TUpdate<T::OperationType>(static_cast<ui32>(userTx.GetOperationType())),
         NIceDb::TUpdate<T::Path>(path),
         NIceDb::TUpdate<T::Status>(ui32(NKikimrScheme::StatusAccepted)),
+        NIceDb::TUpdate<T::UserSID>(userSid),
         NIceDb::TUpdate<T::BodySizeBytes>(body.size()),
         // Zero until finalisation; the fetch path stops here so an in-flight
         // record is never handed out.
@@ -94,11 +99,12 @@ bool TSchemeShard::PersistSchemeChangeRecordAtPropose(NIceDb::TNiceDb& db, TTxId
     slot.UserTxIdx = userTxIdx;
     slot.Order = order;
     slot.Path = path;
+    slot.UserSid = userSid;
     return true;
 }
 
 void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorContext& ctx,
-        const TOperation::TSchemeChangeSlot& slot, TStepId planStep) {
+        const TOperation::TSchemeChangeSlot& slot, TStepId planStep, bool aborted) {
     // Ops completing at propose (e.g. TModifyACL) have no coordinator step: they
     // borrow the ceiling and sort as BUCKETED, clamped to >= 1.
     ui64 step = ui64(planStep);
@@ -113,14 +119,12 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
     TPathId resolvedPathId;
     auto resolvedObjectType = NKikimrSchemeOp::EPathTypeInvalid;
     ui64 schemaVersion = 0;
-    TString userSid;
     if (!slot.Path.empty()) {
         TPath resolved = TPath::Resolve(slot.Path, this);
         if (resolved.IsResolved()) {
             resolvedPathId = resolved.Base()->PathId;
             resolvedObjectType = resolved.Base()->PathType;
             schemaVersion = resolved.Base()->DirAlterVersion;
-            userSid = resolved.Base()->Owner;
         }
     }
 
@@ -149,8 +153,9 @@ void TSchemeShard::FinalizeSchemeChangeRecord(NIceDb::TNiceDb& db, const TActorC
         NIceDb::TUpdate<T::PathOwnerId>(resolvedPathId.OwnerId),
         NIceDb::TUpdate<T::PathLocalId>(resolvedPathId.LocalPathId),
         NIceDb::TUpdate<T::ObjectType>(ui32(resolvedObjectType)),
-        NIceDb::TUpdate<T::Status>(ui32(NKikimrScheme::StatusSuccess)),
-        NIceDb::TUpdate<T::UserSID>(userSid),
+        NIceDb::TUpdate<T::Status>(ui32(aborted
+            ? NKikimrScheme::StatusPreconditionFailed
+            : NKikimrScheme::StatusSuccess)),
         NIceDb::TUpdate<T::SchemaVersion>(schemaVersion),
         NIceDb::TUpdate<T::PlanStep>(step),
         NIceDb::TUpdate<T::Description>(description),

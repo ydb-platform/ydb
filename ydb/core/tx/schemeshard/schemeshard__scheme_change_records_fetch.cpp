@@ -186,7 +186,13 @@ struct TTxFetchSchemeChangeRecords : public NTabletFlatExecutor::TTransactionBas
         }
 
         Y_ENSURE(effectiveAfterOrder < Max<ui64>(), "effectiveAfterOrder overflow");
-        auto rowset = db.Table<Schema::SchemeChangeRecords>().GreaterOrEqual(effectiveAfterOrder + 1).Select();
+        // Bound both ends: an unbounded GreaterOrEqual().Select() would precharge
+        // the whole tail of the table. No order beyond NextSchemeChangeOrder can
+        // exist, so this bound never excludes a real row.
+        auto rowset = db.Table<Schema::SchemeChangeRecords>()
+            .GreaterOrEqual(effectiveAfterOrder + 1)
+            .LessOrEqual(Self->NextSchemeChangeOrder)
+            .Select();
         if (!rowset.IsReady()) {
             return false;
         }

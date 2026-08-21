@@ -4393,7 +4393,22 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
             for (auto& [txId, idxMap] : byTx) {
                 auto opIt = Self->Operations.find(txId);
-                if (opIt == Self->Operations.end()) continue;
+                if (opIt == Self->Operations.end()) {
+                    // No operation survived to finalise these rows (e.g. a
+                    // TolerateOrphanedPaths orphan skip). Finalise them here
+                    // with a failure status instead of leaving CompletedAtUs
+                    // at 0 forever, which would wedge the fetch stream behind
+                    // an in-flight row nothing will ever complete.
+                    using T = Schema::SchemeChangeRecords;
+                    for (auto& [idx, slot] : idxMap) {
+                        db.Table<T>().Key(slot.Order).Update(
+                            NIceDb::TUpdate<T::Status>(ui32(NKikimrScheme::StatusPreconditionFailed)),
+                            NIceDb::TUpdate<T::CompletedAtUs>(ctx.Now().MicroSeconds())
+                        );
+                        Self->PersistRemoveSchemeChangePendingOrder(db, txId, idx);
+                    }
+                    continue;
+                }
                 opIt->second->SchemeChangeSlots.clear();
                 opIt->second->SchemeChangeSlots.reserve(idxMap.size());
                 for (auto& [idx, slot] : idxMap) {

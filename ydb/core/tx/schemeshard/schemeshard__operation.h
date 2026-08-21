@@ -24,6 +24,10 @@ struct TOperation: TSimpleRefCount<TOperation> {
         ui64 Order = 0;
         // Carried in memory because finalisation cannot re-read it.
         TString Path;
+        // The DDL issuer's SID, captured at propose time. Empty if the
+        // caller had no token; finalisation must not substitute the
+        // target's owner for a missing issuer.
+        TString UserSid;
     };
     TVector<TSchemeChangeSlot> SchemeChangeSlots;
 

@@ -1006,11 +1006,21 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         }
 
         TStepId planStep = InvalidStepId;
+        // EPathStateDrop on a part's target means AbortUnsafe force-completed
+        // it (a force-drop of an ancestor); any other state is a real success.
+        bool aborted = false;
         for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
             auto it = ss->TxInFlight.find(TOperationId(txId, partIdx));
-            if (it != ss->TxInFlight.end() && it->second.PlanStep != InvalidStepId) {
+            if (it == ss->TxInFlight.end()) {
+                continue;
+            }
+            if (planStep == InvalidStepId && it->second.PlanStep != InvalidStepId) {
                 planStep = it->second.PlanStep;
-                break;
+            }
+            if (auto* path = ss->PathsById.FindPtr(it->second.TargetPathId)) {
+                if ((*path)->PathState == NKikimrSchemeOp::EPathState::EPathStateDrop) {
+                    aborted = true;
+                }
             }
         }
 
@@ -1018,7 +1028,7 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         // gate refusing DDL, or by an admin force-advance, not by discarding records.
 
         for (const auto& slot : operation->SchemeChangeSlots) {
-            ss->FinalizeSchemeChangeRecord(db, ctx, slot, planStep);
+            ss->FinalizeSchemeChangeRecord(db, ctx, slot, planStep, aborted);
             ss->PersistRemoveSchemeChangePendingOrder(db, txId, slot.UserTxIdx);
 
             ss->UpdateSchemeChangeGauges();

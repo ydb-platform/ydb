@@ -25,7 +25,12 @@ message TDqPqTopicSourceState {
 }
 
 message TDqPqTopicSinkState {
+    // Deduplication info
     string SourceId = 1;
     uint64 ConfirmedSeqNo = 2;
     uint64 EgressBytes = 3;
+
+    // Deferred publication info
+    bool HasExactlyOnceTransaction = 4;
+    uint64 ExactlyOnceIntTransactionId = 5;
 }

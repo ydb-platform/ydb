@@ -24,6 +24,8 @@ SRCS(
     json_proto_conversion.h
     metrics_actor.cpp
     metrics_actor.h
+    utils.cpp
+    utils.h
 )
 
 PEERDIR(

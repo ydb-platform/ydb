@@ -354,7 +354,9 @@ namespace NActors {
                     continue;
                 }
                 if (state == EThreadState::Spin || state == EThreadState::Sleep || state == EThreadState::Blocking) {
-                    if (Threads[workerId].WaitForWaker(StopFlag, ActivationCredits, CheckToSleepWorkers)) {
+                    const bool stopped = Threads[workerId].WaitForWaker(
+                        StopFlag, ActivationCredits, CheckToSleepWorkers, WakerRequestBit);
+                    if (stopped) {
                         return true;
                     }
                     continue;
@@ -479,7 +481,8 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::RequestWaker(bool persistent) {
-        if (WakerPending.exchange(true, std::memory_order_acq_rel)) {
+        const bool wasPending = WakerPending.exchange(true, std::memory_order_acq_rel);
+        if (wasPending) {
             return;
         }
 
@@ -596,6 +599,8 @@ namespace NActors {
             switch (state) {
                 case EThreadState::NeedToBeWaker:
                     return EThreadState::None;
+                case EThreadState::NeedToBeWakerFromSpin:
+                    return EThreadState::Spin;
                 case EThreadState::NeedToBeWakerFromSleep:
                     return EThreadState::Sleep;
                 case EThreadState::NeedToBeWakerFromBlocking:
@@ -670,12 +675,19 @@ namespace NActors {
             }
 
             if (logicalState == EThreadState::Spin) {
-                const EThreadState targetState = budget > 0 ? EThreadState::None : EThreadState::Sleep;
+                const bool consumeReduction = remainingReductions > 0;
+                const EThreadState targetState = consumeReduction || budget == 0
+                    ? EThreadState::Sleep
+                    : EThreadState::None;
                 if (isWaker) {
                     wakerState = targetState;
                     if (targetState == EThreadState::Sleep) {
                         Waker->SleepingStack.push_back(workerId);
-                        ++previousSleepingCount;
+                        if (consumeReduction) {
+                            --remainingReductions;
+                        } else {
+                            ++previousSleepingCount;
+                        }
                     }
                     continue;
                 }
@@ -685,7 +697,11 @@ namespace NActors {
                         --budget;
                     } else {
                         Waker->SleepingStack.push_back(workerId);
-                        ++previousSleepingCount;
+                        if (consumeReduction) {
+                            --remainingReductions;
+                        } else {
+                            ++previousSleepingCount;
+                        }
                     }
                 }
                 continue;

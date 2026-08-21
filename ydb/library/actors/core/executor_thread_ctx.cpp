@@ -90,10 +90,12 @@ namespace NActors {
     bool TExecutorThreadCtx::WaitForWaker(
             const std::atomic<bool>& stopFlag,
             const std::atomic<i64>& activationCredits,
-            const std::atomic<ui64>& reductions) {
+            const std::atomic<ui64>& reductions,
+            ui64 wakerRequestBit) {
         EThreadState state = GetState<EThreadState>();
         while (state == EThreadState::Spin && !stopFlag.load(std::memory_order_relaxed)) {
-            if (activationCredits.load(std::memory_order_acquire) > 0 || reductions.load(std::memory_order_acquire) > 0) {
+            if (activationCredits.load(std::memory_order_acquire) > 0 ||
+                    (reductions.load(std::memory_order_acquire) & wakerRequestBit)) {
                 if (ReplaceState(state, EThreadState::None)) {
                     return false;
                 }
@@ -136,6 +138,7 @@ namespace NActors {
                     break;
                 case EThreadState::Blocking:
                 case EThreadState::NeedToBeWaker:
+                case EThreadState::NeedToBeWakerFromSpin:
                 case EThreadState::NeedToBeWakerFromSleep:
                 case EThreadState::NeedToBeWakerFromBlocking:
                 case EThreadState::Waker:

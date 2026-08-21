@@ -60,7 +60,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
     struct TWakerBurstStats {
         ui64 Mean = 0;
         ui64 P50 = 0;
-        ui64 P99 = 0;
+        ui64 P95 = 0;
     };
 
     TWakerBurstStats CalculateWakerBurstStats(TVector<ui64> values) {
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
         return {
             .Mean = sum / values.size(),
             .P50 = values[values.size() / 2],
-            .P99 = values[(values.size() * 99) / 100],
+            .P95 = values[(values.size() * 95) / 100],
         };
     }
 
@@ -132,10 +132,10 @@ Y_UNIT_TEST_SUITE(ActorBenchmark) {
                  << ",messages=" << messageCount
                  << ",send_mean_ns=" << sendStats.Mean
                  << ",send_p50_ns=" << sendStats.P50
-                 << ",send_p99_ns=" << sendStats.P99
+                 << ",send_p95_ns=" << sendStats.P95
                  << ",completion_mean_ns=" << completionStats.Mean
                  << ",completion_p50_ns=" << completionStats.P50
-                 << ",completion_p99_ns=" << completionStats.P99
+                 << ",completion_p95_ns=" << completionStats.P95
                  << Endl;
         }
 

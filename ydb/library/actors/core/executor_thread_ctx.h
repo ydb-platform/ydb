@@ -21,6 +21,7 @@ namespace NActors {
         Work,
         Blocking,
         NeedToBeWaker,
+        NeedToBeWakerFromSpin,
         NeedToBeWakerFromSleep,
         NeedToBeWakerFromBlocking,
         Waker
@@ -28,6 +29,7 @@ namespace NActors {
 
     constexpr bool IsNeedToBeWaker(EThreadState state) {
         return state == EThreadState::NeedToBeWaker ||
+            state == EThreadState::NeedToBeWakerFromSpin ||
             state == EThreadState::NeedToBeWakerFromSleep ||
             state == EThreadState::NeedToBeWakerFromBlocking;
     }
@@ -101,8 +103,10 @@ namespace NActors {
             Y_ABORT_UNLESS(wakerState);
             switch (state) {
                 case EThreadState::None:
-                case EThreadState::Spin:
                     *wakerState = EThreadState::NeedToBeWaker;
+                    return true;
+                case EThreadState::Spin:
+                    *wakerState = EThreadState::NeedToBeWakerFromSpin;
                     return true;
                 case EThreadState::Sleep:
                     *wakerState = EThreadState::NeedToBeWakerFromSleep;
@@ -119,9 +123,12 @@ namespace NActors {
             Y_ABORT_UNLESS(resumeState);
             switch (state) {
                 case EThreadState::None:
-                case EThreadState::Spin:
                 case EThreadState::NeedToBeWaker:
                     *resumeState = EThreadState::None;
+                    return true;
+                case EThreadState::Spin:
+                case EThreadState::NeedToBeWakerFromSpin:
+                    *resumeState = EThreadState::Spin;
                     return true;
                 case EThreadState::Sleep:
                 case EThreadState::NeedToBeWakerFromSleep:
@@ -213,7 +220,8 @@ namespace NActors {
         bool WaitForWaker(
             const std::atomic<bool>& stopFlag,
             const std::atomic<i64>& activationCredits,
-            const std::atomic<ui64>& reductions);
+            const std::atomic<ui64>& reductions,
+            ui64 wakerRequestBit);
 
         void Interrupt() {
             WaitingPad.Interrupt();

@@ -11,19 +11,21 @@ logger = logging.getLogger("JsonIndexWorkload")
 
 
 class WorkloadJsonIndex(WorkloadBase):
-    def __init__(self, client, prefix, stop):
+    def __init__(self, client, prefix, stop, seed=None):
         super().__init__(client, prefix, "json_index", stop)
         self.table_name_prefix = "table"
         self.index_name_prefix = "json_index"
         self.row_count = 200
         self.limit = 20
         self.query_count = 25
-        self.model_seed = int(os.getenv("YDB_JSON_INDEX_SEED", "19088743"), 0)
+        self.model_seed = seed if seed is not None else int(
+            os.getenv("YDB_JSON_INDEX_SEED", "19088743"), 0
+        )
         self.model_marker = f"json-index-model-{self.model_seed}"
         self.iteration = 0
         logger.info(
-            "JSON index model seed=%d (override with YDB_JSON_INDEX_SEED)",
-            self.model_seed,
+            "JSON index model seed=%d replay='YDB_JSON_INDEX_SEED=%d'",
+            self.model_seed, self.model_seed,
         )
 
     def _create_table(self, table_path, json_document, string_pk=False):

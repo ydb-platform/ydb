@@ -4,17 +4,17 @@ sequenceDiagram
     participant node as YDB Node
     participant cache as Token Cache
 
-    node->>cache: Create user token
+    node->>cache: Cache the user token
     activate cache
-    Note right of node: life_time period started
+    Note right of node: life_time starts
 
-    user->>node: Request with an authentication token
-    node->>cache: Validate authentication token
-    cache-->>node: Token validated
-    Note right of node: life_time period restarted
+    user->>node: Request with the same data
+    node->>cache: Find the user token
+    cache-->>node: User token found
+    Note right of node: life_time restarts
 
-    alt life_time period elapsed
-    node->>cache: Delete user token from cache
+    alt User token is unused for life_time
+    node->>cache: Delete the user token
     deactivate cache
     end
 ```

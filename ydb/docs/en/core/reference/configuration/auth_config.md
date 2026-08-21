@@ -302,58 +302,55 @@ Default value: `false`
     ||
 |#
 
-## Configuring Caching for Authentication Results
+## Configuring Caching for Authentication Results {#caching-auth-results}
 
-During the authentication process, a user session receives an authentication token, which is transmitted along with each request to the cluster {{ydb-short-name }}. Since {{ydb-short-name }} is a distributed system, user requests will eventually be processed on one or more {{ydb-short-name }} nodes. After receiving a request from the user, a {{ydb-short-name }} node verifies the authentication token. If successful, the node generates a **user token**, which is valid only inside the current node and is used to authorize the actions requested by the user. Subsequent requests with the same authentication token to the same node do not require verification of the authentication token.
+To reduce the number of [authentication-token validations](../../security/authentication.md#token-validation), each {{ ydb-short-name }} node caches validation results as **user tokens**. For details, see [{#T}](../../security/caching-authentication-results.md).
 
-To configure the life cycle and other important aspects of managing user tokens, define the following parameters:
+The following parameters configure user-token lifetime and related behavior. Duration values consist of a number followed by a unit suffix: `ms` for milliseconds, `s` for seconds, `m` for minutes, `h` for hours, or `d` for days. For example: `300ms`, `30s`, `10m`, `1h`, or `2d`.
 
 #|
 || refresh_period
-| Specifies how often a {{ ydb-short-name }} node scans cached user tokens to find the ones that need to be refreshed because the `refresh_time`, `life_time` or `expire_time` interval elapses. The lower this parameter value, the higher the CPU load.
+| Interval between processing runs for user tokens scheduled for refresh or removal. Reducing this interval shortens possible processing delays but increases CPU load.
 
 Default value: `1s`
     ||
 || refresh_time
-| Specifies the time interval since the last user token update after which a {{ ydb-short-name }} node updates the user token again. The actual update will occur within the range from `refresh_time/2` to `refresh_time`.
+| Base user-token refresh interval. After a successful validation, the next validation is scheduled at a random point between `refresh_time/2` and `refresh_time`. This parameter applies to authentication-token types that {{ ydb-short-name }} can refresh.
 
 Default value: `1h`
     ||
 || life_time
-| Specifies the time interval for keeping a user token in {{ ydb-short-name }} node cache since its last use. If a {{ ydb-short-name }} node does not receive queries from a user within the specified time interval, the node deletes the user token from its cache.
+| Maximum user-token inactivity period. Each request with the corresponding authentication token updates the last-access time. If the user token is not used for `life_time`, the node removes it from the cache during the next token-queue processing run.
 
 Default value: `1h`
     ||
 || expire_time
-| Specifies the time period, after which a user token is deleted from {{ ydb-short-name }} node cache. Deletion occurs regardless of the `life_time` interval.
+| Lifetime of a successful validation result for most authentication-token types. After a successful refresh, the countdown starts again. Login-and-password tokens and external identity provider tokens use the authentication token's own expiration time. Requests signed with an access key use the separate `as_signature_expire_time` parameter.
 
-{% note warning %}
-
-If a third-party system has successfully authenticated in the {{ydb-short-name }} node and regularly (more often than the `life_time` interval) sends requests to the same node, {{ydb-short-name }} will detect the possible deletion or change in the user account privileges only after the `expire_time` interval elapses.
-
-{% endnote %}
-
-The shorter this time period, the more often {{ ydb-short-name }} nodes re-authenticate users and refresh their privileges. However, excessive user re-authentication slows down {{ ydb-short-name }}, especially so for external users. Setting this parameter to seconds negates the effect of caching user tokens.
+When a validation result expires, the node removes the user token during the next token-queue processing run. `refresh_time` controls the frequency of scheduled revalidation, so reducing only `expire_time` neither disables caching nor sets the refresh frequency.
 
 Default value: `24h`
     ||
-|| min_error_refresh_time
-| Specifies minimum period of time that must elapse since a failed attempt (temporary failure) to refresh a user token before retrying the attempt.
+|| as_signature_expire_time
+| Lifetime of the validation result for a request authenticated with an access-key signature.
 
-Together with the `max_error_refresh_time`, determines the possible interval for a delay before retrying a failed attempt to refresh a user token. Each subsequent delay is increased till it reaches the `max_error_refresh_time` value. Retries continue until a user token is refreshed or the `expire_time` period elapses.
+Default value: `1m`
+    ||
+|| min_error_refresh_time
+| Initial base delay before retrying after a temporary user-token refresh error.
+
+The actual delay is selected randomly between half and all of the current base delay. After each temporary error, the base delay increases subject to `max_error_refresh_time`. These delay parameters do not limit the total retry duration. For AccessService tokens, retries continue until a successful refresh, a permanent error, or removal of the user token after no requests arrive for `life_time`. For login-and-password tokens and external identity provider tokens, retries are also limited by authentication-token expiration.
 
 {% note warning %}
 
-Setting this parameter to `0` is not recommended, because instant retries results in excessive load.
+Setting this parameter to `0` is not recommended because immediate retries create excessive load.
 
 {% endnote %}
 
 Default value: `1s`
     ||
 || max_error_refresh_time
-| Specifies the maximum time interval that can elapse since a failed attempt (temporary failure) to refresh a user token before retrying the attempt.
-
-Together with the `min_error_refresh_time`, determines the possible interval for a delay before retrying a failed attempt to refresh a user token. Each subsequent delay is increased till it reaches the `max_error_refresh_time` value. Retries continue until a user token is refreshed or the `expire_time` period elapses.
+| Limits growth of the base delay between retries after temporary user-token refresh errors. It does not limit the total retry duration.
 
 Default value: `1m`
     ||

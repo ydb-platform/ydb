@@ -142,4 +142,3 @@ Pear;15;33'''
             "simple", sql, type=fq.QueryContent.QueryType.ANALYTICS
         ).result.query_id
         client.wait_query_status(query_id, fq.QueryMeta.FAILED)
-

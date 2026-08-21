@@ -13,18 +13,31 @@ ui32 TUploader::TOptions::GetRps() const {
     return Rate * TDuration::Seconds(1).MilliSeconds() / Interval.MilliSeconds();
 }
 
-TUploader::TUploader(const TUploader::TOptions &opts, NYdb::NTable::TTableClient& client, const TString &query)
+TUploader::TUploader(const TUploader::TOptions &opts, NYdb::NTable::TTableClient& tableClient, const TString &query)
     : Opts(opts)
     , Query(query)
     , ShouldStop(0)
     , RequestLimiter(opts.GetRps(), opts.GetRps())
-    , Client(client)
+    , TableClient(&tableClient)
+{
+    TasksQueue = MakeSimpleShared<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
+    TasksQueue->Start(opts.InFly, opts.InFly + 1);
+}
+
+TUploader::TUploader(const TUploader::TOptions &opts, NYdb::NQuery::TQueryClient& queryClient, const TString &query)
+    : Opts(opts)
+    , Query(query)
+    , ShouldStop(0)
+    , RequestLimiter(opts.GetRps(), opts.GetRps())
+    , QueryClient(&queryClient)
 {
     TasksQueue = MakeSimpleShared<TThreadPool>(TThreadPool::TParams().SetBlocking(true).SetCatching(true));
     TasksQueue->Start(opts.InFly, opts.InFly + 1);
 }
 
 bool TUploader::Push(const TString& path, TValue&& value) {
+    Y_ENSURE(TableClient, "Bulk upsert requires a TableClient-backed TUploader");
+
     if (IsStopped()) {
         return false;
     }
@@ -43,7 +56,7 @@ bool TUploader::Push(const TString& path, TValue&& value) {
             }
 
             RequestLimiter.Use(1);
-            
+
             auto upsert = [&] (NYdb::NTable::TSession) -> TStatus {
                 auto settings = NTable::TBulkUpsertSettings()
                     .RequestType(DOC_API_REQUEST_TYPE)
@@ -51,12 +64,12 @@ bool TUploader::Push(const TString& path, TValue&& value) {
                     .ClientTimeout(TDuration::Seconds(35));
 
                 // Make copy of taskValue to save initial data for case of error
-                return Client.BulkUpsert(path, TValue(taskValue), settings).GetValueSync();
+                return TableClient->BulkUpsert(path, TValue(taskValue), settings).GetValueSync();
             };
             auto settings = NYdb::NTable::TRetryOperationSettings()
                 .MaxRetries(Opts.RetryOperationMaxRetries)
                 .Idempotent(true);
-            auto status = Client.RetryOperationSync(upsert, settings);
+            auto status = TableClient->RetryOperationSync(upsert, settings);
 
             if (status.IsSuccess()) {
                 if (status.GetIssues()) {
@@ -74,9 +87,67 @@ bool TUploader::Push(const TString& path, TValue&& value) {
     return TasksQueue->AddFunc(task);
 }
 
-bool TUploader::Push(TParams params) {
+void TUploader::ReportWriteTxResult(const NYdb::TStatus& status) {
+    if (status.IsSuccess()) {
+        if (status.GetIssues()) {
+            LOG_W("Write tx was completed with issues: " << status.GetIssues().ToOneLineString());
+        }
+        return;
+    }
+
+    LOG_E("Write tx failed: " << status.GetIssues().ToOneLineString());
+    PleaseStop();
+}
+
+bool TUploader::WaitForRequestSlot() {
+    while (!RequestLimiter.IsAvail()) {
+        Sleep(Min(TDuration::MilliSeconds(RequestLimiter.GetWaitTime()), Opts.ReactionTime));
+        if (IsStopped()) {
+            return false;
+        }
+    }
+
     if (IsStopped()) {
         return false;
+    }
+
+    RequestLimiter.Use(1);
+    return true;
+}
+
+bool TUploader::Push(TParams params) {
+    Y_ENSURE(TableClient || QueryClient);
+
+    if (IsStopped()) {
+        return false;
+    }
+
+    if (QueryClient) {
+        auto upload = [this, params] (NYdb::NQuery::TSession session) -> NYdb::TStatus {
+            auto transaction = NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx();
+            auto settings = NYdb::NQuery::TExecuteQuerySettings()
+                .Syntax(NYdb::NQuery::ESyntax::YqlV1)
+                .StatsMode(NYdb::NQuery::EStatsMode::None)
+                .RequestType(DOC_API_REQUEST_TYPE)
+                .ClientTimeout(TDuration::Seconds(120));
+            return session.ExecuteQuery(Query, transaction, std::move(params), settings).GetValueSync();
+        };
+
+        auto task = [this, upload] () {
+            if (!WaitForRequestSlot()) {
+                return;
+            }
+
+            auto settings = NYdb::NQuery::TRetryOperationSettings()
+                .MaxRetries(Opts.RetryOperationMaxRetries)
+                .FastBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::MilliSeconds(10)).Ceiling(10))
+                .SlowBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::Seconds(2)).Ceiling(6))
+                .Idempotent(true);
+
+            ReportWriteTxResult(QueryClient->RetryQuerySync(upload, settings));
+        };
+
+        return TasksQueue->AddFunc(task);
     }
 
     auto upload = [this, params] (NYdb::NTable::TSession session) -> NYdb::TStatus {
@@ -90,18 +161,9 @@ bool TUploader::Push(TParams params) {
     };
 
     auto task = [this, upload] () {
-        while (!RequestLimiter.IsAvail()) {
-            Sleep(Min(TDuration::MilliSeconds(RequestLimiter.GetWaitTime()), Opts.ReactionTime));
-            if (IsStopped()) {
-                return;
-            }
-        }
-
-        if (IsStopped()) {
+        if (!WaitForRequestSlot()) {
             return;
         }
-
-        RequestLimiter.Use(1);
 
         auto settings = NYdb::NTable::TRetryOperationSettings()
             .MaxRetries(Opts.RetryOperationMaxRetries)
@@ -109,18 +171,7 @@ bool TUploader::Push(TParams params) {
             .SlowBackoffSettings(NRetry::TBackoffSettings().SlotDuration(TDuration::Seconds(2)).Ceiling(6))
             .Idempotent(true);
 
-        auto status = Client.RetryOperationSync(upload, settings);
-
-
-        if (status.IsSuccess()) {
-            if (status.GetIssues()) {
-                LOG_W("Write tx was completed with issues: " << status.GetIssues().ToOneLineString());
-            }
-        } else {
-            LOG_E("Write tx failed: " << status.GetIssues().ToOneLineString());
-            PleaseStop();
-            return;
-        }
+        ReportWriteTxResult(TableClient->RetryOperationSync(upload, settings));
     };
 
     return TasksQueue->AddFunc(task);

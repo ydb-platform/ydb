@@ -446,6 +446,10 @@ TRestoreClient::TRestoreClient(const TDriver& driver, const std::shared_ptr<TLog
 TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbPath, const TRestoreSettings& settings) {
     LOG_I("Restore " << fsPath.Quote() << " to " << dbPath.Quote());
 
+    if (auto result = CheckImportDataSupportsAllTables(fsPath, dbPath, settings); !result.IsSuccess()) {
+        return result;
+    }
+
     // Find first existing path on the way from the dbPath to the root of the cluster.
     TPathSplitUnix dbPathSplit(dbPath);
 
@@ -1082,6 +1086,31 @@ namespace {
         return status;
     }
 
+}
+
+TRestoreResult TRestoreClient::CheckImportDataSupportsAllTables(
+        const TFsPath& fsBackupRoot, const TString& dbRestoreRoot, const TRestoreSettings& settings)
+{
+    if (settings.Mode_ != TRestoreSettings::EMode::ImportData) {
+        return Result<TRestoreResult>();
+    }
+
+    TVector<TFsBackupEntry> backupEntries;
+    if (auto result = ListBackupEntries(fsBackupRoot, dbRestoreRoot, backupEntries); !result.IsSuccess()) {
+        return result;
+    }
+
+    for (const auto& entry : backupEntries) {
+        if (entry.Type != ESchemeEntryType::Table) {
+            continue;
+        }
+        if (ReadTableScheme(entry.FsPath, Log.get()).store_type() == Ydb::Table::STORE_TYPE_COLUMN) {
+            return Result<TRestoreResult>(entry.DbPath, EStatus::UNSUPPORTED, "ImportData restore mode does not support"
+                " column-oriented (OLAP) tables. Consider using the --bulk-upsert option to restore column-oriented tables.");
+        }
+    }
+
+    return Result<TRestoreResult>();
 }
 
 TRestoreResult TRestoreClient::RestoreFolder(
@@ -1957,7 +1986,8 @@ THolder<NPrivate::IDataWriter> TRestoreClient::CreateDataWriter(
         case TRestoreSettings::EMode::Yql:
         case TRestoreSettings::EMode::BulkUpsert: {
             // Need only one accumulator to initialize query string
-            writer.Reset(CreateCompatWriter(dbPath, TableClient, accumulators[0].Get(), settings));
+            writer.Reset(CreateCompatWriter(dbPath, TableClient, QueryClient, accumulators[0].Get(), settings,
+                desc.GetStoreType() == EStoreType::Column));
             break;
         }
 

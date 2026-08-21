@@ -12,7 +12,9 @@ NPrivate::IDataAccumulator* CreateCompatAccumulator(
 NPrivate::IDataWriter* CreateCompatWriter(
     const TString& path,
     NTable::TTableClient& tableClient,
+    NQuery::TQueryClient& queryClient,
     const NPrivate::IDataAccumulator* accumulator,
-    const TRestoreSettings& settings);
+    const TRestoreSettings& settings,
+    bool isColumnTable);
 
 } // NYdb::NDump

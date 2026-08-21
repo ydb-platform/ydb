@@ -1,4 +1,5 @@
 import logging
+import os
 import random
 import time
 import zlib
@@ -11,7 +12,7 @@ logger = logging.getLogger("FulltextIndexWorkload")
 
 
 class WorkloadFulltextIndex(WorkloadBase):
-    def __init__(self, client, prefix, stop):
+    def __init__(self, client, prefix, stop, seed=None):
         super().__init__(client, prefix, "fulltext_index", stop)
         self.table_name_prefix = "table"
         self.index_name_prefix = "fulltext_idx"
@@ -23,8 +24,17 @@ class WorkloadFulltextIndex(WorkloadBase):
         # groups is kept small to leave enough rows in each of them - otherwise
         # random word queries return nothing too often.
         self.user_count = 2
-        # Stable across processes (unlike Python's hash()) and logged for exact reproduction.
-        self.base_seed = zlib.crc32(str(prefix).encode("utf-8")) & 0xFFFFFFFF
+        # Stable across processes (unlike Python's hash()) and logged for exact reproduction. An explicit
+        # runner seed takes precedence, then the component-specific replay override, then the old prefix
+        # derived default used by PR tests.
+        default_seed = zlib.crc32(str(prefix).encode("utf-8")) & 0xFFFFFFFF
+        self.base_seed = seed if seed is not None else int(
+            os.getenv("YDB_FULLTEXT_INDEX_SEED", str(default_seed)), 0
+        )
+        logger.info(
+            "Fulltext base seed=%d replay='YDB_FULLTEXT_INDEX_SEED=%d'",
+            self.base_seed, self.base_seed,
+        )
         self.marker_expectations = {}
         self.row_id_snapshots = {}
 

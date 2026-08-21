@@ -11,6 +11,7 @@
 #include <library/cpp/json/json_reader.h>
 
 #include <cmath>
+#include <limits>
 
 namespace NKikimr::NKqp {
 
@@ -399,6 +400,58 @@ Y_UNIT_TEST_SUITE(KqpHybridSearch) {
         UNIT_ASSERT_DOUBLES_EQUAL(parser.ColumnParser("LongParallelLists").GetDouble(), 6.0, 1e-12);
         UNIT_ASSERT_C(std::isfinite(parser.ColumnParser("LargeFiniteRaw").GetDouble()),
             "representable raw score and weight multiplication must remain finite");
+    }
+
+    Y_UNIT_TEST(UdfsRejectNonFiniteInputsAndResults) {
+        auto kikimr = MakeRunner();
+        auto db = kikimr.GetQueryClient();
+
+        const auto assertFails = [&](const TString& expression, double value, TStringBuf issue) {
+            const TString query = TStringBuilder()
+                << "DECLARE $value AS Double; SELECT " << expression << " AS Value;";
+            auto params = TParamsBuilder().AddParam("$value").Double(value).Build().Build();
+            auto result = db.ExecuteQuery(query, TTxControl::NoTx(), params).ExtractValueSync();
+            UNIT_ASSERT_C(result.GetStatus() != EStatus::SUCCESS, "non-finite hybrid input must be rejected");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), issue);
+        };
+
+        assertFails(
+            "HybridSearch::RRF(Cast([1] AS List<Uint64>), Cast([1.0] AS List<Double>), $value)",
+            std::numeric_limits<double>::quiet_NaN(), "finite K");
+        assertFails(
+            "HybridSearch::RRF(Cast([1] AS List<Uint64>), Cast([1.0] AS List<Double>), $value)",
+            -std::numeric_limits<double>::infinity(), "finite K");
+        assertFails(
+            "HybridSearch::RRF(Cast([1] AS List<Uint64>), Cast([$value] AS List<Double>), 60.0)",
+            std::numeric_limits<double>::infinity(), "finite weights");
+        assertFails(
+            "HybridSearch::RRF(Cast([1] AS List<Uint64>), Cast([1.0] AS List<Double>), $value)",
+            -1.0, "non-zero K + rank");
+        assertFails(
+            "HybridSearch::RRF(Cast([1, 1] AS List<Uint64>), "
+            "Cast([$value, $value] AS List<Double>), 0.0)",
+            std::numeric_limits<double>::max(), "non-finite result");
+        assertFails(
+            "HybridSearch::LinearFuse(Cast([$value] AS List<Double>), Cast([0.0] AS List<Double>), "
+            "Cast([1.0] AS List<Double>), Cast([1.0] AS List<Double>), Cast([true] AS List<Bool>), true)",
+            std::numeric_limits<double>::quiet_NaN(), "finite scores");
+        assertFails(
+            "HybridSearch::LinearFuse(Cast([1.0] AS List<Double>), Cast([0.0] AS List<Double>), "
+            "Cast([1.0] AS List<Double>), Cast([$value] AS List<Double>), Cast([true] AS List<Bool>), false)",
+            std::numeric_limits<double>::infinity(), "finite scores");
+        assertFails(
+            "HybridSearch::LinearFuse(Cast([1.0] AS List<Double>), Cast([-$value] AS List<Double>), "
+            "Cast([$value] AS List<Double>), Cast([1.0] AS List<Double>), Cast([true] AS List<Bool>), true)",
+            std::numeric_limits<double>::max(), "finite normalization span");
+        assertFails(
+            "HybridSearch::LinearFuse(Cast([$value] AS List<Double>), Cast([] AS List<Double>), "
+            "Cast([] AS List<Double>), Cast([$value] AS List<Double>), Cast([true] AS List<Bool>), false)",
+            std::numeric_limits<double>::max(), "non-finite contribution");
+        assertFails(
+            "HybridSearch::LinearFuse(Cast([$value, $value] AS List<Double>), Cast([] AS List<Double>), "
+            "Cast([] AS List<Double>), Cast([1.0, 1.0] AS List<Double>), "
+            "Cast([true, true] AS List<Bool>), false)",
+            std::numeric_limits<double>::max(), "non-finite result");
     }
 
     // ListMap produces computed lists rather than passing list literals directly. This exercises the UDFs'

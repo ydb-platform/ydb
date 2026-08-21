@@ -355,9 +355,58 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         UNIT_ASSERT_VALUES_EQUAL(freq, 3);
         UNIT_ASSERT(!reader.Read(docId, freq));
 
-        // There is intentionally no malformed/truncated-input test here. TDeltaReader's bool result is
-        // EOF/MaxId, not a decode status: truncated varints are currently accepted as partial values and
-        // overlong varints raise an ensure. A safe negative corpus needs a fallible decode API first.
+    }
+
+    Y_UNIT_TEST(DeltaReaderRejectsMalformedSegments) {
+        ui64 docId = 0;
+        ui32 freq = 0;
+
+        const TVector<ui8> truncated = {0x80};
+        TDeltaReader truncatedReader(truncated, false, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(truncatedReader.Read(docId, freq), yexception, "truncated varint");
+
+        const TVector<ui8> overlong(10, 0x80);
+        TDeltaReader overlongReader(overlong, false, false);
+        UNIT_ASSERT_EXCEPTION(overlongReader.Read(docId, freq), yexception);
+
+        const TVector<ui8> nonCanonical = {0x80, 0x00};
+        TDeltaReader nonCanonicalReader(nonCanonical, false, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            nonCanonicalReader.Read(docId, freq), yexception, "non-canonical varint");
+
+        TVector<ui8> overflowingFlagged = {0x80};
+        overflowingFlagged.insert(overflowingFlagged.end(), 8, 0x80);
+        overflowingFlagged.push_back(0x04); // tail=2^58 cannot be shifted left by the reserved six bits
+        TDeltaReader flaggedReader(overflowingFlagged, true, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            flaggedReader.Read(docId, freq), yexception, "overflowing flagged varint");
+
+        const TVector<ui8> overflowingFrequency = {0x41, 0x80, 0x80, 0x80, 0x80, 0x10};
+        TDeltaReader frequencyReader(overflowingFrequency, true, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(frequencyReader.Read(docId, freq), yexception, "overflowing frequency");
+
+        TVector<ui8> overflowingDocId = Encode({{Max<ui64>(), 1}}, false);
+        overflowingDocId.push_back(1);
+        TDeltaReader docIdReader(overflowingDocId, false, false);
+        UNIT_ASSERT(docIdReader.Read(docId, freq));
+        UNIT_ASSERT_VALUES_EQUAL(docId, Max<ui64>());
+        UNIT_ASSERT_EXCEPTION_CONTAINS(docIdReader.Read(docId, freq), yexception, "overflowing document id");
+
+        const TVector<ui8> explicitZeroFrequency = {0x41, 0x00};
+        TDeltaReader zeroFrequencyReader(explicitZeroFrequency, true, false);
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            zeroFrequencyReader.Read(docId, freq), yexception, "non-canonical frequency");
+    }
+
+    Y_UNIT_TEST(MultiDeltaReaderRejectsFrequencyOverflow) {
+        const ui32 maxFreq = Max<ui32>();
+        UNIT_ASSERT_EXCEPTION_CONTAINS(
+            Merge({
+                {true, {{1, maxFreq}}},
+                {true, {{1, 1}}},
+            }),
+            yexception,
+            "exceeds ui32");
     }
 
     Y_UNIT_TEST(MultiDeltaReader2) {

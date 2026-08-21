@@ -20,13 +20,15 @@ public:
     using TBase::TBase;
 
     TAsyncBeginPublicationResult BeginPublication(const TString& extPublicationId, const TBeginPublicationSettings& settings) final {
-        Y_UNUSED(extPublicationId, settings);
-        Y_VALIDATE(false, __func__ << " is not implemented");
+        Y_VALIDATE(extPublicationId, "External publication id must be not empty");
+        Y_VALIDATE(extPublicationId.size() <= TDeferredPublication::MaxExtPublicationIdLength, "External publication id is too large, max length is " << TDeferredPublication::MaxExtPublicationIdLength << ", got " << extPublicationId.size());
+
         TEvBeginPublicationRequest::TRequest request;
         request.set_ext_publication_id(extPublicationId);
 
-        if (settings.WriterIdentity_) {
-            request.set_writer_identity(*settings.WriterIdentity_);
+        if (const auto& writerId = settings.WriterIdentity_) {
+            Y_VALIDATE(writerId->size() <= TDeferredPublication::MaxExtPublicationIdLength, "Writer identity is too large, max length is " << TDeferredPublication::MaxExtPublicationIdLength << ", got " << writerId->size());
+            request.set_writer_identity(*writerId);
         }
 
         return DoLocalRpcRequest<TEvBeginPublicationRequest, TBeginPublicationSettings>(std::move(request), settings, &DoBeginPublicationRequest).Apply([extPublicationId](const NThreading::TFuture<TLocalRpcOperationResult>& f) {
@@ -38,6 +40,8 @@ public:
     }
 
     TAsyncPublishResult Publish(const TDeferredPublication& publication, const TPublishSettings& settings) final {
+        Y_VALIDATE(publication.IntPublicationId > 0, "Internal publication id must be positive");
+
         TEvPublishRequest::TRequest request;
         request.set_int_publication_id(publication.IntPublicationId);
 

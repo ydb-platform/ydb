@@ -6,6 +6,7 @@
 
 namespace NKikimr::NKqp {
 
+// Note: for local client where is no automaticall ack waiting on publish
 NYql::IDeferredPublishClient::TPtr CreateLocalDeferredPublishClient(const TLocalTopicClientSettings& localSettings, const NYdb::TCommonClientSettings& clientSettings);
 
 } // namespace NKikimr::NKqp

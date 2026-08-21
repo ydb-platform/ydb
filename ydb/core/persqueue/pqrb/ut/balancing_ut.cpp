@@ -766,6 +766,66 @@ Y_UNIT_TEST(PipeBreakOfTargetFamilyDuringRelease) {
     env.Finish("session-new", 1);
     env.AssertLocked(2, "session-new");
 }
+Y_UNIT_TEST(CommitThenParentReleaseDoesNotReattachMergeChild) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.Merge(0, 1);
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.Commit(0);
+    env.Commit(1);
+
+    env.RegisterSession("session-child", {3});
+    env.AssertLocked(2, "session-child");
+
+    env.RegisterSession("session-pref", {1});
+    env.AssertLocked(0, "session-pref");
+    env.AssertLocked(2, "session-child");
+    UNIT_ASSERT_C(!env.SessionOf(1).empty(), "the other merge parent must stay assigned");
+}
+
+Y_UNIT_TEST(DelayedMergeThenCommitThenParentReleaseKeepsChildIndependent) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    auto [s0, s1] = env.TwoSessionsOnParents();
+    env.Merge(0, 1);
+
+    env.Finish(s0, 0);
+    env.Finish(s1, 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    auto pending = env.WaitRelease();
+    UNIT_ASSERT_C(pending, "second finished parent must trigger a family release to merge");
+    auto pipeIt = env.Pipes.find(pending->Session);
+    UNIT_ASSERT(pipeIt != env.Pipes.end());
+    env.AckRelease(pipeIt->second, pending->Partition, pending->Session);
+    env.Pump();
+    env.AssertLocked(2);
+
+    env.Commit(0);
+    env.Commit(1);
+    env.RegisterSession("session-child", {3});
+    env.AssertLocked(2, "session-child");
+
+    env.RegisterSession("session-pref", {1});
+    env.AssertLocked(0, "session-pref");
+    env.AssertLocked(2, "session-child");
+}
+
+Y_UNIT_TEST(CommitThenRebalanceKeepsMergeChildIndependent) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.Merge(0, 1);
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.AssertSameSession({0, 1, 2});
+
+    env.Commit(0);
+    env.Commit(1);
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(3, 2);
+}
 } // Y_UNIT_TEST_SUITE(TPqrbMergeBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbSplitBalancing) {
@@ -794,6 +854,80 @@ Y_UNIT_TEST(PreferredChildTakenAfterParentCommitted) {
     env.AssertLocked(1, "session-child");
 }
 
+Y_UNIT_TEST(CommitThenParentReleaseDoesNotReattachSplitChildren) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+
+    env.Commit(0);
+    env.RegisterSession("session-child", {2});
+    env.AssertLocked(1, "session-child");
+
+    env.RegisterSession("session-pref", {1});
+    env.AssertLocked(0, "session-pref");
+    env.AssertLocked(1, "session-child");
+    UNIT_ASSERT_C(!env.SessionOf(2).empty(), "the other split child must stay assigned");
+    UNIT_ASSERT_VALUES_UNEQUAL(env.SessionOf(2), env.SessionOf(0));
+}
+
+Y_UNIT_TEST(CommitThenRebalanceKeepsChildrenIndependent) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+
+    env.Commit(0);
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(3, 2);
+
+    const TString parentSession = env.SessionOf(0);
+    UNIT_ASSERT_C(!parentSession.empty(), "parent must stay assigned");
+    ui32 childrenWithParent = 0;
+    for (ui32 child : {1u, 2u}) {
+        const TString childSession = env.SessionOf(child);
+        UNIT_ASSERT_C(!childSession.empty(), "child " << child << " must stay assigned");
+        if (childSession == parentSession) {
+            ++childrenWithParent;
+        }
+    }
+    UNIT_ASSERT_C(childrenWithParent < 2,
+        "committed split children must not be glued back to the parent family on rebalance");
+}
+
+Y_UNIT_TEST(ScaleAwareFinishCommitThenSecondCommonSessionKeepsChildrenIndependent) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.AssertSameSession({0, 1, 2});
+
+    env.Commit(0);
+    env.RegisterSession("session-1");
+    env.AssertEvenDistribution(3, 2);
+
+    const TString parentSession = env.SessionOf(0);
+    UNIT_ASSERT_C(!parentSession.empty(), "parent must stay assigned after rebalance");
+    absl::flat_hash_set<TString> childSessions;
+    ui32 childrenWithParent = 0;
+    for (ui32 child : {1u, 2u}) {
+        const TString childSession = env.SessionOf(child);
+        UNIT_ASSERT_C(!childSession.empty(), "child " << child << " must stay assigned");
+        childSessions.insert(childSession);
+        if (childSession == parentSession) {
+            ++childrenWithParent;
+        }
+    }
+    UNIT_ASSERT_C(childrenWithParent < 2,
+        "committed split children must stay in their own families, not glued back to the parent");
+    UNIT_ASSERT_C(childSessions.size() == 2 || childrenWithParent == 0,
+        "independent child families must be able to sit on a different session than the parent");
+}
 } // Y_UNIT_TEST_SUITE(TPqrbSplitBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants) {

@@ -300,4 +300,6 @@ enum ETxTypes {
     TXTYPE_ALLOCATE_DDISK_BLOCK_GROUP = 34 [(TxTypeOpts) = {Name: "TTxAllocateDDiskBlockGroup"}];
     TXTYPE_CLEANUP_STALE_STORAGE_ENTRIES = 35 [(TxTypeOpts) = {Name: "TTxCleanupStaleStorageEntries"}];
     TXTYPE_BLOB_CHECKER_UPDATE_GROUP_STATUS = 36 [(TxTypeOpts) = {Name: "TTxBlobCheckerUpdateGroupStatus"}];
+    TXTYPE_LIST_DDISK_INFO_TABLETS = 37 [(TxTypeOpts) = {Name: "TTxListDDiskInfoTablets"}];
+    TXTYPE_GET_DDISK_INFO_TABLET = 38 [(TxTypeOpts) = {Name: "TTxGetDDiskInfoTablet"}];
 }

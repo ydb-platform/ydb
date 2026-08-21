@@ -1986,6 +1986,9 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
 {
     YDB_LOG_WARN_CTX(ctx, "BS Controller connection error");
 
+    DDiskInfoRequestsInFlight = 0;
+    DDiskInfoRequestQueue = {};
+
     if (State->BSControllerPipe) {
         NTabletPipe::CloseClient(ctx, State->BSControllerPipe);
         State->BSControllerPipe = TActorId();
@@ -1993,6 +1996,122 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
 
     if (State->Sentinel)
         ctx.Send(State->Sentinel, new TEvSentinel::TEvBSCPipeDisconnected);
+
+    // Recreate the pipe here as well as on CMS activation. Otherwise a transient
+    // BSC restart leaves DDisk synchronization without a pipe forever. The
+    // ListTablets request sent from here is buffered by the pipe client until
+    // the connection is (re-)established, so we must not send it again from
+    // Handle(TEvClientConnected) once the pipe actually connects.
+    StartDDiskSync(ctx);
+}
+
+void TCms::StartDDiskSync(const TActorContext& ctx) {
+    if (!State->BSControllerPipe) {
+        NTabletPipe::TClientConfig config;
+        config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        State->BSControllerPipe = Register(NTabletPipe::CreateClient(SelfId(), MakeBSControllerID(), config));
+    }
+
+    auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoListTablets>();
+    NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
+}
+
+void TCms::Handle(TEvPrivate::TEvPersistDDiskInfo::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxPersistDDiskInfo(ev), ctx);
+}
+
+void TCms::QueueDDiskInfoRequest(ui64 tabletId, ui64 knownRevision, const TActorContext& ctx) {
+    auto request = MakeHolder<TEvBlobStorage::TEvControllerDDiskInfoGetTablet>();
+    request->Record.SetTabletId(tabletId);
+    request->Record.SetKnownRevision(knownRevision);
+    DDiskInfoRequestQueue.push(std::move(request));
+    SendQueuedDDiskInfoRequests(ctx);
+}
+
+void TCms::SendQueuedDDiskInfoRequests(const TActorContext& ctx) {
+    if (!State->BSControllerPipe) {
+        return;
+    }
+
+    while (DDiskInfoRequestsInFlight < MaxDDiskInfoRequestsInFlight && !DDiskInfoRequestQueue.empty()) {
+        auto request = std::move(DDiskInfoRequestQueue.front());
+        DDiskInfoRequestQueue.pop();
+        NTabletPipe::SendData(ctx, State->BSControllerPipe, request.Release());
+        ++DDiskInfoRequestsInFlight;
+    }
+}
+
+void TCms::Handle(TEvCms::TEvDDiskInfoListRequest::TPtr& ev, const TActorContext& ctx) {
+    auto response = MakeHolder<TEvCms::TEvDDiskInfoListResponse>();
+    response->Record.SetStatus(NKikimrProto::OK);
+    for (const auto& [tabletId, info] : State->DDiskInfo) {
+        auto* tablet = response->Record.AddTablets();
+        tablet->SetTabletId(tabletId);
+        tablet->SetRevision(info.Revision);
+        tablet->SetLastChangedAt(info.LastChangedAt.MicroSeconds());
+    }
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TCms::Handle(TEvCms::TEvDDiskInfoGetRequest::TPtr& ev, const TActorContext& ctx) {
+    auto response = MakeHolder<TEvCms::TEvDDiskInfoGetResponse>();
+    const auto it = State->DDiskInfo.find(ev->Get()->Record.GetTabletId());
+    if (it == State->DDiskInfo.end()) {
+        response->Record.SetStatus(NKikimrProto::NOT_FOUND);
+        response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
+        response->Record.SetErrorReason("DDisk snapshot is not available");
+    } else if (!response->Record.ParseFromString(it->second.State)) {
+        response->Record.Clear();
+        response->Record.SetStatus(NKikimrProto::ERROR);
+        response->Record.SetTabletId(ev->Get()->Record.GetTabletId());
+        response->Record.SetErrorReason("failed to parse persisted DDisk snapshot");
+    }
+    ctx.Send(ev->Sender, response.Release(), 0, ev->Cookie);
+}
+
+void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoListTabletsResult::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    if (record.GetStatus() != NKikimrProto::OK || !State->BSControllerPipe) {
+        return;
+    }
+
+    for (const auto& tablet : record.GetTablets()) {
+        const auto it = State->DDiskInfo.find(tablet.GetTabletId());
+        const bool isNewTablet = it == State->DDiskInfo.end();
+        const ui64 knownRevision = isNewTablet ? 0 : it->second.Revision;
+        if (isNewTablet || tablet.GetRevision() > knownRevision) {
+            QueueDDiskInfoRequest(tablet.GetTabletId(), knownRevision, ctx);
+        }
+    }
+}
+
+void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoGetTabletResult::TPtr& ev, const TActorContext& ctx) {
+    // NOTE: The response arrives with ev->Sender set to the remote BS Controller
+    // tablet actor id (as delivered through the tablet pipe), not to the local
+    // pipe client actor id (State->BSControllerPipe). Do not compare against
+    // State->BSControllerPipe here, otherwise every response would be dropped.
+    if (DDiskInfoRequestsInFlight > 0) {
+        --DDiskInfoRequestsInFlight;
+    }
+    SendQueuedDDiskInfoRequests(ctx);
+
+    if (ev->Get()->Record.GetStatus() == NKikimrProto::OK) {
+        auto persist = MakeHolder<TEvPrivate::TEvPersistDDiskInfo>();
+        persist->Record.CopyFrom(ev->Get()->Record);
+        ctx.Send(SelfId(), persist.Release());
+    }
+}
+
+void TCms::Handle(TEvBlobStorage::TEvControllerDDiskInfoTabletRevisionChanged::TPtr& ev, const TActorContext& ctx) {
+    const auto& record = ev->Get()->Record;
+    const auto it = State->DDiskInfo.find(record.GetTabletId());
+    const ui64 knownRevision = it == State->DDiskInfo.end() ? 0 : it->second.Revision;
+
+    if (!State->BSControllerPipe || record.GetRevision() <= knownRevision) {
+        return;
+    }
+
+    QueueDDiskInfoRequest(record.GetTabletId(), knownRevision, ctx);
 }
 
 void TCms::Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx) {
@@ -2689,8 +2808,21 @@ void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
                   const TActorContext &ctx)
 {
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-    if (msg->ClientId == State->BSControllerPipe && msg->Status != NKikimrProto::OK)
+    if (msg->ClientId != State->BSControllerPipe) {
+        return;
+    }
+
+    if (msg->Status != NKikimrProto::OK) {
         OnBSCPipeDestroyed(ctx);
+    } else {
+        // Do not call StartDDiskSync here: the pipe already exists (it was
+        // created either on CMS activation or in OnBSCPipeDestroyed) and the
+        // ListTablets request was already buffered by the pipe client and
+        // will be delivered now that the connection succeeded. Calling
+        // StartDDiskSync again would send a second, duplicate ListTablets
+        // request for every reconnect.
+        SendQueuedDDiskInfoRequests(ctx);
+    }
 }
 
 void TCms::Handle(::NKikimr::TEvNodeWardenStorageConfig::TPtr &ev, const TActorContext &ctx)

@@ -49,6 +49,7 @@ public:
         auto nodeTenantRowset = db.Table<Schema::NodeTenant>().Range().Select<Schema::NodeTenant::TColumns>();
         auto hostMarkersRowset = db.Table<Schema::HostMarkers>().Range().Select<Schema::HostMarkers::TColumns>();
         auto logRowset = db.Table<Schema::LogRecords>().Range().Select<Schema::LogRecords::Timestamp>();
+        auto ddiskInfoRowset = db.Table<Schema::DDiskInfo>().Range().Select<Schema::DDiskInfo::TColumns>();
 
         if (!paramRow.IsReady()
             || !permissionRowset.IsReady()
@@ -57,7 +58,8 @@ public:
             || !maintenanceTasksRowset.IsReady()
             || !notificationRowset.IsReady()
             || !hostMarkersRowset.IsReady()
-            || !logRowset.IsReady())
+            || !logRowset.IsReady()
+            || !ddiskInfoRowset.IsReady())
             return false;
 
         NKikimrCms::TCmsConfig config;
@@ -96,6 +98,19 @@ public:
         state->Permissions.clear();
         state->ScheduledRequests.clear();
         state->Notifications.clear();
+        state->DDiskInfo.clear();
+
+        while (!ddiskInfoRowset.EndOfSet()) {
+            const ui64 tabletId = ddiskInfoRowset.GetValue<Schema::DDiskInfo::TabletId>();
+            state->DDiskInfo.emplace(tabletId, TCmsDDiskInfo{
+                .Revision = ddiskInfoRowset.GetValueOrDefault<Schema::DDiskInfo::Revision>(0),
+                .LastChangedAt = TInstant::MicroSeconds(ddiskInfoRowset.GetValueOrDefault<Schema::DDiskInfo::LastChangedAt>(0)),
+                .State = ddiskInfoRowset.GetValueOrDefault<Schema::DDiskInfo::State>()
+            });
+
+            if (!ddiskInfoRowset.Next())
+                return false;
+        }
 
         while (!requestRowset.EndOfSet()) {
             TString id = requestRowset.GetValue<Schema::Request::ID>();
@@ -284,6 +299,7 @@ public:
         Self->ScheduleLogCleanup(ctx);
         Self->ScheduleUpdateClusterInfo(ctx, true);
         Self->ProcessInitQueue(ctx);
+        Self->StartDDiskSync(ctx);
 
         if (FirstBoot) {
             Self->Execute(Self->CreateTxStoreFirstBootTimestamp(), ctx);

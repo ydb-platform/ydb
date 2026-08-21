@@ -98,6 +98,176 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         }
     }
 
+    Y_UNIT_TEST(DDiskInfoReadApiEmptyState)
+    {
+        TCmsTestEnv env(8);
+
+        const auto list = env.RequestDDiskInfoList();
+        UNIT_ASSERT_VALUES_EQUAL(list.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(list.TabletsSize(), 0);
+
+        const auto snapshot = env.RequestDDiskInfo(42);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetStatus(), NKikimrProto::NOT_FOUND);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetTabletId(), 42);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncOnCmsActivation)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+
+        const ui64 tabletId = 1001;
+        const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+            allocation.ShortDebugString());
+
+        const auto bscSnapshot = env.RequestBSControllerDDiskInfo(tabletId);
+        UNIT_ASSERT_VALUES_EQUAL_C(bscSnapshot.GetStatus(), NKikimrProto::OK,
+            bscSnapshot.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId, bscSnapshot.GetRevision());
+
+        env.RestartCms();
+
+        const auto snapshot = env.WaitForDDiskInfo(tabletId, bscSnapshot.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetTabletId(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetRevision(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GroupsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(snapshot.GetGroups(0).GetDirectBlockGroupId(), 1);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncOnBscUpdate)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(2);
+
+        const ui64 tabletId = 1002;
+        const auto first = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), NKikimrProto::OK,
+            first.ShortDebugString());
+        const auto initial = env.WaitForDDiskInfo(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL(initial.GroupsSize(), 1);
+
+        const auto second = env.AllocateDDiskBlockGroup(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(second.GetStatus(), NKikimrProto::OK,
+            second.ShortDebugString());
+        const auto updated = env.WaitForDDiskInfo(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetRevision(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GroupsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(0).GetDirectBlockGroupId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(1).GetDirectBlockGroupId(), 2);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSurvivesBscRestart)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+
+        const ui64 tabletId = 1003;
+        const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+            allocation.ShortDebugString());
+        const auto before = env.WaitForDDiskInfo(tabletId, 1);
+
+        env.RestartBSController();
+
+        const auto after = env.WaitForDDiskInfo(tabletId, before.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetRevision(), before.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(after.GroupsSize(), before.GroupsSize());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetGroups(0).GetDirectBlockGroupId(), 1);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncContinuesAfterBscRestart)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(2);
+
+        const ui64 tabletId = 1005;
+        const auto first = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(first.GetStatus(), NKikimrProto::OK,
+            first.ShortDebugString());
+        env.WaitForDDiskInfo(tabletId, 1);
+
+        env.RestartBSController();
+
+        const auto second = env.AllocateDDiskBlockGroup(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL_C(second.GetStatus(), NKikimrProto::OK,
+            second.ShortDebugString());
+        const auto updated = env.WaitForDDiskInfo(tabletId, 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetRevision(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GroupsSize(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(0).GetDirectBlockGroupId(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(updated.GetGroups(1).GetDirectBlockGroupId(), 2);
+    }
+
+    Y_UNIT_TEST(DDiskInfoPersistsWhenBscIsUnavailable)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool();
+
+        const ui64 tabletId = 1004;
+        const auto allocation = env.AllocateDDiskBlockGroup(tabletId, 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+            allocation.ShortDebugString());
+        const auto before = env.WaitForDDiskInfo(tabletId, 1);
+
+        env.SendRestartBSController();
+        env.RestartCms();
+
+        const auto after = env.RequestDDiskInfo(tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetStatus(), NKikimrProto::OK);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetTabletId(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(after.GetRevision(), before.GetRevision());
+        UNIT_ASSERT_VALUES_EQUAL(after.GroupsSize(), before.GroupsSize());
+        UNIT_ASSERT_VALUES_EQUAL(after.GetGroups(0).GetDirectBlockGroupId(), 1);
+    }
+
+    Y_UNIT_TEST(DDiskInfoSyncLimitsInFlightRequests)
+    {
+        TCmsTestEnv env(8);
+        env.ConfigureDDiskPool(1);
+
+        const TActorId cmsActorId = ResolveTablet(env, env.CmsId);
+
+        TVector<TAutoPtr<IEventHandle>> delayedResults;
+        ui32 getRequests = 0;
+        ui32 capturedResults = 0;
+        env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTablet) {
+                ++getRequests;
+            } else if (ev->GetTypeRewrite() == TEvBlobStorage::EvControllerDDiskInfoGetTabletResult
+                    && ev->Recipient == cmsActorId
+                    && capturedResults < 16) {
+                ++capturedResults;
+                delayedResults.emplace_back(ev.Release());
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        for (ui64 tabletId = 1; tabletId <= 17; ++tabletId) {
+            const auto allocation = env.AllocateDDiskBlockGroup(tabletId, tabletId);
+            UNIT_ASSERT_VALUES_EQUAL_C(allocation.GetStatus(), NKikimrProto::OK,
+                allocation.ShortDebugString());
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(getRequests, 16);
+        UNIT_ASSERT_VALUES_EQUAL(delayedResults.size(), 16);
+
+        env.Send(delayedResults.front().Release(), 0, true);
+        delayedResults.erase(delayedResults.begin());
+
+        TDispatchOptions options;
+        options.FinalEvents.emplace_back([&getRequests] (IEventHandle&) {
+            return getRequests == 17;
+        });
+        env.DispatchEvents(options);
+
+        UNIT_ASSERT_VALUES_EQUAL(getRequests, 17);
+    }
+
     Y_UNIT_TEST(StateRequest)
     {
         TCmsTestEnv env(8);

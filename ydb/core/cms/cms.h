@@ -4,6 +4,7 @@
 #include "cluster_info.h"
 #include "cms_state.h"
 
+#include <ydb/core/protos/blobstorage.pb.h>
 #include <ydb/core/protos/cms.pb.h>
 #include <ydb/core/protos/maintenance.pb.h>
 
@@ -91,6 +92,10 @@ struct TEvCms {
         EvStoreWalleTaskFailed,
         EvGetClusterInfoRequest,
         EvGetClusterInfoResponse,
+        EvDDiskInfoListRequest,
+        EvDDiskInfoListResponse,
+        EvDDiskInfoGetRequest,
+        EvDDiskInfoGetResponse,
 
         EvEnd
     };
@@ -279,6 +284,26 @@ struct TEvCms {
         TString ToString() const override {
             return "Get Cluster Info Response";
         }
+    };
+
+    struct TEvDDiskInfoListRequest : public TEventPB<TEvDDiskInfoListRequest,
+                                                       NKikimrBlobStorage::TEvControllerDDiskInfoListTablets,
+                                                       EvDDiskInfoListRequest> {
+    };
+
+    struct TEvDDiskInfoListResponse : public TEventPB<TEvDDiskInfoListResponse,
+                                                        NKikimrBlobStorage::TEvControllerDDiskInfoListTabletsResult,
+                                                        EvDDiskInfoListResponse> {
+    };
+
+    struct TEvDDiskInfoGetRequest : public TEventPB<TEvDDiskInfoGetRequest,
+                                                     NKikimrBlobStorage::TEvControllerDDiskInfoGetTablet,
+                                                     EvDDiskInfoGetRequest> {
+    };
+
+    struct TEvDDiskInfoGetResponse : public TEventPB<TEvDDiskInfoGetResponse,
+                                                      NKikimrBlobStorage::TEvControllerDDiskInfoGetTabletResult,
+                                                      EvDDiskInfoGetResponse> {
     };
 
     struct TEvGetConfigRequest : public TEventPB<TEvGetConfigRequest,

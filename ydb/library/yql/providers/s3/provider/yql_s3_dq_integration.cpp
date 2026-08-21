@@ -7,6 +7,7 @@
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_predicate_pushdown.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_read_actor.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_source_queue.h>
 #include <ydb/library/yql/providers/s3/expr_nodes/yql_s3_expr_nodes.h>
 #include <ydb/library/yql/providers/s3/proto/range.pb.h>
 #include <ydb/library/yql/providers/s3/proto/sink.pb.h>

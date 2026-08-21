@@ -2,6 +2,9 @@
 
 #include "yql_http_header.h"
 
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
+
+#include <util/generic/hash.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
 #include <contrib/libs/curl/include/curl/curl.h>
@@ -16,6 +19,24 @@
 namespace NYql {
 
 class THttpGatewayConfig;
+
+struct IHttpRequestContext : public TThrRefBase {
+    using TPtr = TIntrusivePtr<IHttpRequestContext>;
+
+    virtual ~IHttpRequestContext() = default;
+    virtual NDq::TPoolKey GetPoolKey() const = 0;
+};
+
+class TDefaultHttpRequestContext final : public IHttpRequestContext {
+public:
+    explicit TDefaultHttpRequestContext(NDq::TPoolKey key)
+        : Key(std::move(key)) {}
+
+    NDq::TPoolKey GetPoolKey() const override { return Key; }
+
+private:
+    const NDq::TPoolKey Key;
+};
 
 class IHTTPGateway {
 public:
@@ -82,13 +103,15 @@ public:
         TString body,
         TOnResult callback,
         bool put = false,
-        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) = 0;
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(),
+        IHttpRequestContext::TPtr context = nullptr) = 0;
 
     virtual void Delete(
         TString url,
         THeaders headers,
         TOnResult callback,
-        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) = 0;
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(),
+        IHttpRequestContext::TPtr context = nullptr) = 0;
 
     virtual void Download(
         TString url,
@@ -97,7 +120,8 @@ public:
         std::size_t sizeLimit,
         TOnResult callback,
         TString data = {},
-        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy()) = 0;
+        TRetryPolicy::TPtr retryPolicy = TRetryPolicy::GetNoRetryPolicy(),
+        IHttpRequestContext::TPtr context = nullptr) = 0;
 
     class TCountedContent : public TContentBase {
     public:
@@ -130,9 +154,14 @@ public:
         TOnDownloadStart onStart,
         TOnNewDataPart onNewData,
         TOnDownloadFinish onFinish,
-        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter) = 0;
+        const ::NMonitoring::TDynamicCounters::TCounterPtr& inflightCounter,
+        IHttpRequestContext::TPtr context = nullptr) = 0;
         
     virtual ui64 GetBuffersSizePerStream() = 0;
+
+    virtual void UpdatePoolCaps(THashMap<NDq::TPoolKey, size_t> caps) = 0;
+
+    static constexpr const char* DefaultPoolId = "default";
 
     static THeaders MakeYcHeaders(
         const TString& requestId,

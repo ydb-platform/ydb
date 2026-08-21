@@ -3,6 +3,7 @@
 #include "yql_s3_applicator_actor.h"
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <yql/essentials/utils/log/log.h>
 
 #include <util/system/platform.h>
 #if defined(_linux_) || defined(_darwin_)
@@ -70,10 +71,12 @@ namespace NYql::NDq {
                 NDB::registerFormats();
                 factory.RegisterSource<NS3::TSource>("S3Source",
                     [credentialsFactory, gateway, retryPolicy, cfg, counters, allowLocalFiles](NS3::TSource&& settings, IDqAsyncIoFactory::TSourceArguments&& args) {
+                        YQL_LOG(DEBUG) << "S3Source factory: cfg.EnableScheduling=" << cfg.EnableScheduling << " args.SchedulerContext=" << (args.SchedulerContext ? "set" : "null");
+                        auto schedulerContext = cfg.EnableScheduling ? std::move(args.SchedulerContext) : nullptr;
                         return CreateS3ReadActor(args.TypeEnv, args.HolderFactory, std::move(args.Alloc), gateway,
                             std::move(settings), args.InputIndex, args.StatsLevel, args.TxId, args.SecureParams,
                             args.TaskParams, args.ReadRanges, args.ComputeActorId, credentialsFactory, retryPolicy, cfg,
-                            counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles);
+                            counters, args.TaskCounters, args.MemoryQuotaManager, allowLocalFiles, std::move(schedulerContext));
                     });
             #else
                 Y_UNUSED(factory);

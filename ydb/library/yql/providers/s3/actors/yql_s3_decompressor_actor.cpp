@@ -3,10 +3,12 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/actor_coroutine.h>
+#include <ydb/library/yql/dq/actors/compute/dq_schedulable.h>
 #include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/events/events.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <util/generic/scope.h>
 #include <util/generic/size_literals.h>
 
 #if defined(_linux_) || defined(_darwin_)
@@ -21,10 +23,12 @@ namespace {
 
 class TS3DecompressorCoroImpl : public TActorCoroImpl {
 public:
-    TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression)
+    TS3DecompressorCoroImpl(const TActorId& parent, const TString& compression, IDqSchedulerContextPtr schedulerContext)
         : TActorCoroImpl(256_KB)
         , Compression(compression)
         , Parent(parent)
+        , SchedulerContext(std::move(schedulerContext))
+        , Work(SchedulerContext ? SchedulerContext->CreateSchedulableWork() : nullptr)
     {}
 
 private:
@@ -38,9 +42,6 @@ private:
     private:
         bool nextImpl() final {
             while (!Coro->InputFinished || !Coro->Requests.empty()) {
-                Coro->CpuTime += Coro->GetCpuTimeDelta();
-                Coro->ProcessOneEvent();
-                Coro->StartCycleCount = GetCycleCountFast();
                 if (Coro->InputBuffer) {
                     RawDataBuffer.swap(Coro->InputBuffer);
                     Coro->InputBuffer.clear();
@@ -48,6 +49,9 @@ private:
                     working_buffer = NDB::BufferBase::Buffer(rawData, rawData + RawDataBuffer.size());
                     return true;
                 }
+                Coro->CpuTime += Coro->GetCpuTimeDelta();
+                Coro->ProcessOneEvent();
+                Coro->StartCycleCount = GetCycleCountFast();
             }
             return false;
         }
@@ -72,6 +76,26 @@ private:
         InputFinished = true;
     }
 
+    void StartUnit() {
+        bool registered = false;
+        while (Work && !Work->StartExecution(TMonotonic::Now())) {
+            if (!registered) {
+                Work->RegisterForResume(SelfActorId);
+                registered = true;
+            }
+            (void)WaitForSpecificEvent<NActors::TEvents::TEvWakeup>(
+                [this](TAutoPtr<::NActors::IEventHandle> ev) { StateFunc(ev); },
+                TMonotonic::Now() + Work->CalculateDelay(TMonotonic::Now()));
+        }
+    }
+
+    void StopUnit() {
+        if (Work) {
+            bool forced = false;
+            Work->StopExecution(forced);
+        }
+    }
+
     void Run() final {
         StartCycleCount = GetCycleCountFast();
 
@@ -82,6 +106,8 @@ private:
             YQL_ENSURE(decompressorBuffer, "Unsupported " << Compression << " compression.");
             while (!decompressorBuffer->eof()) {
                 decompressorBuffer->nextIfAtEnd();
+                StartUnit();
+                Y_DEFER { StopUnit(); };
                 TString data{decompressorBuffer->available(), ' '};
                 decompressorBuffer->read(&data.front(), decompressorBuffer->available());
                 Send(Parent, new TEvS3Provider::TEvDecompressDataResult(std::move(data), TakeCpuTimeDelta()));
@@ -127,6 +153,8 @@ private:
     TActorId Parent;
     bool InputFinished = false;
     std::queue<THolder<TEvS3Provider::TEvDecompressDataRequest>> Requests;
+    const IDqSchedulerContextPtr SchedulerContext;
+    std::unique_ptr<IDqSchedulableWork> Work;
 };
 
 class TS3DecompressorCoroActor : public TActorCoro {
@@ -143,8 +171,8 @@ private:
 
 } // anonymous namespace
 
-NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression) {
-    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression));
+NActors::IActor* CreateS3DecompressorActor(const NActors::TActorId& parent, const TString& compression, IDqSchedulerContextPtr schedulerContext) {
+    return new TS3DecompressorCoroActor(MakeHolder<TS3DecompressorCoroImpl>(parent, compression, std::move(schedulerContext)));
 }
 
 } // namespace NYql::NDq

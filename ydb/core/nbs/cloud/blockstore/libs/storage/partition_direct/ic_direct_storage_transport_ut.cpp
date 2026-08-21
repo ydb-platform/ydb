@@ -109,18 +109,18 @@ void CheckDirectWriteChecksums(TDBGFixture& fixture, bool directSession)
     TVector<ui64> observedChecksums;
     fixture.Runtime->SetObserverFunc(
         [&](TAutoPtr<NActors::IEventHandle>& ev)
-    {
-        if (ev->GetTypeRewrite() == NDDisk::TEvWrite::EventType) {
-            ++writeRequests;
-            auto* msg = ev->Get<NDDisk::TEvWrite>();
-            UNIT_ASSERT_VALUES_EQUAL(msg->GetPayloadCount(), 1u);
-            observedPayload = msg->GetPayload(0).ConvertToString();
-            observedChecksums.assign(
-                msg->Record.GetChecksums().begin(),
-                msg->Record.GetChecksums().end());
-        }
-        return NActors::TTestActorRuntime::EEventAction::PROCESS;
-    });
+        {
+            if (ev->GetTypeRewrite() == NDDisk::TEvWrite::EventType) {
+                ++writeRequests;
+                auto* msg = ev->Get<NDDisk::TEvWrite>();
+                UNIT_ASSERT_VALUES_EQUAL(msg->GetPayloadCount(), 1u);
+                observedPayload = msg->GetPayload(0).ConvertToString();
+                observedChecksums.assign(
+                    msg->Record.GetChecksums().begin(),
+                    msg->Record.GetChecksums().end());
+            }
+            return NActors::TTestActorRuntime::EEventAction::PROCESS;
+        });
 
     auto future = transport->WriteToDDisk(
         connection,
@@ -135,7 +135,9 @@ void CheckDirectWriteChecksums(TDBGFixture& fixture, bool directSession)
         NKikimrBlobStorage::NDDisk::TReplyStatus::OK);
     UNIT_ASSERT_VALUES_EQUAL(writeRequests, 1u);
     UNIT_ASSERT_VALUES_EQUAL(observedPayload, writeBuf);
-    UNIT_ASSERT_VALUES_EQUAL(observedChecksums.size(), expectedChecksums.size());
+    UNIT_ASSERT_VALUES_EQUAL(
+        observedChecksums.size(),
+        expectedChecksums.size());
     for (size_t i = 0; i < expectedChecksums.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL(observedChecksums[i], expectedChecksums[i]);
     }

@@ -991,17 +991,10 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
         return;
     }
 
-    // One record per user-level transaction (the post-rewrite,
-    // post-auto-mkdir-split TModifyScheme the user originally authored). Target
-    // cluster feeds the body back through IgniteOperation, which redoes
-    // decomposition — no sub-op replay path needed.
-    //
-    // The rows themselves were written at propose; all that is left here is to
-    // fill in what only completion knows. Note this runs regardless of whether
-    // a subscriber exists *now*: what matters is whether one existed at propose,
-    // which is exactly what a non-empty SchemeChangeSlots records. A subscriber
-    // unregistering mid-DDL must not leave a permanently un-finalised row
-    // blocking the outbox.
+    // Runs regardless of whether a subscriber exists *now*: what matters is
+    // whether one existed at propose, which is exactly what a non-empty
+    // SchemeChangeSlots records. A subscriber unregistering mid-DDL must not
+    // leave a permanently un-finalised row blocking the outbox.
     NIceDb::TNiceDb db(txc.DB);
 
     for (const auto& txId : DoneTransactions) {
@@ -1014,8 +1007,6 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             continue;
         }
 
-        // All parts of this operation share one PlanStep assigned by the
-        // coordinator. Read it from any live part.
         TStepId planStep = InvalidStepId;
         for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
             auto it = ss->TxInFlight.find(TOperationId(txId, partIdx));
@@ -1025,9 +1016,9 @@ void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExe
             }
         }
 
-        // No cap relief here any more. The outbox filling up is handled by
-        // the propose gate refusing DDL, not by quietly discarding a lagging
-        // subscriber's records -- only an admin force-advance may do that.
+        // No cap relief here: the outbox filling up is handled by the propose
+        // gate refusing DDL, not by discarding a lagging subscriber's records.
+        // Only an admin force-advance may do that.
 
         for (const auto& slot : operation->SchemeChangeSlots) {
             ss->FinalizeSchemeChangeRecord(db, ctx, slot, planStep);

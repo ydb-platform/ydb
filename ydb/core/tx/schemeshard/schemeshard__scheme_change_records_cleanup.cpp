@@ -37,9 +37,8 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
     TString SubscriberId;
     TString UserToken;
     TActorId ReplyTo;
-    // False only for the in-process monitoring path, which the mon endpoint has
-    // already authorized. Not settable over a tablet pipe, so it cannot be
-    // forged the way an in-band "internal" flag could.
+    // Not settable over a tablet pipe: only the already-authorized in-process
+    // monitoring path can set this false.
     bool RequireAdmin = true;
     THolder<TEvSchemeShard::TEvForceAdvanceSubscriberResult> Result;
     bool HasMoreToCleanup = false;
@@ -52,7 +51,6 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
         , Result(MakeHolder<TEvSchemeShard::TEvForceAdvanceSubscriberResult>())
     {}
 
-    // In-process constructor for the monitoring surface.
     TTxForceAdvanceSubscriber(TSchemeShard* self, const TString& subscriberId, TActorId replyTo)
         : TTransactionBase(self)
         , SubscriberId(subscriberId)
@@ -67,8 +65,6 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
         HasMoreToCleanup = false;
         const TString& subscriberId = SubscriberId;
 
-        // Force-advance discards a subscriber's unread records on purpose --
-        // strictly an operator action.
         if (RequireAdmin && !IsAdministrator(AppData(), UserToken)) {
             Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_ACCESS_DENIED);
             Result->Record.SetReason("Force-advancing a scheme change subscriber requires cluster admin rights");
@@ -90,20 +86,14 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
 
         const ui64 oldMinOrder = Self->GetMinSubscriberOrder(ctx.Now());
 
-        // This subscriber's own cursor, read from the row we just selected --
-        // not the global minimum, which belongs to whichever subscriber is
-        // furthest behind.
         const ui64 oldOrder = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
-        // The visible tail, not the reserved one: force-advance must not park
-        // the cursor above a record an in-flight operation has yet to finalise.
+        // Use the visible tail, not the reserved one: must not park the cursor
+        // above a record an in-flight operation has yet to finalise.
         const ui64 newOrder = Max(oldOrder, Self->GetVisibleSchemeChangeTail());
         const TInstant now = ctx.Now();
 
-        // Force-advance discards whatever the subscriber had not consumed, so
-        // it must report the loss on the same contract every other discarding
-        // path uses (registration clamp, staleness exclusion, count-triggered
-        // cap relief). Only mark Lost if records are actually skipped -- a
-        // force-advance of an already-drained subscriber loses nothing.
+        // Only mark Lost if records are actually skipped -- a force-advance of
+        // an already-drained subscriber loses nothing.
         const bool losesRecords = newOrder > oldOrder;
         const auto newState = losesRecords
             ? NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST
@@ -134,8 +124,7 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
 
     void Complete(const TActorContext& ctx) override {
         Self->UpdateSchemeChangeGauges();
-        // Empty when driven from the monitoring page: that path answers the
-        // HTTP request itself, and the internal result event has no recipient.
+        // Empty when driven from the monitoring page, which answers directly.
         if (ReplyTo) {
             ctx.Send(ReplyTo, Result.Release());
         }

@@ -2739,40 +2739,20 @@ struct Schema : NIceDb::Schema {
         struct SubscriberId :   Column<1, NScheme::NTypeIds::Utf8> {};
         struct LastAckedOrder : Column<2, NScheme::NTypeIds::Uint64> {};
         struct LastActivityAt : Column<3, NScheme::NTypeIds::Uint64> {};
-        // NKikimrSchemeShard::TSchemeChangeSubscriberState::EState.
-        // Written READY unconditionally today; LOST is written when a cursor
-        // is advanced past records the subscriber never received. SCAN is a
-        // seam for a future snapshot-backfill mechanism.
+        // NKikimrSchemeShard::TSchemeChangeSubscriberState::EState. LOST is
+        // written when a cursor is advanced past records the subscriber never
+        // received.
         struct State :          Column<4, NScheme::NTypeIds::Uint32> {};
-        // Order this subscriber's stream begins at. Retained so a future
-        // backfill can hand off to the stream at a defined point. Columns
-        // are added now because adding them later means a schema migration
-        // across every SchemeShard tablet in the cluster.
+        // Order this subscriber's stream begins at.
         struct StartOrder :     Column<5, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<SubscriberId>;
         using TColumns = TableColumns<SubscriberId, LastAckedOrder, LastActivityAt, State, StartOrder>;
     };
 
-    // Maps an in-flight operation's user-level transactions to the outbox
-    // orders reserved for them at propose time, so completion can find the
-    // rows it must finalise even across a reboot.
-    //
-    // The record itself lives in SchemeChangeRecords from propose onward; only
-    // this back-pointer is needed to relocate it. Boot must never scan the
-    // outbox to rebuild the mapping -- that would couple startup cost to
-    // retained log size -- hence a separate, tiny table keyed the same way the
-    // operation is.
-    //
-    // Path is duplicated from the record row on purpose. Finalisation happens
-    // inside the operation's own local-DB transaction, which ran
-    // txc.DB.NoMoreReadsForTx() at its top -- after that both reads and
-    // precharges hard-abort the tablet -- so completion must already have the
-    // path in memory; this table is range-scanned at boot (bounded by in-flight
-    // operations, not by retained log size) to put it back there.
-    //
-    // Column 3 is burned: it held the serialized TModifyScheme back when the
-    // request body itself was the durable artefact.
+    // Maps an in-flight operation to the outbox orders reserved at propose.
+    // Path is duplicated here because finalisation runs after NoMoreReadsForTx().
+    // Column 3 is burned: it held the serialized TModifyScheme.
     struct SchemeChangePendingRecords : Table<144> {
         struct TxId :      Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
         struct UserTxIdx : Column<2, NScheme::NTypeIds::Uint32> {};

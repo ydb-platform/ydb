@@ -4378,9 +4378,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         }
 
         // Restore the outbox rows each in-flight operation reserved at propose,
-        // so completion can still finalise them after a restart. Bounded by the
-        // number of in-flight operations; the outbox itself is never scanned at
-        // boot.
+        // so completion can still finalise them after a restart.
         {
             auto rowset = db.Table<Schema::SchemeChangePendingRecords>().Range().Select();
             if (!rowset.IsReady()) return false;

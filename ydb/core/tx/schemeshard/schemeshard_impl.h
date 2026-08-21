@@ -284,31 +284,17 @@ public:
     THashMap<TPathId, TPathElement::TPtr> PathsById;
     TLocalPathId NextLocalPathId = 0;
     ui64 NextSchemeChangeOrder = 0;
-    // Highest outbox order known to be physically gone. Deleted rows stay as
-    // tombstones until compaction, so a cleanup that restarts at order 1 walks
-    // the whole dead prefix again on every batch -- quadratic while draining a
-    // backlog. Reloaded at TTxInit.
+    // Highest outbox order known deleted. Cleanup resumes above it.
     ui64 SchemeChangeFloorOrder = 0;
     ui64 MaxSchemeChangeRecords = 100000;
-    // A subscriber idle for longer than this stops holding the retention
-    // floor down. Prevents a dead subscriber from wedging DDL forever.
+    // Diagnostic only. A stale subscriber still holds the retention floor.
     TDuration SchemeChangeSubscriberStaleTtl = TDuration::Days(30);
-    // Bounds the subscribers table. Each subscriber pins retention and costs
-    // an O(|Subscribers|) pass in GetMinSubscriberOrder on the DDL admission
-    // path, so the count must not be caller-controlled without limit.
     ui64 MaxSchemeChangeSubscribers = 100;
-    // Longest accepted SubscriberId. Ids are a persisted primary key.
+    // SubscriberId is a persisted primary key.
     static constexpr size_t MaxSchemeChangeSubscriberIdLength = 256;
-    // Monotonic ceiling of coordinator plan steps ever assigned to an op.
-    // Used to seed ClosedThroughPlanStep in Fetch when TxInFlight is empty;
-    // persisted as SysParam_LastAssignedPlanStep so it survives reboot.
     ui64 LastAssignedPlanStep = 0;
-    // Refcount of in-flight operations per assigned PlanStep, maintained
-    // incrementally so a subscriber Fetch costs O(1) instead of scanning all of
-    // TxInFlight. Membership is "PlanStep assigned, until RemoveTx" -- do NOT
-    // filter on TTxState::State: a tx in Done that has not been erased yet must
-    // keep holding its entry, or the bound can close over a record that has not
-    // been emitted.
+    // Membership runs from PlanStep assignment until RemoveTx. Do not filter on
+    // TTxState::State: a tx in Done that is not yet erased must keep its entry.
     TMap<ui64, ui32> InFlightByPlanStep;
 
     void AddInFlightPlanStep(ui64 step) {
@@ -328,13 +314,8 @@ public:
             InFlightByPlanStep.erase(it);
         }
     }
-    // Highest PlanStep for which no operation is still in flight, i.e. the
-    // point through which the record stream is complete. A consumer may close
-    // window (S_prev, S] once this is >= S.
-    //
-    // Inclusive on purpose: with nothing in flight it reports the ceiling, so a
-    // quiesced cluster can close its newest window. Reporting the min-in-flight
-    // minus one would leave the last DDL before quiesce permanently unclosable.
+    // Highest PlanStep through which the record stream is complete. Inclusive:
+    // a consumer may close window (S_prev, S] once this is >= S.
     ui64 GetClosedThroughPlanStep() const {
         if (InFlightByPlanStep.empty()) {
             return LastAssignedPlanStep;
@@ -342,31 +323,17 @@ public:
         const ui64 minInFlight = InFlightByPlanStep.begin()->first;
         return minInFlight ? minInFlight - 1 : 0;
     }
-    // Per-tx row cap for DeleteAckedSchemeChangeRecords. Keeps a single
-    // cleanup tx's redo log bounded; leftover work spills into a follow-up
-    // TTxSchemeChangeRecordsCleanup triggered from Complete().
+    // Row cap per cleanup tx. Remaining work continues in a follow-up tx.
     ui64 SchemeChangeCleanupBatchSize = 1000;
-    // Delay between bounded cleanup tx batches when draining a backlog.
-    // Yields the executor so other SS work (DDL, fetches) can interleave
-    // rather than wait for a long chain of back-to-back cleanup txs.
+    // Yield between cleanup batches so DDL and fetches can interleave.
     TDuration SchemeChangeCleanupInterval = TDuration::MilliSeconds(10);
 
-    // Cap on Orders per FetchSchemeChangeRecordBodies request. Bodies are read
-    // by point lookup, so cost is |Orders| rather than the span they cover --
-    // but |Orders| is caller-supplied, so it needs its own bound. Matches the
-    // metadata fetch's maxCount ceiling.
+    // Cap on Orders per FetchSchemeChangeRecordBodies request.
     ui64 MaxSchemeChangeBodiesPerRequest = 1000;
 
-    // Test-only: counts PersistUpdateNextSchemeChangeOrder calls.
-    // Used by unit tests to verify that a multi-part DDL persists the
-    // NextSchemeChangeOrder sysparam once per batch, not once per record.
+    // Test-only.
     mutable ui64 NextSchemeChangeOrderPersistCount = 0;
-    // Test-only: bytes the outbox adds to the DDL redo log. Phase 5's NFR2
-    // budget is asserted against this; without it "blazingly fast" is an
-    // aspiration rather than a gate.
     mutable ui64 TestSchemeChangeRedoBytesAccum = 0;
-    // Test-only: counts TTxSchemeChangeRecordsCleanup tx Completes.
-    // Used by unit tests to verify the bounded cleanup continuation chain.
     ui64 SchemeChangeCleanupTxCount = 0;
 
     struct TSubscriberInfo {
@@ -382,45 +349,20 @@ public:
     };
     THashMap<TString, TSubscriberInfo> Subscribers;
 
-    // Retention floor: the lowest cursor still worth retaining records for.
-    //
-    // Subscribers idle beyond SchemeChangeSubscriberStaleTtl are EXCLUDED.
-    // This is deliberate and is the fix for a dead subscriber wedging DDL --
-    // but note it also raises the delete bound handed to
-    // DeleteAckedSchemeChangeRecords, so records a stale subscriber never saw
-    // are destroyed. That must always be paired with marking it STATE_LOST so
-    // the loss is reported, never silent.
-    //
-    // `now` must come from ctx.Now(), not TInstant::Now(): under
-    // TTestActorRuntime the actor-system clock is virtual and starts at 0,
-    // while the wall clock does not. Mixing them makes every age saturate to
-    // zero (TInstant subtraction saturates), so nothing is ever stale.
-    // Highest order a subscriber cursor may sit at: orders above it are
-    // reserved by in-flight operations and not yet deliverable. Defined in
-    // schemeshard_impl.cpp.
+    // Highest deliverable order. Orders above it are reserved by in-flight
+    // operations.
     ui64 GetVisibleSchemeChangeTail() const;
 
-    // Refresh the outbox gauges. Cheap (O(|Subscribers|), capped at 100), so it
-    // is called from every path that can move the depth or a subscriber's state
-    // rather than being scheduled. Depth is the one operators alert on: DDL is
-    // rejected at MaxSchemeChangeRecords and only an admin can release it.
     void UpdateSchemeChangeGauges() const;
 
-    // Retention floor. Where nothing holds it down it rises to the visible
-    // tail rather than the reserved one -- cleanup deletes everything at or
-    // below this, and a reserved row must outlive that sweep or the operation
-    // still running would have nothing left to finalise.
+    // Retention floor: cleanup deletes everything at or below this. Returns the
+    // visible tail when there are no subscribers.
     ui64 GetMinSubscriberOrder(TInstant) const {
         if (Subscribers.empty()) {
             return GetVisibleSchemeChangeTail();
         }
-        // Every registered subscriber holds the floor, including a stale one.
-        //
-        // Staleness used to exclude a subscriber here, which silently handed its
-        // unread records to the cleanup sweep. Under the no-silent-loss policy
-        // nothing is discarded without an explicit admin force-advance: a dead
-        // consumer wedges DDL instead of losing data quietly. Staleness is now
-        // only a diagnostic (see the Stale gauge).
+        // Stale subscribers still hold the floor. Records are dropped only by
+        // an admin force-advance.
         ui64 m = Max<ui64>();
         for (const auto& [_, info] : Subscribers) {
             m = Min(m, info.LastAckedOrder);
@@ -1084,12 +1026,8 @@ public:
     struct TSchemeChangeRecordData {
         ui64 Order = 0;
         TTxId TxId = InvalidTxId;
-        // The user-level NKikimrSchemeOp::EOperationType, i.e. what the user
-        // actually asked for. Deliberately NOT TTxState::ETxType: ConvertToTxType
-        // collapses 17 distinct operations onto TxInvalid, so a TxType-derived
-        // kind cannot identify (for example) an incremental-backup sync point.
-        // Held as ui32 because EOperationType has no zero enumerator (it starts
-        // at ESchemeOpMkDir = 1), so 0 is an unambiguous "unset".
+        // User-level NKikimrSchemeOp::EOperationType, not TTxState::ETxType:
+        // ConvertToTxType collapses 17 operations onto TxInvalid. 0 means unset.
         ui32 OpType = 0;
         TPathId PathId;
         TString Path;
@@ -1125,28 +1063,16 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxForceAdvanceSubscriberFromMonitoring(
         const TString& subscriberId, TActorId replyTo);
     void Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx);
-    // Deletes records with (oldMinOrder, newMinOrder] up to `limit` rows per tx.
-    // Sets `hasMore = true` if the cap was hit with more rows still matching —
-    // the caller should schedule a TTxSchemeChangeRecordsCleanup continuation
-    // from Complete() to drain the rest in bounded follow-up txs.
-    // Returns false if the rowset is not ready (tx will be retried).
+    // Deletes (oldMinOrder, newMinOrder] up to `limit` rows per tx. Sets
+    // hasMore if the cap was hit; returns false if the rowset is not ready.
     bool DeleteAckedSchemeChangeRecords(NIceDb::TNiceDb& db, ui64 oldMinOrder, ui64 newMinOrder,
         ui64 limit, bool& hasMore);
-    // Schedules a follow-up TTxSchemeChangeRecordsCleanup after
-    // SchemeChangeCleanupInterval. Used by Ack / Unregister / ForceAdvance /
-    // Cleanup Complete() to drain a backlog across multiple bounded txs
-    // without monopolising the executor. Namespace-level tx structs call
-    // this in lieu of the protected Execute().
+    // Schedules a follow-up cleanup tx after SchemeChangeCleanupInterval.
     void EnqueueSchemeChangeRecordsCleanup(const TActorContext& ctx);
     bool CheckSchemeChangeRecordsOverflow(TString& errStr, TInstant now) const;
-    // D7/Option A: the outbox is scoped to a single domain, which is what keeps
-    // the borrowed LastAssignedPlanStep (D6) a sound lower bound -- a global max
-    // taken across two coordinator timelines would let a Bucketed record borrow
-    // a step past its own domain's next sync point.
+    // The outbox is scoped to a single domain, which keeps the borrowed
+    // LastAssignedPlanStep a sound lower bound.
     ui32 CountTransactionSupportingDomains() const;
-    // Cap relief: advance whichever subscribers are pinning the retention
-    // floor to the tail and mark them Lost, so the log can be swept. Called
-    // from the record-allocation site when appending would exceed the cap.
     void PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const;
     void PersistParentDomainEffectiveACL(NIceDb::TNiceDb& db, const TString& owner, const TString& effectiveACL, ui64 effectiveACLVersion) const;
     void PersistShardsToDelete(NIceDb::TNiceDb& db, const THashSet<TShardIdx>& shardsIdxs);

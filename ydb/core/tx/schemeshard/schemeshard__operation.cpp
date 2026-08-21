@@ -336,19 +336,9 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
-    // All parts accepted. Emit the outbox record now, half-filled: what was
-    // asked for is known here, and persisting it at propose is what makes it
-    // survive a reboot anywhere between now and completion. Completion fills in
-    // identity and coordinator position; until then CompletedAtUs stays 0 and
-    // no subscriber can see the row.
-    //
-    // This must stay after every ProcessOperationParts call: writing via NIceDb
-    // flips DirectAccessGranted, and a later part proposing after that trips
+    // Must stay after every ProcessOperationParts call: writing via NIceDb sets
+    // DirectAccessGranted, and a later part proposing after that fails
     // Y_VERIFY_S(context.IsUndoChangesSafe()) and aborts the tablet.
-    //
-    // Gated on there being a subscriber: with none, nothing consumes the outbox
-    // and this would be a per-DDL local-DB write on every cluster, subscribed
-    // or not.
     if (!Subscribers.empty()) {
         NIceDb::TNiceDb db(context.GetDB());
         operation->SchemeChangeOrderBase = NextSchemeChangeOrder;
@@ -379,11 +369,8 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
 
     context.MemChanges.UnDo(context.SS);
 
-    // Rewind the outbox counter. A propose rejected after ignition (the redo
-    // size limit is the live case) rolls the local DB back, taking the
-    // reserved record rows and the persisted counter with it -- but not the
-    // in-memory counter. Left alone, the next propose would hand out an order
-    // that is already persisted against a live record and overwrite it.
+    // Rewind the in-memory counter. The local-DB rollback reverts the reserved
+    // rows and the persisted counter, but not this one.
     if (operation->SchemeChangeOrdersReserved) {
         NextSchemeChangeOrder = operation->SchemeChangeOrderBase;
     }

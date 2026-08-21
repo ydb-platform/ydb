@@ -1339,7 +1339,19 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
 
   - 
 
+  - 
+
+  - 
+
+  - 
+
     {% endcut %}
+
+  - 
+
+  - 
+
+  - 
 
   - 
 
@@ -1684,7 +1696,19 @@ The method returns a list of dictionaries with fields `id`, `document`, and `sco
 
   - 
 
+  - 
+
+  - 
+
+  - 
+
     {% endcut %}
+
+  - 
+
+  - 
+
+  - 
 
   - 
 
@@ -1921,7 +1945,19 @@ Combine all the methods described above into one example that includes the follo
 
   - 
 
+  - 
+
+  - 
+
+  - 
+
     {% endcut %}
+
+  - 
+
+  - 
+
+  - 
 
   - 
 

@@ -166,7 +166,6 @@ message IssueLog {
 
 
 ### Response field descriptions {#fields-Описание}
-
 | Field | Description |
 | :--- | :--- |
 | `self_check_result` | enum field which contains the [database check result](#selfcheck-result) |
@@ -208,7 +207,7 @@ Status (severity) of the current issue:
 
 | Field | Description |
 | :--- | :--- |
-| `GREY` | Unable to determine the status (an issue with the self-diagnostic subsystem). |
+| `GREY` | Degradation of at least one of the database systems was detected, but the database is still functioning (for example, allowable disk loss). |
 | `GREEN` | No issues detected. |
 | `BLUE` | Temporary minor degradation that does not affect database availability; the system is expected to return to `GREEN`. |
 | `YELLOW` | A minor issue with no risks to availability. It is recommended to continue monitoring the issue. |
@@ -285,52 +284,52 @@ Status (severity) of the current issue:
 
 #### VDisk is not available
 
-**Actions:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Actions when triggered:** In [YDB Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### VDisk is being initialized
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Actions when triggered:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### Replication in progress
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
+**Actions when triggered:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and apply the `Groups` and `Degraded` filters. The group `id` can be found through the related `STORAGE_GROUP` issue. Hover over the relevant VDisk to identify the node with the problem and check the availability of nodes and disks on those nodes.
 
 #### VDisk have space issue
 
-**Description:** These issues depend solely on the underlying `PDISK` layer.
+**Description:** These issues depend on the underlying `PDISK` layer.
 
 ### PDISK
 
 #### Unknown PDisk state
 
-**Description:** `HealthCheck` the system can't parse pdisk state.
+**Description:** The system `HealthCheck` can't parse the pdisk state.
 
 #### PDisk state is
 
 **Description:** Reports the state of a physical disk.
-**Actions on trigger:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters. Using the known `id` of the node and pDisk, check the availability of nodes and disks on the nodes.
+**Actions when triggered:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters. Using the known `id` of the node and pDisk, check the availability of nodes and disks on the nodes.
 
 #### Available size is less than 12%, Available size is less than 9%, Available size is less than 6%
 
 **Description:** The physical disk is running out of free space.
-**Actions on trigger:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set the `Nodes` and `Out of Space` filters, and view the available space using the known `id` of the node and PDisk.
+**Actions when triggered:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set the `Nodes` and `Out of Space` filters, and view the available space using the known `id` of the node and PDisk.
 
 #### PDisk is not available
 
 **Description:** The physical disk is missing.
-**Actions on trigger:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and check the availability of nodes and disks on the nodes using the known `id` of the node and PDisk.
+**Actions when triggered:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set the `Nodes` and `Degraded` filters, and check the availability of nodes and disks on the nodes using the known `id` of the node and PDisk.
 
 ### STORAGE_NODE
 
 #### Storage node is not available
 
-**Description:** The storage node is missing. This information helps in diagnosing the upper layer `PDISK`.
+**Description:** The storage node is missing. This information is helpful for diagnosing the upper layer `PDISK`.
 
 ### COMPUTE
 
 #### There are no compute nodes
 
-**Description:** The database has no nodes available to start the tablets. Unable to determine `COMPUTE_NODE` issues below.
+**Description:** The database has no nodes available to start the tablets. Unable to determine issues with `COMPUTE_NODE` below.
 
 #### Compute has issues with system tablets
 
@@ -372,6 +371,7 @@ Status (severity) of the current issue:
 
 #### Tablets/Followers are dead
 
+**Description:** Tablets are not started (or cannot be started).
 **Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
 
 ### LOAD_AVERAGE

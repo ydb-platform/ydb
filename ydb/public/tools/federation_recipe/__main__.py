@@ -60,7 +60,7 @@ class FederationRecipe(object):
             additional_log_configs={
                 'PQ_MIRRORER': LogLevels.TRACE,
             },
-            extra_feature_flags=["enable_topic_retention_delete_last_blob"]
+            extra_feature_flags=["enable_topic_retention_delete_last_blob", "enable_insecure_mirror_factory"]
         )
         configurator.yaml_config.setdefault('pqconfig', {})
         configurator.yaml_config['pqconfig']['pqdiscovery_config'] = {

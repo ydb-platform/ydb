@@ -20,10 +20,4 @@ INCLUDE(${ARCADIA_ROOT}/ydb/public/tools/federation_recipe/recipe.inc)
 
 SIZE(MEDIUM)
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:24 cpu:4)
-ELSE()
-    REQUIREMENTS(ram:16 cpu:2)
-ENDIF()
-
 END()

@@ -768,7 +768,7 @@ void TBlocksDirtyMap::StatePersisted(ui32 persistGeneration)
     PersistedGeneration = persistGeneration;
 }
 
-ui64 TBlocksDirtyMap::GetCurrentGeneration() const
+ui32 TBlocksDirtyMap::GetCurrentGeneration() const
 {
     return BehindAheadGeneration;
 }

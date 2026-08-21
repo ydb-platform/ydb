@@ -890,8 +890,7 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
                 auto& dirtyMap = AccessBlocksDirtyMap(*vchunk);
                 MakeDirtyMapNeedPersist(dirtyMap);
                 UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap.NeedPersist());
-                expectedGeneration =
-                    static_cast<ui32>(dirtyMap.GetCurrentGeneration());
+                expectedGeneration = dirtyMap.GetCurrentGeneration();
 
                 InvokePersistDirtyMap(*vchunk);
                 return true;

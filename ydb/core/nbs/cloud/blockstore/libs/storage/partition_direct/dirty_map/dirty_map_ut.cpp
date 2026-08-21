@@ -2442,7 +2442,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Initially no changes.
         UNIT_ASSERT_VALUES_EQUAL(false, dirtyMap->NeedPersist());
-        UNIT_ASSERT_VALUES_EQUAL(0u, dirtyMap->GetCurrentGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(0, dirtyMap->GetCurrentGeneration());
 
         const THostMask requested = MakeHostMask(true, true, true, true, false);
         dirtyMap->RegisterInflightWrite(100, TBlockRange64::WithLength(10, 10));
@@ -2457,12 +2457,15 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         FlushAll(flushHint, *dirtyMap);
 
-        UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap->NeedPersist());
-        UNIT_ASSERT(dirtyMap->GetCurrentGeneration() > 0);
+        // Can't erase not persisted red blocks.
+        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        UNIT_ASSERT_VALUES_EQUAL("", eraseHints.DebugPrint());
 
         // GetStateForPersist captures current generation.
         // Saves one entry per host slot (DirectBlockGroupHostCount = 5).
-        const ui32 gen = static_cast<ui32>(dirtyMap->GetCurrentGeneration());
+        UNIT_ASSERT_VALUES_EQUAL(true, dirtyMap->NeedPersist());
+        const ui32 gen = dirtyMap->GetCurrentGeneration();
+        UNIT_ASSERT(gen > 0);
         auto state = dirtyMap->GetStateForPersist();
         UNIT_ASSERT_VALUES_EQUAL(gen, state.GetStateGeneration());
         UNIT_ASSERT_VALUES_EQUAL(5, state.DDiskStatesSize());
@@ -2475,7 +2478,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         UNIT_ASSERT_VALUES_EQUAL(
             "  H1: [10..19]\n",
             dirtyMap->DebugPrintBehind());
-        auto eraseHints = dirtyMap->MakeEraseHint(1);
+        eraseHints = dirtyMap->MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
             "H0:0:100;"
             "H2:0:100;"

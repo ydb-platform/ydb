@@ -158,7 +158,7 @@ public:
     [[nodiscard]] bool NeedPersist() const;
     [[nodiscard]] TDirtyMapStateProto GetStateForPersist() const;
     void StatePersisted(ui32 persistGeneration);
-    [[nodiscard]] ui64 GetCurrentGeneration() const;
+    [[nodiscard]] ui32 GetCurrentGeneration() const;
 
     // Debug purposes
     [[nodiscard]] TString DebugPrintPBuffers();

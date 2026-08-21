@@ -1,22 +1,8 @@
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/auth.h>
-
 namespace NKikimr::NSchemeShard {
 
 namespace {
-
-// These events arrive over a tablet pipe, which carries no caller identity, so
-// the token is supplied in the request.
-template <class TResultRecord>
-bool CheckSubscriberAdmin(const TString& userToken, TResultRecord& result) {
-    if (IsAdministrator(AppData(), userToken)) {
-        return true;
-    }
-    result.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_ACCESS_DENIED);
-    result.SetReason("Scheme change subscriber administration requires cluster admin rights");
-    return false;
-}
 
 // An empty SubscriberId is dangerous: two consumers that both leave it unset
 // silently share one cursor, so one's ack deletes records the other never saw.
@@ -54,8 +40,7 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
         const auto& record = Request->Get()->Record;
         const TString& subscriberId = record.GetSubscriberId();
 
-        if (!CheckSubscriberAdmin(record.GetUserToken(), Result->Record)
-            || !CheckSubscriberId(subscriberId, Result->Record)) {
+        if (!CheckSubscriberId(subscriberId, Result->Record)) {
             return true;
         }
 
@@ -108,7 +93,6 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
         auto state = NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_READY;
 
         if (record.HasStartOrder()) {
-            // TODO: gate this branch on admin auth.
             const ui64 requested = record.GetStartOrder();
             if (requested > tail) {
                 Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);
@@ -409,10 +393,6 @@ struct TTxUnregisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TS
         HasMoreToCleanup = false;
         const auto& record = Request->Get()->Record;
         const TString& subscriberId = record.GetSubscriberId();
-
-        if (!CheckSubscriberAdmin(record.GetUserToken(), Result->Record)) {
-            return true;
-        }
 
         NIceDb::TNiceDb db(txc.DB);
 

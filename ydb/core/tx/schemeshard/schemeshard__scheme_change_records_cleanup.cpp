@@ -1,7 +1,5 @@
 #include "schemeshard_impl.h"
 
-#include <ydb/core/base/auth.h>
-
 namespace NKikimr::NSchemeShard {
 
 struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
@@ -35,18 +33,13 @@ struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionB
 
 struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
     TString SubscriberId;
-    TString UserToken;
     TActorId ReplyTo;
-    // Not settable over a tablet pipe: only the in-process monitoring path
-    // can set this false.
-    bool RequireAdmin = true;
     THolder<TEvSchemeShard::TEvForceAdvanceSubscriberResult> Result;
     bool HasMoreToCleanup = false;
 
     TTxForceAdvanceSubscriber(TSchemeShard* self, TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev)
         : TTransactionBase(self)
         , SubscriberId(ev->Get()->Record.GetSubscriberId())
-        , UserToken(ev->Get()->Record.GetUserToken())
         , ReplyTo(ev->Sender)
         , Result(MakeHolder<TEvSchemeShard::TEvForceAdvanceSubscriberResult>())
     {}
@@ -55,7 +48,6 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
         : TTransactionBase(self)
         , SubscriberId(subscriberId)
         , ReplyTo(replyTo)
-        , RequireAdmin(false)
         , Result(MakeHolder<TEvSchemeShard::TEvForceAdvanceSubscriberResult>())
     {}
 
@@ -64,12 +56,6 @@ struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         HasMoreToCleanup = false;
         const TString& subscriberId = SubscriberId;
-
-        if (RequireAdmin && !IsAdministrator(AppData(), UserToken)) {
-            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_ACCESS_DENIED);
-            Result->Record.SetReason("Force-advancing a scheme change subscriber requires cluster admin rights");
-            return true;
-        }
 
         NIceDb::TNiceDb db(txc.DB);
 

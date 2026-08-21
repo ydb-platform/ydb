@@ -1127,9 +1127,6 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "churn at the cap must not mark the subscriber Lost");
     }
 
-    // These events arrive over a tablet pipe, which carries no caller identity,
-    // so the protocol carries a UserToken field for this to be enforced.
-
     Y_UNIT_TEST(EmptySubscriberIdRejected) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -1137,7 +1134,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         // Two consumers that both leave SubscriberId unset would silently
         // share one cursor.
         TAutoPtr<IEventHandle> handle;
-        RegisterSubscriberWithTokenExpect(runtime, "", "",
+        RegisterSubscriberExpect(runtime, "",
             NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST, handle);
     }
 
@@ -1146,7 +1143,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TTestEnv env(runtime);
 
         TAutoPtr<IEventHandle> handle;
-        RegisterSubscriberWithTokenExpect(runtime, TString(300, 'x'), "",
+        RegisterSubscriberExpect(runtime, TString(300, 'x'),
             NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST, handle);
     }
 
@@ -1168,42 +1165,13 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
 
         // Each subscriber pins retention and costs a pass on the DDL admission
         // path, so the count must be bounded.
-        RegisterSubscriberWithTokenExpect(runtime, "sub-3", "",
+        RegisterSubscriberExpect(runtime, "sub-3",
             NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST, h3);
 
         // Re-registering an existing id must still succeed: registration is
         // idempotent.
         TAutoPtr<IEventHandle> h4;
         RegisterSubscriber(runtime, "sub-1", h4);
-    }
-
-    Y_UNIT_TEST(UnauthorizedRegisterRejected) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-
-        // Without this the test proves nothing: an empty allowlist admits any token.
-        runtime.GetAppData().AdministrationAllowedSIDs.push_back("thou-shalt-not-pass");
-
-        TAutoPtr<IEventHandle> handle;
-        RegisterSubscriberWithTokenExpect(runtime, "intruder:sub", "",
-            NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_ACCESS_DENIED, handle);
-    }
-
-    Y_UNIT_TEST(UnauthorizedForceAdvanceRejected) {
-        TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
-
-        TAutoPtr<IEventHandle> regHandle;
-        RegisterSubscriber(runtime, "victim:sub", regHandle);
-
-        // Deny only after a legitimate registration, so the rejection below is
-        // attributable to the admin gate, not setup failing.
-        runtime.GetAppData().AdministrationAllowedSIDs.push_back("thou-shalt-not-pass");
-
-        // Force-advance discards unread records, so it is operator-only.
-        TAutoPtr<IEventHandle> advHandle;
-        ForceAdvanceSubscriberExpect(runtime, "victim:sub",
-            NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_ACCESS_DENIED, advHandle);
     }
 
     Y_UNIT_TEST(ForceAdvanceReachableFromMonitoring) {

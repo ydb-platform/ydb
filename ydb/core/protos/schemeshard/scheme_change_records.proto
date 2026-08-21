@@ -17,8 +17,6 @@ message TSchemeChangeRecordsStatus {
         STATUS_NOT_REGISTERED = 2;
         STATUS_INVALID_REQUEST = 3;
         STATUS_INTERNAL_ERROR = 4;
-        // Register / unregister / force-advance are admin-only.
-        STATUS_ACCESS_DENIED = 5;
     }
 }
 
@@ -53,13 +51,10 @@ message TSchemeChangePosition {
 // Register a subscriber to the scheme change records log. Idempotent.
 message TEvRegisterSubscriber {
     string SubscriberId = 1;
-    // Absent => start at the tail; the only non-privileged form.
-    // Present => admin-only. Clamped up to the retention floor if below it
+    // Absent => start at the tail.
+    // Present => clamped up to the retention floor if below it
     // (State=STATE_LOST + SkippedEntries); rejected if beyond the tail.
     optional uint64 StartOrder = 2;
-    // Serialized NACLib::TUserToken; these events arrive over a tablet pipe,
-    // which carries no identity. An EMPTY admin allowlist admits any token.
-    bytes UserToken = 3;
 }
 
 // CurrentOrder is the subscriber's cursor after registration.
@@ -135,11 +130,10 @@ message TEvAckSchemeChangeRecordsResult {
     uint64 LastAckedOrder = 3;
 }
 
-// Admin: advance a subscriber's cursor to the tail regardless of
-// consumption. Used to unblock overflow caused by a dead subscriber.
+// Advance a subscriber's cursor to the tail regardless of consumption. Used
+// to unblock overflow caused by a dead subscriber.
 message TEvForceAdvanceSubscriber {
     string SubscriberId = 1;
-    bytes UserToken = 2;
 }
 
 // Response to force-advance.
@@ -152,7 +146,6 @@ message TEvForceAdvanceSubscriberResult {
 // Remove a subscriber.
 message TEvUnregisterSubscriber {
     string SubscriberId = 1;
-    bytes UserToken = 2;
 }
 
 // Response to unregister.

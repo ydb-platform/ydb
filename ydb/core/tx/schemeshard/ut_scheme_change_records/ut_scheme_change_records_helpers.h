@@ -30,6 +30,23 @@ inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriber(
     return result;
 }
 
+// Register with the default start position, asserting a specific status.
+inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriberExpect(
+    TTestActorRuntime& runtime, const TString& subscriberId,
+    NKikimrSchemeShard::TSchemeChangeRecordsStatus::EStatus expected,
+    TAutoPtr<IEventHandle>& handle)
+{
+    auto sender = runtime.AllocateEdgeActor();
+    auto req = MakeHolder<TEvSchemeShard::TEvRegisterSubscriber>();
+    req->Record.SetSubscriberId(subscriberId);
+    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
+    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvRegisterSubscriberResult>(handle);
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C((ui32)result->Record.GetStatus(), (ui32)expected,
+        "RegisterSubscriber status mismatch: " << result->Record.GetReason());
+    return result;
+}
+
 // Register at an explicit start position. `startOrder` is an exclusive cursor
 // (0 means "everything retained"); values below the retention floor are
 // clamped up and reported as STATE_LOST.
@@ -56,25 +73,6 @@ inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriberAt(
 {
     return RegisterSubscriberAtExpect(runtime, subscriberId, startOrder,
         NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS, handle);
-}
-
-// Register with an explicit caller token. An empty AdministrationAllowedSIDs
-// admits any token, so a rejection test must populate that list first.
-inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriberWithTokenExpect(
-    TTestActorRuntime& runtime, const TString& subscriberId, const TString& userToken,
-    NKikimrSchemeShard::TSchemeChangeRecordsStatus::EStatus expected,
-    TAutoPtr<IEventHandle>& handle)
-{
-    auto sender = runtime.AllocateEdgeActor();
-    auto req = MakeHolder<TEvSchemeShard::TEvRegisterSubscriber>();
-    req->Record.SetSubscriberId(subscriberId);
-    req->Record.SetUserToken(userToken);
-    ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender, req.Release());
-    auto result = runtime.GrabEdgeEvent<TEvSchemeShard::TEvRegisterSubscriberResult>(handle);
-    UNIT_ASSERT(result);
-    UNIT_ASSERT_VALUES_EQUAL_C((ui32)result->Record.GetStatus(), (ui32)expected,
-        "RegisterSubscriberWithToken status mismatch: " << result->Record.GetReason());
-    return result;
 }
 
 inline TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecordsExpect(

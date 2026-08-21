@@ -488,7 +488,7 @@ TICDirectStorageTransport::WriteToDDisk(
     const auto& sglist = guard.Get();
     TRope rope = TRope::Uninitialized(SgListGetSize(sglist));
     SgListCopy(sglist, CreateSgList(rope));
-    request->AddPayload(std::move(rope));
+    request->AddPayloadThenChecksum(std::move(rope));
 
     auto promise = NewPromise<TEvWriteResult>();
     auto future = promise.GetFuture();

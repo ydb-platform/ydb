@@ -403,7 +403,7 @@ public:
             auto ev = std::make_unique<NDDisk::TEvWritePersistentBuffer>(Credentials,
                 NDDisk::TBlockSelector(1, 0, write.Size),
                 requestIdx, NDDisk::TWriteInstruction(0));
-            ev->AddPayload(TRope(write.Data));
+            ev->AddPayloadThenChecksum(TRope(write.Data));
             SendRequest(ctx, std::move(ev), requestIdx);
             ++Write_RequestsSent;
             ++InFlight;

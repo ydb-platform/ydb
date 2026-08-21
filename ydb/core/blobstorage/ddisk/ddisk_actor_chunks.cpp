@@ -146,18 +146,23 @@ namespace NKikimr::NDDisk {
                     queuedChunkAllocation = true;
                 },
                 [&](TIntegrityManager::TWriteIo& io) {
-                    // Integrity writes are rare (allocation-time only), so the op is heap-allocated
-                    // rather than pooled.
-                    auto integrityOp = std::make_unique<TIntegrityIoOp>(*this);
-                    integrityOp->Reinit();
-                    integrityOp->SetIoId(io.IoId);
+                    if (io.Kind == TIntegrityManager::EWriteIoKind::Pair) {
+                        Counters.Checksums.IntegrityPairWrites->Inc();
+                    }
+                    std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TIntegrityIoOp>();
+                    static_cast<TIntegrityIoOp*>(op.get())->SetIoId(io.IoId);
 
                     const ui64 diskOffset = DiskFormat->Offset(io.ChunkIdx, 0, io.OffsetInBytes);
-                    const TChunkIdx chunkIdx = io.ChunkIdx;
-                    const ui32 offsetInBytes = io.OffsetInBytes;
-                    integrityOp->PrepareWrite(TRope(std::move(io.Data)), diskOffset, chunkIdx, offsetInBytes);
+                    op->PrepareWrite(TRope(std::move(io.Data)), diskOffset, io.ChunkIdx, io.OffsetInBytes);
+                    DirectUringOp(op);
+                },
+                [&](TIntegrityManager::TReadIo& io) {
+                    Counters.Checksums.IntegrityPairReads->Inc();
+                    std::unique_ptr<TDirectIoOpBase> op = AllocateOp<TIntegrityIoOp>();
+                    static_cast<TIntegrityIoOp*>(op.get())->SetIoId(io.IoId);
 
-                    std::unique_ptr<TDirectIoOpBase> op = std::move(integrityOp);
+                    const ui64 diskOffset = DiskFormat->Offset(io.ChunkIdx, 0, io.OffsetInBytes);
+                    op->PrepareRead(io.Size, diskOffset, io.ChunkIdx, io.OffsetInBytes);
                     DirectUringOp(op);
                 },
             }, action);
@@ -165,8 +170,54 @@ namespace NKikimr::NDDisk {
         return queuedChunkAllocation;
     }
 
+    void TDDiskActor::ProcessIntegrityCompletions() {
+        for (auto& result : IntegrityManager->TakeCompletedOperations()) {
+            if (result.Status == TIntegrityManager::EOperationStatus::Corrupted) {
+                Counters.Checksums.IntegrityCorruption->Inc();
+                if (result.LostWriteDetected) {
+                    Counters.Checksums.IntegrityLostWriteDetected->Inc();
+                }
+            }
+            if (result.Kind == TIntegrityManager::EOperationKind::Write) {
+                const auto writeIt = PendingClientWrites.find(result.OperationId);
+                if (writeIt != PendingClientWrites.end()) {
+                    writeIt->second.IntegrityCompleted = true;
+                    writeIt->second.IntegrityStatus = result.Status;
+                    writeIt->second.IntegrityError = std::move(result.ErrorReason);
+                    MaybeFinishClientWrite(result.OperationId);
+                    continue;
+                }
+
+                const auto syncIt = PendingSyncSegments.find(result.OperationId);
+                if (syncIt != PendingSyncSegments.end()) {
+                    syncIt->second.IntegrityCompleted = true;
+                    syncIt->second.IntegrityStatus = result.Status;
+                    syncIt->second.IntegrityError = std::move(result.ErrorReason);
+                    MaybeFinishSyncSegment(result.OperationId);
+                }
+                continue;
+            }
+
+            const auto readIt = PendingChecksumReads.find(result.OperationId);
+            if (readIt == PendingChecksumReads.end()) {
+                continue;
+            }
+            std::unique_ptr<IEventHandle> readEvent = std::move(readIt->second.Event);
+            PendingChecksumReads.erase(readIt);
+            if (result.Status == TIntegrityManager::EOperationStatus::Corrupted) {
+                const TBlockSelector selector(readEvent->Get<TEvRead>()->Record.GetSelector());
+                Counters.Interface.Read.Reply(false, selector.Size);
+                SendReply(*readEvent, std::make_unique<TEvReadResult>(
+                    NKikimrBlobStorage::NDDisk::TReplyStatus::CORRUPTED, result.ErrorReason));
+            } else {
+                StartDDiskDataRead(std::move(readEvent), std::move(result.Checksums));
+            }
+        }
+    }
+
     void TDDiskActor::DrainIntegrityManager(bool kickReserve) {
         const bool queuedChunkAllocation = ProcessIntegrityActions();
+        ProcessIntegrityCompletions();
         OpenDataChunkWritePath(IntegrityManager->TakePlacedKeys());
         if (kickReserve && queuedChunkAllocation) {
             HandleChunkReserved();
@@ -321,6 +372,8 @@ namespace NKikimr::NDDisk {
     void TDDiskActor::Handle(TEvPrivate::TEvIntegrityIoResult::TPtr ev) {
         auto& msg = *ev->Get();
 
+        // Transient OVERLOADED errors are retried in TDirectIoOpBase::OnComplete while the
+        // op still owns its buffers. Any non-OK status that reaches this handler is fatal.
         if (msg.Status != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
             EnterBroken(msg.ErrorMessage);
             return;
@@ -329,7 +382,12 @@ namespace NKikimr::NDDisk {
             return;
         }
 
-        const auto readyKeys = IntegrityManager->OnIoCompleted(msg.IoId);
+        std::vector<TIntegrityManager::TDataChunkKey> readyKeys;
+        if (msg.IsRead) {
+            IntegrityManager->OnReadIoCompleted(msg.IoId, std::move(msg.Data));
+        } else {
+            readyKeys = IntegrityManager->OnIoCompleted(msg.IoId);
+        }
         DrainIntegrityManager();
 
         for (const auto& key : readyKeys) {
@@ -357,6 +415,17 @@ namespace NKikimr::NDDisk {
         queue.pop();
         Receive(temp);
 
+        // Receive may synchronously enter Broken while the remaining events are temporarily
+        // outside chunkRef.PendingEventsForChunk, so EnterBroken cannot see and fail them.
+        if (Y_UNLIKELY(IsBroken())) {
+            while (!queue.empty()) {
+                auto pending = queue.front().Release();
+                queue.pop();
+                FailPendingDDiskQuery(std::unique_ptr<IEventHandle>(pending.Release()));
+            }
+            return;
+        }
+
         // schedule processing another one, if needed
         if (!queue.empty()) {
             TActivationContext::Send(ev.Release());
@@ -365,6 +434,50 @@ namespace NKikimr::NDDisk {
         // put queue back in
         queue.swap(chunkRef.PendingEventsForChunk);
         Y_ABORT_UNLESS(queue.empty()); // ensure nothing more appeared during event handling
+    }
+
+    void TDDiskActor::ScheduleSerializedWrite(ui64 tabletId, ui64 vChunkIndex) {
+        TChunkRef& chunkRef = ChunkRefs.at(tabletId).at(vChunkIndex);
+        if (Y_UNLIKELY(IsBroken()) || chunkRef.IntegrityExtentWriteInFlight
+                || chunkRef.SerializedWriteResumeScheduled
+                || chunkRef.PendingSerializedWrites.empty()) {
+            return;
+        }
+        chunkRef.SerializedWriteResumeScheduled = true;
+        Send(SelfId(), new TEvPrivate::TEvHandleSerializedWriteForChunk(tabletId, vChunkIndex));
+    }
+
+    void TDDiskActor::ReleaseIntegrityExtentWrite(ui64 tabletId, ui64 vChunkIndex) {
+        TChunkRef& chunkRef = ChunkRefs.at(tabletId).at(vChunkIndex);
+        Y_ABORT_UNLESS(chunkRef.IntegrityExtentWriteInFlight);
+        chunkRef.IntegrityExtentWriteInFlight = false;
+        ScheduleSerializedWrite(tabletId, vChunkIndex);
+    }
+
+    void TDDiskActor::Handle(TEvPrivate::TEvHandleSerializedWriteForChunk::TPtr ev) {
+        auto& msg = *ev->Get();
+        // EnterBroken clears SerializedWriteResumeScheduled but cannot recall a
+        // self-message already in the mailbox. Bail out before the flag assert.
+        if (Y_UNLIKELY(IsBroken())) {
+            return;
+        }
+
+        TChunkRef& chunkRef = ChunkRefs.at(msg.TabletId).at(msg.VChunkIndex);
+        Y_ABORT_UNLESS(chunkRef.SerializedWriteResumeScheduled);
+        chunkRef.SerializedWriteResumeScheduled = false;
+
+        if (chunkRef.IntegrityExtentWriteInFlight
+                || chunkRef.PendingSerializedWrites.empty()) {
+            return;
+        }
+
+        auto pending = chunkRef.PendingSerializedWrites.front().Release();
+        chunkRef.PendingSerializedWrites.pop();
+        Receive(pending);
+
+        // The resumed event may have become obsolete while parked and therefore not acquire the
+        // extent. Continue the FIFO in that case.
+        ScheduleSerializedWrite(msg.TabletId, msg.VChunkIndex);
     }
 
     void TDDiskActor::Handle(NPDisk::TEvCutLog::TPtr ev) {
@@ -534,6 +647,13 @@ namespace NKikimr::NDDisk {
             }
         }
 
+        if (IntegrityManager->HasInFlightOperationsForTablet(tabletId)) {
+            SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
+                "integrity I/O is in flight for tablet"));
+            return;
+        }
+
         const auto tabletIt = ChunkRefs.find(tabletId);
 
         if (tabletIt == ChunkRefs.end()) {
@@ -545,10 +665,12 @@ namespace NKikimr::NDDisk {
         // Reject if any VChunk has a pending event queue (allocation queued but not yet in log)
         // or client data I/O that still targets its physical chunk.
         for (const auto& [vChunkIndex, chunkRef] : tabletIt->second) {
-            if (!chunkRef.PendingEventsForChunk.empty()) {
+            if (!chunkRef.PendingEventsForChunk.empty()
+                    || !chunkRef.PendingSerializedWrites.empty()
+                    || chunkRef.IntegrityExtentWriteInFlight) {
                 SendReply(*ev, std::make_unique<TEvDeleteTabletChunksResult>(
                     NKikimrBlobStorage::NDDisk::TReplyStatus::BUSY,
-                    "chunk allocation is queued for tablet"));
+                    "chunk allocation or integrity-extent write is queued for tablet"));
                 return;
             }
             if (chunkRef.InFlightDataIo) {

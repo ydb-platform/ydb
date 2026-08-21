@@ -148,10 +148,10 @@ namespace NKikimr::NDDisk {
         auto msg = std::make_unique<TEvWritePersistentBuffers>(creds, selector, inflight.Lsn, NDDisk::TWriteInstruction(0),
             inflight.PersistentBufferIds, inflight.Timeout);
         msg->AddPayload(TRope(payload));
-        // Forward the checksums persisted on the source record, if any (TEvReadPersistentBufferResult
-        // carries them opt-in, see TPersistentBuffer::TRecord::PayloadChecksums). Without this, records
-        // re-replicated via TEvReadThenWritePersistentBuffers would silently lose their checksums on
-        // every target PB, exactly the recovery scenario where corruption detection matters most.
+        // Forward the checksums persisted on the source record. Successful writes always store them,
+        // so a successful source read returns exactly one checksum per aligned block. Without this,
+        // TEvReadThenWritePersistentBuffers would re-replicate a record that the destination would
+        // then reject as a checksum-less write.
         msg->Record.MutableChecksums()->CopyFrom(record.GetChecksums());
         auto h = std::make_unique<IEventHandle>(SelfId(), inflight.Sender, msg.release(), 0, inflight.Cookie);
         TActivationContext::Send(h.release());

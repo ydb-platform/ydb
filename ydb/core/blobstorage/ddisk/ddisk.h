@@ -341,9 +341,18 @@ namespace NKikimr::NDDisk {
         std::optional<ui32> MismatchedBlockIdx; // set only when Status == CORRUPTED
     };
 
+    // True when the request is 4 KiB-aligned and carries exactly one checksum per block.
+    inline bool HasRequiredBlockChecksums(ui32 checksumCount, ui32 offsetInBytes, ui32 size) {
+        return offsetInBytes % IntegrityUnitSize == 0
+            && size > 0
+            && size % IntegrityUnitSize == 0
+            && checksumCount > 0
+            && static_cast<ui64>(checksumCount) * IntegrityUnitSize == size;
+    }
+
     // Validates a sender-supplied per-block payload checksum list against the payload actually received.
-    // For now, checksum validation is opt-in: returns std::nullopt when the sender attached no checksums at all
-    // or when every checksum matches. Otherwise returns the status/reason to send back to the sender:
+    // Callers must reject writes without HasRequiredBlockChecksums first. This function then returns
+    // std::nullopt when every checksum matches, otherwise:
     // * INCORRECT_REQUEST if the checksum count does not match the payload size
     // * CORRUPTED at the first mismatching MinSectorSize block.
     template<typename TRecord>
@@ -611,13 +620,16 @@ struct TPersistentBufferFormat {
 
         TEvReadResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt,
-                TRope data = {}) {
+                TRope data = {}, const std::vector<ui64>& checksums = {}) {
             Record.SetStatus(status);
             if (errorReason) {
                 Record.SetErrorReason(*errorReason);
             }
             if (data) {
                 TReadResult(AddPayload(std::move(data))).Serialize(Record.MutableReadResult());
+            }
+            for (const ui64 checksum : checksums) {
+                Record.AddChecksums(checksum);
             }
         }
     };
@@ -789,9 +801,9 @@ struct TPersistentBufferFormat {
                 Record.SetOffsetInBytes(offsetInBytes);
                 Record.SetSizeInBytes(sizeInBytes);
                 TReadResult(AddPayload(std::move(data))).Serialize(Record.MutableReadResult());
-                // Opt-in, mirrors TEvWritePersistentBuffer.Checksums: only attached when the persisted
-                // record actually carries sender-supplied payload checksums (see
-                // TPersistentBuffer::TRecord::PayloadChecksums).
+                // Raw XXH3_64(data) per MinSectorSize block, copied from the persisted record.
+                // Successful writes always store checksums, so a successful read of a live record
+                // returns exactly one value per aligned block.
                 for (ui64 checksum : checksums) {
                     Record.AddChecksums(checksum);
                 }

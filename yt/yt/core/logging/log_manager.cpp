@@ -627,7 +627,7 @@ private:
                 NotificationHandle_ = std::make_unique<TInotifyHandle>();
             } catch (const std::exception& ex) {
                 YT_TLOG_ERROR("Error creating inotify handle, watching disabled")
-                    .With(TError(ex));
+                    .With(ex);
                 NotificationHandleCreationFailed_ = true;
             }
         }
@@ -655,7 +655,7 @@ private:
                 // e.g. due to the lack of space.
                 YT_TLOG_ERROR("Error creating inotify watch")
                     .With("Path", writer->GetFileName())
-                    .With(TError(ex));
+                    .With(ex);
                 return nullptr;
             }
         }
@@ -928,19 +928,16 @@ private:
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
 
-        auto key = std::pair(event.Category->Name, event.Level);
-        auto it = WrittenEventsCounters_.find(key);
-        if (it == WrittenEventsCounters_.end()) {
+        auto& counter = WrittenEventsCounters_[event.Category][event.Level];
+        if (!counter) [[unlikely]] {
             // TODO(prime@): optimize sensor count
-            auto counter = Profiler
+            counter = Profiler
                 .WithSparse()
                 .WithTag("category", std::string{event.Category->Name})
                 .WithTag("level", FormatEnum(event.Level))
                 .Counter("/written_events");
-
-            it = WrittenEventsCounters_.emplace(key, counter).first;
         }
-        return it->second;
+        return counter;
     }
 
     void CollectSensors(ISensorWriter* writer) override
@@ -984,7 +981,7 @@ private:
             }
         } catch (const std::exception& ex) {
             YT_TLOG_WARNING("Failed to get log storage disk statistics")
-                .With(TError(ex));
+                .With(ex);
         }
     }
 
@@ -1074,34 +1071,37 @@ private:
         struct THeapItem
         {
             TThreadLocalQueue* Queue;
+            TCpuInstant Instant;
 
             explicit THeapItem(TThreadLocalQueue* queue)
                 : Queue(queue)
-            { }
+            {
+                UpdateInstant();
+            }
 
             TLoggerQueueItem* Front() const
             {
                 return Queue->Front();
             }
 
+            void UpdateInstant()
+            {
+                if (auto* front = Queue->Front()) {
+                    Instant = GetEventInstant(*front);
+                } else {
+                    Instant = std::numeric_limits<TCpuInstant>::max();
+                }
+            }
+
             void Pop()
             {
                 Queue->Pop();
-            }
-
-            TCpuInstant GetInstant() const
-            {
-                auto* front = Front();
-                if (front) [[likely]] {
-                    return GetEventInstant(*front);
-                } else {
-                    return std::numeric_limits<TCpuInstant>::max();
-                }
+                UpdateInstant();
             }
 
             bool operator<(const THeapItem& other) const
             {
-                return GetInstant() < other.GetInstant();
+                return Instant < other.Instant;
             }
         };
 
@@ -1123,20 +1123,20 @@ private:
             while (!heap.empty()) {
                 // Increment front instant by one to avoid live lock when there are two queueus
                 // with equal front instants.
-                auto nextInstant = heap.front().GetInstant() < currentInstant
-                    ? heap.front().GetInstant() + 1
+                auto nextInstant = heap.front().Instant < currentInstant
+                    ? heap.front().Instant + 1
                     : currentInstant;
 
                 // TODO(lukyan): Use exponential search to determine last element.
                 // Use batch extraction from queue.
-                while (topItem.GetInstant() < nextInstant) {
+                while (topItem.Instant < nextInstant) {
                     TimeOrderedBuffer_.emplace_back(std::move(*topItem.Front()));
                     topItem.Pop();
                 }
 
                 std::swap(topItem, heap.front());
 
-                if (heap.front().GetInstant() < currentInstant) {
+                if (heap.front().Instant < currentInstant) {
                     AdjustHeapFront(heap.begin(), heap.end());
                 } else {
                     ExtractHeap(heap.begin(), heap.end());
@@ -1144,7 +1144,7 @@ private:
                 }
             }
 
-            while (topItem.GetInstant() < currentInstant) {
+            while (topItem.Instant < currentInstant) {
                 TimeOrderedBuffer_.emplace_back(std::move(*topItem.Front()));
                 topItem.Pop();
             }
@@ -1347,8 +1347,7 @@ private:
     std::deque<TLoggerQueueItem> TimeOrderedBuffer_;
     TExpiringSet<TRequestId> SuppressedRequestIdSet_;
 
-    using TEventProfilingKey = std::pair<std::string, ELogLevel>;
-    THashMap<TEventProfilingKey, TCounter> WrittenEventsCounters_;
+    THashMap<const TLoggingCategory*, TEnumIndexedArray<ELogLevel, TCounter>> WrittenEventsCounters_;
 
     const TProfiler Profiler{"/logging"};
     const TGauge MinLogStorageAvailableSpace_ = Profiler.Gauge("/min_log_storage_available_space");

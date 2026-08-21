@@ -2,18 +2,16 @@ LIBRARY()
 
 SRCS(
     column.cpp
-    evaluate.cpp
     function.cpp
     global.cpp
     input.cpp
-    named_node_resolution.cpp
     named_node_visibility.cpp
-    parse_tree.cpp
     parser.cpp
     use.cpp
 )
 
 PEERDIR(
+    yql/essentials/sql/v1/ide/analysis
     yql/essentials/sql/v1/ide/completion/core
     yql/essentials/sql/v1/ide/completion/syntax
     yql/essentials/sql/v1/ide/completion/text

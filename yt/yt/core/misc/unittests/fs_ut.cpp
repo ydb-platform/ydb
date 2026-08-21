@@ -90,7 +90,7 @@ TEST(TFSTest, TestGetRelativePath)
 }
 
 #ifdef _unix_
-TEST(TFSTest, TestCombinePathsWithBackslashUnix)
+TEST(TFSTest, CombinePathsWithBackslashUnix)
 {
     EXPECT_EQ(CombinePaths("/", "path/with/back\\slashed/file"), "/path/with/back\\slashed/file");
 }

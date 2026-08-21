@@ -28,7 +28,9 @@ private:
         if (Source == ESource::DataSource || Source == ESource::All) {
             for (auto& x : Types_.DataSources) {
                 auto s = HandleProvider(x.Get(), input, output, ctx);
-                if (s.Level == TStatus::Error) return s;
+                if (s.Level == TStatus::Error) {
+                    return s;
+                }
                 HasRepeats_ = HasRepeats_ || s == TStatus::Repeat;
 
                 if (!NewRoots_.empty()) {
@@ -40,7 +42,9 @@ private:
         if (Source == ESource::DataSink || Source == ESource::All) {
             for (auto& x : Types_.DataSinks) {
                 auto s = HandleProvider(x.Get(), input, output, ctx);
-                if (s.Level == TStatus::Error) return s;
+                if (s.Level == TStatus::Error) {
+                    return s;
+                }
                 HasRepeats_ = HasRepeats_ || s == TStatus::Repeat;
 
                 if (!NewRoots_.empty()) {
@@ -172,7 +176,9 @@ private:
         if (Source == ESource::DataSource || Source == ESource::All) {
             if (auto p = Types_.DataSourceMap.FindPtr(Provider_)) {
                 auto s = HandleProvider(p->Get(), input, output, ctx);
-                if (s.Level == TStatus::Error) return s;
+                if (s.Level == TStatus::Error) {
+                    return s;
+                }
                 hasRepeats = hasRepeats || s == TStatus::Repeat;
             }
         }
@@ -180,7 +186,9 @@ private:
         if (Source == ESource::DataSink || Source == ESource::All) {
             if (auto p = Types_.DataSinkMap.FindPtr(Provider_)) {
                 auto s = HandleProvider(p->Get(), input, output, ctx);
-                if (s.Level == TStatus::Error) return s;
+                if (s.Level == TStatus::Error) {
+                    return s;
+                }
                 hasRepeats = hasRepeats || s == TStatus::Repeat;
             }
         }

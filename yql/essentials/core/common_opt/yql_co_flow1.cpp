@@ -28,23 +28,26 @@ bool IsConstMapLambda(TCoLambda lambda) {
 TExprNode::TPtr ExtractMemberFromLiteral(const TExprNode& lambda, const std::string_view& member) {
     if (lambda.IsLambda() && lambda.Tail().IsCallable("AsStruct")) {
         for (const auto& pair : lambda.Tail().ChildrenList()) {
-            if (pair->Head().IsAtom(member))
+            if (pair->Head().IsAtom(member)) {
                 return pair->TailPtr();
-            else if (!pair->Tail().IsCallable("Member") || &pair->Tail().Tail() != &pair->Head() || &pair->Tail().Head() != &lambda.Head().Head())
+            } else if (!pair->Tail().IsCallable("Member") || &pair->Tail().Tail() != &pair->Head() || &pair->Tail().Head() != &lambda.Head().Head()) {
                 break;
+            }
         }
     }
     return {};
 }
 
 bool IsPasstroughtFields(std::map<std::string_view, TExprNode::TPtr> fields, const TExprNode& lambda) {
-    if (&lambda.Tail() == &lambda.Head().Head() || &lambda.Tail() == &lambda.Head().Tail())
+    if (&lambda.Tail() == &lambda.Head().Head() || &lambda.Tail() == &lambda.Head().Tail()) {
         return true;
+    }
 
     if (lambda.Tail().IsCallable("AsStruct")) {
         lambda.Tail().ForEachChild([&](const TExprNode& field) {
-            if (field.Tail().IsCallable("Member") && &field.Tail().Tail() == &field.Head() && (&field.Tail().Head() == &lambda.Head().Head() || &field.Tail().Head() == &lambda.Head().Tail()))
+            if (field.Tail().IsCallable("Member") && &field.Tail().Tail() == &field.Head() && (&field.Tail().Head() == &lambda.Head().Head() || &field.Tail().Head() == &lambda.Head().Tail())) {
                 fields.erase(field.Head().Content());
+            }
         });
     }
 
@@ -1346,12 +1349,15 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
             TNodeSet atoms(variants);
             for (auto i = 2U; i < self.Input().Ref().ChildrenSize(); ++i) {
                 const auto& ids = *input.Child(i);
-                for (auto j = 0U; j < ids.ChildrenSize(); ++j)
-                    if (!atoms.emplace(ids.Child(j)).second)
+                for (auto j = 0U; j < ids.ChildrenSize(); ++j) {
+                    if (!atoms.emplace(ids.Child(j)).second) {
                         return node;
+                    }
+                }
 
-                if (input.Child(++i) != &input.Tail())
+                if (input.Child(++i) != &input.Tail()) {
                     return node;
+                }
             }
 
             if (variants != atoms.size()) {

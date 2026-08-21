@@ -9,6 +9,7 @@ SRCS(
 
 PEERDIR(
     library/cpp/yt/logging
+    library/cpp/yt/logging/plain_text_formatter
     library/cpp/yt/string
 )
 

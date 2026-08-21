@@ -159,17 +159,6 @@ TYPED_TEST(TRpcTest, DefaultUserIsRoot)
     EXPECT_FALSE(rsp->has_user());
 }
 
-TYPED_TEST(TGrpcAuthenticatedTest, EmptyUserIsRootForCompatibility)
-{
-    TTestProxy proxy(this->CreateChannel());
-    auto req = proxy.PassCall();
-    req->SetUser("");
-    auto rspOrError = WaitForFast(req->Invoke());
-    EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
-    const auto& rsp = rspOrError.Value();
-    EXPECT_EQ("authenticated-user", rsp->user());
-}
-
 TYPED_TEST(TGrpcAuthenticatedTest, ManuallySpecifiedUserMismatch)
 {
     TTestProxy proxy(this->CreateChannel());
@@ -190,6 +179,23 @@ TYPED_TEST(TRpcTest, UserTag)
     const auto& rsp = rspOrError.Value();
     EXPECT_EQ(req->GetUser(), rsp->user());
     EXPECT_EQ(req->GetUserTag(), rsp->user_tag());
+}
+
+TYPED_TEST(TRpcTest, StartTime)
+{
+    TTestProxy proxy(this->CreateChannel());
+    auto req = proxy.PassCall();
+
+    auto beforeInvoke = TInstant::Now();
+    auto rspOrError = WaitForFast(req->Invoke());
+    auto afterInvoke = TInstant::Now();
+
+    EXPECT_TRUE(rspOrError.IsOK()) << ToString(rspOrError);
+    const auto& rsp = rspOrError.Value();
+    ASSERT_TRUE(rsp->has_start_time());
+    auto startTime = NYT::FromProto<TInstant>(rsp->start_time());
+    EXPECT_GE(startTime, beforeInvoke);
+    EXPECT_LE(startTime, afterInvoke);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

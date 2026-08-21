@@ -14,6 +14,33 @@ struct TOperation: TSimpleRefCount<TOperation> {
     ui32 PreparedParts = 0;
     TVector<ISubOperation::TPtr> Parts;
 
+    // User-level transactions (after Phase-Zero rewrite and Phase-One
+    // auto-mkdir split) that drive this operation. In-memory only, and only
+    // for the duration of the propose that created them: the outbox record is
+    // written from these before the propose tx commits, so nothing downstream
+    // needs them back after a reboot.
+    TVector<TTxTransaction> UserLevelTransactions;
+
+    // Outbox rows reserved at propose, one per emitting user-level transaction.
+    // Empty when the operation emits nothing (all churn ops, or no subscriber
+    // at the time of propose). Restored at boot from
+    // Schema::SchemeChangePendingRecords.
+    struct TSchemeChangeSlot {
+        ui32 UserTxIdx = 0;
+        ui64 Order = 0;
+        // Carried in memory because finalisation cannot re-read it; see the
+        // comment on Schema::SchemeChangePendingRecords.
+        TString Path;
+    };
+    TVector<TSchemeChangeSlot> SchemeChangeSlots;
+
+    // NextSchemeChangeOrder as it stood before this operation reserved any
+    // orders. A propose that is rejected after ignition rolls the local DB
+    // back but not the in-memory counter, which would let a later propose
+    // reuse a persisted order and overwrite a live record; AbortOperationPropose
+    // rewinds to this. Zero means nothing was reserved.
+    ui64 SchemeChangeOrderBase = 0;
+
     THashSet<TActorId> Subscribers;
     THashSet<TTxId> DependentOperations;
     THashSet<TTxId> WaitOperations;

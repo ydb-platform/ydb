@@ -402,6 +402,8 @@ void TSchemeShard::ActivateAfterInitialization(const TActorContext& ctx, TActiva
 
     StartStopShred();
 
+    Execute(CreateTxSchemeChangeRecordsCleanup(), ctx);
+
     ctx.Send(TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(InitiateCachedTxIdsCount));
 
     // Start local index migration if feature flag is enabled
@@ -4204,6 +4206,106 @@ void TSchemeShard::PersistUpdateNextShardIdx(NIceDb::TNiceDb& db) const {
                 NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextLocalShardIdx)));
 }
 
+void TSchemeShard::PersistUpdateNextSchemeChangeOrder(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_NextSchemeChangeOrder).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(NextSchemeChangeOrder)));
+    ++NextSchemeChangeOrderPersistCount;
+}
+
+void TSchemeShard::PersistUpdateLastAssignedPlanStep(NIceDb::TNiceDb& db) const {
+    db.Table<Schema::SysParams>().Key(Schema::SysParam_LastAssignedPlanStep).Update(
+        NIceDb::TUpdate<Schema::SysParams::Value>(ToString(LastAssignedPlanStep)));
+}
+
+void TSchemeShard::PersistSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx,
+        ui64 order, const TString& path) const {
+    db.Table<Schema::SchemeChangePendingRecords>().Key(txId, userTxIdx).Update(
+        NIceDb::TUpdate<Schema::SchemeChangePendingRecords::Order>(order),
+        NIceDb::TUpdate<Schema::SchemeChangePendingRecords::Path>(path));
+}
+
+void TSchemeShard::PersistRemoveSchemeChangePendingOrder(NIceDb::TNiceDb& db, TTxId txId, ui32 userTxIdx) const {
+    // Point delete by known key avoids a range scan, which would otherwise
+    // trigger a late Precharge and abort in non-init transactions (reads in
+    // the caller's tx have already set NoMoreUnprechargedReadsFlag without
+    // including table SchemeChangePendingRecords).
+    db.Table<Schema::SchemeChangePendingRecords>().Key(txId, userTxIdx).Delete();
+}
+
+ui64 TSchemeShard::GetVisibleSchemeChangeTail() const {
+    // The highest order a subscriber cursor may legitimately sit at.
+    //
+    // NextSchemeChangeOrder is the *reserved* tail: it counts rows written at
+    // propose for operations still in flight, which carry no identity or plan
+    // step yet. Parking a cursor at or above such an order drops that record
+    // the instant it finalises -- and worse, the retention floor is derived
+    // from cursors, so cleanup would delete the reserved row out from under the
+    // running operation, whose finalising Update would then resurrect a zombie
+    // with identity but no body and no operation type.
+    //
+    // Bounded by in-flight operations, not by retained log size.
+    ui64 firstPending = Max<ui64>();
+    for (const auto& [_, operation] : Operations) {
+        for (const auto& slot : operation->SchemeChangeSlots) {
+            firstPending = Min(firstPending, slot.Order);
+        }
+    }
+    return firstPending == Max<ui64>() ? NextSchemeChangeOrder : firstPending - 1;
+}
+
+void TSchemeShard::ForceAdvanceLaggingSubscribers(NIceDb::TNiceDb& db, const TActorContext& ctx) {
+    const TInstant now = ctx.Now();
+    const ui64 floor = GetMinSubscriberOrder(now);
+    const ui64 tail = GetVisibleSchemeChangeTail();
+    if (floor >= tail) {
+        return;
+    }
+    for (auto& [subscriberId, info] : Subscribers) {
+        if (IsSubscriberStale(info, now) || info.LastAckedOrder > floor) {
+            continue;
+        }
+        // The consumer must learn its chain is broken so it can fall back to a
+        // full snapshot instead of silently resuming with a hole. Same contract
+        // as the TTL force-advance and the clamped-registration path.
+        info.LastAckedOrder = tail;
+        info.State = NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST;
+        info.LastActivityAt = now;
+        db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(tail),
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::State>(
+                NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST)
+        );
+        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Scheme change records cap reached; force-advancing subscriber '" << subscriberId
+                << "' to " << tail << " and marking it Lost");
+    }
+}
+
+ui32 TSchemeShard::CountTransactionSupportingDomains() const {
+    ui32 count = 0;
+    for (const auto& [_, domain] : SubDomains) {
+        if (domain && domain->IsSupportTransactions()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool TSchemeShard::CheckSchemeChangeRecordsOverflow(TString& errStr, TInstant now) const {
+    if (Subscribers.empty()) {
+        return true;
+    }
+    const ui64 unacked = NextSchemeChangeOrder - GetMinSubscriberOrder(now);
+    if (unacked >= MaxSchemeChangeRecords) {
+        errStr = TStringBuilder()
+            << "scheme change records is full: " << unacked
+            << " unacked entries (limit: " << MaxSchemeChangeRecords << ")."
+            << " Subscribers may not be draining.";
+        return false;
+    }
+    return true;
+}
+
 void TSchemeShard::PersistParentDomain(NIceDb::TNiceDb& db, TPathId parentDomain) const {
     db.Table<Schema::SysParams>().Key(Schema::SysParam_ParentDomainSchemeShard).Update(
         NIceDb::TUpdate<Schema::SysParams::Value>(ToString(parentDomain.OwnerId)));
@@ -5965,6 +6067,9 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(NReplication::TEvController::TEvAlterReplicationResult, Handle);
         HFuncTraced(NReplication::TEvController::TEvDropReplicationResult, Handle);
 
+        // scheme change records bounded cleanup continuation
+        HFuncTraced(TEvPrivate::TEvSchemeChangeRecordsCleanup, Handle);
+
         // conditional erase
         HFuncTraced(TEvPrivate::TEvRunConditionalErase, Handle);
         HFuncTraced(TEvPrivate::TEvFlushConditionalEraseBatch, Handle);
@@ -6153,6 +6258,12 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvSchemeShard::TEvShredManualStartupRequest, Handle);
         HFuncTraced(TEvBlobStorage::TEvControllerShredResponse, Handle);
         HFuncTraced(TEvSchemeShard::TEvWakeupToRunShredBSC, Handle);
+        HFuncTraced(TEvSchemeShard::TEvRegisterSubscriber, Handle);
+        HFuncTraced(TEvSchemeShard::TEvFetchSchemeChangeRecords, Handle);
+        HFuncTraced(TEvSchemeShard::TEvAckSchemeChangeRecords, Handle);
+        HFuncTraced(TEvSchemeShard::TEvUnregisterSubscriber, Handle);
+        HFuncTraced(TEvSchemeShard::TEvForceAdvanceSubscriber, Handle);
+        HFuncTraced(TEvSchemeShard::TEvFetchSchemeChangeRecordBodies, Handle);
 
         HFuncTraced(NKikimr::NTestShard::TEvControlResponse, Handle);
 
@@ -6262,6 +6373,7 @@ void TSchemeShard::RemoveTx(const TActorContext &ctx, NIceDb::TNiceDb &db, TOper
     LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "RemoveTx for txid " << opId);
     auto pathId = txState->TargetPathId;
 
+    RemoveInFlightPlanStep(ui64(txState->PlanStep));
     PersistRemoveTx(db, opId, *txState);
     TabletCounters->Simple()[TxTypeInFlightCounter(txState->TxType)].Sub(1);
 
@@ -8730,6 +8842,9 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         MaxBuildIndexShardsInFlight = schemeShardConfig.GetMaxBuildIndexShardsInFlight();
         MaxStoredIndexBuilds = schemeShardConfig.GetMaxStoredIndexBuilds();
         ConfigureCondErase(schemeShardConfig, ctx);
+        MaxSchemeChangeRecords = schemeShardConfig.GetMaxSchemeChangeRecords();
+        SchemeChangeSubscriberStaleTtl =
+            TDuration::Seconds(schemeShardConfig.GetSchemeChangeSubscriberStaleTtlSeconds());
     }
 
     if (appConfig.HasTableProfilesConfig()) {

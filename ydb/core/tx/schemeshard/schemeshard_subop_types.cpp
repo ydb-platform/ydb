@@ -339,6 +339,29 @@ bool IsDrop(ETxType t) {
     }
 }
 
+// Ops that fire on internal churn and must never reach the scheme change
+// records outbox.
+//
+// THIS LIST IS THE FILTER -- add an entry here to exclude an op; everything
+// else is logged, including Internal=true ops. The asymmetry is deliberate: a
+// missing DDL corrupts a restore, while an extra record costs bytes, so a
+// newly added op type should show up as noise rather than be silently dropped.
+//
+// Partitioning is layout, not data-encoding: a row is byte-identical whether
+// the table had 10 shards or 40, so a consumer never needs the *history* of
+// splits. What it needs -- the partitioning at a restore point -- is a
+// snapshot, captured backup-side. Streaming these would also emit thousands of
+// records per repartitioning and, via the outbox budget, could stall DDL worst
+// on exactly the largest databases.
+bool IsChurnOp(NKikimrSchemeOp::EOperationType opType) {
+    switch (opType) {
+        case NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions:
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool CanDeleteParts(ETxType t) {
     switch (t) {
         case TxDropTable:

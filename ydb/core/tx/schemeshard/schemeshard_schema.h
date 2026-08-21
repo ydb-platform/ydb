@@ -2697,6 +2697,91 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
     };
 
+    struct SchemeChangeRecords : Table<141> {
+        struct Order :         Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TxId :          Column<2, NScheme::NTypeIds::Uint64> {};
+        struct OperationType : Column<3, NScheme::NTypeIds::Uint32> {};
+        struct PathOwnerId :   Column<4, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
+        struct PathLocalId :   Column<5, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct Path :          Column<6, NScheme::NTypeIds::Utf8> {};
+        struct ObjectType :    Column<7, NScheme::NTypeIds::Uint32> {};
+        struct Status :        Column<8, NScheme::NTypeIds::Uint32> {};
+        struct UserSID :       Column<9, NScheme::NTypeIds::Utf8> {};
+        struct SchemaVersion : Column<10, NScheme::NTypeIds::Uint64> {};
+        struct CompletedAtUs : Column<11, NScheme::NTypeIds::Uint64> {};
+        struct PlanStep :      Column<12, NScheme::NTypeIds::Uint64> {};
+        struct BodySize :      Column<13, NScheme::NTypeIds::Uint64> {};
+        // Serialized TEvDescribeSchemeResult for the target path, captured at
+        // completion. Makes the record self-contained: a consumer can rebuild
+        // the object without calling back into SchemeShard, which matters
+        // because after a DROP the object is gone and because a later read
+        // would race a newer version.
+        struct Description :   Column<14, NScheme::NTypeIds::String, false, true> {}; // Sensitive: may describe a secret
+        // NKikimrSchemeShard::TSchemeChangePosition::EKind
+        struct PositionKind :  Column<15, NScheme::NTypeIds::Uint32> {};
+
+        using TKey = TableKey<Order>;
+        using TColumns = TableColumns<Order, TxId, OperationType, PathOwnerId, PathLocalId,
+                                      Path, ObjectType, Status, UserSID, SchemaVersion,
+                                      CompletedAtUs, PlanStep, BodySize, Description, PositionKind>;
+    };
+
+    struct SchemeChangeRecordDetails : Table<143> {
+        struct Order : Column<1, NScheme::NTypeIds::Uint64> {};
+        // Sensitive: the captured request body can contain a plaintext secret.
+        struct Body :  Column<2, NScheme::NTypeIds::String, false, true> {};
+
+        using TKey = TableKey<Order>;
+        using TColumns = TableColumns<Order, Body>;
+    };
+
+    struct SchemeChangeSubscribers : Table<142> {
+        struct SubscriberId :   Column<1, NScheme::NTypeIds::Utf8> {};
+        struct LastAckedOrder : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LastActivityAt : Column<3, NScheme::NTypeIds::Uint64> {};
+        // NKikimrSchemeShard::TSchemeChangeSubscriberState::EState.
+        // Written READY unconditionally today; LOST is written when a cursor
+        // is advanced past records the subscriber never received. SCAN is a
+        // seam for a future snapshot-backfill mechanism.
+        struct State :          Column<4, NScheme::NTypeIds::Uint32> {};
+        // Order this subscriber's stream begins at. Retained so a future
+        // backfill can hand off to the stream at a defined point. Columns
+        // are added now because adding them later means a schema migration
+        // across every SchemeShard tablet in the cluster.
+        struct StartOrder :     Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<SubscriberId>;
+        using TColumns = TableColumns<SubscriberId, LastAckedOrder, LastActivityAt, State, StartOrder>;
+    };
+
+    // Maps an in-flight operation's user-level transactions to the outbox
+    // orders reserved for them at propose time, so completion can find the
+    // rows it must finalise even across a reboot.
+    //
+    // The record itself lives in SchemeChangeRecords from propose onward; only
+    // this back-pointer is needed to relocate it. Boot must never scan the
+    // outbox to rebuild the mapping -- that would couple startup cost to
+    // retained log size -- hence a separate, tiny table keyed the same way the
+    // operation is.
+    //
+    // Path is duplicated from the record row on purpose. Finalisation happens
+    // inside the operation's own local-DB transaction, which has already taken
+    // its reads and cannot issue another without tripping a late Precharge, so
+    // completion must have the path in memory; this table is range-scanned at
+    // boot (bounded by in-flight operations, not by retained log size) to put
+    // it back there.
+    //
+    // Column 3 is burned: it held the serialized TModifyScheme back when the
+    // request body itself was the durable artefact.
+    struct SchemeChangePendingRecords : Table<144> {
+        struct TxId :      Column<1, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
+        struct UserTxIdx : Column<2, NScheme::NTypeIds::Uint32> {};
+        struct Order :     Column<4, NScheme::NTypeIds::Uint64> {};
+        struct Path :      Column<5, NScheme::NTypeIds::String> {};
+
+        using TKey = TableKey<TxId, UserTxIdx>;
+        using TColumns = TableColumns<TxId, UserTxIdx, Order, Path>;
+    };
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2835,7 +2920,11 @@ struct Schema : NIceDb::Schema {
         FullBackupItems,
         SetColumnConstraint,
         SetColumnConstraintShardStatus,
-        TestShardSet
+        TestShardSet,
+        SchemeChangeRecords,
+        SchemeChangeRecordDetails,
+        SchemeChangeSubscribers,
+        SchemeChangePendingRecords
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;
@@ -2852,6 +2941,8 @@ struct Schema : NIceDb::Schema {
     // static constexpr ui64 SysParam_IsOldArgonHashFormatMigrationCompleted = 12; deprecated
     static constexpr ui64 SysParam_TablePartitionsFormatSweepStatus = 13;
     static constexpr ui64 SysParam_TablePartitionsFormatSweepTarget = 14;
+    static constexpr ui64 SysParam_NextSchemeChangeOrder = 15;
+    static constexpr ui64 SysParam_LastAssignedPlanStep = 16;
 
     // List of incompatible changes:
     // * Change 1: store migrated shards of local tables (e.g. after a rename) as a migrated record

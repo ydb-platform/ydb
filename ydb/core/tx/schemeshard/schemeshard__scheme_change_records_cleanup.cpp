@@ -1,0 +1,164 @@
+#include "schemeshard_impl.h"
+
+#include <ydb/core/base/auth.h>
+
+namespace NKikimr::NSchemeShard {
+
+struct TTxSchemeChangeRecordsCleanup : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    bool HasMoreToCleanup = false;
+
+    TTxSchemeChangeRecordsCleanup(TSchemeShard* self)
+        : TTransactionBase(self)
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_SCHEME_CHANGE_RECORDS_CLEANUP; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        HasMoreToCleanup = false;
+        NIceDb::TNiceDb db(txc.DB);
+        const ui64 minOrder = Self->GetMinSubscriberOrder(ctx.Now());
+        if (minOrder == 0) {
+            return true;
+        }
+        return Self->DeleteAckedSchemeChangeRecords(db, 0, minOrder,
+            Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup);
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        ++Self->SchemeChangeCleanupTxCount;
+        if (HasMoreToCleanup) {
+            Self->EnqueueSchemeChangeRecordsCleanup(ctx);
+        }
+    }
+};
+
+struct TTxForceAdvanceSubscriber : public NTabletFlatExecutor::TTransactionBase<TSchemeShard> {
+    TString SubscriberId;
+    TString UserToken;
+    TActorId ReplyTo;
+    // False only for the in-process monitoring path, which the mon endpoint has
+    // already authorized. Not settable over a tablet pipe, so it cannot be
+    // forged the way an in-band "internal" flag could.
+    bool RequireAdmin = true;
+    THolder<TEvSchemeShard::TEvForceAdvanceSubscriberResult> Result;
+    bool HasMoreToCleanup = false;
+
+    TTxForceAdvanceSubscriber(TSchemeShard* self, TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev)
+        : TTransactionBase(self)
+        , SubscriberId(ev->Get()->Record.GetSubscriberId())
+        , UserToken(ev->Get()->Record.GetUserToken())
+        , ReplyTo(ev->Sender)
+        , Result(MakeHolder<TEvSchemeShard::TEvForceAdvanceSubscriberResult>())
+    {}
+
+    // In-process constructor for the monitoring surface.
+    TTxForceAdvanceSubscriber(TSchemeShard* self, const TString& subscriberId, TActorId replyTo)
+        : TTransactionBase(self)
+        , SubscriberId(subscriberId)
+        , ReplyTo(replyTo)
+        , RequireAdmin(false)
+        , Result(MakeHolder<TEvSchemeShard::TEvForceAdvanceSubscriberResult>())
+    {}
+
+    TTxType GetTxType() const override { return TXTYPE_FORCE_ADVANCE_SCHEME_CHANGE_SUBSCRIBER; }
+
+    bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
+        HasMoreToCleanup = false;
+        const TString& subscriberId = SubscriberId;
+
+        // Force-advance discards a subscriber's unread records on purpose --
+        // strictly an operator action.
+        if (RequireAdmin && !IsAdministrator(AppData(), UserToken)) {
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_ACCESS_DENIED);
+            Result->Record.SetReason("Force-advancing a scheme change subscriber requires cluster admin rights");
+            return true;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        auto rowset = db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Select();
+        if (!rowset.IsReady()) {
+            return false;
+        }
+
+        if (!rowset.IsValid()) {
+            Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_NOT_REGISTERED);
+            Result->Record.SetReason("Subscriber not registered: " + subscriberId);
+            return true;
+        }
+
+        const ui64 oldMinOrder = Self->GetMinSubscriberOrder(ctx.Now());
+
+        // This subscriber's own cursor, read from the row we just selected --
+        // not the global minimum, which belongs to whichever subscriber is
+        // furthest behind.
+        const ui64 oldOrder = rowset.GetValue<Schema::SchemeChangeSubscribers::LastAckedOrder>();
+        // The visible tail, not the reserved one: force-advance must not park
+        // the cursor above a record an in-flight operation has yet to finalise.
+        const ui64 newOrder = Max(oldOrder, Self->GetVisibleSchemeChangeTail());
+        const TInstant now = ctx.Now();
+
+        // Force-advance discards whatever the subscriber had not consumed, so
+        // it must report the loss on the same contract every other discarding
+        // path uses (registration clamp, staleness exclusion, count-triggered
+        // cap relief). Only mark Lost if records are actually skipped -- a
+        // force-advance of an already-drained subscriber loses nothing.
+        const bool losesRecords = newOrder > oldOrder;
+        const auto newState = losesRecords
+            ? NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_LOST
+            : NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_READY;
+
+        db.Table<Schema::SchemeChangeSubscribers>().Key(subscriberId).Update(
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastAckedOrder>(newOrder),
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::State>(newState),
+            NIceDb::TUpdate<Schema::SchemeChangeSubscribers::LastActivityAt>(now.MicroSeconds())
+        );
+
+        if (auto it = Self->Subscribers.find(subscriberId); it != Self->Subscribers.end()) {
+            it->second.LastAckedOrder = newOrder;
+            it->second.State = newState;
+            it->second.LastActivityAt = now;
+        }
+
+        if (!Self->DeleteAckedSchemeChangeRecords(db, oldMinOrder, Self->GetMinSubscriberOrder(ctx.Now()),
+                Self->SchemeChangeCleanupBatchSize, HasMoreToCleanup)) {
+            return false;
+        }
+
+        Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_SUCCESS);
+        Result->Record.SetLastAckedOrder(newOrder);
+
+        return true;
+    }
+
+    void Complete(const TActorContext& ctx) override {
+        // Empty when driven from the monitoring page: that path answers the
+        // HTTP request itself, and the internal result event has no recipient.
+        if (ReplyTo) {
+            ctx.Send(ReplyTo, Result.Release());
+        }
+        if (HasMoreToCleanup) {
+            Self->EnqueueSchemeChangeRecordsCleanup(ctx);
+        }
+    }
+};
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxSchemeChangeRecordsCleanup() {
+    return new TTxSchemeChangeRecordsCleanup(this);
+}
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxForceAdvanceSubscriberFromMonitoring(
+    const TString& subscriberId, TActorId replyTo)
+{
+    return new TTxForceAdvanceSubscriber(this, subscriberId, replyTo);
+}
+
+NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxForceAdvanceSubscriber(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev) {
+    return new TTxForceAdvanceSubscriber(this, ev);
+}
+
+void TSchemeShard::Handle(TEvSchemeShard::TEvForceAdvanceSubscriber::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxForceAdvanceSubscriber(ev), ctx);
+}
+
+} // namespace NKikimr::NSchemeShard

@@ -110,11 +110,35 @@ bool TSchemeShard::ProcessOperationParts(
         context.IsAllowedPrivateTables = true;
     }
 
+    // Overflow is a whole-schemeshard condition, not per-part; compute it
+    // once for the batch instead of rescanning Subscribers each iteration.
+    TString overflowErr;
+    const bool schemeChangeRecordsOverflow = !context.SS->CheckSchemeChangeRecordsOverflow(overflowErr, context.Ctx.Now());
+
     for (auto& part : parts) {
         TString errStr;
         if (!context.SS->CheckInFlightLimit(part->GetTransaction().GetOperationType(), errStr)) {
             response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
             response->SetError(NKikimrScheme::StatusResourceExhausted, errStr);
+        } else if (schemeChangeRecordsOverflow
+                && !part->GetTransaction().GetInternal()
+                && !IsChurnOp(part->GetTransaction().GetOperationType())) {
+            // Internal ops are NEVER rejected: split/merge, temp-dir GC and
+            // export/import all run with Internal=true, and rejecting them is
+            // a cluster-level outage, not backpressure.
+            //
+            // Churn ops are excluded separately and this is not redundant with
+            // Internal: a user-initiated split is not Internal=true, yet it
+            // emits no record (IsChurnOp), so gating it would block an op on an
+            // outbox it never feeds.
+            //
+            // The cap is still enforced -- but against the subscriber, at the
+            // record-allocation site in DoPersistSchemeChangeRecords, where it
+            // fires only when a record is actually appended. Doing it here
+            // would also flip DirectAccessGranted before later parts propose,
+            // hard-aborting the tablet on any subsequent failed propose.
+            response.Reset(new TProposeResponse(NKikimrScheme::StatusResourceExhausted, ui64(txId), ui64(selfId)));
+            response->SetError(NKikimrScheme::StatusResourceExhausted, overflowErr);
         } else {
             response = part->Propose(owner, context);
         }
@@ -287,6 +311,10 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
     // # Phase Three
     // For all initial transactions parts are constructed and proposed
 
+    // Keep the pre-split (post-rewrite) user-level transactions in memory
+    // so DoPersistSchemeChangeRecords can emit parent-level records.
+    operation->UserLevelTransactions = rewrittenTransactions;
+
     for (const auto& transaction : transactions) {
         auto parts = operation->ConstructParts(transaction, context);
         operation->PreparedParts += parts.size();
@@ -308,6 +336,30 @@ THolder<TProposeResponse> TSchemeShard::IgniteOperation(TProposeRequest& request
         }
     }
 
+    // All parts accepted. Emit the outbox record now, half-filled: what was
+    // asked for is known here, and persisting it at propose is what makes it
+    // survive a reboot anywhere between now and completion. Completion fills in
+    // identity and coordinator position; until then CompletedAtUs stays 0 and
+    // no subscriber can see the row.
+    //
+    // This must stay after every ProcessOperationParts call: writing via NIceDb
+    // flips DirectAccessGranted, and a later part proposing after that trips
+    // Y_VERIFY_S(context.IsUndoChangesSafe()) and aborts the tablet.
+    //
+    // Gated on there being a subscriber: with none, nothing consumes the outbox
+    // and this would be a per-DDL local-DB write on every cluster, subscribed
+    // or not.
+    if (!Subscribers.empty()) {
+        NIceDb::TNiceDb db(context.GetDB());
+        operation->SchemeChangeOrderBase = NextSchemeChangeOrder;
+        for (ui32 i = 0; i < rewrittenTransactions.size(); ++i) {
+            TOperation::TSchemeChangeSlot slot;
+            if (PersistSchemeChangeRecordAtPropose(db, txId, i, rewrittenTransactions[i], slot)) {
+                operation->SchemeChangeSlots.push_back(std::move(slot));
+            }
+        }
+    }
+
     return response;
 }
 
@@ -325,6 +377,15 @@ void TSchemeShard::AbortOperationPropose(const TTxId txId, TOperationContext& co
     }
 
     context.MemChanges.UnDo(context.SS);
+
+    // Rewind the outbox counter. A propose rejected after ignition (the redo
+    // size limit is the live case) rolls the local DB back, taking the
+    // reserved record rows and the persisted counter with it -- but not the
+    // in-memory counter. Left alone, the next propose would hand out an order
+    // that is already persisted against a live record and overwrite it.
+    if (operation->SchemeChangeOrderBase) {
+        NextSchemeChangeOrder = operation->SchemeChangeOrderBase;
+    }
 
     // And remove aborted operation from existence
     Operations.erase(txId);
@@ -702,6 +763,15 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                         << ", message: " << record.ShortDebugString()
                         << ", at schemeshard: " << Self->TabletID());
 
+        // Plan step is monotonic per coordinator, so advance the ceiling
+        // once per message rather than per op. Persisting keeps the
+        // ClosedThroughPlanStep monotonic across reboots.
+        if (ui64(step) > Self->LastAssignedPlanStep) {
+            Self->LastAssignedPlanStep = ui64(step);
+            NIceDb::TNiceDb db(txc.DB);
+            Self->PersistUpdateLastAssignedPlanStep(db);
+        }
+
         for (size_t i = 0; i < txCount; ++i) {
             const auto txId = TTxId(record.GetTransactions(i).GetTxId());
             const auto coordinator = ActorIdFromProto(record.GetTransactions(i).GetAckTo());
@@ -728,6 +798,13 @@ struct TSchemeShard::TTxOperationPlanStep: public NTabletFlatExecutor::TTransact
                                     << " operation part is already done"
                                     << ", operationId: " << opId);
                     continue;
+                }
+
+                // Set PlanStep on txState before HandleReply so it's available
+                // for scheme change records persistence (not all operations set it themselves)
+                if (auto* txState = Self->FindTx(opId)) {
+                    txState->PlanStep = step;
+                    Self->AddInFlightPlanStep(ui64(step));
                 }
 
                 TOperationContext context{Self, txc, ctx, OnComplete, MemChanges, DbChanges};

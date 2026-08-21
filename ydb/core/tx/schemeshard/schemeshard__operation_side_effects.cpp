@@ -3,6 +3,7 @@
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_path_describer.h"
 
 #include <ydb/core/tx/tx_processing.h>
 
@@ -984,7 +985,75 @@ void TSideEffects::DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContex
     PendingFullBackupItemDone.clear();
 }
 
+
+void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
+    if (DoneTransactions.empty()) {
+        return;
+    }
+
+    // One record per user-level transaction (the post-rewrite,
+    // post-auto-mkdir-split TModifyScheme the user originally authored). Target
+    // cluster feeds the body back through IgniteOperation, which redoes
+    // decomposition — no sub-op replay path needed.
+    //
+    // The rows themselves were written at propose; all that is left here is to
+    // fill in what only completion knows. Note this runs regardless of whether
+    // a subscriber exists *now*: what matters is whether one existed at propose,
+    // which is exactly what a non-empty SchemeChangeSlots records. A subscriber
+    // unregistering mid-DDL must not leave a permanently un-finalised row
+    // blocking the outbox.
+    NIceDb::TNiceDb db(txc.DB);
+
+    for (const auto& txId : DoneTransactions) {
+        auto opIt = ss->Operations.find(txId);
+        if (opIt == ss->Operations.end() || !opIt->second->IsReadyToDone(ctx)) {
+            continue;
+        }
+        const TOperation::TPtr& operation = opIt->second;
+        if (operation->SchemeChangeSlots.empty()) {
+            continue;
+        }
+
+        // All parts of this operation share one PlanStep assigned by the
+        // coordinator. Read it from any live part.
+        TStepId planStep = InvalidStepId;
+        for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
+            auto it = ss->TxInFlight.find(TOperationId(txId, partIdx));
+            if (it != ss->TxInFlight.end() && it->second.PlanStep != InvalidStepId) {
+                planStep = it->second.PlanStep;
+                break;
+            }
+        }
+
+        // Cap enforcement, against the SUBSCRIBER rather than against DDL.
+        //
+        // This sits at finalisation, not at the propose gate, because it must
+        // not abort the tablet: TTxForceAdvanceSubscriber writes via NIceDb and
+        // would flip DirectAccessGranted before later parts propose. Here we
+        // are already inside the operation's local-DB transaction, so NFR1
+        // holds and the O(|Subscribers|) scan is paid only at the cap.
+        if (ss->NextSchemeChangeOrder - ss->GetMinSubscriberOrder(ctx.Now())
+                > ss->MaxSchemeChangeRecords) {
+            ss->ForceAdvanceLaggingSubscribers(db, ctx);
+        }
+
+        for (const auto& slot : operation->SchemeChangeSlots) {
+            ss->FinalizeSchemeChangeRecord(db, ctx, slot, planStep);
+            ss->PersistRemoveSchemeChangePendingOrder(db, txId, slot.UserTxIdx);
+
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "DoPersistSchemeChangeRecords: finalised user-level entry"
+                    << " order=" << slot.Order
+                    << " txId=" << txId
+                    << " userTxIdx=" << slot.UserTxIdx
+                    << " path=" << slot.Path
+                    << " planStep=" << planStep);
+        }
+    }
+}
+
 void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) {
+    DoPersistSchemeChangeRecords(ss, txc, ctx);  // persist scheme change records before operations are erased
     for (auto& txId: DoneTransactions) {
 
         if (!ss->Operations.contains(txId)) {

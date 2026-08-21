@@ -1377,7 +1377,10 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
                 if (allParentsMerged) {
                     auto* other = FindFamily(id);
                     if (other && other != family) {
-                        auto [f, _] = MergeFamilies(family, other, ctx);
+                        auto [f, v] = MergeFamilies(family, other, ctx);
+                        if (!v) {
+                            family->WantedPartitions.insert(id);
+                        }
                         family = f;
                     } else {
                         family->AttachePartitions({id}, ctx);
@@ -1424,6 +1427,10 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
 
     auto wasInactive = partition->IsInactive();
     if (partition->StartReading()) {
+        if (!ScalingSupport()) {
+            return;
+        }
+
         YDB_LOG_DEBUG("Reading of the partition was started by We stop reading from child partitions",
             {"logPrefix", LogPrefix()},
             {"partitionId", partitionId},
@@ -1436,21 +1443,18 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
 
         if (!family->IsLonely()) {
             BreakUpFamily(family, partitionId, false, ctx);
-            return;
-        }
-
-        if (wasInactive) {
+        } else if (wasInactive) {
             family->ActivatePartition(partitionId);
         }
 
-        // We releasing all children's partitions because we don't start reading the partition from EndOffset
-        GetPartitionGraph().Travers(partitionId, [&](ui32 partitionId) {
-            auto* partition = GetPartition(partitionId);
-            auto* f = FindFamily(partitionId);
+        // Stop reading children: the parent is being read again, so they are no longer readable.
+        GetPartitionGraph().Travers(partitionId, [&](ui32 childId) {
+            auto* child = GetPartition(childId);
+            auto* f = FindFamily(childId);
 
             if (f) {
-                if (partition && partition->Reset()) {
-                    f->ActivatePartition(partitionId);
+                if (child && child->Reset()) {
+                    f->ActivatePartition(childId);
                 }
                 DestroyFamily(f, ctx);
             }
@@ -1478,24 +1482,16 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
         return;
     }
 
-    auto* family = FindFamily(partitionId);
-    if (!family) {
-        YDB_LOG_DEBUG("Reading of the partition was finished by but the partition hasn't family",
+    auto* partitionPtr = GetPartition(partitionId);
+    if (!partitionPtr) {
+        YDB_LOG_DEBUG("Reading of the partition was finished by but the partition is unknown",
             {"logPrefix", LogPrefix()},
             {"partitionId", partitionId},
             {"consumerName", ConsumerName});
         return;
     }
 
-    if (!family->Session) {
-        YDB_LOG_DEBUG("Reading of the partition was finished by but the partition hasn't reading session",
-            {"logPrefix", LogPrefix()},
-            {"partitionId", partitionId},
-            {"consumerName", ConsumerName});
-        return;
-    }
-
-    auto& partition = Partitions[partitionId];
+    auto& partition = *partitionPtr;
 
     const bool wasInactive = partition.IsInactive();
     if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset()) || wasInactive) {

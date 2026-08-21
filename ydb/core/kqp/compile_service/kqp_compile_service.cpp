@@ -261,11 +261,15 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         Y_UNUSED(ctx);
 
+        FeatureFlags = AppData()->FeatureFlags;
         QueryReplayBackend.Reset(CreateQueryReplayBackend(TableServiceConfig, Counters, QueryReplayFactory));
-        // Subscribe for TableService config changes
+        // Both TableServiceConfig and FeatureFlags affect compiled plan shapes. In particular,
+        // EnableJsonIndexAutoSelect controls an optimizer rewrite, while compact/fulltext flags affect
+        // DDL lowering. A cached plan must never survive a runtime change of either config section.
         ui32 tableServiceConfigKind = (ui32) NKikimrConsole::TConfigItem::TableServiceConfigItem;
+        ui32 featureFlagsKind = (ui32) NKikimrConsole::TConfigItem::FeatureFlagsItem;
         Send(NConsole::MakeConfigsDispatcherID(SelfId().NodeId()),
-             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind}),
+             new NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest({tableServiceConfigKind, featureFlagsKind}),
              IEventHandle::FlagTrackDelivery);
 
         Become(&TKqpCompileService::MainState);
@@ -385,15 +389,33 @@ private:
     void HandleConfig(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
         auto &event = ev->Get()->Record;
 
-        auto diff = ShouldInvalidateCompileCache(TableServiceConfig, event.GetConfig().GetTableServiceConfig());
-        if (diff.has_value()) {
+        TStringBuilder diff;
+        bool invalidate = false;
+        if (event.GetConfig().HasTableServiceConfig()) {
+            if (auto tableDiff = ShouldInvalidateCompileCache(TableServiceConfig, event.GetConfig().GetTableServiceConfig())) {
+                invalidate = true;
+                diff << *tableDiff;
+            }
+        }
+        if (event.GetConfig().HasFeatureFlags()) {
+            if (auto flagsDiff = ShouldInvalidateCompileCache(FeatureFlags, event.GetConfig().GetFeatureFlags())) {
+                invalidate = true;
+                diff << *flagsDiff;
+            }
+        }
+        if (invalidate) {
             YDB_LOG_NOTICE("Query cache was invalidated due to config change, config change differencer",
-                {"output", diff.value()});
+                {"output", TString(diff)});
 
             QueryCache->Clear();
         }
 
-        TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
+        if (event.GetConfig().HasTableServiceConfig()) {
+            TableServiceConfig.Swap(event.MutableConfig()->MutableTableServiceConfig());
+        }
+        if (event.GetConfig().HasFeatureFlags()) {
+            FeatureFlags.Swap(event.MutableConfig()->MutableFeatureFlags());
+        }
         YDB_LOG_INFO_CTX(*TlsActivationContext, "Updated config");
 
         auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
@@ -1031,6 +1053,7 @@ private:
 private:
     TKqpQueryCachePtr QueryCache;
 
+    NKikimrConfig::TFeatureFlags FeatureFlags;
     TTableServiceConfig TableServiceConfig;
     TQueryServiceConfig QueryServiceConfig;
     TKqpSettings::TConstPtr KqpSettings;

@@ -274,6 +274,110 @@ class TestCompactJsonIndexWithRowId(RollingUpgradeAndDowngradeFixture):
 
         assert wait_for(predicate, timeout_seconds=100, step_seconds=1), "JSON indexes did not become ready"
 
+    def _assert_row_ids_unique_and_stable(self, table_name, key_columns):
+        columns = ", ".join([*(f"`{column}`" for column in key_columns), "`__ydb_row_id`"])
+        order = ", ".join(f"`{column}`" for column in key_columns)
+        rows = self._execute(f"""
+            SELECT {columns} FROM `{table_name}` ORDER BY {order};
+        """)[0].rows
+        current = {
+            tuple(row[column] for column in key_columns): row["__ydb_row_id"]
+            for row in rows
+        }
+        assert len(current.values()) == len(set(current.values()))
+        snapshots = getattr(self, "row_id_snapshots", {})
+        previous = snapshots.get(table_name, {})
+        for key, row_id in previous.items():
+            if key in current:
+                assert current[key] == row_id
+        snapshots[table_name] = current
+        self.row_id_snapshots = snapshots
+
+    def _exercise_new_json_ddl_at_roll_step(self, roll_idx):
+        """Create compact JSON row-id infrastructure while old and new binaries coexist."""
+        table = f"roll_json_ddl_{roll_idx}"
+        self._execute(f"""
+            CREATE TABLE `{table}` (
+                `pk` Utf8 NOT NULL,
+                `json` JsonDocument,
+                PRIMARY KEY (`pk`)
+            );
+        """)
+        self._execute(f"""
+            UPSERT INTO `{table}` (`pk`, `json`) VALUES
+                ("base"u, JsonDocument('{{"group":"match","roll":{roll_idx}}}'));
+        """)
+        self._execute(f"""
+            ALTER TABLE `{table}`
+            ADD INDEX `json_idx` GLOBAL USING json ON (`json`);
+        """)
+
+        def ready():
+            try:
+                self._assert_index_and_auto_select_match_primary(table, ("pk",))
+                return True
+            except ydbs.issues.SchemeError as error:
+                if "not ready to use" in str(error) or "Required global index not found" in str(error):
+                    return False
+                raise
+
+        assert wait_for(ready, timeout_seconds=100, step_seconds=1), f"{table}.json_idx is not ready"
+        self._execute(f"""
+            UPSERT INTO `{table}` (`pk`, `json`) VALUES
+                ("mixed"u, JsonDocument('{{"group":"match","roll":{roll_idx}}}'));
+        """)
+        self._assert_index_and_auto_select_match_primary(table, ("pk",))
+        self._assert_row_ids_unique_and_stable(table, ("pk",))
+        self._execute(f"DROP TABLE `{table}`;")
+
+    def _restart_with_json_feature_gates(self, enabled):
+        flags = self.config.yaml_config.setdefault("feature_flags", {})
+        for name in (
+            "enable_json_index",
+            "enable_json_index_auto_select",
+            "enable_compact_fulltext_index",
+            "enable_fulltext_index_row_id",
+        ):
+            flags[name] = enabled
+
+        self.stop_driver()
+        self.cluster.update_configurator_and_restart(self.config)
+        self.driver = self.create_driver()
+
+    def _exercise_json_feature_gate_authority(self):
+        self._restart_with_json_feature_gates(False)
+
+        # Existing physical JSON indexes remain readable and maintained. With auto-select disabled the
+        # unqualified query falls back to primary scan, which must still have the same result.
+        self._execute("""
+            UPSERT INTO `compact_json_string_pk` (`pk`, `json`) VALUES
+                ("flag-off"u, JsonDocument('{"group":"match","gate":false}'));
+        """)
+        self._assert_index_and_auto_select_match_primary("compact_json_string_pk", ("pk",))
+        self._assert_row_ids_unique_and_stable("compact_json_string_pk", ("pk",))
+
+        self._execute("""
+            CREATE TABLE `disabled_json_ddl` (
+                `pk` Utf8 NOT NULL,
+                `json` JsonDocument,
+                PRIMARY KEY (`pk`)
+            );
+        """)
+        try:
+            self._execute("""
+                ALTER TABLE `disabled_json_ddl`
+                ADD INDEX `json_idx` GLOBAL USING json ON (`json`);
+            """)
+        except Exception as error:
+            assert "JSON index support is disabled" in str(error)
+        else:
+            raise AssertionError("new JSON index DDL unexpectedly succeeded with its gate disabled")
+        self._execute("DROP TABLE `disabled_json_ddl`;")
+
+        self._restart_with_json_feature_gates(True)
+        self._assert_index_and_auto_select_match_primary("compact_json_string_pk", ("pk",))
+        self._exercise_new_json_ddl_at_roll_step(10000)
+
     def _exercise_string_pk_dml(self, roll_idx):
         key = f"roll-{roll_idx}"
         self._execute(f"""
@@ -329,5 +433,11 @@ class TestCompactJsonIndexWithRowId(RollingUpgradeAndDowngradeFixture):
                 "compact_json_string_pk", ("pk",))
             self._assert_index_and_auto_select_match_primary(
                 "compact_json_composite_pk", ("tenant", "pk"))
+            self._assert_row_ids_unique_and_stable(
+                "compact_json_string_pk", ("pk",))
+            self._assert_row_ids_unique_and_stable(
+                "compact_json_composite_pk", ("tenant", "pk"))
             self._exercise_string_pk_dml(roll_idx)
             self._exercise_composite_pk_dml(roll_idx)
+            self._exercise_new_json_ddl_at_roll_step(roll_idx)
+        self._exercise_json_feature_gate_authority()

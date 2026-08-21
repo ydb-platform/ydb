@@ -392,6 +392,122 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
 
         assert wait_for(predicate, timeout_seconds=100, step_seconds=1), "Exact-config indexes are not ready"
 
+    def _exercise_new_ddl_at_roll_step(self, step):
+        """SchemeShard remains the deterministic DDL authority while binaries are mixed."""
+        table = f"roll_ddl_{step}"
+        self._execute(f"""
+            CREATE TABLE `{table}` (
+                `pk` String NOT NULL,
+                `text` Utf8 NOT NULL,
+                PRIMARY KEY (`pk`)
+            );
+        """)
+        self._execute(f"""
+            UPSERT INTO `{table}` (`pk`, `text`) VALUES
+                ("base", "ddlanchor base"u);
+        """)
+        self._execute(f"""
+            ALTER TABLE `{table}` ADD INDEX `idx`
+                GLOBAL USING fulltext_plain ON (`text`)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        """)
+
+        def ready():
+            try:
+                keys = self._select_column(f"""
+                    SELECT `pk` FROM `{table}` VIEW `idx`
+                    WHERE FulltextMatch(`text`, "ddlanchor") ORDER BY `pk`;
+                """, "pk")
+                return keys == [b"base"]
+            except ydbs.issues.SchemeError as error:
+                if "not ready to use" in str(error) or "Required global index not found" in str(error):
+                    return False
+                raise
+
+        assert wait_for(ready, timeout_seconds=100, step_seconds=1), f"{table}.idx is not ready"
+        self._execute(f"""
+            UPSERT INTO `{table}` (`pk`, `text`) VALUES
+                ("mixed", "ddlanchor mixed"u);
+        """)
+        keys = self._select_column(f"""
+            SELECT `pk` FROM `{table}` VIEW `idx`
+            WHERE FulltextMatch(`text`, "ddlanchor") ORDER BY `pk`;
+        """, "pk")
+        assert keys == [b"base", b"mixed"]
+        rows = self._execute(f"SELECT `__ydb_row_id` FROM `{table}`;")[0].rows
+        row_ids = [row["__ydb_row_id"] for row in rows]
+        assert len(row_ids) == len(set(row_ids))
+        self._execute(f"DROP TABLE `{table}`;")
+
+    def _restart_with_exact_feature_gates(self, enabled):
+        flags = self.config.yaml_config.setdefault("feature_flags", {})
+        for name in (
+            "enable_fulltext_index_prefix",
+            "enable_fulltext_index_row_id",
+            "enable_compact_fulltext_index",
+        ):
+            flags[name] = enabled
+        self.stop_driver()
+        self.cluster.update_configurator_and_restart(self.config)
+        self.driver = self.create_driver()
+
+    def _exercise_feature_gate_authority(self):
+        # Physical indexes created while the flags were enabled remain authoritative: their read/write
+        # path is schema-driven, not reinterpreted from the current creation gates.
+        self._restart_with_exact_feature_gates(False)
+        self._execute("""
+            UPSERT INTO `rowid_docs` (`pk`, `text`) VALUES
+                ("flag-off", "rowanchor flag off"u);
+            UPSERT INTO `prefix_docs` (`key`, `tenant`, `text`) VALUES
+                (9999, 1, "prefixanchor flag off"u);
+        """)
+        assert b"flag-off" in self._select_column("""
+            SELECT `pk` FROM `rowid_docs` VIEW `rowid_idx`
+            WHERE FulltextMatch(`text`, "rowanchor") ORDER BY `pk`;
+        """, "pk")
+        assert 9999 in self._select_column("""
+            SELECT `key` FROM `prefix_docs` VIEW `prefix_idx`
+            WHERE `tenant` = 1 AND FulltextMatch(`text`, "prefixanchor") ORDER BY `key`;
+        """, "key")
+        assert 1 in self._select_column("""
+            SELECT `key` FROM `compact_docs` VIEW `relevance_idx`
+            WHERE FulltextScore(`text`, "anchor") > 0 ORDER BY `key`;
+        """, "key")
+
+        try:
+            self._execute("""
+                ALTER TABLE `prefix_docs` ADD INDEX `disabled_prefix_idx`
+                    GLOBAL USING fulltext_plain ON (`tenant`, `text`)
+                    WITH (tokenizer=standard, use_filter_lowercase=true);
+            """)
+        except Exception as error:
+            assert "Prefixed fulltext/json index support is disabled" in str(error)
+        else:
+            raise AssertionError("new prefixed fulltext DDL unexpectedly succeeded with its gate disabled")
+
+        self._restart_with_exact_feature_gates(True)
+        self._execute("""
+            ALTER TABLE `prefix_docs` ADD INDEX `reenabled_prefix_idx`
+                GLOBAL USING fulltext_plain ON (`tenant`, `text`)
+                WITH (tokenizer=standard, use_filter_lowercase=true);
+        """)
+
+        def ready():
+            try:
+                keys = self._select_column("""
+                    SELECT `key` FROM `prefix_docs` VIEW `reenabled_prefix_idx`
+                    WHERE `tenant` = 1 AND FulltextMatch(`text`, "prefixanchor");
+                """, "key")
+                return 9999 in keys
+            except ydbs.issues.SchemeError as error:
+                if "not ready to use" in str(error) or "Required global index not found" in str(error):
+                    return False
+                raise
+
+        assert wait_for(ready, timeout_seconds=100, step_seconds=1), "re-enabled prefix index is not ready"
+        self._execute("ALTER TABLE `prefix_docs` DROP INDEX `reenabled_prefix_idx`;")
+        self._exercise_new_ddl_at_roll_step(10000)
+
     def _exercise_exact_feature_config(self, step):
         compact_key = 1000 + step
         scratch_key = 2000 + step
@@ -479,8 +595,13 @@ class TestFulltextIndex(RollingUpgradeAndDowngradeFixture):
         """, "key")
         assert tenant_two == [2]
 
+        # New compact+row-id DDL is deliberately issued after each node transition, not only before
+        # rolling begins. This covers both homogeneous endpoints and every mixed-binary boundary.
+        self._exercise_new_ddl_at_roll_step(step)
+
     def test_fulltext_exact_feature_config(self):
         self._create_exact_feature_tables()
         self._wait_exact_indexes()
         for step, _ in enumerate(self.roll()):
             self._exercise_exact_feature_config(step)
+        self._exercise_feature_gate_authority()

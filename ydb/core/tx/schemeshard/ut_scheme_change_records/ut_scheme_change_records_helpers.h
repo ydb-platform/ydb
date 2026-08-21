@@ -62,7 +62,7 @@ inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriberAt(
 // Register while supplying an explicit caller token. Note that with an EMPTY
 // AppData().AdministrationAllowedSIDs every token -- including none -- is an
 // administrator, so a test asserting rejection must populate that list first
-// or it is vacuous.
+// or the assertion proves nothing.
 inline TEvSchemeShard::TEvRegisterSubscriberResult* RegisterSubscriberWithTokenExpect(
     TTestActorRuntime& runtime, const TString& subscriberId, const TString& userToken,
     NKikimrSchemeShard::TSchemeChangeRecordsStatus::EStatus expected,
@@ -99,7 +99,7 @@ inline TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecor
 }
 
 // Asserts STATUS_SUCCESS. Without this, a failed fetch returns zero entries
-// and any emptiness-asserting test passes vacuously on code that never swept.
+// and any emptiness-asserting test passes on code that never swept.
 inline TEvSchemeShard::TEvFetchSchemeChangeRecordsResult* FetchSchemeChangeRecords(
     TTestActorRuntime& runtime, const TString& subscriberId, ui64 afterOrder, ui32 maxCount,
     TAutoPtr<IEventHandle>& handle)

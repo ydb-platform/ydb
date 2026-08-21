@@ -243,7 +243,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
     }
 
     Y_UNIT_TEST(AckFreesOverflowCapacityImmediately) {
-        // Verifies the post-Phase-2 invariant: overflow check uses
+        // Verifies the invariant: overflow check uses
         // (NextSchemeChangeOrder - MinSubscriberOrder), so an ack
         // restores capacity immediately without waiting for background cleanup.
         TSchemeShard* schemeshard;
@@ -758,7 +758,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSchemaTests) {
         UNIT_ASSERT_VALUES_EQUAL(ct->GetIndexDescription(0).GetName(), "IdxByValue");
     }
 
-    // RFC-0129 4.2/2.0: MultiPartDDLIsReconstructibleBySubscriber was deleted.
+    // MultiPartDDLIsReconstructibleBySubscriber was deleted.
     //
     // Its whole point was the replay round-trip through TEvReplaySchemeChangeRecord,
     // which no longer exists: the record carries a resolved event rather than a

@@ -278,7 +278,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     }
 
     Y_UNIT_TEST(AckDeletesAckedRecordsInline) {
-        // Phase 3 invariant: Ack tx deletes records (up to ReactiveCleanupCap)
+        // Ack tx deletes records (up to ReactiveCleanupCap)
         // in the same transaction. No manual wakeup / background sweep needed.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
                 << kCount << " stale records; " << entries.size() << " still remaining");
     }
 
-    // --- Phase 1.0: subscriber start-position seam -------------------------
+    // --- Subscriber start-position seam -------------------------------------
     //
     // NextSchemeChangeOrder is the *last assigned* order, not the next one
     // (schemeshard__scheme_change_records.cpp:6, `ui64 id = ++NextSchemeChangeOrder;`),
@@ -729,7 +729,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         }
     }
 
-    // --- Phase 0: harness guards --------------------------------------------
+    // --- Test harness sanity checks ------------------------------------------
 
     Y_UNIT_TEST(ReadHelperSeesAllRecordsRegardlessOfTail) {
         TTestBasicRuntime runtime;
@@ -797,8 +797,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         // Now the helper must return empty *because the log is empty*, not
         // because its registration was rejected or its cursor clamped past
         // live rows. The registration inside the helper asserts SUCCESS, and
-        // the physical probe independently confirms the rows are gone. This is
-        // the guard against the vacuous-green mode.
+        // the physical probe independently confirms the rows are gone. This
+        // guards against passing for the wrong reason.
         auto entries = ReadSchemeChangeRecords(runtime);
         UNIT_ASSERT_VALUES_EQUAL_C(entries.size(), 0u,
             "after a full sweep the helper must read empty");
@@ -808,7 +808,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "emptiness must be real: no record rows may remain on disk");
     }
 
-    // --- Phase 1.3: no propose-time write when nobody is subscribed ---------
+    // --- No propose-time write when nobody is subscribed ---------------------
     //
     // The measurement is taken mid-DDL, after a reboot: TTxInit rebuilds
     // Operations[txId]->SchemeChangeSlots *only* from persisted rows, so
@@ -894,16 +894,14 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "the surviving reservation must be finalised into a fetchable record");
     }
 
-    // --- Phase 1.4: staleness is a diagnostic, never a licence to discard ----
+    // --- Staleness is a diagnostic, never a licence to discard ---------------
     //
-    // POLICY REVERSAL (W2). This block used to assert the opposite: that a
-    // subscriber idle past the TTL stops holding the retention floor, so DDL
-    // recovers on its own. That self-healing was a silent-data-loss path -- the
-    // forgotten consumer's records were swept to keep the cluster moving, and
-    // the backup chain broke with nobody notified. Under the no-silent-loss
-    // policy a stale subscriber still holds the floor and DDL wedges until an
-    // admin acts. The tests below are inverted accordingly, not deleted: the
-    // staleness DETECTION they were written to protect still has to work.
+    // A stale subscriber still holds the retention floor and DDL wedges until
+    // an admin acts. Self-healing by letting a stale subscriber stop holding
+    // the floor would be a silent-data-loss path -- the forgotten consumer's
+    // records get swept to keep the cluster moving, and the backup chain
+    // breaks with nobody notified. The staleness DETECTION still has to work
+    // even though nothing gets swept automatically.
     //
     // All four LastActivityAt writes and the age comparison use ctx.Now().
     // Under TTestActorRuntime the actor-system clock is virtual and starts at
@@ -999,10 +997,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TestMkDir(runtime, ++txId, "/MyRoot", "Dir3", {NKikimrScheme::StatusResourceExhausted});
     }
 
-    // Was StaleExclusionMarksSubscriberLost. Its premise -- that a live
-    // subscriber's ack sweeps a stale one's unread records -- is exactly the
-    // silent loss W2 removed, so the assertions are inverted: the stale
-    // subscriber's records must SURVIVE another subscriber draining the log.
+    // A live subscriber's ack must not sweep a stale one's unread records: the
+    // stale subscriber's records must SURVIVE another subscriber draining the
+    // log.
     Y_UNIT_TEST(StaleSubscriberRecordsSurviveAnotherSubscribersAck) {
         TSchemeShard* schemeshard = nullptr;
         auto ssFactory = [&schemeshard](const TActorId& tablet, TTabletStorageInfo* info) {
@@ -1066,7 +1063,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "it must actually receive the records it was owed");
     }
 
-    // --- Phase 1.5: internal ops bypass the gate; the cap binds the subscriber
+    // --- Internal ops bypass the gate; the cap binds the subscriber ----------
     //
     // Policy, not merely "bypass":
     //   * Internal ops are NEVER rejected -- rejecting split/merge, temp-dir GC
@@ -1075,9 +1072,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
     //     Internal: a user-initiated split is not Internal=true, yet emits no
     //     record, so gating it blocks an op on an outbox it never feeds.
     //   * The cap is still enforced -- at the propose gate, by REFUSING the
-    //     DDL. It is no longer relieved by force-advancing the subscriber:
-    //     discarding a consumer's records to keep DDL flowing was the silent
-    //     loss path W2 removed. Only an admin force-advance may discard.
+    //     DDL. It is not relieved by force-advancing the subscriber: discarding
+    //     a consumer's records to keep DDL flowing would be silent data loss.
+    //     Only an admin force-advance may discard.
 
     Y_UNIT_TEST(UserDdlStillRejectedAtCap) {
         TTestBasicRuntime runtime;
@@ -1180,11 +1177,11 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "churn at the cap must not mark the subscriber Lost");
     }
 
-    // --- Phase 1.6: identity, validation, cap -------------------------------
+    // --- Identity, validation, cap --------------------------------------------
     //
     // These events arrive over a tablet pipe, which carries no caller identity,
     // so the protocol had to grow a UserToken field before any of this could be
-    // enforced (see plan finding F4).
+    // enforced.
 
     Y_UNIT_TEST(EmptySubscriberIdRejected) {
         TTestBasicRuntime runtime;
@@ -1238,7 +1235,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
 
-        // Without this the test is vacuous: an EMPTY allowlist admits any
+        // Without this the test proves nothing: an EMPTY allowlist admits any
         // token, including none (auth.cpp IsTokenAllowedImpl).
         runtime.GetAppData().AdministrationAllowedSIDs.push_back("thou-shalt-not-pass");
 
@@ -1264,7 +1261,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_ACCESS_DENIED, advHandle);
     }
 
-    // --- Phase 1.7: the operator surface actually exists --------------------
+    // --- The operator surface actually exists ---------------------------------
 
     Y_UNIT_TEST(ForceAdvanceReachableFromMonitoring) {
         TSchemeShard* schemeshard = nullptr;
@@ -1289,9 +1286,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_C(tail >= 2, "precondition: the subscriber must be behind");
         UNIT_ASSERT_VALUES_EQUAL(schemeshard->Subscribers.at("stuck:sub").LastAckedOrder, 0u);
 
-        // RFC 0129:359-363 makes force-advance the entire mitigation for a dead
-        // subscriber wedging DDL -- but it had no reachable caller at all until
-        // this action existed. Drive it the way an operator would.
+        // Force-advance is the entire mitigation for a dead subscriber wedging
+        // DDL -- but it had no reachable caller at all until this action
+        // existed. Drive it the way an operator would.
         auto resp = SendSchemeShardMonRequest(runtime, TTestTxConfig::SchemeShard,
             "/app?Action=ForceAdvanceSchemeChangeSubscriber&SubscriberId=stuck:sub",
             HTTP_METHOD_POST);
@@ -1319,7 +1316,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "an unknown subscriber must produce a clear operator-facing error, got: " << resp.Body);
     }
 
-    // --- Phase 2.2 / 2.3: the record carries resolved identity + description --
+    // --- The record carries resolved identity + description -------------------
 
     Y_UNIT_TEST(RecordCarriesResolvedIdentity) {
         TTestBasicRuntime runtime;
@@ -1392,7 +1389,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
                 << tableDesc.ColumnsSize());
     }
 
-    // --- Phase 2.4: plaintext secrets must never reach the outbox ------------
+    // --- Plaintext secrets must never reach the outbox ------------------------
 
     Y_UNIT_TEST(SecretValueNotPersistedInSchemeChangeRecord) {
         TTestBasicRuntime runtime;
@@ -1414,9 +1411,9 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         // would still be serialized verbatim into the outbox and handed to
         // every subscriber.
         auto entries = ReadSchemeChangeRecords(runtime);
-        // Guard against a vacuous pass: an absence-assertion over an empty set
-        // proves nothing, and would silently "pass" if secrets were gated off
-        // or produced no record at all.
+        // Guard against passing for the wrong reason: an absence-assertion over
+        // an empty set proves nothing, and would silently "pass" if secrets
+        // were gated off or produced no record at all.
         UNIT_ASSERT_C(!entries.empty(),
             "creating a secret must produce at least one record for this test to mean anything");
         bool sawSecretOp = false;
@@ -1435,7 +1432,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "the secret CREATE must itself be among the records checked");
     }
 
-    // --- Phase 2.1: the churn denylist is the only filter -------------------
+    // --- The churn denylist is the only filter ---------------------------------
 
     Y_UNIT_TEST(SplitMergeProducesNoRecords) {
         TTestBasicRuntime runtime;
@@ -1513,7 +1510,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "the churn list must be the only thing excluded");
     }
 
-    // --- Phase 2.5: identity must resolve for every object type -------------
+    // --- Identity must resolve for every object type ---------------------------
     //
     // The name-extraction switch originally covered 6 op types. For anything
     // else targetName stayed empty, so Path fell back to WorkingDir -- which
@@ -1561,7 +1558,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "ObjectType must be the object's own type, not the parent's EPathTypeDir");
     }
 
-    // --- Phase 3.1: (PlanStep, PositionKind) is always meaningful ------------
+    // --- (PlanStep, PositionKind) is always meaningful ------------
 
     Y_UNIT_TEST(EveryRecordHasNonZeroPlanStep) {
         TTestBasicRuntime runtime;
@@ -1634,7 +1631,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
                 << proposeTime->PlanStep << " vs " << coordinated->PlanStep);
     }
 
-    // --- Phase 3.3: the sync point is identifiable in the stream ------------
+    // --- The sync point is identifiable in the stream ------------
 
     Y_UNIT_TEST(IncrementalBackupProducesIdentifiableSyncPoint) {
         TTestBasicRuntime runtime;
@@ -1722,7 +1719,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "otherwise a consumer cannot locate window boundaries");
     }
 
-    // --- Phase 4.1 / 3.6: closure bound + pinned assumptions ----------------
+    // --- Closure bound + pinned assumptions ----------------
 
     Y_UNIT_TEST(ClosedThroughPlanStepIsInclusiveAtQuiesce) {
         TTestBasicRuntime runtime;
@@ -1756,8 +1753,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TAutoPtr<IEventHandle> regHandle;
         RegisterSubscriber(runtime, "order:sub", regHandle);
 
-        // Two independent objects. D3 says NO cross-object ordering is
-        // required; what must hold is per-object order.
+        // Two independent objects. NO cross-object ordering is required; what
+        // must hold is per-object order.
         TestMkDir(runtime, ++txId, "/MyRoot", "DirA");
         env.TestWaitNotification(runtime, txId);
         TestMkDir(runtime, ++txId, "/MyRoot", "DirB");
@@ -1792,10 +1789,10 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         TTestEnvOptions opts;
         TTestEnv env(runtime, opts, ssFactory);
 
-        // D7/Option A rests on this invariant. If a config ever puts a second
-        // transaction-supporting domain under one SchemeShard, D6's global-max
-        // borrow stops being a sound lower bound -- so fail loudly here rather
-        // than emit records with incomparable steps.
+        // The record-durability design rests on this invariant. If a config
+        // ever puts a second transaction-supporting domain under one
+        // SchemeShard, the global-max borrow stops being a sound lower bound --
+        // so fail loudly here rather than emit records with incomparable steps.
         UNIT_ASSERT_VALUES_EQUAL_C(schemeshard->CountTransactionSupportingDomains(), 1u,
             "the default test env must serve exactly one transaction-supporting domain");
 
@@ -1803,7 +1800,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         RegisterSubscriber(runtime, "domain:sub", regHandle);
     }
 
-    // --- Phase 3.5: window assignment, end to end (acceptance gate) ---------
+    // --- Window assignment, end to end -----------------------------------------
 
     Y_UNIT_TEST(DdlBucketsIntoCorrectBackupWindow) {
         TTestBasicRuntime runtime;
@@ -1855,8 +1852,8 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_C(!entries.empty(), "records must exist");
 
         // Locate the two sync points by the body's EOperationType. This is the
-        // whole reason 2.2 stores the request-level enum: ConvertToTxType maps
-        // backup-collection ops onto TxInvalid, shared with 16 others.
+        // whole reason the record stores the request-level enum: ConvertToTxType
+        // maps backup-collection ops onto TxInvalid, shared with 16 others.
         TVector<ui64> syncSteps;
         for (const auto& rec : entries) {
             if (rec.OperationType == (ui32)NKikimrSchemeOp::ESchemeOpCreateBackupCollection) {
@@ -1903,7 +1900,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
                 << result.ClosedThroughPlanStep << " s2=" << s2);
     }
 
-    // --- Phase 5: NFR gate --------------------------------------------------
+    // --- Closure-bound performance -------------------------------------------
 
     Y_UNIT_TEST(ClosureBoundIsIndexedNotScanned) {
         TSchemeShard* schemeshard = nullptr;
@@ -1924,7 +1921,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             env.TestWaitNotification(runtime, txId);
         }
 
-        // NFR2: the bound is served from an incrementally maintained index, not
+        // The bound is served from an incrementally maintained index, not
         // by scanning TxInFlight on every Fetch. Once everything completes the
         // index must be empty -- entries are released by RemoveTx, so a leak
         // here would mean the bound silently stops advancing.
@@ -1960,14 +1957,14 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         const ui64 perDdl = schemeshard->TestSchemeChangeRedoBytesAccum - before;
 
         UNIT_ASSERT_C(perDdl > 0, "a watched DDL must actually write a record");
-        // NFR2. A MkDir's request body and description are both small; a
+        // A MkDir's request body and description are both small; a
         // regression that started stashing whole table descriptions on every
         // op, or emitting per-part instead of per-user-op, would blow this.
         UNIT_ASSERT_C(perDdl < 16384,
             "outbox redo per DDL must stay bounded; got " << perDdl << " bytes");
     }
 
-    // --- Phase 3.4 / 3.5 (contended) ----------------------------------------
+    // --- Window assignment under contention -----------------------------------
 
     Y_UNIT_TEST(SyncPointPlanStepIsTheWindowEdge) {
         TTestBasicRuntime runtime;
@@ -2028,7 +2025,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         UNIT_ASSERT_C(syncStep && beforeStep && afterStep,
             "sync point and both DDLs must be recorded");
 
-        // D8: the backup op is a coordinated tx, so its PlanStep IS the cut --
+        // The backup op is a coordinated tx, so its PlanStep IS the cut --
         // DDL planned before it falls inside the window, DDL after falls out.
         UNIT_ASSERT_C(beforeStep < syncStep,
             "DDL before the sync point must sit below its PlanStep: "
@@ -2103,16 +2100,16 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "once quiesced the bound must reach the ceiling again");
     }
 
-    // --- Option A (4.3): the record must survive a propose->done reboot -----
+    // --- The record must survive a propose->done reboot -----------------------
     //
-    // THIS IS THE TEST WHOSE ABSENCE MAKES A NAIVE 4.3 LOOK SAFE.
+    // THIS IS THE TEST WHOSE ABSENCE MAKES A NAIVE IMPLEMENTATION LOOK SAFE.
     //
     // DoPersistSchemeChangeRecords builds every record from the IN-MEMORY
-    // operation->UserLevelTransactions. Today table 144 repopulates that vector
-    // at TTxInit. Delete the table without replacing that job and a SchemeShard
-    // restart between propose and done emits NO record at all -- and the rest of
-    // the reboots suite would not notice, because it reboots around completion
-    // rather than inside the window.
+    // operation->UserLevelTransactions. The UserLevelTransactions table
+    // repopulates that vector at TTxInit. Delete the table without replacing
+    // that job and a SchemeShard restart between propose and done emits NO
+    // record at all -- and the rest of the reboots suite would not notice,
+    // because it reboots around completion rather than inside the window.
 
     Y_UNIT_TEST(RecordSurvivesProposeToDoneReboot) {
         TSchemeShard* schemeshard = nullptr;
@@ -2333,7 +2330,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "a subscriber that lost nothing must not be marked Lost");
     }
 
-    // W2. No silent loss. A consumer that stops acking must WEDGE DDL, not get
+    // No silent loss. A consumer that stops acking must WEDGE DDL, not get
     // its records quietly discarded so the cluster can keep going.
     //
     // Two automatic discard paths used to prevent this wedge: cap relief
@@ -2397,7 +2394,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "the admin override discarded records, so the subscriber must now be Lost");
     }
 
-    // W3. The outbox's failure modes are all silent -- records dropped, a
+    // The outbox's failure modes are all silent -- records dropped, a
     // subscriber wedged, DDL blocked at the cap -- and under the no-silent-loss
     // policy DDL now STOPS on a broken consumer rather than self-healing. That
     // makes these gauges load-bearing rather than nice-to-have: an operator has
@@ -2454,7 +2451,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "after acking everything the backlog must return to zero");
     }
 
-    // W1. Description is serialized into the local-DB redo log on every DDL, so
+    // Description is serialized into the local-DB redo log on every DDL, so
     // it must not carry anything that scales with the object's size. The default
     // DescribePath options return partitioning info, partition config, children
     // and range keys -- bounded only by MaxShardsInPath (35k) and
@@ -2509,7 +2506,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
                 << " bytes, 64 partitions -> " << spread << " bytes");
     }
 
-    // W0. The order counter must be rewound when a propose is rejected AFTER it
+    // The order counter must be rewound when a propose is rejected AFTER it
     // has already reserved outbox rows.
     //
     // AbortOperationPropose guards the rewind with `if (SchemeChangeOrderBase)`,
@@ -2582,7 +2579,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "a subscriber that lost nothing must not be marked Lost");
     }
 
-    // --- W5: the cleanup scan is bounded at both ends -----------------------
+    // --- The cleanup scan is bounded at both ends -----------------------
     //
     // DeleteAckedSchemeChangeRecords now selects [oldMinOrder+1, newMinOrder]
     // instead of a one-sided GreaterOrEqual: the one-sided form precharges with
@@ -2625,7 +2622,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
         const ui64 boundary = 3;
 
         // Positive companion: the rows are physically present beforehand, so a
-        // later "gone" cannot be vacuous.
+        // later "gone" is meaningful.
         auto before = ProbeRecordOrdersPresent(runtime, "boundary:sub", {boundary, boundary + 1});
         UNIT_ASSERT_VALUES_EQUAL_C(before.size(), 2u,
             "both the boundary record and the one above it must exist first");
@@ -2642,7 +2639,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "kept; a stranded boundary row is never revisited");
     }
 
-    // --- W5: the cleanup floor survives a reboot ----------------------------
+    // --- The cleanup floor survives a reboot ----------------------------
     //
     // Deleted outbox rows remain as tombstones until compaction, so a cleanup
     // that restarts at order 1 re-seeks the whole dead prefix on every batch.
@@ -2689,7 +2686,7 @@ Y_UNIT_TEST_SUITE(TSchemeChangeRecordsSubscriberTests) {
             "every later cleanup batch back over the tombstoned prefix");
     }
 
-    // --- W7: fetching bodies costs |Orders|, not the span they cover --------
+    // --- Fetching bodies costs |Orders|, not the span they cover --------
     //
     // Unlike the cleanup scan above, this one IS observable: the old code
     // walked [min(Orders), max(Orders)] on both tables and counted every row

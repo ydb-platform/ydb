@@ -113,7 +113,7 @@ struct TTxRegisterSubscriber : public NTabletFlatExecutor::TTransactionBase<TSch
         auto state = NKikimrSchemeShard::TSchemeChangeSubscriberState::STATE_READY;
 
         if (record.HasStartOrder()) {
-            // TODO(rfc-0129 phase 1.6): gate this branch on admin auth.
+            // TODO: gate this branch on admin auth.
             const ui64 requested = record.GetStartOrder();
             if (requested > tail) {
                 Result->Record.SetStatus(NKikimrSchemeShard::TSchemeChangeRecordsStatus::STATUS_INVALID_REQUEST);

@@ -9,6 +9,8 @@
 
 #include <util/random/random.h>
 
+#include <algorithm>
+
 namespace NYdb::inline Dev {
 namespace NSessionPool {
 
@@ -60,48 +62,43 @@ bool IsSessionCloseRequested(const TStatus& status) {
 }
 
 void TSessionCloseCommand::Execute(TKqpSessionCommon& session, ISessionClient* client) const {
-    if ((session.*Transition)() && client) {
+    if ((session.*Transition)() && client && session.IsOwnedBySessionPool()) {
         client->RecordSessionClosed(Reason);
     }
 }
 
 namespace NSessionCloseCommands {
 
-const TSessionCloseCommand PoolIdleTimeout{"pool_idle_timeout", &TKqpSessionCommon::MarkBroken};
-const TSessionCloseCommand PoolGracefulShutdown{"pool_graceful_shutdown", &TKqpSessionCommon::MarkBroken};
-const TSessionCloseCommand ClientTimeout{"client_timeout", &TKqpSessionCommon::MarkBroken};
-const TSessionCloseCommand ClientCancelled{"client_cancelled", &TKqpSessionCommon::MarkBroken};
-const TSessionCloseCommand AttachClosed{"attach_closed", &TKqpSessionCommon::MarkBroken};
-const TSessionCloseCommand TransportError{"transport_error", &TKqpSessionCommon::MarkBroken};
-const TSessionCloseCommand NodeShutdown{"node_shutdown", &TKqpSessionCommon::MarkAsClosing};
-const TSessionCloseCommand SessionShutdown{"session_shutdown", &TKqpSessionCommon::MarkAsClosing};
-const TSessionCloseCommand BadSession{"bad_session", &TKqpSessionCommon::MarkBroken};
-const TSessionCloseCommand SessionBusy{"session_busy", &TKqpSessionCommon::MarkBroken};
+namespace {
+
+template<EStatus Code>
+bool HasStatus(const TStatus& status) { return status.GetStatus() == Code; }
+
+bool IsBreakingTransport(const TStatus& status) {
+    const auto code = status.GetStatus();
+    return status.IsTransportError()
+        && code != EStatus::CLIENT_RESOURCE_EXHAUSTED
+        && code != EStatus::CLIENT_OUT_OF_RANGE;
+}
+
+using TStatusCloseCommand =
+    std::pair<bool (*)(const TStatus&), const TSessionCloseCommand*>;
+
+} // namespace
 
 const TSessionCloseCommand* FromStatus(const TStatus& status) {
-    const auto code = status.GetStatus();
-    if (code == EStatus::CLIENT_DEADLINE_EXCEEDED) {
-        return &ClientTimeout;
-    }
-    if (code == EStatus::CLIENT_CANCELLED) {
-        return &ClientCancelled;
-    }
-    if (status.IsTransportError()
-        && code != EStatus::CLIENT_RESOURCE_EXHAUSTED
-        && code != EStatus::CLIENT_OUT_OF_RANGE)
-    {
-        return &TransportError;
-    }
-    if (code == EStatus::SESSION_BUSY) {
-        return &SessionBusy;
-    }
-    if (code == EStatus::BAD_SESSION || code == EStatus::SESSION_EXPIRED) {
-        return &BadSession;
-    }
-    if (IsSessionCloseRequested(status)) {
-        return &SessionShutdown;
-    }
-    return nullptr;
+    static const TStatusCloseCommand Commands[] = {
+        {&HasStatus<EStatus::CLIENT_DEADLINE_EXCEEDED>, &ClientTimeout},
+        {&HasStatus<EStatus::CLIENT_CANCELLED>, &ClientCancelled},
+        {&IsBreakingTransport, &TransportError},
+        {&HasStatus<EStatus::SESSION_BUSY>, &SessionBusy},
+        {&HasStatus<EStatus::BAD_SESSION>, &BadSession},
+        {&IsSessionCloseRequested, &SessionShutdown},
+    };
+    const auto command = std::ranges::find_if(
+        Commands,
+        [&status](const auto& entry) { return entry.first(status); });
+    return command == std::ranges::end(Commands) ? nullptr : command->second;
 }
 
 } // namespace NSessionCloseCommands
@@ -167,7 +164,6 @@ void TSessionPool::ReplySessionToUser(
     TKqpSessionCommon* session,
     std::unique_ptr<IGetSessionCtx> ctx)
 {
-    Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
     session->MarkActive();
     session->SetNeedUpdateActiveCounter(true);
     ctx->ReplySessionToUser(session);
@@ -271,7 +267,7 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
     std::unique_ptr<IGetSessionCtx> getSessionCtx;
     {
         std::lock_guard guard(Mtx_);
-        if (Closed_)
+        if (Closed_ || impl->GetState() != TKqpSessionCommon::S_IDLE)
             return false;
 
         if (auto maybeCtx = WaitersQueue_.TryGet()) {
@@ -280,6 +276,10 @@ bool TSessionPool::ReturnSession(TKqpSessionCommon* impl, bool active) {
                 IncrementActiveCounterUnsafe();
         } else {
             impl->UpdateServerCloseHandler(this);
+            if (impl->GetState() != TKqpSessionCommon::S_IDLE) {
+                impl->UpdateServerCloseHandler(nullptr);
+                return false;
+            }
             Sessions_.emplace(std::make_pair(
                 impl->GetTimeToTouchFast(),
                 impl));
@@ -434,9 +434,7 @@ std::int64_t TSessionPool::GetCurrentPoolSize() const {
     return Sessions_.size();
 }
 
-void TSessionPool::OnCloseSession(TKqpSessionCommon* s, std::shared_ptr<ISessionClient> client,
-    const TSessionCloseCommand& command)
-{
+void TSessionPool::OnCloseSession(const TKqpSessionCommon* s, std::shared_ptr<ISessionClient> client) {
     std::unique_ptr<TKqpSessionCommon> session;
     {
         std::lock_guard guard(Mtx_);
@@ -457,8 +455,6 @@ void TSessionPool::OnCloseSession(TKqpSessionCommon* s, std::shared_ptr<ISession
     }
 
     if (session) {
-        Y_ABORT_UNLESS(session->GetState() == TKqpSessionCommon::S_IDLE);
-        command.Execute(*session, client.get());
         CloseAndDeleteSession(std::move(session), client);
     }
 }

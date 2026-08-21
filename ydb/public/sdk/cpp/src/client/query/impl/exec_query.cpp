@@ -65,11 +65,6 @@ public:
     {}
 
     ~TReaderImpl() {
-        if (!Finished_ && Session_) {
-            auto sessionClient = Session_->SessionImpl_->GetSessionClient();
-            NSessionPool::NSessionCloseCommands::ClientCancelled.Execute(
-                *Session_->SessionImpl_, sessionClient.get());
-        }
         StreamProcessor_->Cancel();
     }
 
@@ -90,9 +85,6 @@ public:
                 EStatus clientStatus = static_cast<EStatus>(self->Response_.status());
                 TPlainStatus plainStatus{clientStatus, std::move(issues), self->Endpoint_, {}};
                 TStatus status{std::move(plainStatus)};
-                if (!status.IsSuccess()) {
-                    self->Finished_ = true;
-                }
 
                 std::optional<TExecStats> stats;
                 std::optional<TTransaction> tx;

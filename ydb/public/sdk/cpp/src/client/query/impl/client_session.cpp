@@ -92,15 +92,14 @@ void TSession::TImpl::StartAsyncRead(TStreamProcessorPtr ptr, std::weak_ptr<ISes
             default: {
                 auto impl = holder->TrySharedOwning();
                 if (impl) {
-                    auto strongClient = client.lock();
-                    const auto& closeCommand = grpcStatus.GRpcStatusCode == grpc::StatusCode::OUT_OF_RANGE
-                        ? NSessionPool::NSessionCloseCommands::AttachClosed
-                        : NSessionPool::NSessionCloseCommands::TransportError;
                     if (impl->GetState() == TKqpSessionCommon::S_IDLE) {
-                        impl->CloseFromServer(client, closeCommand);
-                    } else {
+                        auto strongClient = client.lock();
+                        const auto& closeCommand = grpcStatus.GRpcStatusCode == grpc::StatusCode::OUT_OF_RANGE
+                            ? NSessionPool::NSessionCloseCommands::AttachClosed
+                            : NSessionPool::NSessionCloseCommands::TransportError;
                         closeCommand.Execute(*impl, strongClient.get());
                     }
+                    impl->CloseFromServer(client);
                     holder->Release();
                 }
             }

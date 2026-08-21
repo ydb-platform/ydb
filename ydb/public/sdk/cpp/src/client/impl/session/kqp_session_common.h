@@ -15,17 +15,12 @@ namespace NYdb::inline Dev {
 std::uint64_t GetNodeIdFromSession(const std::string& sessionId);
 
 class TKqpSessionCommon;
-namespace NSessionPool {
-struct TSessionCloseCommand;
-}
 
 class IServerCloseHandler {
 public:
     virtual ~IServerCloseHandler() = default;
     // called when session should be closed by server signal
-    virtual void OnCloseSession(
-        TKqpSessionCommon*, std::shared_ptr<ISessionClient>,
-        const NSessionPool::TSessionCloseCommand&) = 0;
+    virtual void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient>) = 0;
 };
 
 class TKqpSessionCommon : public TEndpointObj {
@@ -49,15 +44,13 @@ public:
     const TEndpointKey& GetEndpointKey() const;
     bool MarkBroken();
     bool MarkAsClosing();
-    void MarkActive();
-    void MarkIdle();
+    bool MarkActive();
+    bool MarkIdle();
     bool IsOwnedBySessionPool() const;
     EState GetState() const;
     void SetNeedUpdateActiveCounter(bool flag);
     bool NeedUpdateActiveCounter() const;
-    virtual std::shared_ptr<ISessionClient> GetSessionClient() const {
-        return {};
-    }
+    virtual std::shared_ptr<ISessionClient> GetSessionClient() const { return {}; }
     void InvalidateQueryInCache(const std::string& key);
     void InvalidateQueryCache();
     void ScheduleTimeToTouch(TDuration interval, bool updateTimeInPast);
@@ -71,8 +64,7 @@ public:
     void UpdateServerCloseHandler(IServerCloseHandler*);
 
     // Called asynchronously from grpc thread.
-    void CloseFromServer(std::weak_ptr<ISessionClient> client,
-        const NSessionPool::TSessionCloseCommand& command) noexcept;
+    void CloseFromServer(std::weak_ptr<ISessionClient> client) noexcept;
 
 public:
     std::optional<TDeadline> PropagatedDeadline_;

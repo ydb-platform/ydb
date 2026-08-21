@@ -40,16 +40,16 @@ struct TSessionCloseCommand {
 };
 
 namespace NSessionCloseCommands {
-extern const TSessionCloseCommand PoolIdleTimeout;
-extern const TSessionCloseCommand PoolGracefulShutdown;
-extern const TSessionCloseCommand ClientTimeout;
-extern const TSessionCloseCommand ClientCancelled;
-extern const TSessionCloseCommand AttachClosed;
-extern const TSessionCloseCommand TransportError;
-extern const TSessionCloseCommand NodeShutdown;
-extern const TSessionCloseCommand SessionShutdown;
-extern const TSessionCloseCommand BadSession;
-extern const TSessionCloseCommand SessionBusy;
+inline const TSessionCloseCommand PoolIdleTimeout{"pool_idle_timeout", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand PoolGracefulShutdown{"pool_graceful_shutdown", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand ClientTimeout{"client_timeout", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand ClientCancelled{"client_cancelled", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand AttachClosed{"attach_closed", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand TransportError{"transport_error", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand NodeShutdown{"node_shutdown", &TKqpSessionCommon::MarkAsClosing};
+inline const TSessionCloseCommand SessionShutdown{"session_shutdown", &TKqpSessionCommon::MarkAsClosing};
+inline const TSessionCloseCommand BadSession{"bad_session", &TKqpSessionCommon::MarkBroken};
+inline const TSessionCloseCommand SessionBusy{"session_busy", &TKqpSessionCommon::MarkBroken};
 
 const TSessionCloseCommand* FromStatus(const TStatus& status);
 }
@@ -143,8 +143,7 @@ public:
     void RecordConnectionCreateTime(double seconds);
     void RecordSessionClosed(std::string_view reason);
 
-    void OnCloseSession(TKqpSessionCommon*, std::shared_ptr<ISessionClient> client,
-        const TSessionCloseCommand& command) override;
+    void OnCloseSession(const TKqpSessionCommon*, std::shared_ptr<ISessionClient> client) override;
 
 private:
     void UpdateStats();

@@ -92,13 +92,9 @@ public:
     }
 
     ~TImpl() {
-        std::vector<std::unique_ptr<TKqpSessionCommon>> sessions;
-        SessionPool_.Drain([&sessions](std::unique_ptr<TKqpSessionCommon>&& session) {
-            sessions.emplace_back(std::move(session));
-            return true;
-        }, true);
-        for (auto& session : sessions) {
-            NSessionPool::NSessionCloseCommands::PoolGracefulShutdown.Execute(*session, this);
+        auto sessions = SessionPool_.GetCurrentPoolSize();
+        while (sessions-- > 0) {
+            SessionPool_.RecordSessionClosed(NSessionPool::NSessionCloseCommands::PoolGracefulShutdown.Reason);
         }
     }
 
@@ -450,13 +446,17 @@ public:
     }
 
     bool ReturnSession(TKqpSessionCommon* sessionImpl) override {
-        Y_ABORT_UNLESS(sessionImpl->GetState() == TSession::TImpl::S_ACTIVE ||
-            sessionImpl->GetState() == TSession::TImpl::S_IDLE);
+        const auto state = sessionImpl->GetState();
+        if (state != TSession::TImpl::S_ACTIVE && state != TSession::TImpl::S_IDLE) {
+            return false;
+        }
 
         //TODO: Remove this copy-paste from table client
         bool needUpdateCounter = sessionImpl->NeedUpdateActiveCounter();
         // Also removes NeedUpdateActiveCounter flag
-        sessionImpl->MarkIdle();
+        if (!sessionImpl->MarkIdle()) {
+            return false;
+        }
         if (!SessionPool_.ReturnSession(sessionImpl, needUpdateCounter)) {
             sessionImpl->SetNeedUpdateActiveCounter(needUpdateCounter);
             return false;

@@ -10,6 +10,7 @@
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 
+#include <library/cpp/protobuf/interop/cast.h>
 #include <library/cpp/protobuf/json/json2proto.h>
 
 namespace NKikimr::NSysView {
@@ -525,9 +526,18 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
         TInstant SuspendedUntil;
         TString LastExecutionId;
         TString PreviousExecutionIds = "{}";
+        TString CreatedBy;
+        TString ModifiedBy;
+        TString StartedBy;
+        TString StoppedBy;
+        TInstant CreatedAt;
+        TInstant ModifiedAt;
+        TInstant SubmittedAt;
+        TInstant StartedAt;
+        TInstant FinishedAt;
 
         ui64 GetSize() const {
-            return sizeof(TQueryInfo) + Status.size() + Issues.size() + Plan.size() + Ast.size() + Text.size() + ResourcePool.size() + LastExecutionId.size() + PreviousExecutionIds.size();
+            return sizeof(TQueryInfo) + Status.size() + Issues.size() + Plan.size() + Ast.size() + Text.size() + ResourcePool.size() + LastExecutionId.size() + PreviousExecutionIds.size() + CreatedBy.size() + ModifiedBy.size() + StartedBy.size() + StoppedBy.size();
         }
     };
 
@@ -559,6 +569,30 @@ class TStreamingQueriesScan final : public TScanActorBase<TStreamingQueriesScan>
             });
             AddString<TSchema::LastExecutionId>([](const TExtractorValue& p) { return p.second.LastExecutionId; });
             AddString<TSchema::PreviousExecutionIds>([](const TExtractorValue& p) { return p.second.PreviousExecutionIds; });
+            AddString<TSchema::CreatedBy>([](const TExtractorValue& p) { return p.second.CreatedBy; });
+            AddString<TSchema::ModifiedBy>([](const TExtractorValue& p) { return p.second.ModifiedBy; });
+            AddString<TSchema::StartedBy>([](const TExtractorValue& p) { return p.second.StartedBy; });
+            AddString<TSchema::StoppedBy>([](const TExtractorValue& p) { return p.second.StoppedBy; });
+            AddOpt<TSchema::CreatedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                if (p.second.CreatedAt) return p.second.CreatedAt.MicroSeconds();
+                return std::nullopt;
+            });
+            AddOpt<TSchema::ModifiedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                if (p.second.ModifiedAt) return p.second.ModifiedAt.MicroSeconds();
+                return std::nullopt;
+            });
+            AddOpt<TSchema::SubmittedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                if (p.second.SubmittedAt) return p.second.SubmittedAt.MicroSeconds();
+                return std::nullopt;
+            });
+            AddOpt<TSchema::StartedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                if (p.second.StartedAt) return p.second.StartedAt.MicroSeconds();
+                return std::nullopt;
+            });
+            AddOpt<TSchema::FinishedAt, ui64>([](const TExtractorValue& p) -> std::optional<ui64> {
+                if (p.second.FinishedAt) return p.second.FinishedAt.MicroSeconds();
+                return std::nullopt;
+            });
         }
 
     private:
@@ -727,6 +761,15 @@ public:
                 .ResourcePool = info.ResourcePool,
                 .LastExecutionId = query.State.GetCurrentExecutionId(),
                 .PreviousExecutionIds = NKqp::SequenceToJsonString(query.State.GetPreviousExecutionIds()),
+                .CreatedBy = info.CreatedBy,
+                .ModifiedBy = info.ModifiedBy,
+                .StartedBy = info.StartedBy,
+                .StoppedBy = info.StoppedBy,
+                .CreatedAt = info.CreatedAt,
+                .ModifiedAt = info.ModifiedAt,
+                .StartedAt = query.State.HasOperationStartedAt()
+                    ? NProtoInterop::CastFromProto(query.State.GetOperationStartedAt())
+                    : TInstant{},
             };
 
             if (ScriptExecutionInfoRequired) {
@@ -771,6 +814,10 @@ public:
             auto& info = it->second;
             info.Issues = NKqp::SerializeIssues(event.Issues);
             info.RetryCount = event.RetryCount;
+            info.SubmittedAt = event.SubmittedAt;
+            if (event.FinishedAt) {
+                info.FinishedAt = event.FinishedAt;
+            }
 
             if (!ready || operationStatus != Ydb::StatusIds::SUCCESS) {
                 info.LastFailAt = event.LastFailAt;

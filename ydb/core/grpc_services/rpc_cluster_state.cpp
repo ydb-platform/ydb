@@ -121,7 +121,7 @@ public:
         {{ "SessionId", "NodeId", "State", {"Query", true}, "QueryCount", "ClientAddress", "ClientPID", "ClientUserAgent", "ClientSdkBuildInfo", "ApplicationName", "SessionStartAt", "QueryStartAt", "StateChangeAt", "UserSID", "TraceId" }, ".sys/query_sessions" },
         {{ "Name", "Rank", "MemberName", "ResourcePool" }, ".sys/resource_pool_classifiers" },
         {{ "Name", "ConcurrentQueryLimit", "QueueSize", "DatabaseLoadCpuThreshold", "ResourceWeight", "TotalCpuLimitPercentPerNode", "QueryCpuLimitPercentPerNode", "QueryMemoryLimitPercentPerNode", "TotalMemoryLimitPercentPerNode" }, ".sys/resource_pools" },
-        {{ "Path", "Status", "Issues", "Plan", "Ast", "Text", "Run", "ResourcePool", "RetryCount", "LastFailAt", "SuspendedUntil", "LastExecutionId", "PreviousExecutionIds" }, ".sys/streaming_queries" },
+        {{ "Path", "Status", "Issues", "Plan", "Ast", "Text", "Run", "ResourcePool", "RetryCount", "LastFailAt", "SuspendedUntil", "LastExecutionId", "PreviousExecutionIds", "CreatedBy", "ModifiedBy", "StartedBy", "StoppedBy", "CreatedAt", "ModifiedAt", "SubmittedAt", "StartedAt", "FinishedAt" }, ".sys/streaming_queries" },
         {{ "IntervalEnd", "Rank", "TabletId", "Path", "LocksAcquired", "LocksWholeShard", "LocksBroken", "NodeId", "DataSize", "RowCount", "IndexSize", "FollowerId" }, ".sys/top_partitions_by_tli_one_hour" },
         {{ "IntervalEnd", "Rank", "TabletId", "Path", "LocksAcquired", "LocksWholeShard", "LocksBroken", "NodeId", "DataSize", "RowCount", "IndexSize", "FollowerId" }, ".sys/top_partitions_by_tli_one_minute" },
         {{ "IntervalEnd", "Rank", "TabletId", "Path", "PeakTime", "CPUCores", "NodeId", "DataSize", "RowCount", "IndexSize", "InFlightTxCount", "FollowerId" }, ".sys/top_partitions_one_hour" },

@@ -1780,10 +1780,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::IsTable, NLs::IndexesCount(2)});
 
         auto preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        // Wait until temporary index build tablets are actually deleted
+        const ui64 expectedDomainShards = 4;
+        for (int i = 0; i < 5; i++) {
+            if (preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside() != expectedDomainShards) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside(), expectedDomainShards);
         const ui64 expectedDomainPaths =
             preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
-        const ui64 expectedDomainShards =
-            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside();
 
         TestMoveTable(runtime, ++txId, "/MyRoot/texts", "/MyRoot/texts_moved");
         env.TestWaitNotification(runtime, txId);
@@ -1795,7 +1802,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         // json_idx must preserve UseRowIdAsDocId=true through the move.
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(ff.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
         {
@@ -1807,16 +1816,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                 "json_idx after move: UseRowIdAsDocId must be preserved through MoveTable");
         }
 
-        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
-        TestDescribeResult(DescribePrivatePath(runtime,
-                "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable));
+            TestDescribeResult(d, { NLs::PathExist });
+            if (ff.GetEnableCompactFulltextIndex()) {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn, NTableIndex::NFulltext::AddedColumn, NTableIndex::NFulltext::SegmentColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn },
+                    /*strictCount=*/ true) });
+            } else {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true) });
+            }
+        }
 
         // Auto-provisioned unique index must have been moved.
         TestDescribeResult(DescribePrivatePath(runtime,
@@ -1872,10 +1888,17 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::IsTable, NLs::IndexesCount(2)});
 
         auto preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        // Wait until tablets are actually deleted
+        const ui64 expectedDomainShards = 4;
+        for (int i = 0; i < 5; i++) {
+            if (preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside() != expectedDomainShards) {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+            preMoveDomainDesc = DescribePath(runtime, "/MyRoot");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside(), expectedDomainShards);
         const ui64 expectedDomainPaths =
             preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetPathsInside();
-        const ui64 expectedDomainShards =
-            preMoveDomainDesc.GetPathDescription().GetDomainDescription().GetShardsInside();
 
         TestMoveTable(runtime, ++txId, "/MyRoot/texts", "/MyRoot/texts_moved");
         env.TestWaitNotification(runtime, txId);
@@ -1886,7 +1909,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
 
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx"), {
             NLs::PathExist,
-            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexType(ff.GetEnableCompactFulltextIndex()
+                ? NKikimrSchemeOp::EIndexTypeGlobalJsonCompact
+                : NKikimrSchemeOp::EIndexTypeGlobalJson),
             NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
         });
         {
@@ -1898,15 +1923,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                 "json_idx after move: UseRowIdAsDocId must be preserved through MoveTable");
         }
 
-        TestDescribeResult(DescribePrivatePath(runtime,
-                "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable)), {
-            NLs::PathExist,
-            NLs::CheckColumns(TString(NTableIndex::ImplTable),
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                {},
-                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
-                /*strictCount=*/ true),
-        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_moved/json_idx/" + TString(NTableIndex::ImplTable));
+            TestDescribeResult(d, { NLs::PathExist });
+            if (ff.GetEnableCompactFulltextIndex()) {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn, NTableIndex::NFulltext::AddedColumn, NTableIndex::NFulltext::SegmentColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::MaxIdColumn },
+                    /*strictCount=*/ true) });
+            } else {
+                TestDescribeResult(d, { NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    {},
+                    { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                    /*strictCount=*/ true) });
+            }
+        }
 
         // User-created unique index must have been moved.
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_moved/uniq_rowid"), {

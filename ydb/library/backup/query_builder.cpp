@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/string/builder.h>
+#include <util/stream/mem.h>
 #include <library/cpp/string_utils/quote/quote.h>
 
 namespace NYdb::NBackup {

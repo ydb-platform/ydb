@@ -354,7 +354,7 @@ namespace NActors {
                     continue;
                 }
                 if (state == EThreadState::Spin || state == EThreadState::Sleep || state == EThreadState::Blocking) {
-                    if (Threads[workerId].WaitForWaker(&StopFlag, &ActivationCredits)) {
+                    if (Threads[workerId].WaitForWaker(StopFlag, ActivationCredits, CheckToSleepWorkers)) {
                         return true;
                     }
                     continue;
@@ -365,69 +365,53 @@ namespace NActors {
         };
 
         while (!StopFlag.load(std::memory_order_acquire)) {
-            if (settleWakerState()) {
-                return nullptr;
-            }
-
-            ui64 reductions = CheckToSleepWorkers.load(std::memory_order_acquire);
-            bool claimedReduction = false;
-            while (true) {
-                if (reductions & WakerRequestBit) {
-                    if (CheckToSleepWorkers.compare_exchange_weak(reductions, reductions & WakerReductionMask,
-                            std::memory_order_acq_rel, std::memory_order_acquire)) {
-                        bool changed = Threads[workerId].TrySetNeedToBeWaker(EThreadState::None);
-                        Y_DEBUG_ABORT_UNLESS(changed);
-                        settleWakerState();
+            if (TlsThreadContext->ExecutionContext.IsNeededToWaitNextActivation) {
+                ui64 reductions = CheckToSleepWorkers.load(std::memory_order_acquire);
+                bool restartWorkerIteration = false;
+                while (true) {
+                    if (reductions & WakerRequestBit) {
+                        if (CheckToSleepWorkers.compare_exchange_weak(reductions, reductions & WakerReductionMask,
+                                std::memory_order_acq_rel, std::memory_order_acquire)) {
+                            EThreadState expected = EThreadState::None;
+                            bool changed = Threads[workerId].TrySetNeedToBeWaker(&expected);
+                            Y_DEBUG_ABORT_UNLESS(changed);
+                            settleWakerState();
+                            restartWorkerIteration = true;
+                            break;
+                        }
+                        continue;
+                    }
+                    if (reductions == 0) {
                         break;
                     }
-                    continue;
-                }
-                if (reductions == 0) {
+                    if (!CheckToSleepWorkers.compare_exchange_weak(reductions, reductions - 1,
+                            std::memory_order_acq_rel, std::memory_order_acquire)) {
+                        continue;
+                    }
+
+                    EThreadState expected = EThreadState::None;
+                    Y_ABORT_UNLESS(Threads[workerId].ReplaceState(expected, EThreadState::Blocking));
+                    if (!WakerPending.exchange(true, std::memory_order_acq_rel)) {
+                        Threads[workerId].TrySetNeedToBeWaker();
+                    }
+                    if (settleWakerState()) {
+                        return nullptr;
+                    }
+                    restartWorkerIteration = true;
                     break;
                 }
-                if (!CheckToSleepWorkers.compare_exchange_weak(reductions, reductions - 1,
-                        std::memory_order_acq_rel, std::memory_order_acquire)) {
+
+                if (restartWorkerIteration) {
                     continue;
                 }
-
-                EThreadState expected = EThreadState::None;
-                Y_ABORT_UNLESS(Threads[workerId].ReplaceState(expected, EThreadState::Blocking));
-                reductions = CheckToSleepWorkers.load(std::memory_order_acquire);
-                while (reductions & WakerRequestBit) {
-                    if (CheckToSleepWorkers.compare_exchange_weak(reductions, reductions & WakerReductionMask,
-                            std::memory_order_acq_rel, std::memory_order_acquire)) {
-                        Threads[workerId].TrySetNeedToBeWaker(EThreadState::Blocking);
-                        break;
-                    }
-                }
-                if (Threads[workerId].GetState<EThreadState>() == EThreadState::Blocking &&
-                        !WakerPending.exchange(true, std::memory_order_acq_rel)) {
-                    Threads[workerId].TrySetNeedToBeWaker(EThreadState::Blocking);
-                }
-                if (settleWakerState()) {
-                    return nullptr;
-                }
-                break;
-            }
-
-            if (IsNeedToBeWaker(Threads[workerId].GetState<EThreadState>())) {
-                RunWaker(workerId);
-                if (settleWakerState()) {
-                    return nullptr;
-                }
-            }
-
-            if (claimedReduction) {
-
-                continue;
             }
 
             {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> queueActivityGuard;
                 if (const ui32 activation = Activations.Pop(++revolvingCounter)) {
-                    Threads[workerId].SetWork();
                     const i64 previousCredits = ActivationCredits.fetch_sub(1, std::memory_order_acq_rel);
                     Y_DEBUG_ABORT_UNLESS(previousCredits > 0);
+                    Threads[workerId].SetWork();
                     return MailboxTable->Get(activation);
                 }
             }
@@ -446,7 +430,7 @@ namespace NActors {
                 continue;
             }
             if (!WakerPending.exchange(true, std::memory_order_acq_rel)) {
-                Threads[workerId].TrySetNeedToBeWaker(EThreadState::Spin);
+                Threads[workerId].TrySetNeedToBeWaker();
             }
             if (settleWakerState()) {
                 return nullptr;
@@ -474,18 +458,21 @@ namespace NActors {
         }
 
         for (i16 workerId = 0; workerId < MaxFullThreadCount; ++workerId) {
-            const EThreadState state = Threads[workerId].GetState<EThreadState>();
-            if (IsNeedToBeWaker(state) || state == EThreadState::Waker) {
-                return true;
-            }
-            if (state != EThreadState::Spin && state != EThreadState::Blocking && state != EThreadState::Sleep) {
-                continue;
-            }
-            if (Threads[workerId].TrySetNeedToBeWaker(state)) {
-                if (state == EThreadState::Blocking || state == EThreadState::Sleep) {
-                    Threads[workerId].WaitingPad.Unpark();
+            EThreadState state = Threads[workerId].GetState<EThreadState>();
+            while (true) {
+                if (IsNeedToBeWaker(state) || state == EThreadState::Waker) {
+                    return true;
                 }
-                return true;
+                if (state != EThreadState::Spin && state != EThreadState::Blocking && state != EThreadState::Sleep) {
+                    break;
+                }
+                const EThreadState requestedState = state;
+                if (Threads[workerId].TrySetNeedToBeWaker(&state)) {
+                    if (requestedState == EThreadState::Blocking || requestedState == EThreadState::Sleep) {
+                        Threads[workerId].WaitingPad.Unpark();
+                    }
+                    return true;
+                }
             }
         }
         return false;
@@ -496,12 +483,43 @@ namespace NActors {
             return;
         }
 
-        if (TryRequestWaker(!persistent)) {
-            return;
+        if (!persistent) {
+            if (TryRequestWaker(true)) {
+                return;
+            }
+
+            while (true) {
+                if (SleepingCount.load(std::memory_order_acquire) == 0) {
+                    const ui64 reductions = CheckToSleepWorkers.fetch_or(WakerRequestBit, std::memory_order_acq_rel);
+                    if (reductions & WakerRequestBit || SleepingCount.load(std::memory_order_acquire) == 0) {
+                        return;
+                    }
+                }
+                if (TryRequestWaker(true)) {
+                    return;
+                }
+            }
         }
 
-        CheckToSleepWorkers.fetch_or(WakerRequestBit, std::memory_order_acq_rel);
-        TryRequestWaker(false);
+        bool requestBitSet = false;
+        if (AtomicLoad(&SuggestedThreadCount) <= AtomicLoad(&ThreadCount) &&
+                SleepingCount.load(std::memory_order_acquire) == 0) {
+            const ui64 reductions = CheckToSleepWorkers.fetch_or(WakerRequestBit, std::memory_order_acq_rel);
+            if (reductions & WakerRequestBit) {
+                return;
+            }
+            requestBitSet = true;
+            if (SleepingCount.load(std::memory_order_acquire) == 0) {
+                return;
+            }
+        }
+
+        if (TryRequestWaker(false)) {
+            return;
+        }
+        if (!requestBitSet) {
+            CheckToSleepWorkers.fetch_or(WakerRequestBit, std::memory_order_acq_rel);
+        }
     }
 
     void TBasicExecutorPool::RunWaker(TWorkerId workerId) {
@@ -518,16 +536,16 @@ namespace NActors {
                             std::memory_order_acq_rel, std::memory_order_acquire)) {
                         continue;
                     }
-                    Y_ABORT_UNLESS(Threads[workerId].BecomeWaker(&resumeState));
+                    Y_ABORT_UNLESS(Threads[workerId].TryBecomeWaker(&resumeState));
                     hasResumeState = true;
                     continue;
                 }
                 if (owner == workerId) {
-                    Y_ABORT_UNLESS(Threads[workerId].BecomeWaker(&resumeState));
+                    Y_ABORT_UNLESS(Threads[workerId].TryBecomeWaker(&resumeState));
                     hasResumeState = true;
                     continue;
                 }
-                Threads[workerId].RestoreWakerResumeState();
+                Threads[workerId].CancelWakerRequest();
                 return;
             }
 
@@ -548,8 +566,8 @@ namespace NActors {
             Y_ABORT_UNLESS(Threads[workerId].ReplaceState(expectedState, finalState));
 
             if (WakerPending.load(std::memory_order_acquire)) {
-                Y_ABORT_UNLESS(Threads[workerId].TrySetNeedToBeWaker(finalState));
-                Y_ABORT_UNLESS(Threads[workerId].BecomeWaker(&resumeState));
+                Y_ABORT_UNLESS(Threads[workerId].TrySetNeedToBeWaker(&finalState));
+                Y_ABORT_UNLESS(Threads[workerId].TryBecomeWaker(&resumeState));
                 continue;
             }
 
@@ -563,7 +581,7 @@ namespace NActors {
                     continue;
                 }
                 if (currentState != EThreadState::Work &&
-                        Threads[workerId].TrySetNeedToBeWaker(currentState)) {
+                        Threads[workerId].TrySetNeedToBeWaker(&currentState)) {
                     continue;
                 }
             }

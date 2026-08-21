@@ -87,28 +87,29 @@ namespace NActors {
         return Sleep(stopFlag);
     }
 
-    bool TExecutorThreadCtx::WaitForWaker(std::atomic<bool>* stopFlag, std::atomic<i64>* activationCredits) {
+    bool TExecutorThreadCtx::WaitForWaker(
+            const std::atomic<bool>& stopFlag,
+            const std::atomic<i64>& activationCredits,
+            const std::atomic<ui64>& reductions) {
         EThreadState state = GetState<EThreadState>();
-        while (state == EThreadState::Spin && !stopFlag->load(std::memory_order_relaxed)) {
-            if (activationCredits->load(std::memory_order_acquire) > 0) {
-                EThreadState expected = EThreadState::Spin;
-                if (ReplaceState(expected, EThreadState::None)) {
+        while (state == EThreadState::Spin && !stopFlag.load(std::memory_order_relaxed)) {
+            if (activationCredits.load(std::memory_order_acquire) > 0 || reductions.load(std::memory_order_acquire) > 0) {
+                if (ReplaceState(state, EThreadState::None)) {
                     return false;
                 }
-                state = expected;
                 continue;
             }
             SpinLockPause();
             state = GetState<EThreadState>();
         }
 
-        while ((state == EThreadState::Sleep || state == EThreadState::Blocking) && !stopFlag->load(std::memory_order_relaxed)) {
+        while ((state == EThreadState::Sleep || state == EThreadState::Blocking) && !stopFlag.load(std::memory_order_relaxed)) {
             if (WaitingPad.Park()) {
                 return true;
             }
             state = GetState<EThreadState>();
         }
-        return stopFlag->load(std::memory_order_relaxed);
+        return stopFlag.load(std::memory_order_relaxed);
     }
 
     bool TExecutorThreadCtx::WakeUp() {

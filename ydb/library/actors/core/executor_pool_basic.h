@@ -187,10 +187,14 @@ namespace NActors {
         static constexpr ui64 WakerReductionMask = ~WakerRequestBit;
 
         const bool EnableWaker;
-        alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic<i64>> ActivationCredits = 0;
-        alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic<i16>> SleepingCount = 0;
-        alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic_bool> WakerPending = false;
-        alignas(PLATFORM_CACHE_LINE) NThreading::TPadded<std::atomic<i16>> WakerWorkerId = InvalidWakerWorkerId;
+    public:
+        const EASProfile ActorSystemProfile;
+
+    private:
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i64> ActivationCredits = 0;
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i16> SleepingCount = 0;
+        alignas(PLATFORM_CACHE_LINE) std::atomic_bool WakerPending = false;
+        alignas(PLATFORM_CACHE_LINE) std::atomic<i16> WakerWorkerId = InvalidWakerWorkerId;
 
     public:
         struct TSemaphore {
@@ -216,7 +220,6 @@ namespace NActors {
             }
         };
 
-        const EASProfile ActorSystemProfile;
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
 

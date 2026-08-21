@@ -86,54 +86,6 @@ namespace NActors {
             }
         }
 
-        bool BecomeWakerState(EThreadState* resumeState) {
-            Y_ABORT_UNLESS(resumeState);
-            ui64 state = WaitingFlag.load();
-            while (true) {
-                EThreadState currentResumeState;
-                switch (DecodeState(state)) {
-                    case EThreadState::NeedToBeWaker:
-                        currentResumeState = EThreadState::None;
-                        break;
-                    case EThreadState::NeedToBeWakerFromSleep:
-                        currentResumeState = EThreadState::Sleep;
-                        break;
-                    case EThreadState::NeedToBeWakerFromBlocking:
-                        currentResumeState = EThreadState::Blocking;
-                        break;
-                    default:
-                        return false;
-                }
-                if (WaitingFlag.compare_exchange_weak(state, EncodeState(EThreadState::Waker))) {
-                    *resumeState = currentResumeState;
-                    return true;
-                }
-            }
-        }
-
-        bool RestoreNeedToBeWakerState() {
-            ui64 state = WaitingFlag.load();
-            while (true) {
-                EThreadState restoredState;
-                switch (DecodeState(state)) {
-                    case EThreadState::NeedToBeWaker:
-                        restoredState = EThreadState::None;
-                        break;
-                    case EThreadState::NeedToBeWakerFromSleep:
-                        restoredState = EThreadState::Sleep;
-                        break;
-                    case EThreadState::NeedToBeWakerFromBlocking:
-                        restoredState = EThreadState::Blocking;
-                        break;
-                    default:
-                        return false;
-                }
-                if (WaitingFlag.compare_exchange_weak(state, EncodeState(restoredState))) {
-                    return true;
-                }
-            }
-        }
-
         template <typename TDerived, typename TWaitState>
         void Spin(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag);
 
@@ -144,6 +96,47 @@ namespace NActors {
     struct TExecutorThreadCtx : public TGenericExecutorThreadCtx {
         using TBase = TGenericExecutorThreadCtx;
 
+    private:
+        static bool TryGetNeedToBeWakerState(EThreadState state, EThreadState* wakerState) {
+            Y_ABORT_UNLESS(wakerState);
+            switch (state) {
+                case EThreadState::None:
+                case EThreadState::Spin:
+                    *wakerState = EThreadState::NeedToBeWaker;
+                    return true;
+                case EThreadState::Sleep:
+                    *wakerState = EThreadState::NeedToBeWakerFromSleep;
+                    return true;
+                case EThreadState::Blocking:
+                    *wakerState = EThreadState::NeedToBeWakerFromBlocking;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        static bool TryGetWakerResumeState(EThreadState state, EThreadState* resumeState) {
+            Y_ABORT_UNLESS(resumeState);
+            switch (state) {
+                case EThreadState::None:
+                case EThreadState::Spin:
+                case EThreadState::NeedToBeWaker:
+                    *resumeState = EThreadState::None;
+                    return true;
+                case EThreadState::Sleep:
+                case EThreadState::NeedToBeWakerFromSleep:
+                    *resumeState = EThreadState::Sleep;
+                    return true;
+                case EThreadState::Blocking:
+                case EThreadState::NeedToBeWakerFromBlocking:
+                    *resumeState = EThreadState::Blocking;
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+    public:
         void SetWork() {
             ExchangeState(EThreadState::Work);
         }
@@ -164,34 +157,63 @@ namespace NActors {
 
         bool WakeUp();
 
-        bool TrySetNeedToBeWaker(EThreadState expected) {
+        bool TrySetNeedToBeWaker(EThreadState* expected) {
+            Y_ABORT_UNLESS(expected);
             EThreadState wakerState;
-            switch (expected) {
-                case EThreadState::None:
-                case EThreadState::Spin:
-                    wakerState = EThreadState::NeedToBeWaker;
-                    break;
-                case EThreadState::Sleep:
-                    wakerState = EThreadState::NeedToBeWakerFromSleep;
-                    break;
-                case EThreadState::Blocking:
-                    wakerState = EThreadState::NeedToBeWakerFromBlocking;
-                    break;
-                default:
-                    return false;
+            if (!TryGetNeedToBeWakerState(*expected, &wakerState)) {
+                return false;
             }
-            return ReplaceState(expected, wakerState);
+            return ReplaceState(*expected, wakerState);
         }
 
-        bool BecomeWaker(EThreadState* resumeState) {
-            return BecomeWakerState(resumeState);
+        bool TrySetNeedToBeWaker() {
+            EThreadState state = GetState<EThreadState>();
+            while (true) {
+                if (IsNeedToBeWaker(state) || state == EThreadState::Waker) {
+                    return true;
+                }
+                if (state != EThreadState::None && state != EThreadState::Spin &&
+                        state != EThreadState::Sleep && state != EThreadState::Blocking) {
+                    return false;
+                }
+                if (TrySetNeedToBeWaker(&state)) {
+                    return true;
+                }
+            }
         }
 
-        bool RestoreWakerResumeState() {
-            return RestoreNeedToBeWakerState();
+        bool TryBecomeWaker(EThreadState* resumeState) {
+            EThreadState state = GetState<EThreadState>();
+            while (true) {
+                EThreadState currentResumeState;
+                if (!TryGetWakerResumeState(state, &currentResumeState)) {
+                    return false;
+                }
+                if (ReplaceState(state, EThreadState::Waker)) {
+                    *resumeState = currentResumeState;
+                    return true;
+                }
+            }
         }
 
-        bool WaitForWaker(std::atomic<bool>* stopFlag, std::atomic<i64>* activationCredits);
+        bool CancelWakerRequest() {
+            EThreadState state = GetState<EThreadState>();
+            while (true) {
+                if (!IsNeedToBeWaker(state)) {
+                    return false;
+                }
+                EThreadState resumeState;
+                Y_ABORT_UNLESS(TryGetWakerResumeState(state, &resumeState));
+                if (ReplaceState(state, resumeState)) {
+                    return true;
+                }
+            }
+        }
+
+        bool WaitForWaker(
+            const std::atomic<bool>& stopFlag,
+            const std::atomic<i64>& activationCredits,
+            const std::atomic<ui64>& reductions);
 
         void Interrupt() {
             WaitingPad.Interrupt();

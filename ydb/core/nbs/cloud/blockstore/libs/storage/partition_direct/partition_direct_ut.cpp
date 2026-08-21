@@ -2,6 +2,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/fast_path_service.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_cleanup_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_direct_actor.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/region.h>
 
@@ -14,6 +15,12 @@
 #include <ydb/library/actors/core/mon.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <util/generic/hash.h>
+#include <util/generic/hash_set.h>
+#include <util/string/builder.h>
+
+#include <set>
 
 using namespace NKikimr;
 
@@ -184,6 +191,62 @@ ui64 CreatePartitionTablet(
     return PartitionTabletId;
 }
 
+NProto::TError DeletePartition(
+    TEnvironmentSetup& env,
+    ui64 partitionTabletId,
+    const TActorId& edge)
+{
+    auto request = std::make_unique<TEvService::TEvDeletePartitionRequest>();
+    env.Runtime->SendToPipe(
+        partitionTabletId,
+        edge,
+        request.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
+
+    auto res =
+        env.WaitForEdgeActorEvent<TEvService::TEvDeletePartitionResponse>(
+            edge,
+            false);
+    UNIT_ASSERT(res);
+    return res->Get()->GetError();
+}
+
+NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroupResult
+SendBscDirectBlockGroupOperation(
+    TEnvironmentSetup& env,
+    ui64 tabletId,
+    ui64 directBlockGroupId,
+    const std::function<void(
+        NKikimrBlobStorage::TEvControllerAllocateDDiskBlockGroup::
+            TDirectBlockGroupOperation*)>& fill)
+{
+    auto ev = std::make_unique<
+        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+    auto& r = ev->Record;
+    r.SetDDiskPoolName(DDiskPoolName);
+    r.SetPersistentBufferDDiskPoolName(PersistentBufferDDiskPoolName);
+    r.SetTabletId(tabletId);
+    auto* op = r.AddDirectBlockGroupOperations();
+    op->SetDirectBlockGroupId(directBlockGroupId);
+    fill(op);
+
+    const TActorId edge = env.Runtime->AllocateEdgeActor(
+        env.Settings.ControllerNodeId,
+        __FILE__,
+        __LINE__);
+    env.Runtime->SendToPipe(
+        MakeBSControllerID(),
+        edge,
+        ev.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
+    auto response = env.WaitForEdgeActorEvent<
+        TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult>(edge);
+    UNIT_ASSERT(response);
+    return response->Get()->Record;
+}
+
 void StopFastPathService(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
@@ -203,7 +266,7 @@ void StopFastPathService(
     UNIT_ASSERT(res);
 }
 
-TActorId GetLoadActorAdapterActorId(
+TActorId TryGetLoadActorAdapterActorId(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
     const TActorId& edge)
@@ -220,11 +283,20 @@ TActorId GetLoadActorAdapterActorId(
     auto res = env.WaitForEdgeActorEvent<
         TEvService::TEvGetLoadActorAdapterActorIdResponse>(edge, false);
     UNIT_ASSERT(res);
-    UNIT_ASSERT(!res->Get()->Record.GetActorId().empty());
     NActors::TActorId loadActorAdapter;
-    loadActorAdapter.Parse(
-        res->Get()->Record.GetActorId().data(),
-        res->Get()->Record.GetActorId().size());
+    const auto& actorIdStr = res->Get()->Record.GetActorId();
+    UNIT_ASSERT(loadActorAdapter.Parse(actorIdStr.data(), actorIdStr.size()));
+    return loadActorAdapter;
+}
+
+TActorId GetLoadActorAdapterActorId(
+    TEnvironmentSetup& env,
+    ui64 partitionTabletId,
+    const TActorId& edge)
+{
+    auto loadActorAdapter =
+        TryGetLoadActorAdapterActorId(env, partitionTabletId, edge);
+    UNIT_ASSERT(loadActorAdapter);
     return loadActorAdapter;
 }
 
@@ -250,6 +322,53 @@ void WriteBlock(
         S_OK,
         res->Get()->Record.GetError().GetCode(),
         FormatError(res->Get()->Record.GetError()));
+}
+
+void WriteBlockExpectFailure(
+    TEnvironmentSetup& env,
+    const TActorId& loadActorAdapter,
+    const TActorId& edge,
+    ui64 index,
+    const TString& data)
+{
+    auto request = std::make_unique<TEvService::TEvWriteBlocksRequest>();
+    request->Record.SetStartIndex(index);
+    request->Record.MutableBlocks()->AddBuffers(data);
+
+    env.Runtime->Send(
+        new IEventHandle(
+            loadActorAdapter,
+            edge,
+            request.release(),
+            IEventHandle::FlagTrackDelivery),
+        edge.NodeId());
+
+    auto ev = env.Runtime->WaitForEdgeActorEvent({edge});
+    if (ev->GetTypeRewrite() == TEvService::TEvWriteBlocksResponse::EventType) {
+        const auto& error =
+            ev->Get<TEvService::TEvWriteBlocksResponse>()->Record.GetError();
+        UNIT_ASSERT_C(error.GetCode() != S_OK, FormatError(error));
+        return;
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(
+        NActors::TEvents::TEvUndelivered::EventType,
+        ev->GetTypeRewrite());
+}
+
+TString DDiskKey(const NKikimrBlobStorage::NDDisk::TDDiskId& id)
+{
+    return TStringBuilder() << id.GetNodeId() << ":" << id.GetPDiskId() << ":"
+                            << id.GetDDiskSlotId();
+}
+
+ui32 UniqueDDiskCount(const TVector<NKikimrBlobStorage::NDDisk::TDDiskId>& ids)
+{
+    THashSet<TString> keys;
+    for (const auto& id: ids) {
+        keys.insert(DDiskKey(id));
+    }
+    return keys.size();
 }
 
 TString ReadBlock(
@@ -1796,6 +1915,586 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         UNIT_ASSERT_VALUES_EQUAL(
             defaultCount + 3,
             roundTrips[3].RequestedNumDDisks);
+    }
+
+    Y_UNIT_TEST(ShouldDeletePartition)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> allocatedDDisks;
+        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> allocatedPBuffers;
+        ui32 deallocateRequestCount = 0;
+
+        // Wipe traffic: Max-lsn barrier erase hits every PBuffer;
+        // DeleteTabletChunks hits every DDisk. Match request↔result by
+        // (sender, cookie): request.Sender / result.Recipient are the
+        // cleanup actor. Do not use the DDisk service id — RegisterService
+        // aliases it to a different actor SelfId that appears as result.Sender.
+        using TTransportCookie = std::pair<TActorId, ui64>;
+        THashSet<TTransportCookie> pendingWipeBarriers;
+        THashSet<TTransportCookie> wipeBarrierOks;
+        THashSet<TTransportCookie> pendingDeleteChunks;
+        THashSet<TTransportCookie> deleteChunksOks;
+        bool captureWipeTraffic = false;
+        bool deallocateBeforeWipeDone = false;
+        bool deleteChunksBeforeWipeDone = false;
+        ui32 deallocateOpSize = 0;
+        bool deallocateOpMalformed = false;
+
+        runtime->FilterFunction =
+            [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev)
+        {
+            const ui32 type = ev->GetTypeRewrite();
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::
+                    EventType)
+            {
+                auto* msg =
+                    ev->Get<TEvBlobStorage::
+                                TEvControllerAllocateDDiskBlockGroupResult>();
+                if (msg->Record.GetStatus() == NKikimrProto::OK &&
+                    allocatedDDisks.empty())
+                {
+                    for (const auto& response: msg->Record.GetResponses()) {
+                        for (const auto& node: response.GetNodes()) {
+                            if (node.HasDDiskId()) {
+                                allocatedDDisks.push_back(node.GetDDiskId());
+                            }
+                            if (node.HasPersistentBufferDDiskId()) {
+                                allocatedPBuffers.push_back(
+                                    node.GetPersistentBufferDDiskId());
+                            }
+                        }
+                    }
+                }
+            }
+            if (type ==
+                TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() > 0 &&
+                    msg->Record.GetDirectBlockGroupOperations(0)
+                        .HasDefineDirectBlockGroup() &&
+                    msg->Record.GetDirectBlockGroupOperations(0)
+                            .GetDefineDirectBlockGroup()
+                            .GetNumDDisks() == 0)
+                {
+                    if (!pendingDeleteChunks.empty()) {
+                        deallocateBeforeWipeDone = true;
+                    }
+                    ++deallocateRequestCount;
+                    deallocateOpSize =
+                        msg->Record.DirectBlockGroupOperationsSize();
+                    for (const auto& op:
+                         msg->Record.GetDirectBlockGroupOperations())
+                    {
+                        if (!op.HasDefineDirectBlockGroup()) {
+                            deallocateOpMalformed = true;
+                            continue;
+                        }
+                        const auto& def = op.GetDefineDirectBlockGroup();
+                        if (def.GetNumDDisks() != 0 ||
+                            def.GetNumChunksPerDDisk() != 0 ||
+                            def.GetNumPersistentBuffers() != 0)
+                        {
+                            deallocateOpMalformed = true;
+                        }
+                    }
+                }
+            }
+            if (captureWipeTraffic) {
+                if (type == NDDisk::TEvErasePersistentBuffer::EventType) {
+                    const auto& record =
+                        ev->Get<NDDisk::TEvErasePersistentBuffer>()->Record;
+                    // Partition wipe sends Max<ui64>(); background cleanup uses
+                    // a finite watermark and must not be counted here.
+                    if (record.GetLsn() == Max<ui64>()) {
+                        pendingWipeBarriers.insert({ev->Sender, ev->Cookie});
+                    }
+                }
+                if (type == NDDisk::TEvErasePersistentBufferResult::EventType) {
+                    const TTransportCookie key{
+                        ev->GetRecipientRewrite(),
+                        ev->Cookie};
+                    if (pendingWipeBarriers.contains(key)) {
+                        const auto& record =
+                            ev->Get<NDDisk::TEvErasePersistentBufferResult>()
+                                ->Record;
+                        if (record.GetStatus() ==
+                            NKikimrBlobStorage::NDDisk::TReplyStatus::OK)
+                        {
+                            wipeBarrierOks.insert(key);
+                        }
+                        pendingWipeBarriers.erase(key);
+                    }
+                }
+                if (type == NDDisk::TEvDeleteTabletChunks::EventType) {
+                    if (!pendingWipeBarriers.empty()) {
+                        deleteChunksBeforeWipeDone = true;
+                    }
+                    pendingDeleteChunks.insert({ev->Sender, ev->Cookie});
+                }
+                if (type == NDDisk::TEvDeleteTabletChunksResult::EventType) {
+                    const TTransportCookie key{
+                        ev->GetRecipientRewrite(),
+                        ev->Cookie};
+                    if (pendingDeleteChunks.contains(key)) {
+                        const auto& record =
+                            ev->Get<NDDisk::TEvDeleteTabletChunksResult>()
+                                ->Record;
+                        if (record.GetStatus() ==
+                            NKikimrBlobStorage::NDDisk::TReplyStatus::OK)
+                        {
+                            deleteChunksOks.insert(key);
+                        }
+                        pendingDeleteChunks.erase(key);
+                    }
+                }
+            }
+            return true;
+        };
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        auto loadActorAdapter =
+            GetLoadActorAdapterActorId(env, partition, edge);
+        const TString data = NUnitTest::RandomString(DefaultBlockSize, 42);
+        WriteBlock(env, loadActorAdapter, edge, 0, data);
+
+        UNIT_ASSERT(!allocatedDDisks.empty());
+        UNIT_ASSERT(!allocatedPBuffers.empty());
+
+        captureWipeTraffic = true;
+        const auto error = DeletePartition(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(0u, error.GetCode(), FormatError(error));
+        UNIT_ASSERT_VALUES_EQUAL(1u, deallocateRequestCount);
+        UNIT_ASSERT(!deallocateBeforeWipeDone);
+        UNIT_ASSERT(!deleteChunksBeforeWipeDone);
+        UNIT_ASSERT_VALUES_EQUAL(DirectBlockGroupsCount, deallocateOpSize);
+        UNIT_ASSERT(!deallocateOpMalformed);
+
+        UNIT_ASSERT(!TryGetLoadActorAdapterActorId(env, partition, edge));
+        WriteBlockExpectFailure(
+            env,
+            loadActorAdapter,
+            edge,
+            0,
+            NUnitTest::RandomString(DefaultBlockSize, 7));
+
+        // Every unique allocated PBuffer got a Max-lsn barrier erase and
+        // replied OK.
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            UniqueDDiskCount(allocatedPBuffers),
+            wipeBarrierOks.size(),
+            "wipe barrier-erase OK replies vs unique allocated PBuffers");
+        UNIT_ASSERT_C(
+            pendingWipeBarriers.empty(),
+            "unanswered wipe barrier-erase keys: "
+                << pendingWipeBarriers.size());
+
+        // Every unique allocated DDisk got DeleteTabletChunks and replied OK.
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            UniqueDDiskCount(allocatedDDisks),
+            deleteChunksOks.size(),
+            "DeleteTabletChunks OK replies vs unique allocated DDisks");
+        UNIT_ASSERT_C(
+            pendingDeleteChunks.empty(),
+            "unanswered DeleteTabletChunks keys: "
+                << pendingDeleteChunks.size());
+
+        // BSController must have released every previously allocated entity:
+        // re-deleting any of them returns NOT_FOUND.
+        {
+            const auto& ddisk = allocatedDDisks.front();
+            auto rr = SendBscDirectBlockGroupOperation(
+                env,
+                partition,
+                /*directBlockGroupId=*/0,
+                [&](auto* op)
+                { op->AddDeleteDDisks()->MutableDDiskId()->CopyFrom(ddisk); });
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                NKikimrProto::NOT_FOUND,
+                rr.GetStatus(),
+                rr.GetErrorReason());
+        }
+        {
+            const auto& pbuffer = allocatedPBuffers.front();
+            auto rr = SendBscDirectBlockGroupOperation(
+                env,
+                partition,
+                /*directBlockGroupId=*/0,
+                [&](auto* op)
+                {
+                    op->AddDeletePersistentBuffers()
+                        ->MutablePersistentBufferId()
+                        ->CopyFrom(pbuffer);
+                });
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                NKikimrProto::NOT_FOUND,
+                rr.GetStatus(),
+                rr.GetErrorReason());
+        }
+    }
+
+    Y_UNIT_TEST(ShouldDeletePartitionIdempotently)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        {
+            const auto error = DeletePartition(env, partition, edge);
+            UNIT_ASSERT_VALUES_EQUAL_C(0u, error.GetCode(), FormatError(error));
+        }
+        {
+            // Second delete after teardown finished is a no-op.
+            const auto error = DeletePartition(env, partition, edge);
+            UNIT_ASSERT_VALUES_EQUAL_C(0u, error.GetCode(), FormatError(error));
+        }
+
+        UNIT_ASSERT(!TryGetLoadActorAdapterActorId(env, partition, edge));
+    }
+
+    Y_UNIT_TEST(ShouldFailDeleteWhenBscPipeBreaksDuringDeallocate)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+
+        TActorId lastBscPipeClient;
+        TActorId lastBscPipeOwner;
+        bool injectPipeBreak = true;
+
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            const ui32 type = ev->GetTypeRewrite();
+            if (type == TEvTabletPipe::TEvClientConnected::EventType) {
+                const auto* msg = ev->Get<TEvTabletPipe::TEvClientConnected>();
+                if (msg->TabletId == MakeBSControllerID()) {
+                    lastBscPipeClient = msg->ClientId;
+                    lastBscPipeOwner = ev->GetRecipientRewrite();
+                }
+            }
+            if (injectPipeBreak &&
+                type == TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup::
+                            EventType)
+            {
+                auto* msg = ev->Get<
+                    TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
+                if (msg->Record.DirectBlockGroupOperationsSize() > 0 &&
+                    msg->Record.GetDirectBlockGroupOperations(0)
+                        .HasDefineDirectBlockGroup() &&
+                    msg->Record.GetDirectBlockGroupOperations(0)
+                            .GetDefineDirectBlockGroup()
+                            .GetNumDDisks() == 0 &&
+                    lastBscPipeClient && lastBscPipeOwner)
+                {
+                    injectPipeBreak = false;
+                    // Drop the deallocate and fail the in-flight delete via
+                    // the cleanup actor that owns the BSC pipe.
+                    runtime->Schedule(
+                        TDuration::MilliSeconds(1),
+                        new IEventHandle(
+                            lastBscPipeOwner,
+                            lastBscPipeClient,
+                            new TEvTabletPipe::TEvClientDestroyed(
+                                MakeBSControllerID(),
+                                lastBscPipeClient,
+                                TActorId())),
+                        nullptr,
+                        nodeId);
+                    return false;
+                }
+            }
+            return true;
+        };
+
+        auto partition = CreatePartitionTablet(env);
+        UNIT_ASSERT(lastBscPipeOwner);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        Y_UNUSED(GetLoadActorAdapterActorId(env, partition, edge));
+
+        const auto error = DeletePartition(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_REJECTED,
+            error.GetCode(),
+            FormatError(error));
+
+        // A retry after the pipe failure must still be able to finish.
+        const auto error2 = DeletePartition(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(0u, error2.GetCode(), FormatError(error2));
+    }
+
+    Y_UNIT_TEST(ShouldFailDeleteWhenPBufferEraseIsOverloaded)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        bool injectOverload = true;
+        THashSet<std::pair<TActorId, ui64>> wipeCookies;
+        runtime->FilterFunction =
+            [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev)
+        {
+            const ui32 type = ev->GetTypeRewrite();
+            if (type == NDDisk::TEvErasePersistentBuffer::EventType) {
+                const auto& record =
+                    ev->Get<NDDisk::TEvErasePersistentBuffer>()->Record;
+                if (record.GetLsn() == Max<ui64>()) {
+                    wipeCookies.insert({ev->Sender, ev->Cookie});
+                }
+                return true;
+            }
+            if (!injectOverload ||
+                type != NDDisk::TEvErasePersistentBufferResult::EventType)
+            {
+                return true;
+            }
+            const std::pair<TActorId, ui64> key{
+                ev->GetRecipientRewrite(),
+                ev->Cookie};
+            if (!wipeCookies.contains(key)) {
+                return true;
+            }
+            auto* msg = ev->Get<NDDisk::TEvErasePersistentBufferResult>();
+            if (msg->Record.GetStatus() !=
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OK)
+            {
+                return true;
+            }
+            injectOverload = false;
+            msg->Record.SetStatus(
+                NKikimrBlobStorage::NDDisk::TReplyStatus::OVERLOADED);
+            msg->Record.SetErrorReason("injected overload");
+            return true;
+        };
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        Y_UNUSED(GetLoadActorAdapterActorId(env, partition, edge));
+
+        const auto error = DeletePartition(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_REJECTED,
+            error.GetCode(),
+            FormatError(error));
+
+        const auto error2 = DeletePartition(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(0u, error2.GetCode(), FormatError(error2));
+    }
+
+    Y_UNIT_TEST(ShouldFailDeleteWhenDDiskDeleteChunksIsUndelivered)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        bool injectUndelivery = true;
+        runtime->FilterFunction =
+            [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (!injectUndelivery) {
+                return true;
+            }
+            if (ev->GetTypeRewrite() !=
+                NDDisk::TEvDeleteTabletChunks::EventType)
+            {
+                return true;
+            }
+            injectUndelivery = false;
+            runtime->Send(
+                new IEventHandle(
+                    ev->Sender,
+                    ev->GetRecipientRewrite(),
+                    new NActors::TEvents::TEvUndelivered(
+                        NDDisk::TEvDeleteTabletChunks::EventType,
+                        NActors::TEvents::TEvUndelivered::Disconnected),
+                    0,
+                    ev->Cookie),
+                nodeId);
+            return false;
+        };
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        Y_UNUSED(GetLoadActorAdapterActorId(env, partition, edge));
+
+        const auto error = DeletePartition(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_REJECTED,
+            error.GetCode(),
+            FormatError(error));
+
+        const auto error2 = DeletePartition(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(0u, error2.GetCode(), FormatError(error2));
+    }
+
+    Y_UNIT_TEST(ShouldReplyToConcurrentDeletePartitionRequests)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge1 = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        const TActorId& edge2 = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        Y_UNUSED(GetLoadActorAdapterActorId(env, partition, edge1));
+
+        auto sendDelete = [&](const TActorId& edge)
+        {
+            auto request =
+                std::make_unique<TEvService::TEvDeletePartitionRequest>();
+            runtime->SendToPipe(
+                partition,
+                edge,
+                request.release(),
+                0,
+                TTestActorSystem::GetPipeConfigWithRetries());
+        };
+
+        sendDelete(edge1);
+        sendDelete(edge2);
+
+        // Wait on both edges together so pipe ClientConnected on the second
+        // edge is consumed instead of crashing an unattended edge actor.
+        std::set<TActorId> ids{edge1, edge2};
+        THashMap<TActorId, NProto::TError> errors;
+        while (errors.size() < 2) {
+            auto ev = runtime->WaitForEdgeActorEvent(ids);
+            if (ev->GetTypeRewrite() !=
+                TEvService::TEvDeletePartitionResponse::EventType)
+            {
+                continue;
+            }
+            errors[ev->GetRecipientRewrite()] =
+                ev->Get<TEvService::TEvDeletePartitionResponse>()->GetError();
+        }
+
+        for (const auto& [actorId, error]: errors) {
+            UNIT_ASSERT_VALUES_EQUAL_C(
+                0u,
+                error.GetCode(),
+                FormatError(error) << " from " << actorId);
+        }
+    }
+
+    Y_UNIT_TEST(ShouldFailDeleteWhenWipeReplyIsLost)
+    {
+        TEnvironmentSetup env{{
+            .NodeCount = 8,
+            .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
+        }};
+        auto& runtime = env.Runtime;
+        runtime->SetLogPriority(
+            NKikimrServices::NBS_PARTITION,
+            NActors::NLog::PRI_DEBUG);
+
+        bool dropResult = true;
+        runtime->FilterFunction =
+            [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev)
+        {
+            if (!dropResult) {
+                return true;
+            }
+            if (ev->GetTypeRewrite() !=
+                NDDisk::TEvDeleteTabletChunksResult::EventType)
+            {
+                return true;
+            }
+            dropResult = false;
+            return false;
+        };
+
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
+        auto partition = CreatePartitionTablet(env);
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+        Y_UNUSED(GetLoadActorAdapterActorId(env, partition, edge));
+
+        const auto error = DeletePartition(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            E_TIMEOUT,
+            error.GetCode(),
+            FormatError(error));
+        UNIT_ASSERT_STRING_CONTAINS(error.GetMessage(), "timed out");
+
+        const auto error2 = DeletePartition(env, partition, edge);
+        UNIT_ASSERT_VALUES_EQUAL_C(0u, error2.GetCode(), FormatError(error2));
     }
 }
 

@@ -139,6 +139,9 @@ public:
             case TQueryReplayEvents::WriteColumnsMismatch:
                 failReason = "write_columns_mismatch";
                 break;
+            case TQueryReplayEvents::WriteTypesMismatch:
+                failReason = "write_types_mismatch";
+                break;
             case TQueryReplayEvents::UncategorizedPlanMismatch:
                 failReason = "uncategorized_plan_mismatch";
                 break;

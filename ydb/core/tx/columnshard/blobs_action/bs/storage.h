@@ -38,6 +38,10 @@ public:
         return Manager->HasToDelete(blobId, tabletId);
     }
 
+    virtual bool HasBlobsForGroups(const THashSet<ui32>& groups) const override {
+        return Manager->HasBlobsForGroups(groups) || TBase::HasBlobsForGroups(groups);
+    }
+
     virtual TTabletsByBlob GetBlobsToDelete() const override {
         return Manager->GetBlobsToDeleteAll();
     }

@@ -344,6 +344,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
     void Handle(TEvDataShard::TEvCancelBackup::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCancelRestore::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvCompactTable::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvTablet::TEvMoveData::TPtr& ev, const TActorContext& ctx);
+    virtual void MoveDataCompleted(const TActorContext& ctx) override;
 
     void Handle(TEvColumnShard::TEvOverloadUnsubscribe::TPtr& ev, const TActorContext& ctx);
     void Handle(NLongTxService::TEvLongTxService::TEvLockStatus::TPtr& ev, const TActorContext& ctx);
@@ -534,6 +536,28 @@ private:
 
     TActorId StatsReportPipe;
     std::unique_ptr<TEvDataShard::TEvPeriodicTableStats> LastStats;
+
+    // State for the Hive-initiated MoveData operation.
+    // Stateless v1: no persistence; on restart Hive re-sends TEvMoveData.
+    struct TMoveDataState {
+        TActorId HiveSender;
+        THashSet<ui32> TargetGroups;
+        bool Active = false;
+        // Set to true when the executor calls MoveDataCompleted(); signals that
+        // vacuum is done and only the HasBlobsForGroups gate remains.
+        bool VacuumCompleted = false;
+        // The completion gate scans the GC queues; cap its cadence instead of
+        // paying the scans on every periodic wakeup tick. Default-initialized to the
+        // epoch so the first check fires immediately. The effective interval is
+        // max(MoveDataGateCheckCadence, PeriodicWakeupActivationPeriod) — the cadence
+        // is a lower bound; wakeup granularity is acceptable for an hours-scale
+        // decommission operation.
+        TInstant LastGateCheckAt;
+    };
+
+    static constexpr TDuration MoveDataGateCheckCadence = TDuration::Seconds(5);
+
+    TMoveDataState MoveDataState;
 
     // In-flight forced-compaction requests (ALTER TABLE ... COMPACT). Kept in memory only, mirroring
     // DataShard's CompactionWaiters: on restart/move the SchemeShard's persisted queue re-sends

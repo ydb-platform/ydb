@@ -1,8 +1,12 @@
 #pragma once
+
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.h>
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/queue_sizes.h>
+
+#include <util/generic/hash_set.h>
 
 namespace NKikimr::NOlap {
 class TVersionedIndex;
@@ -12,6 +16,7 @@ class TTiering;
 namespace NKikimr::NOlap::NActualizer {
 class TTieringActualizer;
 class TSchemeActualizer;
+class TMoveDataActualizer;
 
 class TGranuleActualizationIndex {
 private:
@@ -20,6 +25,7 @@ private:
 
     std::shared_ptr<TTieringActualizer> TieringActualizer;
     std::shared_ptr<TSchemeActualizer> SchemeActualizer;
+    std::shared_ptr<TMoveDataActualizer> MoveDataActualizer;
 
     const TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
@@ -40,6 +46,10 @@ public:
 
     void RefreshTiering(const std::optional<TTiering>& info, const TAddExternalContext& context);
     void RefreshScheme(const TAddExternalContext& context);
+
+    void StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context);
+    void StopMoveData();
+    TMoveDataQueueSizes GetMoveDataQueueSizes() const;
 
     void AddPortion(const std::shared_ptr<TPortionInfo>& portion, const TAddExternalContext& context);
     void RemovePortion(const std::shared_ptr<TPortionInfo>& portion);

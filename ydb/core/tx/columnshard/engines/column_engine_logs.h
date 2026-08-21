@@ -172,6 +172,30 @@ public:
         return GranulesStorage->ReturnToIndexes(portions);
     }
 
+    void StartMoveData(const THashSet<ui32>& targetGroups) {
+        for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
+            granule->StartMoveData(targetGroups);
+        }
+    }
+
+    void StopMoveData() {
+        for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
+            granule->StopMoveData();
+        }
+    }
+
+    NActualizer::TMoveDataQueueSizes GetMoveDataQueueSizes() const {
+        NActualizer::TMoveDataQueueSizes result;
+        for (auto& [pathId, granule] : GranulesStorage->GetTables()) {
+            result += granule->GetMoveDataQueueSizes();
+        }
+        return result;
+    }
+
+    ui64 GetMoveDataPortionsCount() const {
+        return GetMoveDataQueueSizes().GetTotal();
+    }
+
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
     virtual bool ApplyChangesOnExecute(
         IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;

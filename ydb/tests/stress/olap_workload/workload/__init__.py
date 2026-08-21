@@ -8,11 +8,13 @@ from ydb.tests.stress.olap_workload.workload.type.insert_delete import WorkloadI
 from ydb.tests.stress.olap_workload.workload.type.transactions import WorkloadTransactions
 from ydb.tests.stress.olap_workload.workload.type.rename_tables import WorkloadRenameTables
 from ydb.tests.stress.olap_workload.workload.type.encodings import WorkloadEncodings
+from ydb.tests.stress.olap_workload.workload.type.move_data import WorkloadMoveData
 
 
 class WorkloadRunner:
-    def __init__(self, client, path, duration, allow_nullables_in_pk):
+    def __init__(self, client, path, duration, allow_nullables_in_pk, endpoint=None):
         self.client = client
+        self.endpoint = endpoint
         self.name = path
         self.tables_prefix = "/".join([self.client.database, self.name])
         self.duration = duration
@@ -28,7 +30,20 @@ class WorkloadRunner:
 
     def _cleanup(self):
         print(f"Cleaning up {self.tables_prefix}...")
-        deleted = self.client.remove_recursively(self.tables_prefix)
+        # Workloads that restart tablets or decommission storage (move_data,
+        # cut_history) can still have restarts landing when the run ends; a plain
+        # remove then dies on transient Unavailable ("Connection to tablet was
+        # lost"), which failed release-asan three retries in a row.
+        deadline = time.time() + 120
+        while True:
+            try:
+                deleted = self.client.remove_recursively(self.tables_prefix)
+                break
+            except (ydb.issues.Unavailable, ydb.issues.BadSession, ydb.issues.ConnectionError) as e:
+                if time.time() >= deadline:
+                    raise
+                print(f"Cleaning up {self.tables_prefix}: transient {type(e).__name__}, retrying...")
+                time.sleep(3)
         print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 
     def run(self):
@@ -40,6 +55,10 @@ class WorkloadRunner:
             WorkloadRenameTables(self.client, self.name, stop, 10),
             WorkloadEncodings(self.client, self.name, stop),
         ]
+        # Pool shrink/grow needs the console endpoint, so it is only enabled when
+        # the caller supplied one.
+        if self.endpoint:
+            workloads.append(WorkloadMoveData(self.client, self.name, stop, self.endpoint, self.client.database))
         for w in workloads:
             w.start()
         started_at = started_at = time.time()

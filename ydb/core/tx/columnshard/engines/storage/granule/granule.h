@@ -268,6 +268,19 @@ public:
         ActualizationIndex->RefreshScheme(context);
     }
 
+    void StartMoveData(const THashSet<ui32>& targetGroups) {
+        NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
+        ActualizationIndex->StartMoveData(targetGroups, context);
+    }
+
+    void StopMoveData() {
+        ActualizationIndex->StopMoveData();
+    }
+
+    NActualizer::TMoveDataQueueSizes GetMoveDataQueueSizes() const {
+        return ActualizationIndex->GetMoveDataQueueSizes();
+    }
+
     void ReturnToIndexes(const THashSet<ui64>& portionIds) {
         NActualizer::TAddExternalContext context(HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now(), Portions);
         context.SetPortionExclusiveGuarantee(false);

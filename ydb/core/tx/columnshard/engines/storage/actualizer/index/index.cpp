@@ -1,8 +1,11 @@
 #include "index.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/actualizer/move/move.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/scheme/scheme.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/tiering/tiering.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+
+#include <util/generic/algorithm.h>
 
 namespace NKikimr::NOlap::NActualizer {
 
@@ -44,7 +47,6 @@ TGranuleActualizationIndex::TGranuleActualizationIndex(
     , VersionedIndex(versionedIndex)
     , StoragesManager(storagesManager)
 {
-    Y_UNUSED(PathId);
 }
 
 void TGranuleActualizationIndex::Start() {
@@ -55,11 +57,39 @@ void TGranuleActualizationIndex::Start() {
     Actualizers.emplace_back(SchemeActualizer);
 }
 
-std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {
-    if (!TieringActualizer) {
-        return {};
+void TGranuleActualizationIndex::StartMoveData(const THashSet<ui32>& targetGroups, const TAddExternalContext& context) {
+    AFL_VERIFY(!MoveDataActualizer);
+    MoveDataActualizer = std::make_shared<TMoveDataActualizer>(targetGroups, VersionedIndex);
+    Actualizers.emplace_back(MoveDataActualizer);
+    MoveDataActualizer->Refresh(context);
+}
+
+void TGranuleActualizationIndex::StopMoveData() {
+    if (!MoveDataActualizer) {
+        return;
     }
-    return TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
+    Erase(Actualizers, MoveDataActualizer);
+    MoveDataActualizer.reset();
+}
+
+TMoveDataQueueSizes TGranuleActualizationIndex::GetMoveDataQueueSizes() const {
+    if (!MoveDataActualizer) {
+        return TMoveDataQueueSizes();
+    }
+    return MoveDataActualizer->GetMoveDataQueueSizes();
+}
+
+std::vector<TCSMetadataRequest> TGranuleActualizationIndex::CollectMetadataRequests(const THashMap<ui64, TPortionInfo::TPtr>& portions) {
+    std::vector<TCSMetadataRequest> result;
+    if (TieringActualizer) {
+        auto requests = TieringActualizer->BuildMetadataRequests(PathId, portions, TieringActualizer);
+        result.insert(result.end(), std::make_move_iterator(requests.begin()), std::make_move_iterator(requests.end()));
+    }
+    if (MoveDataActualizer) {
+        auto requests = MoveDataActualizer->BuildMoveDataMetadataRequests(portions, MoveDataActualizer);
+        result.insert(result.end(), std::make_move_iterator(requests.begin()), std::make_move_iterator(requests.end()));
+    }
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NActualizer

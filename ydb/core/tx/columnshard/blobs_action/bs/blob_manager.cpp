@@ -7,6 +7,8 @@
 
 #include <ydb/library/actors/struct_log/log_stack.h>
 
+#include <util/generic/algorithm.h>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD_BLOBS_BS
 
 namespace NKikimr::NOlap {
@@ -505,6 +507,21 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
         account(i.first);
     }
     return result;
+}
+
+bool TBlobManager::HasBlobsForGroups(const THashSet<ui32>& groups) const {
+    // BlobsToKeep: TBlobsByGenStep — TLogoBlobID entries; resolve group via TabletInfo.
+    const auto keptBlobInGroups = [&](const TLogoBlobID& blob) {
+        const ui32 groupId = TabletInfo->GroupFor(blob.Channel(), blob.Generation());
+        // GroupFor returns Max<ui32>() when the generation predates every history
+        // entry; never treat that sentinel as a real group match.
+        return groupId != Max<ui32>() && groups.contains(groupId);
+    };
+    // BlobsToDelete / BlobsToDeleteDelayed: TTabletsByBlob — keyed by TUnifiedBlobId.
+    const auto deletedBlobInGroups = [&groups](const auto& blob) {
+        return groups.contains(blob.first.GetDsGroup());
+    };
+    return AnyOf(BlobsToKeep, keptBlobInGroups) || AnyOf(BlobsToDelete, deletedBlobInGroups) || AnyOf(BlobsToDeleteDelayed, deletedBlobInGroups);
 }
 
 TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {

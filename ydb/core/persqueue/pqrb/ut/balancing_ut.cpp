@@ -634,6 +634,24 @@ Y_UNIT_TEST(PreferredChildDoesNotStealFromCommonParentSession) {
     env.AssertLocked(2, "session-0");
 }
 
+Y_UNIT_TEST(SessionClosedBeforeSecondParentFinished) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.RegisterSession("session-1");
+    env.Merge(0, 1);
+
+    const TString first = env.SessionOf(0);
+    env.Finish(first, 0);
+    env.AssertNotLocked(2);
+    env.CloseSession(first);
+    env.AssertNotLocked(2);
+
+    const TString remaining = env.SessionOf(1);
+    UNIT_ASSERT_C(!remaining.empty(), "surviving session must keep the other parent");
+    env.Finish(remaining, 1);
+    env.AssertLocked(2);
+}
 } // Y_UNIT_TEST_SUITE(TPqrbMergeBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbSplitBalancing) {
@@ -663,5 +681,35 @@ Y_UNIT_TEST(PreferredChildTakenAfterParentCommitted) {
 }
 
 } // Y_UNIT_TEST_SUITE(TPqrbSplitBalancing)
+
+Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants) {
+
+Y_UNIT_TEST(StaleFinishAfterPipeBreakIsIgnored) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    const auto pipe = env.Pipes["session-0"];
+    env.CloseSession("session-0");
+    env.InjectFinish(pipe, 0);
+    env.RegisterSession("session-new");
+    env.AssertNotLocked(1);
+    env.Finish("session-new", 0);
+    env.AssertLocked(1);
+    env.AssertLocked(2);
+}
+
+Y_UNIT_TEST(FinishThenImmediatePipeBreakKeepsConsumerIfOtherSessionAlive) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    auto [s0, s1] = env.TwoSessionsOnParents();
+    env.Split(0);
+    env.Finish(s0, 0, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+    env.CloseSession(s1);
+    env.AssertLocked(2);
+    env.AssertLocked(3);
+}
+
+} // Y_UNIT_TEST_SUITE(TPqrbBalancingInvariants)
 
 } // namespace NKikimr::NPQ

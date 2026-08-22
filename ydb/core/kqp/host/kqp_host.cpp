@@ -2051,7 +2051,13 @@ private:
         state->Gateway->OpenSession(sessionId, "username");
 
         if (const auto requestContext = SessionCtx->GetUserRequestContext()) {
-            state->StreamingTopicsReadByDefault = requestContext->IsStreamingQuery;
+            if (requestContext->IsStreamingQuery) {
+                state->StreamingTopicsReadByDefault = true;
+
+                if (Config->FeatureFlags.GetEnableExactlyOnceTopicsWriting()) {
+                    state->DeferredPublicationExtIdPrefix = TStringBuilder() << "__ydb_streaming:" << requestContext->StreamingQueryPath << ":" << requestContext->CurrentExecutionId;
+                }
+            }
 
             if (const auto disposition = requestContext->StreamingDisposition) {
                 state->Disposition = *disposition;

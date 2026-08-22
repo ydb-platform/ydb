@@ -359,7 +359,7 @@ public:
         return result.Cast();
     }
 
-    NNodes::TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {
+    TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, const std::optional<TCoNameValueTupleList>& settings, TExprContext& ctx) const {
         TVector<TCoNameValueTuple> props;
 
         auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
@@ -374,6 +374,12 @@ public:
 
         if (clusterConfiguration->AddBearerToToken) {
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
+        }
+
+        if (settings) {
+            for (const auto& setting : *settings) {
+                Add(props, setting.Name(), setting.Value().Maybe<TCoAtom>().Cast(), setting.Ref().Pos(), ctx);
+            }
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)
@@ -407,7 +413,7 @@ public:
 
         auto dqPqTopicSinkSettingsBuilder = Build<TDqPqTopicSink>(ctx, write.Pos());
         dqPqTopicSinkSettingsBuilder.Topic(topicNode);
-        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), ctx));
+        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), std::nullopt, ctx));
         dqPqTopicSinkSettingsBuilder.Token<TCoSecureParam>().Name().Build("cluster:default_" + cluster).Build();
         auto dqPqTopicSinkSettings = dqPqTopicSinkSettingsBuilder.Done();
 
@@ -452,7 +458,7 @@ public:
             .DataSink(insert.DataSink())
             .Settings<TDqPqTopicSink>()
                 .Topic(topicNode)
-                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), ctx))
+                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), insert.Settings(), ctx))
                 .Token<TCoSecureParam>()
                     .Name()
                         .Value(TStringBuilder() << "cluster:default_" << cluster)

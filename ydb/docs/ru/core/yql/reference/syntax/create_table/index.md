@@ -319,7 +319,11 @@ CREATE TABLE <table_name> (
 
 Для колоночных таблиц при их создании возможно задать:
 
+<<<<<<< HEAD
 * [Группы колонок](family.md).
+=======
+* [Блум-индекс](bloom_skip_index.md).
+>>>>>>> 3cc83c6fefe (Clarifications regarding column groups (#45849))
 * [Дополнительные параметры](with.md).
 * [Создание и заполнение таблицы на основе результатов запроса](as_select.md).
 

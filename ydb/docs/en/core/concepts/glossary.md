@@ -603,7 +603,15 @@ A **Hive** is a system tablet responsible for launching and managing other table
 
 #### Cluster management system {#cms}
 
+<<<<<<< HEAD
 The **cluster management system** or **CMS** is a system tablet responsible for managing the information about the current [{{ ydb-short-name }} cluster](#cluster) state. This information is used to perform cluster rolling restarts without affecting user workloads, maintenance, cluster re-configuration, etc.
+=======
+**CMS** or **cluster management system** is a system tablet responsible for managing information about the current state of the [{{ ydb-short-name }} cluster](#cluster). This information is used to perform gradual cluster restarts without affecting user workloads, maintenance, cluster reconfiguration, and so on. CMS includes Sentinel, a component that implements [SelfHeal](#self-heal).
+
+#### SelfHeal {#self-heal}
+
+**SelfHeal** is a set of mechanisms that automatically maintain and restore cluster fault tolerance. [Storage SelfHeal](../maintenance/manual/selfheal.md) relocates [VDisks](#vdisk) of storage groups after prolonged node or disk failures. [State Storage SelfHeal](../maintenance/manual/selfheal_statestorage.md) relocates replicas of metadata distribution subsystems after failures and adds replicas when new nodes appear.
+>>>>>>> 95c048edc38 (docs: improve SelfHeal documentation (#50561))
 
 #### Node Broker {#node-broker}
 

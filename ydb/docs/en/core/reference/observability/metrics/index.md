@@ -128,6 +128,12 @@ Transaction execution duration can be analyzed using a histogram counter. Interv
 | `table.datashard.cache_hit.bytes`<br/>`RATE`, bytes | Total volume of row table data successfully retrieved from memory (cache). A larger volume of data retrieved from the cache indicates efficient cache usage without accessing the distributed storage. |
 | `table.datashard.cache_miss.bytes`<br/>`RATE`, bytes | Total volume of row table data that was requested but not found in memory (cache) and was read from distributed storage. Indicates potential areas for cache optimization. |
 
+## Replicas metrics {#followers}
+
+| Metric name<br/>Type, unit | Description<br/>Labels |
+| --- | --- |
+| `FollowerSyncLatency`<br/>`HIST_RATE`, microseconds | The latency of applying updates on followers relative to their commit on the leader. <br/>Labels:<br/>- _type_ – tablet type, the only value is `DataShard`. |
+
 ## Columnar table partition metrics {#columnshards}
 
 | Metric name<br/>Type, units of measurement | Description<br/>Labels |

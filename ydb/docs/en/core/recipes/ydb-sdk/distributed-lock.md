@@ -14,30 +14,30 @@ Therefore, while distributed locking through such mechanisms cannot guarantee th
 
 - Go
 
-  ```go
-  for {
-    if session, err := db.Coordination().CreateSession(ctx, path); err != nil {
-      return fmt.Errorf("cannot create session: %v", err);
-    }
+   ```go
+   for {
+     if session, err := db.Coordination().CreateSession(ctx, path); err != nil {
+       return fmt.Errorf("cannot create session: %v", err);
+     }
 
-    if lease, err := session.AcquireSemaphore(ctx,
-      semaphore,
-      coordination.Exclusive,
-      options.WithEphemeral(true),
-    ); err != nil {
-      // the session is likely lost, try to create a new one and get the lock in it
-      session.Close(ctx);
-      continue;
-    }
+     if lease, err := session.AcquireSemaphore(ctx,
+       semaphore,
+       coordination.Exclusive,
+       options.WithEphemeral(true),
+     ); err != nil {
+       // the session is likely lost, try to create a new one and get the lock in it
+       session.Close(ctx);
+       continue;
+     }
 
-    // lock acquired, start processing
-    select {
-       case <-lease.Context().Done():
-    }
+     // lock acquired, start processing
+     select {
+        case <-lease.Context().Done():
+     }
 
-    // lock released, end processing
-  }
-  ```
+     // lock released, end processing
+   }
+   ```
 
 - Python
 

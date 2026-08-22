@@ -10,21 +10,21 @@ Coordination nodes are created in {{ ydb-short-name }} databases in the same nam
 
 - Go
 
-  ```go
-  err := db.Coordination().CreateNode(ctx,
-      "/path/to/mynode",
-  )
-  ```
+    ```go
+    err := db.Coordination().CreateNode(ctx,
+        "/path/to/mynode",
+    )
+    ```
 
 - C++
 
-  ```cpp
-  TClient client(driver);
-  auto status = client
-      .CreateNode("/path/to/mynode")
-      .ExtractValueSync();
-  Y_ABORT_UNLESS(status.IsSuccess());
-  ```
+    ```cpp
+    TClient client(driver);
+    auto status = client
+        .CreateNode("/path/to/mynode")
+        .ExtractValueSync();
+    Y_ABORT_UNLESS(status.IsSuccess());
+    ```
 
 
   When creating a node, you can optionally specify `TNodeSettings` with the following settings:
@@ -144,21 +144,21 @@ To start working with coordination nodes, a client must establish a session with
 
 - Go
 
-  ```go
-  session, err := db.Coordination().CreateSession(ctx,
-      "/path/to/mynode", // Coordination Node name in the database
-  )
-  ```
+    ```go
+    session, err := db.Coordination().CreateSession(ctx,
+    "/path/to/mynode", // Coordination Node name in the database
+    )
+    ```
 
 - C++
 
-  ```cpp
-  TClient client(driver);
-  const TSession& session = client
-     .StartSession("/path/to/mynode")
-     .ExtractValueSync()
-     .ExtractResult();
-  ```
+    ```cpp
+    TClient client(driver);
+    const TSession& session = client
+       .StartSession("/path/to/mynode")
+       .ExtractValueSync()
+       .ExtractResult();
+    ```
 
 
   When establishing a session, you can optionally pass a `TSessionSettings` structure with the following settings:
@@ -299,39 +299,39 @@ When creating a semaphore, you can specify its limit. The limit determines the m
 
 - Go
 
-  ```go
-  err := session.CreateSemaphore(ctx,
-      "my-semaphore", // semaphore name
-      10              // semaphore limit
-  )
-  ```
+    ```go
+    err := session.CreateSemaphore(ctx,
+        "my-semaphore", // semaphore name
+        10              // semaphore limit
+    )
+   ```
 
 - C++
 
-  ```cpp
-  session
-      .CreateSemaphore(
-          "my-semaphore",  // semaphore name
-          10               // semaphore limit
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
+    ```cpp
+    session
+        .CreateSemaphore(
+            "my-semaphore",  // semaphore name
+            10               // semaphore limit
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 
   You can also pass a string that will be stored with the semaphore and returned when it's captured:
 
 
-  ```cpp
-  session
-      .CreateSemaphore(
-          "my-semaphore",  // semaphore name
-          10,              // semaphore limit
-          "my-data"        // semaphore data
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
+    ```cpp
+    session
+        .CreateSemaphore(
+            "my-semaphore",  // semaphore name
+            10,              // semaphore limit
+            "my-data"        // semaphore data
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 - Python
 
@@ -412,27 +412,27 @@ To acquire a semaphore, the client must call the `AcquireSemaphore` method and w
 
 - Go
 
-  ```go
-  lease, err := session.AcquireSemaphore(ctx,
-      "my-semaphore",  // semaphore name
-      5,              // value to increase semaphore by
-  )
-  ```
+    ```go
+    lease, err := session.AcquireSemaphore(ctx,
+        "my-semaphore",  // semaphore name
+        5,              // value to increase semaphore by
+    )
+    ```
 
 
   To cancel waiting to acquire the semaphore, cancel the context `ctx` passed to the method.
 
 - C++
 
-  ```cpp
-  session
-      .AcquireSemaphore(
-          "my-semaphore",                       // semaphore name
-          TAcquireSemaphoreSettings().Count(5)  // value to increase semaphore by
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
+    ```cpp
+    session
+        .AcquireSemaphore(
+            "my-semaphore",                       // semaphore name
+            TAcquireSemaphoreSettings().Count(5)  // value to increase semaphore by
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 
   When acquiring, you can optionally pass a `TAcquireSemaphoreSettings` structure with the following settings:
@@ -561,24 +561,24 @@ Using the `UpdateSemaphore` method, you can update (replace) the semaphore data 
 
 - Go
 
-  ```go
-  err := session.UpdateSemaphore(
-      "my-semaphore",                                                          // semaphore name
-      options.WithUpdateData([]byte("updated-data")),   // new semaphore data
-  )
-  ```
+    ```go
+    err := session.UpdateSemaphore(
+        "my-semaphore",                                                          // semaphore name
+        options.WithUpdateData([]byte("updated-data")),   // new semaphore data
+    )
+    ```
 
 - C++
 
-  ```cpp
-  session
-      .UpdateSemaphore(
-          "my-semaphore",  // semaphore name
-          "updated-data"   // new semaphore data
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
+    ```cpp
+    session
+        .UpdateSemaphore(
+            "my-semaphore",  // semaphore name
+            "updated-data"   // new semaphore data
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 - Python
 
@@ -648,24 +648,24 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
 
 - Go
 
-  ```go
-  description, err := session.DescribeSemaphore(
-      "my-semaphore"                                // semaphore name
-      options.WithDescribeOwners(true), // to get list of owners
-      options.WithDescribeWaiters(true), // to get list of waiters
-  )
-  ```
+    ```go
+    description, err := session.DescribeSemaphore(
+        "my-semaphore"                                // semaphore name
+        options.WithDescribeOwners(true), // to get list of owners
+        options.WithDescribeWaiters(true), // to get list of waiters
+    )
+    ```
 
 - C++
 
-  ```cpp
-  session
-      .DescribeSemaphore(
-          "my-semaphore"  // semaphore name
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
+    ```cpp
+    session
+        .DescribeSemaphore(
+            "my-semaphore"  // semaphore name
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 
   When getting information about a semaphore, you can optionally pass a `TDescribeSemaphoreSettings` structure with the following settings:
@@ -778,20 +778,20 @@ This call doesn't require acquiring the semaphore and doesn't lead to it. If you
   To release a semaphore acquired in a session, call the `Release` method on the `Lease` object.
 
 
-  ```go
-  err := lease.Release()
-  ```
+    ```go
+    err := lease.Release()
+    ```
 
 - C++
 
-  ```cpp
-  session
-      .ReleaseSemaphore(
-          "my-semaphore"  // semaphore name
-      )
-      .ExtractValueSync()
-      .ExtractResult();
-  ```
+    ```cpp
+    session
+        .ReleaseSemaphore(
+            "my-semaphore"  // semaphore name
+        )
+        .ExtractValueSync()
+        .ExtractResult();
+    ```
 
 - Python
 

@@ -9,22 +9,22 @@ In the example below, the rows of the `mytable` table will be deleted an hour af
 {% list tabs group=tool %}
 
 
-  {% if oss == true %}
+{% if oss == true %}
 
-  - C++
+- C++
 
 
-    ```c++
-    session.AlterTable(
-        "mytable",
-        TAlterTableSettings()
-            .BeginAlterTtlSettings()
-                .Set("created_at", TDuration::Hours(1))
-            .EndAlterTtlSettings()
-    );
-    ```
+  ```c++
+  session.AlterTable(
+      "mytable",
+      TAlterTableSettings()
+          .BeginAlterTtlSettings()
+              .Set("created_at", TDuration::Hours(1))
+          .EndAlterTtlSettings()
+  );
+  ```
 
-  {% endif %}
+{% endif %}
 
 - Go
 
@@ -62,22 +62,22 @@ The example below shows how to use the `modified_at` column with a numeric type 
 {% list tabs group=tool %}
 
 
-  {% if oss == true %}
+{% if oss == true %}
 
-  - C++
+- C++
 
 
-    ```c++
-    session.AlterTable(
-        "mytable",
-        TAlterTableSettings()
-            .BeginAlterTtlSettings()
-                .Set("modified_at", TTtlSettings::EUnit::Seconds, TDuration::Hours(1))
-            .EndAlterTtlSettings()
-    );
-    ```
+  ```c++
+  session.AlterTable(
+      "mytable",
+      TAlterTableSettings()
+          .BeginAlterTtlSettings()
+              .Set("modified_at", TTtlSettings::EUnit::Seconds, TDuration::Hours(1))
+          .EndAlterTtlSettings()
+  );
+  ```
 
-  {% endif %}
+{% endif %}
 
 - Go
 
@@ -125,25 +125,25 @@ In the following example, rows of the table `mytable` will be moved to the bucke
 {% list tabs group=tool %}
 
 
-  {% if oss == true %}
+{% if oss == true %}
 
-  - C++
+- C++
 
 
-    ```c++
-    session.AlterTable(
-        "mytable",
-        TAlterTableSettings()
-            .BeginAlterTtlSettings()
-                .Set("created_at", {
-                        TTtlTierSettings(TDuration::Hours(1), TTtlEvictToExternalStorageAction("/Root/s3_cold_data")),
-                        TTtlTierSettings(TDuration::Hours(24), TTtlDeleteAction("/Root/s3_cold_data"))
-                    })
-            .EndAlterTtlSettings()
-    );
-    ```
+  ```c++
+  session.AlterTable(
+      "mytable",
+      TAlterTableSettings()
+          .BeginAlterTtlSettings()
+              .Set("created_at", {
+                      TTtlTierSettings(TDuration::Hours(1), TTtlEvictToExternalStorageAction("/Root/s3_cold_data")),
+                      TTtlTierSettings(TDuration::Hours(24), TTtlDeleteAction("/Root/s3_cold_data"))
+                  })
+          .EndAlterTtlSettings()
+  );
+  ```
 
-  {% endif %}
+{% endif %}
 
 - JavaScript
 
@@ -170,24 +170,24 @@ For a newly created table, you can pass TTL settings along with the table descri
 {% list tabs group=tool %}
 
 
-  {% if oss == true %}
+{% if oss == true %}
 
-  - C++
+- C++
 
 
-    ```c++
-    session.CreateTable(
-        "mytable",
-        TTableBuilder()
-            .AddNullableColumn("id", EPrimitiveType::Uint64)
-            .AddNullableColumn("expire_at", EPrimitiveType::Timestamp)
-            .SetPrimaryKeyColumn("id")
-            .SetTtlSettings("expire_at")
-            .Build()
-    );
-    ```
+  ```c++
+  session.CreateTable(
+      "mytable",
+      TTableBuilder()
+          .AddNullableColumn("id", EPrimitiveType::Uint64)
+          .AddNullableColumn("expire_at", EPrimitiveType::Timestamp)
+          .SetPrimaryKeyColumn("id")
+          .SetTtlSettings("expire_at")
+          .Build()
+  );
+  ```
 
-  {% endif %}
+{% endif %}
 
 - Go
 
@@ -238,22 +238,22 @@ For a newly created table, you can pass TTL settings along with the table descri
 {% list tabs group=tool %}
 
 
-  {% if oss == true %}
+{% if oss == true %}
 
-  - C++
+- C++
 
 
-    ```c++
-    session.AlterTable(
-        "mytable",
-        TAlterTableSettings()
-            .BeginAlterTtlSettings()
-                .Drop()
-            .EndAlterTtlSettings()
-    );
-    ```
+  ```c++
+  session.AlterTable(
+      "mytable",
+      TAlterTableSettings()
+          .BeginAlterTtlSettings()
+              .Drop()
+          .EndAlterTtlSettings()
+  );
+  ```
 
-  {% endif %}
+{% endif %}
 
 - Go
 
@@ -291,17 +291,17 @@ The current TTL settings can be obtained from the table description:
 {% list tabs group=tool %}
 
 
-  {% if oss == true %}
+{% if oss == true %}
 
-  - C++
+- C++
 
 
-    ```c++
-    auto desc = session.DescribeTable("mytable").GetValueSync().GetTableDescription();
-    auto ttl = desc.GetTtlSettings();
-    ```
+  ```c++
+  auto desc = session.DescribeTable("mytable").GetValueSync().GetTableDescription();
+  auto ttl = desc.GetTtlSettings();
+  ```
 
-  {% endif %}
+{% endif %}
 
 - Go
 

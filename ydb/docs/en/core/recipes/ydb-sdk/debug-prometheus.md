@@ -10,78 +10,78 @@ Below are code examples for enabling metrics in Prometheus in different {{ ydb-s
 
   - Native SDK
 
-    ```go
-    package main
+      ```go
+      package main
 
-    import (
-        "context"
+      import (
+          "context"
 
-        "github.com/prometheus/client_golang/prometheus"
-        metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
-        "github.com/ydb-platform/ydb-go-sdk/v3"
-        "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-    )
+          "github.com/prometheus/client_golang/prometheus"
+          metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
+          "github.com/ydb-platform/ydb-go-sdk/v3"
+          "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+      )
 
-    func main() {
-        ctx := context.Background()
-        registry := prometheus.NewRegistry()
-        db, err := ydb.Open(ctx,
-            os.Getenv("YDB_CONNECTION_STRING"),
-            metrics.WithTraces(
-                registry,
-                metrics.WithDetails(trace.DetailsAll),
-                metrics.WithSeparator("_"),
-            ),
-        )
-        if err != nil {
-            panic(err)
-        }
-        defer db.Close(ctx)
-        ...
-    }
-    ```
+      func main() {
+          ctx := context.Background()
+          registry := prometheus.NewRegistry()
+          db, err := ydb.Open(ctx,
+              os.Getenv("YDB_CONNECTION_STRING"),
+              metrics.WithTraces(
+                  registry,
+                  metrics.WithDetails(trace.DetailsAll),
+                  metrics.WithSeparator("_"),
+              ),
+          )
+          if err != nil {
+              panic(err)
+          }
+          defer db.Close(ctx)
+          ...
+      }
+      ```
 
   - database/sql
 
-    ```go
-    package main
+      ```go
+      package main
 
-    import (
-        "context"
-        "database/sql"
+      import (
+          "context"
+          "database/sql"
 
-        "github.com/prometheus/client_golang/prometheus"
-        metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
-        "github.com/ydb-platform/ydb-go-sdk/v3"
-        "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-    )
+          "github.com/prometheus/client_golang/prometheus"
+          metrics "github.com/ydb-platform/ydb-go-sdk-prometheus/v2"
+          "github.com/ydb-platform/ydb-go-sdk/v3"
+          "github.com/ydb-platform/ydb-go-sdk/v3/trace"
+      )
 
-    func main() {
-        ctx := context.Background()
-        registry := prometheus.NewRegistry()
-        nativeDriver, err := ydb.Open(ctx,
-            os.Getenv("YDB_CONNECTION_STRING"),
-            metrics.WithTraces(
-                registry,
-                metrics.WithDetails(trace.DetailsAll),
-                metrics.WithSeparator("_"),
-            ),
-        )
-        if err != nil {
-            panic(err)
-        }
-        defer nativeDriver.Close(ctx)
+      func main() {
+          ctx := context.Background()
+          registry := prometheus.NewRegistry()
+          nativeDriver, err := ydb.Open(ctx,
+              os.Getenv("YDB_CONNECTION_STRING"),
+              metrics.WithTraces(
+                  registry,
+                  metrics.WithDetails(trace.DetailsAll),
+                  metrics.WithSeparator("_"),
+              ),
+          )
+          if err != nil {
+              panic(err)
+          }
+          defer nativeDriver.Close(ctx)
 
-        connector, err := ydb.Connector(nativeDriver)
-        if err != nil {
-            panic(err)
-        }
+          connector, err := ydb.Connector(nativeDriver)
+          if err != nil {
+              panic(err)
+          }
 
-        db := sql.OpenDB(connector)
-        defer db.Close()
-        ...
-    }
-    ```
+          db := sql.OpenDB(connector)
+          defer db.Close()
+          ...
+      }
+      ```
 
   {% endlist %}
 

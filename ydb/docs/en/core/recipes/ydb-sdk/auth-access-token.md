@@ -41,62 +41,62 @@ Below are code examples of authentication using a token in different {{ ydb-shor
 
     {% cut "If is used connector for creation connection to {{ ydb-short-name }}" %}
 
-    ```go
-    package main
+      ```go
+      package main
 
-    import (
-      "context"
-      "database/sql"
-      "os"
+      import (
+        "context"
+        "database/sql"
+        "os"
 
-      "github.com/ydb-platform/ydb-go-sdk/v3"
-    )
-
-    func main() {
-      ctx, cancel := context.WithCancel(context.Background())
-      defer cancel()
-      nativeDriver, err := ydb.Open(ctx,
-        os.Getenv("YDB_CONNECTION_STRING"),
-        ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+        "github.com/ydb-platform/ydb-go-sdk/v3"
       )
-      if err != nil {
-        panic(err)
+
+      func main() {
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+        nativeDriver, err := ydb.Open(ctx,
+          os.Getenv("YDB_CONNECTION_STRING"),
+          ydb.WithAccessTokenCredentials(os.Getenv("YDB_TOKEN")),
+        )
+        if err != nil {
+          panic(err)
+        }
+        defer nativeDriver.Close(ctx)
+        connector, err := ydb.Connector(nativeDriver)
+        if err != nil {
+          panic(err)
+        }
+        db := sql.OpenDB(connector)
+        defer db.Close()
+        ...
       }
-      defer nativeDriver.Close(ctx)
-      connector, err := ydb.Connector(nativeDriver)
-      if err != nil {
-        panic(err)
-      }
-      db := sql.OpenDB(connector)
-      defer db.Close()
-      ...
-    }
-    ```
+      ```
 
     {% endcut %}
 
     {% cut "If is used string connection" %}
 
-    ```go
-    package main
+      ```go
+      package main
 
-    import (
-      "context"
-      "database/sql"
-      "os"
+      import (
+        "context"
+        "database/sql"
+        "os"
 
-      _ "github.com/ydb-platform/ydb-go-sdk/v3"
-    )
+        _ "github.com/ydb-platform/ydb-go-sdk/v3"
+      )
 
-    func main() {
-      db, err := sql.Open("ydb", "grpcs://localhost:2135/local?token="+os.Getenv("YDB_TOKEN"))
-      if err != nil {
-        panic(err)
+      func main() {
+        db, err := sql.Open("ydb", "grpcs://localhost:2135/local?token="+os.Getenv("YDB_TOKEN"))
+        if err != nil {
+          panic(err)
+        }
+        defer db.Close()
+        ...
       }
-      defer db.Close()
-      ...
-    }
-    ```
+      ```
 
     {% endcut %}
 

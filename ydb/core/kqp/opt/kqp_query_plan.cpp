@@ -3791,7 +3791,9 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, bool n
     }
 
     if (newRboEnabled) {
-        return SerializeRBOAnalyzePlan(txPlans, queryStats, poolId);
+        if (auto rboPlan = SerializeRBOAnalyzePlan(txPlans, queryStats, poolId); !rboPlan.empty()) {
+            return rboPlan;
+        }
     }
 
     NJsonWriter::TBuf writer;

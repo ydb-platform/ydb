@@ -147,7 +147,8 @@ struct TJoinOrderHints {
     public:
         enum EKind: ui32 {
             Relation,
-            Join
+            Join,
+            Partial
         };
 
         virtual TVector<TString> Labels() = 0;
@@ -155,15 +156,20 @@ struct TJoinOrderHints {
         bool IsRelation() { return Type == Relation; }
         bool IsJoin()     { return Type == Join; }
 
+        bool IsPartial() {
+            return Type == Partial;
+        }
+
         virtual ~ITreeNode() = default;
 
         ui32 Type;
     };
 
     struct TJoinNode: public ITreeNode {
-        TJoinNode(std::shared_ptr<ITreeNode> lhs, std::shared_ptr<ITreeNode> rhs)
+        TJoinNode(std::shared_ptr<ITreeNode> lhs, std::shared_ptr<ITreeNode> rhs, bool isCommutativeHint = false)
             : Lhs(std::move(lhs))
             , Rhs(std::move(rhs))
+            , IsCommutativeHint(isCommutativeHint)
         {
             this->Type = ITreeNode::Join;
         }
@@ -177,6 +183,7 @@ struct TJoinOrderHints {
 
         std::shared_ptr<ITreeNode> Lhs;
         std::shared_ptr<ITreeNode> Rhs;
+        bool IsCommutativeHint; // [] brackets: enforce grouping but allow either direction
     };
 
     struct TRelationNode: public ITreeNode {
@@ -189,6 +196,20 @@ struct TJoinOrderHints {
         TVector<TString> Labels() override { return {Label}; }
 
         TString Label;
+    };
+
+    struct TPartialNode: public ITreeNode {
+        explicit TPartialNode(TVector<TString> labels)
+            : Labels_(std::move(labels))
+        {
+            this->Type = ITreeNode::Partial;
+        }
+
+        TVector<TString> Labels() override {
+            return Labels_;
+        }
+
+        TVector<TString> Labels_;
     };
 
     struct TJoinOrderHint {

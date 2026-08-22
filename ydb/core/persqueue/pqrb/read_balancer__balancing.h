@@ -6,6 +6,8 @@
 #include <library/cpp/containers/absl/flat_hash_map.h>
 #include <library/cpp/containers/absl/flat_hash_set.h>
 
+#include <vector>
+
 namespace NKikimr::NPQ::NApp {
 struct TNavigationBar;
 }
@@ -112,13 +114,12 @@ struct TPartitionFamily {
 
     bool IsCommon() const;
     bool IsLonely() const;
-    bool HasActivePartitions() const;
 
     // Releases all partitions of the family.
     void Release(const TActorContext& ctx, ETargetStatus targetStatus = ETargetStatus::Free);
     // Processes the signal from the reading session that the partition has been released.
-    // Return true if all partitions has been unlocked.
-    bool Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx);
+    // Return true if all partitions has been unlocked; the caller then Reset()s the family.
+    bool Unlock(const TActorId& sender, ui32 partitionId);
     // Processes the signal that the reading session has ended.
     bool Reset(const TActorContext& ctx);
     bool Reset(ETargetStatus targetStatus, const TActorContext& ctx);
@@ -126,6 +127,7 @@ struct TPartitionFamily {
     void StartReading(TSession& session, const TActorContext& ctx);
     // Add partitions to the family.
     void AttachePartitions(const std::vector<ui32>& partitions, const TActorContext& ctx);
+    void AttachReadyWantedPartitions(const TActorContext& ctx);
     void Merge(TPartitionFamily* other);
 
     // The partition became active
@@ -140,7 +142,7 @@ struct TPartitionFamily {
     TString DebugStr() const;
 
 private:
-    void Destroy(const TActorContext& ctx);
+    void Destroy();
     void AfterRelease();
 
 private:
@@ -159,6 +161,7 @@ private:
     std::pair<size_t, size_t> ClassifyPartitions(const TPartitions& partitions);
     void UpdatePartitionMapping(const std::vector<ui32>& partitions);
     void UpdateSpecialSessions();
+    void AppendUniqueRoots(const std::vector<ui32>& partitions);
     void ChangePartitionCounters(ssize_t activeDiff, ssize_t inactiveDiff);
     void LockPartition(ui32 partitionId, const TActorContext& ctx);
     std::unique_ptr<TEvPersQueue::TEvReleasePartition> MakeEvReleasePartition(ui32 partitionId) const;
@@ -227,6 +230,9 @@ struct TConsumer {
     std::pair<TPartitionFamily*, bool> MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx);
     void DestroyFamily(TPartitionFamily* family, const TActorContext& ctx);
     TPartitionFamily* FindFamily(ui32 partitionId);
+    // After parents of a merged partition are processed, attach (or independently
+    // balance) readable descendants. Safe to call repeatedly.
+    void AttachReadableDescendants(TPartitionFamily* family, const TActorContext& ctx);
 
     void RegisterReadingSession(TSession* session, const TActorContext& ctx);
     void UnregisterReadingSession(TSession* session, const TActorContext& ctx);
@@ -249,6 +255,29 @@ struct TConsumer {
 
 private:
     TString LogPrefix() const;
+    bool AttachingDescendants = false;
+
+    // Families.erase in Destroy() would free `this` while Unlock/Reset is still
+    // on the stack. Park the unique_ptr here and drop it when the outermost
+    // TConsumer call returns.
+    std::vector<std::unique_ptr<TPartitionFamily>> DoomedFamilies;
+    ui32 DoomedGuardDepth = 0;
+
+    struct TDoomedFamilyGuard {
+        TConsumer& C;
+        explicit TDoomedFamilyGuard(TConsumer& c)
+            : C(c)
+        {
+            ++C.DoomedGuardDepth;
+        }
+        ~TDoomedFamilyGuard() {
+            if (--C.DoomedGuardDepth == 0) {
+                C.DoomedFamilies.clear();
+            }
+        }
+        TDoomedFamilyGuard(const TDoomedFamilyGuard&) = delete;
+        TDoomedFamilyGuard& operator=(const TDoomedFamilyGuard&) = delete;
+    };
 };
 
 struct TSession {

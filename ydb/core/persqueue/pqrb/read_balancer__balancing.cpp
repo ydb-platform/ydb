@@ -6,6 +6,8 @@
 
 #include <library/cpp/containers/absl/btree_set.h>
 
+#include <util/system/yassert.h>
+
 #include <algorithm>
 #include <array>
 
@@ -129,10 +131,6 @@ bool TPartitionFamily::IsLonely() const {
     return Partitions.size() == 1;
 }
 
-bool TPartitionFamily::HasActivePartitions() const {
-    return ActivePartitionCount;
-}
-
 const TString& TPartitionFamily::Topic() const {
     return Consumer.Topic();
 }
@@ -168,6 +166,8 @@ TString TPartitionFamily::LogPrefix() const {
 
 
 void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetStatus) {
+    Y_DEBUG_ABORT_UNLESS(IsActive(), "Releasing a family that is not active, family %lu", Id);
+    Y_DEBUG_ABORT_UNLESS(Session, "Releasing a family without a session, family %lu", Id);
     if (Status != EStatus::Active) {
         YDB_LOG_CRIT("Releasing the family that isn't active",
             {"logPrefix", LogPrefix()},
@@ -202,7 +202,7 @@ void TPartitionFamily::Release(const TActorContext& ctx, ETargetStatus targetSta
     }
 }
 
-bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
+bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId) {
     if (!Session || Session->Pipe != sender) {
         YDB_LOG_DEBUG("Try unlock the partition from other sender",
             {"logPrefix", LogPrefix()},
@@ -238,8 +238,6 @@ bool TPartitionFamily::Unlock(const TActorId& sender, ui32 partitionId, const TA
 
     --Session->ReleasingFamilyCount;
 
-    Reset(ctx);
-
     return true;
 }
 
@@ -257,7 +255,7 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
 
     switch (targetStatus) {
         case ETargetStatus::Destroy:
-            Destroy(ctx);
+            Destroy();
             return false;
 
         case ETargetStatus::Free:
@@ -266,31 +264,40 @@ bool TPartitionFamily::Reset(ETargetStatus targetStatus, const TActorContext& ct
 
             Status = EStatus::Free;
             AfterRelease();
+            AttachReadyWantedPartitions(ctx);
 
             return true;
 
-        case ETargetStatus::Merge:
+        case ETargetStatus::Merge: {
             Status = EStatus::Free;
             AfterRelease();
 
+            TPartitionFamily* attachTo = this;
             auto it = Consumer.Families.find(MergeTo);
             if (it == Consumer.Families.end()) {
                 YDB_LOG_DEBUG("Has been released for merge but target family is not exists",
                     {"logPrefix", LogPrefix()});
-                return true;
-            }
-            auto* targetFamily = it->second.get();
-            if (targetFamily->CanAttach(Partitions) && targetFamily->CanAttach(WantedPartitions)) {
-                Consumer.MergeFamilies(targetFamily, this, ctx);
             } else {
-                WantedPartitions.clear();
+                auto* targetFamily = it->second.get();
+                if (targetFamily->CanAttach(Partitions) && targetFamily->CanAttach(WantedPartitions)) {
+                    attachTo = Consumer.MergeFamilies(targetFamily, this, ctx).first;
+                } else {
+                    WantedPartitions.clear();
+                    attachTo = targetFamily;
+                }
             }
+            // Parent families are in one place now, or this family remains after the
+            // target died with its session. Readable merge-children must be attached
+            // here: ProccessReadingFinished could not attach them while the merge was
+            // delayed on a release.
+            Consumer.AttachReadableDescendants(attachTo, ctx);
 
             return true;
+        }
     }
 }
 
-void TPartitionFamily::Destroy(const TActorContext&) {
+void TPartitionFamily::Destroy() {
     YDB_LOG_DEBUG("Destroyed",
         {"logPrefix", LogPrefix()});
 
@@ -303,7 +310,16 @@ void TPartitionFamily::Destroy(const TActorContext&) {
     }
     Consumer.UnreadableFamilies.erase(Id);
     Consumer.FamiliesRequireBalancing.erase(Id);
-    Consumer.Families.erase(Id);
+
+    auto it = Consumer.Families.find(Id);
+    if (it == Consumer.Families.end()) {
+        return;
+    }
+
+    Y_DEBUG_ABORT_UNLESS(Consumer.DoomedGuardDepth > 0,
+        "Destroy family %zu without a doomed-family guard", Id);
+    Consumer.DoomedFamilies.push_back(std::move(it->second));
+    Consumer.Families.erase(it);
 }
 
 void TPartitionFamily::AfterRelease() {
@@ -315,6 +331,17 @@ void TPartitionFamily::AfterRelease() {
     }
 
     Partitions.clear();
+    {
+        absl::flat_hash_set<ui32> seen;
+        std::vector<ui32> uniqueRoots;
+        uniqueRoots.reserve(RootPartitions.size());
+        for (auto partitionId : RootPartitions) {
+            if (seen.insert(partitionId).second) {
+                uniqueRoots.push_back(partitionId);
+            }
+        }
+        RootPartitions = std::move(uniqueRoots);
+    }
     Partitions.insert(Partitions.end(), RootPartitions.begin(), RootPartitions.end());
 
     LockedPartitions.clear();
@@ -326,6 +353,9 @@ void TPartitionFamily::AfterRelease() {
 }
 
 void TPartitionFamily::StartReading(TSession& session, const TActorContext& ctx) {
+    Y_DEBUG_ABORT_UNLESS(IsFree(), "StartReading requires a free family %lu", Id);
+    Y_DEBUG_ABORT_UNLESS(Consumer.Sessions.contains(session.Pipe),
+        "StartReading session is not registered, family %lu", Id);
     if (Status != EStatus::Free) {
         YDB_LOG_CRIT("Try start reading but the family status is",
             {"logPrefix", LogPrefix()},
@@ -377,6 +407,11 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
     auto [activePartitionCount, inactivePartitionCount] = ClassifyPartitions(newPartitions);
     ChangePartitionCounters(activePartitionCount, inactivePartitionCount);
 
+    for (auto partitionId : newPartitions) {
+        Y_DEBUG_ABORT_UNLESS(IsReadable(partitionId),
+            "Cannot attach unreadable partition %u to family %lu", partitionId, Id);
+    }
+
     if (IsActive()) {
         if (!Session) {
             YDB_LOG_CRIT("Attaching partitions to an active family without a session",
@@ -385,6 +420,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         }
         if (!Session->AllPartitionsReadable(newPartitions)) {
             WantedPartitions.insert(newPartitions.begin(), newPartitions.end());
+            AppendUniqueRoots(newPartitions);
             UpdateSpecialSessions();
             Release(ctx);
             return;
@@ -392,12 +428,23 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
 
         Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
         UpdatePartitionMapping(newPartitions);
+        AppendUniqueRoots(newPartitions);
 
         for (auto partitionId : newPartitions) {
             LockPartition(partitionId, ctx);
             WantedPartitions.erase(partitionId);
         }
         LockedPartitions.insert(newPartitions.begin(), newPartitions.end());
+    } else if (IsFree()) {
+        Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
+        UpdatePartitionMapping(newPartitions);
+        AppendUniqueRoots(newPartitions);
+        for (auto partitionId : newPartitions) {
+            WantedPartitions.erase(partitionId);
+        }
+    } else if (IsReleasing()) {
+        WantedPartitions.insert(newPartitions.begin(), newPartitions.end());
+        AppendUniqueRoots(newPartitions);
     }
 
     // Removing sessions wich can't read the family now
@@ -408,6 +455,42 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         } else {
             SpecialSessions.erase(it++);
         }
+    }
+}
+
+void TPartitionFamily::AttachReadyWantedPartitions(const TActorContext& ctx) {
+    if (WantedPartitions.empty()) {
+        return;
+    }
+
+    std::vector<ui32> ready;
+    ready.reserve(WantedPartitions.size());
+    for (auto partitionId : WantedPartitions) {
+        auto* node = Consumer.GetPartitionGraph().GetPartition(partitionId);
+        if (!node) {
+            continue;
+        }
+        bool allParentsInFamily = true;
+        for (auto* parent : node->DirectParents) {
+            if (!parent) {
+                YDB_LOG_WARN("Partition graph has a null DirectParents pointer",
+                    {"logPrefix", LogPrefix()},
+                    {"partitionId", partitionId});
+                allParentsInFamily = false;
+                break;
+            }
+            if (Consumer.FindFamily(parent->Id) != this) {
+                allParentsInFamily = false;
+                break;
+            }
+        }
+        if (allParentsInFamily) {
+            ready.push_back(partitionId);
+        }
+    }
+
+    if (!ready.empty()) {
+        AttachePartitions(ready, ctx);
     }
 }
 
@@ -427,7 +510,16 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
     ChangePartitionCounters(-1, 1);
 }
 
- void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
+void TPartitionFamily::AppendUniqueRoots(const std::vector<ui32>& partitions) {
+    absl::flat_hash_set<ui32> seen(RootPartitions.begin(), RootPartitions.end());
+    for (auto partitionId : partitions) {
+        if (seen.insert(partitionId).second) {
+            RootPartitions.push_back(partitionId);
+        }
+    }
+}
+
+void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
     Y_VERIFY_DEBUG((ssize_t)ActivePartitionCount + active >= 0, "ActivePartitionCount: %lu, active: %ld", ActivePartitionCount, active);
     Y_VERIFY_DEBUG((ssize_t)InactivePartitionCount + inactive >= 0, "InactivePartitionCount: %lu, inactive: %ld", InactivePartitionCount, inactive);
 
@@ -453,7 +545,7 @@ void TPartitionFamily::Merge(TPartitionFamily* other) {
     UpdatePartitionMapping(other->Partitions);
     other->Partitions.clear();
 
-    RootPartitions.insert(RootPartitions.end(), other->RootPartitions.begin(), other->RootPartitions.end());
+    AppendUniqueRoots(other->RootPartitions);
     other->RootPartitions.clear();
 
     for (auto partitionId : Partitions) {
@@ -501,7 +593,7 @@ bool TPartitionFamily::PossibleForBalance(TSession* session) {
     if (!session) {
         return false;
     }
-    if (!IsLonely()) {
+    if (Partitions.empty() || !IsLonely()) {
         return true;
     }
 
@@ -562,9 +654,6 @@ std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const TPartitions
 }
 
 template
-std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const absl::btree_set<ui32>& partitions);
-
-template
 std::pair<size_t, size_t> TPartitionFamily::ClassifyPartitions(const std::vector<ui32>& partitions);
 
 void TPartitionFamily::UpdatePartitionMapping(const std::vector<ui32>& partitions) {
@@ -591,6 +680,10 @@ void TPartitionFamily::UpdateSpecialSessions() {
 }
 
 void TPartitionFamily::LockPartition(ui32 partitionId, const TActorContext& ctx) {
+    Y_DEBUG_ABORT_UNLESS(Session, "Lock partition %u without a session, family %lu", partitionId, Id);
+    Y_DEBUG_ABORT_UNLESS(IsActive(), "Lock partition %u from a non-active family %lu", partitionId, Id);
+    Y_DEBUG_ABORT_UNLESS(IsReadable(partitionId),
+        "Lock unreadable partition %u, family %lu", partitionId, Id);
     if (!Session) {
         YDB_LOG_CRIT("Lock partition without a session",
             {"logPrefix", LogPrefix()},
@@ -718,6 +811,7 @@ TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, const 
 }
 
 TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TPartitionFamily::EStatus status, const TActorContext&) {
+    Y_DEBUG_ABORT_UNLESS(!partitions.empty(), "Cannot create an empty family, consumer %s", ConsumerName.data());
     auto id = ++NextFamilyId;
     auto [it, _] = Families.emplace(id, std::make_unique<TPartitionFamily>(*this, id, std::move(partitions)));
     auto* family = it->second.get();
@@ -770,6 +864,8 @@ bool TConsumer::BreakUpFamily(ui32 partitionId, bool destroy, const TActorContex
 }
 
 bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool destroy, const TActorContext& ctx) {
+    TDoomedFamilyGuard doomed(*this);
+
     std::vector<TPartitionFamily*> newFamilies;
 
     if (!family->IsLonely()) {
@@ -818,6 +914,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
                 f->TargetStatus = family->TargetStatus;
                 f->Partitions.insert(f->Partitions.end(), members.begin(), members.end());
                 f->LastPipe = family->LastPipe;
+                f->RootPartitions.assign(f->Partitions.begin(), f->Partitions.end());
                 f->UpdatePartitionMapping(f->Partitions);
                 f->ClassifyPartitions();
                 if (locked) {
@@ -839,6 +936,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
 
             family->Partitions.clear();
             family->Partitions.push_back(partitionId);
+            family->RootPartitions = {partitionId};
 
             auto locked = family->LockedPartitions.contains(partitionId);
             family->LockedPartitions.clear();
@@ -875,6 +973,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
 }
 
 std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lhs, TPartitionFamily* rhs, const TActorContext& ctx) {
+    Y_DEBUG_ABORT_UNLESS(lhs && rhs, "MergeFamilies with a null family");
     AFL_ENSURE(lhs != rhs)
         ("lhs_id", lhs->Id)("rhs_id", rhs->Id)
         ("lhs_partitions", lhs->Partitions.size())("rhs_partitions", rhs->Partitions.size());
@@ -884,7 +983,8 @@ std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lh
         lhs->IsReleasing() && rhs->IsReleasing() && lhs->Session == rhs->Session && lhs->TargetStatus == rhs->TargetStatus) {
 
         lhs->Merge(rhs);
-        rhs->Destroy(ctx);
+        rhs->Destroy();
+        lhs->AttachReadyWantedPartitions(ctx);
 
         return {lhs, true};
     }
@@ -894,10 +994,10 @@ std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lh
     }
     if ((lhs->IsActive() || lhs->IsReleasing()) && rhs->IsFree()) {
         lhs->AttachePartitions(rhs->Partitions, ctx);
-        lhs->RootPartitions.insert(lhs->RootPartitions.end(), rhs->Partitions.begin(), rhs->Partitions.end());
 
         rhs->Partitions.clear();
-        rhs->Destroy(ctx);
+        rhs->Destroy();
+        lhs->AttachReadyWantedPartitions(ctx);
 
         return {lhs, true};
     }
@@ -921,6 +1021,8 @@ std::pair<TPartitionFamily*, bool> TConsumer::MergeFamilies(TPartitionFamily* lh
 }
 
 void TConsumer::DestroyFamily(TPartitionFamily* family, const TActorContext& ctx) {
+    TDoomedFamilyGuard doomed(*this);
+
     switch(family->Status) {
         case TPartitionFamily::EStatus::Active:
             family->Release(ctx, TPartitionFamily::ETargetStatus::Destroy);
@@ -942,6 +1044,111 @@ TPartitionFamily* TConsumer::FindFamily(ui32 partitionId) {
     return it->second;
 }
 
+void TConsumer::AttachReadableDescendants(TPartitionFamily* family, const TActorContext& ctx) {
+    if (!family || AttachingDescendants) {
+        return;
+    }
+
+    struct TGuard {
+        bool& Flag;
+        explicit TGuard(bool& flag)
+            : Flag(flag)
+        {
+            Flag = true;
+        }
+        ~TGuard() {
+            Flag = false;
+        }
+    } guard(AttachingDescendants);
+
+    absl::flat_hash_set<ui32> roots;
+    roots.insert(family->RootPartitions.begin(), family->RootPartitions.end());
+    roots.insert(family->Partitions.begin(), family->Partitions.end());
+
+    bool needReleaseChildren = false;
+    for (auto partitionId : roots) {
+        auto* partition = GetPartition(partitionId);
+        if (partition && partition->NeedReleaseChildren()) {
+            needReleaseChildren = true;
+            break;
+        }
+    }
+
+    absl::flat_hash_set<ui32> descendants;
+    for (auto partitionId : roots) {
+        GetPartitionGraph().Travers(partitionId, [&](ui32 id) {
+            if (!IsReadable(id)) {
+                return false;
+            }
+            if (!roots.contains(id)) {
+                descendants.insert(id);
+            }
+            return true;
+        });
+    }
+
+    // Hash-set order is not stable. Sort so a chain (root → parent → grandchild)
+    // merges in a deterministic survivor family.
+    std::vector<ui32> ordered(descendants.begin(), descendants.end());
+    std::sort(ordered.begin(), ordered.end());
+
+    for (auto id : ordered) {
+        auto* node = GetPartitionGraph().GetPartition(id);
+        if (!node) {
+            continue;
+        }
+
+        bool allParentsMerged = true;
+        if (node->DirectParents.size() > 1) {
+            for (auto* parent : node->DirectParents) {
+                if (!parent) {
+                    YDB_LOG_WARN("Partition graph has a null DirectParents pointer",
+                        {"logPrefix", LogPrefix()},
+                        {"partitionId", id});
+                    allParentsMerged = false;
+                    continue;
+                }
+                auto* other = FindFamily(parent->Id);
+                if (!other) {
+                    allParentsMerged = false;
+                    continue;
+                }
+                if (other != family) {
+                    auto [f, ok] = MergeFamilies(family, other, ctx);
+                    family = f;
+                    allParentsMerged = allParentsMerged && ok;
+                }
+            }
+        }
+
+        if (!allParentsMerged) {
+            family->WantedPartitions.insert(id);
+            continue;
+        }
+
+        if (needReleaseChildren) {
+            std::array<ui32, 1> partitionIds{id};
+            if (!family->CanAttach(partitionIds)) {
+                continue;
+            }
+            auto* other = FindFamily(id);
+            if (other && other != family) {
+                auto [f, ok] = MergeFamilies(family, other, ctx);
+                family = f;
+                if (!ok) {
+                    family->WantedPartitions.insert(id);
+                }
+            } else {
+                family->AttachePartitions({id}, ctx);
+            }
+        } else if (!FindFamily(id)) {
+            CreateFamily({id}, ctx);
+        }
+    }
+
+    family->AttachReadyWantedPartitions(ctx);
+}
+
 void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& ctx) {
     YDB_LOG_INFO("Register reading session",
         {"logPrefix", LogPrefix()},
@@ -958,7 +1165,10 @@ void TConsumer::RegisterReadingSession(TSession* session, const TActorContext& c
         }
 
         for (auto& partitionId : session->Partitions) {
-            if (!FindFamily(partitionId)) {
+            // A session that names a merge-child must not get it before all parents
+            // are processed: CreateFamily here would make the partition immediately
+            // balanceable.
+            if (!FindFamily(partitionId) && IsReadable(partitionId)) {
                 CreateFamily({partitionId}, ctx);
             }
         }
@@ -981,6 +1191,8 @@ std::vector<TPartitionFamily*> Snapshot(const absl::flat_hash_map<size_t, std::u
 }
 
 void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext& ctx) {
+    TDoomedFamilyGuard doomed(*this);
+
     auto pipe = session->Pipe;
     Sessions.erase(session->Pipe);
     if (!session->WithGroups()) {
@@ -990,43 +1202,86 @@ void TConsumer::UnregisterReadingSession(TSession* session, const TActorContext&
         });
     }
 
-    for (auto* family : Snapshot(Families)) {
-        auto special = family->SpecialSessions.erase(pipe);
+    auto resetHeldFamily = [&](TPartitionFamily* family, bool special) {
+        auto live = Families.find(family->Id);
+        if (live == Families.end() || live->second.get() != family) {
+            return;
+        }
 
-        if (session == family->Session) {
-            std::vector<ui32> roots;
-            roots.reserve(family->RootPartitions.size());
-            roots.insert(roots.end(), family->RootPartitions.begin(), family->RootPartitions.end());
+        std::vector<ui32> roots;
+        roots.reserve(family->RootPartitions.size());
+        roots.insert(roots.end(), family->RootPartitions.begin(), family->RootPartitions.end());
 
-            TPartitionFamily::ETargetStatus targetStatus = family->TargetStatus;
-            if (special && family->SpecialSessions.empty()) {
-                for (auto& r : roots) {
-                    if (!IsReadable(r)) {
-                        targetStatus = TPartitionFamily::ETargetStatus::Destroy;
-                        break;
-                    }
+        TPartitionFamily::ETargetStatus targetStatus = family->TargetStatus;
+        if (special && family->SpecialSessions.empty()) {
+            for (auto& r : roots) {
+                if (!IsReadable(r)) {
+                    targetStatus = TPartitionFamily::ETargetStatus::Destroy;
+                    break;
+                }
+            }
+        }
+
+        if (!family->CanAttach(family->WantedPartitions)) {
+            targetStatus = TPartitionFamily::ETargetStatus::Destroy;
+        }
+
+        const size_t familyId = family->Id;
+        if (family->Reset(targetStatus, ctx)) {
+            auto it = Families.find(familyId);
+            if (it == Families.end()) {
+                // Reset(Merge) may destroy this family by attaching it to the target.
+                return;
+            }
+            UnreadableFamilies[familyId] = it->second.get();
+            FamiliesRequireBalancing.erase(familyId);
+        } else {
+            for (auto& r : roots) {
+                if (IsReadable(r)) {
+                    CreateFamily({r}, ctx);
+                }
+            }
+        }
+    };
+
+    std::vector<TPartitionFamily*> held;
+    held.reserve(session->Families.size());
+    for (auto& [_, family] : session->Families) {
+        held.push_back(family);
+    }
+
+    if (session->WithGroups()) {
+        // A preferred session may sit in SpecialSessions of families it is not
+        // currently reading. Scan those families only in this case.
+        for (auto* family : Snapshot(Families)) {
+            auto live = Families.find(family->Id);
+            if (live == Families.end() || live->second.get() != family) {
+                continue;
+            }
+
+            auto special = family->SpecialSessions.erase(pipe);
+            for (auto it = family->SpecialSessions.begin(); it != family->SpecialSessions.end();) {
+                if (it->second == session) {
+                    family->SpecialSessions.erase(it++);
+                } else {
+                    ++it;
                 }
             }
 
-            if (!family->CanAttach(family->WantedPartitions)) {
-                targetStatus = TPartitionFamily::ETargetStatus::Destroy;
+            if (session == family->Session) {
+                resetHeldFamily(family, special);
             }
-
-            if (family->Reset(targetStatus, ctx)) {
-                UnreadableFamilies[family->Id] = family;
-                FamiliesRequireBalancing.erase(family->Id);
-            } else {
-                for (auto& r : roots) {
-                    if (IsReadable(r)) {
-                        CreateFamily({r}, ctx);
-                    }
-                }
-            }
+        }
+    } else {
+        for (auto* family : held) {
+            resetHeldFamily(family, false);
         }
     }
 }
 
 bool TConsumer::Unlock(const TActorId& sender, ui32 partitionId, const TActorContext& ctx) {
+    TDoomedFamilyGuard doomed(*this);
+
     auto* family = FindFamily(partitionId);
     if (!family) {
         YDB_LOG_CRIT("Unlocking the partition from unknown family",
@@ -1035,7 +1290,15 @@ bool TConsumer::Unlock(const TActorId& sender, ui32 partitionId, const TActorCon
         return false;
     }
 
-    return family->Unlock(sender, partitionId, ctx);
+    if (!family->Unlock(sender, partitionId)) {
+        return false;
+    }
+
+    // Reset may park this family in DoomedFamilies (Merge/Destroy). Drop it only
+    // after Unlock returns to TConsumer, so TPartitionFamily methods never
+    // continue on a destroyed this.
+    family->Reset(ctx);
+    return true;
 }
 
 bool TConsumer::IsReadable(ui32 partitionId) {
@@ -1048,14 +1311,30 @@ bool TConsumer::IsReadable(ui32 partitionId) {
         return false;
     }
 
-    if (Partitions.empty()) {
-        return node->DirectParents.empty();
-    }
-
-    for(auto* parent : node->AllParents) {
-        if (!IsInactive(parent->Id)) {
-            return false;
+    auto parentsProcessed = [&](const auto& parents) {
+        for (auto* parent : parents) {
+            if (!parent) {
+                YDB_LOG_WARN("Partition graph has a null parent pointer",
+                    {"logPrefix", LogPrefix()},
+                    {"partitionId", partitionId});
+                return false;
+            }
+            if (!IsInactive(parent->Id)) {
+                return false;
+            }
         }
+        return true;
+    };
+
+    // DirectParents is the source of truth for a merge child. AllParents also
+    // covers grandparents (chained split/merge). An empty AllParents must not
+    // be treated as "no parents" — that used to make merge children readable
+    // immediately.
+    if (!parentsProcessed(node->DirectParents)) {
+        return false;
+    }
+    if (!parentsProcessed(node->AllParents)) {
+        return false;
     }
 
     return true;
@@ -1082,6 +1361,8 @@ bool TConsumer::SetCommittedState(ui32 partitionId, ui32 generation, ui64 cookie
 }
 
 bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, const TActorContext& ctx) {
+    TDoomedFamilyGuard doomed(*this);
+
     if (!ScalingSupport()) {
         return false;
     }
@@ -1149,11 +1430,16 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
                 if (allParentsMerged) {
                     auto* other = FindFamily(id);
                     if (other && other != family) {
-                        auto [f, _] = MergeFamilies(family, other, ctx);
+                        auto [f, v] = MergeFamilies(family, other, ctx);
                         family = f;
+                        if (!v) {
+                            family->WantedPartitions.insert(id);
+                        }
                     } else {
                         family->AttachePartitions({id}, ctx);
                     }
+                } else {
+                    family->WantedPartitions.insert(id);
                 }
             } else {
                 YDB_LOG_DEBUG("Can't attache partition",
@@ -1175,6 +1461,8 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
 }
 
 void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
+    TDoomedFamilyGuard doomed(*this);
+
     if (!GetPartitionInfo(partitionId)) {
         YDB_LOG_NOTICE("Reading of the partition was started by but partition has been deleted",
             {"logPrefix", LogPrefix()},
@@ -1194,6 +1482,10 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
 
     auto wasInactive = partition->IsInactive();
     if (partition->StartReading()) {
+        if (!ScalingSupport()) {
+            return;
+        }
+
         YDB_LOG_DEBUG("Reading of the partition was started by We stop reading from child partitions",
             {"logPrefix", LogPrefix()},
             {"partitionId", partitionId},
@@ -1206,21 +1498,18 @@ void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
 
         if (!family->IsLonely()) {
             BreakUpFamily(family, partitionId, false, ctx);
-            return;
-        }
-
-        if (wasInactive) {
+        } else if (wasInactive) {
             family->ActivatePartition(partitionId);
         }
 
-        // We releasing all children's partitions because we don't start reading the partition from EndOffset
-        GetPartitionGraph().Travers(partitionId, [&](ui32 partitionId) {
-            auto* partition = GetPartition(partitionId);
-            auto* f = FindFamily(partitionId);
+        // Stop reading children: the parent is being read again, so they are no longer readable.
+        GetPartitionGraph().Travers(partitionId, [&](ui32 childId) {
+            auto* child = GetPartition(childId);
+            auto* f = FindFamily(childId);
 
             if (f) {
-                if (partition && partition->Reset()) {
-                    f->ActivatePartition(partitionId);
+                if (child && child->Reset()) {
+                    f->ActivatePartition(childId);
                 }
                 DestroyFamily(f, ctx);
             }
@@ -1235,6 +1524,8 @@ TString GetSdkDebugString0(bool scaleAwareSDK) {
 }
 
 void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::TPtr& ev, const TActorContext& ctx) {
+    TDoomedFamilyGuard doomed(*this);
+
     auto& r = ev->Get()->Record;
     auto partitionId = r.GetPartitionId();
 
@@ -1246,24 +1537,16 @@ void TConsumer::FinishReading(TEvPersQueue::TEvReadingPartitionFinishedRequest::
         return;
     }
 
-    auto* family = FindFamily(partitionId);
-    if (!family) {
-        YDB_LOG_DEBUG("Reading of the partition was finished by but the partition hasn't family",
+    auto* partitionPtr = GetPartition(partitionId);
+    if (!partitionPtr) {
+        YDB_LOG_DEBUG("Reading of the partition was finished by but the partition is unknown",
             {"logPrefix", LogPrefix()},
             {"partitionId", partitionId},
             {"consumerName", ConsumerName});
         return;
     }
 
-    if (!family->Session) {
-        YDB_LOG_DEBUG("Reading of the partition was finished by but the partition hasn't reading session",
-            {"logPrefix", LogPrefix()},
-            {"partitionId", partitionId},
-            {"consumerName", ConsumerName});
-        return;
-    }
-
-    auto& partition = Partitions[partitionId];
+    auto& partition = *partitionPtr;
 
     const bool wasInactive = partition.IsInactive();
     if (partition.SetFinishedState(r.GetScaleAwareSDK(), r.GetStartedReadingFromEndOffset()) || wasInactive) {
@@ -1358,6 +1641,8 @@ size_t GetStatistics(const TFamilies& values, TPredicate predicate) {
 }
 
 void TConsumer::Balance(const TActorContext& ctx) {
+    TDoomedFamilyGuard doomed(*this);
+
     YDB_LOG_DEBUG("Balancing",
         {"logPrefix", LogPrefix()},
         {"sessions", Sessions.size()},
@@ -1993,7 +2278,8 @@ void TBalancer::Handle(TEvPersQueue::TEvGetReadSessionsInfo::TPtr& ev, const TAc
             pi->SetPartition(partitionId);
 
             auto* family = consumer->FindFamily(partitionId);
-            if (family && family->Session && family->LockedPartitions.contains(partitionId)) {
+            if (family && family->Session && consumer->Sessions.contains(family->Session->Pipe)
+                    && family->LockedPartitions.contains(partitionId)) {
                 auto* session = family->Session;
 
                 pi->SetClientNode(session->ClientNode);

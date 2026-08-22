@@ -750,19 +750,19 @@ The information in the state storage is volatile. Thus, it is lost on power fail
 
 Due to its nature, the state storage service operates on a best-effort basis. For example, the absence of multiple tablet leaders is guaranteed through the leader election protocol on [distributed storage](#distributed-storage), not on state storage.
 
-For more details on the structure of StateStorage and related subsystems, see the section Metadata distribution services.
+For more details about the StateStorage architecture and related subsystems, see the section [Metadata distribution services](architecture/metadata-services.md).
 
 ### Board {#board}
 
 **Board** is a distributed service designed to store metadata as key-value pairs. It is used, among other things, to store information about [endpoints](../concepts/connect.md#endpoint).
 
-For more details on the structure of Board and related subsystems, see the section Metadata distribution services.
+For more details about the Board architecture and related subsystems, see the section [Metadata distribution services](architecture/metadata-services.md).
 
 ### SchemeBoard {#scheme-board}
 
 **SchemeBoard** is a distributed service designed to store metadata as key-value pairs. It is used, among other things, to store information about [schemas](#global-schema).
 
-For more details on the structure of SchemeBoard and related subsystems, see the section Metadata distribution services.
+For more details about the SchemeBoard architecture and related subsystems, see the section [Metadata distribution services](architecture/metadata-services.md).
 
 #### Compaction {#compaction}
 

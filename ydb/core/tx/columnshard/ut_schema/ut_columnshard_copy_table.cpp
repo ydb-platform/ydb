@@ -721,7 +721,7 @@ Y_UNIT_TEST_SUITE(CopyTable) {
 
     // Drop source first while read-only copies still exist, then drop copies one by one.
     // The internal path must enter PathsToDrop only after the last copy is removed, then cleanup erases it.
-    Y_UNIT_TEST(DropSourceThenReadOnlyCopiesAddedToPathsToDropAndCleanedUp) {
+    Y_UNIT_TEST_DUO(DropSourceThenReadOnlyCopiesAddedToPathsToDropAndCleanedUp, InStore) {
         TTestBasicRuntime runtime;
         SetupCopyTableTestRuntime(runtime);
         auto csControllerGuard = RegisterCopyTableTestController<TCopyTableDropTestController>();
@@ -732,7 +732,7 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         const ui64 srcPathId = 1;
         constexpr ui64 auxPathId = 99;
         TestTableDescription testTable{};
-        testTable.InStore = true;
+        testTable.InStore = InStore;
         auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
 
         ui64 auxTxId = 1000;

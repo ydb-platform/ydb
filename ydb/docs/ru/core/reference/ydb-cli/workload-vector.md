@@ -128,7 +128,7 @@ vector                YDB vector workload.
 
 {% endnote %}
 
-{% include [load_options](./_includes/workload/load_options.md) %}
+См. также [общие параметры команды import](#load_options) выше.
 
 ## Построение векторного индекса {#build-index}
 
@@ -226,7 +226,7 @@ vector                YDB vector workload.
 | `--prefixed` | Генерировать вставки со столбцом `prefix` (для prefixed-индексов). | |
 | `--prefix-count <значение>` | Количество различных значений префикса. Используется только при указании `--prefixed`. | `1000` |
 
-{% include [run_options](./_includes/workload/run_options.md) %}
+См. также [общие параметры для всех видов нагрузки](#run_options) выше.
 
 ## Очистка данных {#cleanup}
 

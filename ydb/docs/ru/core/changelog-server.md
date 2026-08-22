@@ -694,13 +694,21 @@
 * Исправлена ошибка `SIGSEGV` в диннодах при импорте `CSV` через `YDB CLI`.
 * Исправлена ошибка с падением при обработке `NGRpcService::TRefreshTokenImpl`.
 * Реализован `gossip` протокол обмена информацией о ресурсах кластера.
-* Исправлена ошибка `DeserializeValuePickleV1(): requirement data.GetTransportVersion() == (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed`.
+* Исправлена ошибка:
+
+  ```text
+  DeserializeValuePickleV1(): requirement data.GetTransportVersion() == (ui32) NDqProto::DATA_TRANSPORT_UV_PICKLE_1_0 failed
+  ```
 * Реализованы автоинкрементные колонки.
 * Использовать статус `UNAVAILABLE` вместо `GENERIC_ERROR` при ошибке идентификации шарда.
 * Добавлена поддержка `rope payload` в `TEvVGet`.
 * Добавлено игнорирование устаревших событий.
 * Исправлено падение write-сессий на невалидном имени топика.
-* Исправлена ошибка `CheckExpected(): requirement newConstr failed, message: Rewrite error, missing Distinct((id)) constraint in node FlatMap`.
+* Исправлена ошибка:
+
+  ```text
+  CheckExpected(): requirement newConstr failed, message: Rewrite error, missing Distinct((id)) constraint in node FlatMap
+  ```
 * Включён `safe heal` по умолчанию.
 
 ## Версия 23.2 {#23-2}

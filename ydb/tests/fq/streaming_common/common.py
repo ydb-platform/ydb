@@ -48,22 +48,13 @@ def get_ydb_config(request, enable_fq_connector=None):
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
     enable_user_attributes_in_topic_query = param.get("enable_user_attributes_in_topic_query", True)
     enable_dq_source_stream_lookup_join = param.get("enable_dq_source_stream_lookup_join", True)
-<<<<<<< HEAD
-=======
-    enable_kqp_constraints_transformer = param.get("kqp_constraints_transformer", True)
     enable_dq_source_stream_lookup_join_local_lookups = param.get(
         "enable_dq_source_stream_lookup_join_local_lookups", False
     )  # TODO YQ-5431
     enable_dq_source_stream_lookup_join_fullscan = param.get("enable_dq_source_stream_lookup_join_fullscan", True)
     enable_dq_source_stream_lookup_join_shuffle_mode = param.get(
-<<<<<<< HEAD
-        "enable_dq_source_stream_lookup_join_shuffle_mode", False
-    )  # TODO YQ-5453
->>>>>>> 8fe7027cd66 (fq tests: port tests/fq/generic/streaming/test_join.py (yqv1) to ydb streaming (#49405))
-=======
         "enable_dq_source_stream_lookup_join_shuffle_mode", True
     )
->>>>>>> a46b9b677fc (dq streamlookupjoin: correctly fix multi-partition: add feature-flag and tests (#41442))
 
     extra_feature_flags = {
         "enable_external_data_sources",

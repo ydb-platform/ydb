@@ -15,6 +15,7 @@
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io_state.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
@@ -82,6 +83,8 @@ struct TEvPrivate {
 
         EvPqEventsReady = EvBegin,
         EvExecuteTopicEvent,
+        EvDeferredPublicationCreated,
+        EvDeferredPublicationCommitted,
 
         EvEnd
     };
@@ -94,6 +97,22 @@ struct TEvPrivate {
 
     struct TEvExecuteTopicEvent : public TTopicEventBase<TEvExecuteTopicEvent, EvExecuteTopicEvent> {
         using TTopicEventBase::TTopicEventBase;
+    };
+
+    struct TEvDeferredPublicationCreated : public TEventLocal<TEvDeferredPublicationCreated, EvDeferredPublicationCreated> {
+        explicit TEvDeferredPublicationCreated(const NYdb::NTopic::TBeginPublicationResult& result)
+            : Result(result)
+        {}
+
+        NYdb::NTopic::TBeginPublicationResult Result;
+    };
+
+    struct TEvDeferredPublicationCommitted : public TEventLocal<TEvDeferredPublicationCommitted, EvDeferredPublicationCommitted> {
+        explicit TEvDeferredPublicationCommitted(const NYdb::NTopic::TPublishResult& result)
+            : Result(result)
+        {}
+
+        NYdb::NTopic::TPublishResult Result;
     };
 };
 
@@ -160,6 +179,17 @@ class TDqPqWriteActor : public NActors::TActor<TDqPqWriteActor>, public IDqCompu
         ui64 SeqNo = 0;
     };
 
+    struct TCheckpointInto {
+        TCheckpointInto(ui64 seqNo, NDqProto::TCheckpoint checkpoint)
+            : SeqNo(seqNo)
+            , Checkpoint(std::move(checkpoint))
+        {}
+
+        ui64 SeqNo;
+        NDqProto::TCheckpoint Checkpoint;
+        std::optional<NYdb::NTopic::TDeferredPublication> DeferredPublication;
+    };
+
 public:
     TDqPqWriteActor(
         ui64 outputIndex,
@@ -188,8 +218,10 @@ public:
         , PqGateway(pqGateway)
         , TaskId(taskId)
         , EnableDeduplication(enableStreamingQueriesPqSinkDeduplicationFeatureFlag && SinkParams.GetEnableDeduplication())
+        , ExactlyOnceExcTransactionId(SinkParams.GetExactlyOnceTransactionPrefix() ? TStringBuilder() << SinkParams.GetExactlyOnceTransactionPrefix() << ":" << TaskId : TStringBuilder())
     { 
         EgressStats.Level = statsLevel;
+        YQL_ENSURE(!EnableDeduplication || !ExactlyOnceExcTransactionId, "Can not use deduplication with exactly once transactions");
     }
 
     static constexpr char ActorName[] = "DQ_PQ_WRITE_ACTOR";
@@ -249,7 +281,8 @@ public:
         if (checkpoint) {
             if (Buffer.empty() && WaitingAcks.empty()) {
                 SINK_LOG_D(MakeStringForLog(*checkpoint) << "Send checkpoint state immediately");
-                Callbacks->OnAsyncOutputStateSaved(BuildState(*checkpoint), OutputIndex, *checkpoint);
+                Callbacks->OnAsyncOutputStateSaved(BuildState(*checkpoint, DeferredPublication), OutputIndex, *checkpoint);
+                DeferredPublication.reset();
             } else {
                 ui64 seqNo = NextSeqNo + Buffer.size() - 1;
                 SINK_LOG_D(MakeStringForLog(*checkpoint) << "Defer sending the checkpoint, seqNo: " << seqNo);
@@ -258,9 +291,15 @@ public:
             }
         }
 
-        if (!Buffer.empty() && ContinuationToken) {
-            WriteNextMessage(std::move(*ContinuationToken));
-            ContinuationToken = std::nullopt;
+        if (!Buffer.empty()) {
+            if (ExactlyOnceExcTransactionId && !DeferredPublication) {
+                CreateDeferredPublication();
+            }
+
+            if (ContinuationToken) {
+                WriteNextMessage(std::move(*ContinuationToken));
+                ContinuationToken = std::nullopt;
+            }
         }
 
         while (HandleNewPQEvents()) {} // Write messages while new continuationTokens are arriving
@@ -281,13 +320,22 @@ public:
             ConfirmedSeqNo = stateProto.GetConfirmedSeqNo();
             NextSeqNo = ConfirmedSeqNo + 1;
             EgressStats.Bytes = stateProto.GetEgressBytes();
+
+            // if (stateProto.GetHasExactlyOnceTransaction()) {
+            //     ExactlyOnceExcTransactionId = stateProto.GetExactlyOnceIntTransactionId();
+            // }
+            // TODO: load state
             return;
         }
         ythrow yexception() << "Invalid state version " << data.Version;
     }
 
     void CommitState(const NDqProto::TCheckpoint& checkpoint) override {
-        Y_UNUSED(checkpoint);
+        const auto it = PendingCommitPublications.find(std::pair(checkpoint.GetGeneration(), checkpoint.GetId()));
+        if (it != PendingCommitPublications.end()) {
+            PendingPublishPublications.emplace(it->second);
+            CommitDeferredPublication();
+        }
     }
 
     i64 GetFreeSpace() const override {
@@ -306,19 +354,51 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(TEvPrivate::TEvPqEventsReady, Handle);
         hFunc(TEvPrivate::TEvExecuteTopicEvent, HandleTopicEvent);
+        hFunc(TEvPrivate::TEvDeferredPublicationCreated, Handle);
+        hFunc(TEvPrivate::TEvDeferredPublicationCommitted, Handle);
     )
 
     void Handle(TEvPrivate::TEvPqEventsReady::TPtr&) {
         SINK_LOG_T("New PQ write session events arrived");
 
-        if (!Inited) {
+        if (!Initted) {
             Init();
-            Inited = true;
+            Initted = true;
         }
 
         while (HandleNewPQEvents()) {}
 
         SubscribeOnNextEvent();
+    }
+
+    void Handle(TEvPrivate::TEvDeferredPublicationCreated::TPtr& ev) {
+        WaitDeferredPublicationCreation = false;
+
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess()) {
+            Fail(result, "Failed to create deferred publication");
+            return;
+        }
+
+        YQL_ENSURE(!DeferredPublication, "Unexpected deferred publication creation");
+        DeferredPublication = result.GetPublication();
+
+        if (!Buffer.empty() && ContinuationToken) {
+            WriteNextMessage(std::move(*ContinuationToken));
+            ContinuationToken = std::nullopt;
+        }
+    }
+
+    void Handle(TEvPrivate::TEvDeferredPublicationCommitted::TPtr& ev) {
+        WaitDeferredPublicationPublish = false;
+
+        const auto& result = ev->Get()->Result;
+        if (!result.IsSuccess() && result.GetStatus() != NYdb::EStatus::NOT_FOUND) {
+            Fail(result, "Failed to create deferred publication");
+            return;
+        }
+
+        CommitDeferredPublication();
     }
 
     void Init() {
@@ -380,6 +460,20 @@ private:
         return opts;
     }
 
+    IDeferredPublishClient& GetDeferredPublishClient() {
+        if (!DeferredPublishClient) {
+            NYdb::TCommonClientSettings settings;
+            settings.Database(SinkParams.GetDatabase())
+                    .DiscoveryEndpoint(SinkParams.GetEndpoint())
+                    .SslCredentials(NYdb::TSslCredentials(SinkParams.GetUseSsl()))
+                    .CredentialsProviderFactory(CredentialsProviderFactory);
+
+            DeferredPublishClient = PqGateway->GetDeferredPublishClient(Driver, settings);
+        }
+
+        return *DeferredPublishClient;
+    }
+
     static i64 GetItemSize(const TString& item) {
         return std::max(static_cast<i64>(item.size()), static_cast<i64>(1));
     }
@@ -432,11 +526,21 @@ private:
         return !events.empty();
     }
 
-    TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint) {
+    bool IsSeqNoForFirstCheckpoint(ui64 seqNo) const {
+        return !DeferredCheckpoints.empty() && DeferredCheckpoints.front().SeqNo == seqNo;
+    }
+
+    TSinkState BuildState(const NDqProto::TCheckpoint& checkpoint, const std::optional<NYdb::NTopic::TDeferredPublication>& deferredPublication) {
         NPq::NProto::TDqPqTopicSinkState stateProto;
         stateProto.SetSourceId(GetSourceId());
         stateProto.SetConfirmedSeqNo(ConfirmedSeqNo);
         stateProto.SetEgressBytes(EgressStats.Bytes);
+
+        if (deferredPublication) {
+            stateProto.SetHasExactlyOnceTransaction(true);
+            stateProto.SetExactlyOnceIntTransactionId(deferredPublication->IntPublicationId);
+        }
+
         TString serializedState;
         YQL_ENSURE(stateProto.SerializeToString(&serializedState));
 
@@ -448,13 +552,61 @@ private:
         return sinkState;
     }
 
+    void CreateDeferredPublication() {
+        if (Buffer.empty() || WaitDeferredPublicationCreation) {
+            return;
+        }
+
+        YQL_ENSURE(ExactlyOnceExcTransactionId, "Exactly once transaction id is not set");
+        YQL_ENSURE(!DeferredPublication, "Deferred publication is already created");
+        WaitDeferredPublicationCreation = true;
+
+        auto* actorSystem = TActivationContext::ActorSystem();
+        GetDeferredPublishClient().BeginPublication(ExactlyOnceExcTransactionId).Subscribe([actorSystem, selfId = SelfId()](const NYdb::NTopic::TAsyncBeginPublicationResult& result){
+            actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCreated(result.GetValue()));
+        });
+    }
+
+    void CommitDeferredPublication() {
+        if (PendingPublishPublications.empty() || WaitDeferredPublicationPublish) {
+            return;
+        }
+
+        WaitDeferredPublicationPublish = true;
+        auto* actorSystem = TActivationContext::ActorSystem();
+        GetDeferredPublishClient().Publish(PendingPublishPublications.front()).Subscribe([actorSystem, selfId = SelfId()](const NYdb::NTopic::TAsyncPublishResult& result){
+            actorSystem->Send(selfId, new TEvPrivate::TEvDeferredPublicationCommitted(result.GetValue()));
+        });
+        PendingPublishPublications.pop();
+    }
+
     void WriteNextMessage(NYdb::NTopic::TContinuationToken&& token) {
         std::optional<uint64_t> seqNo;
         if (EnableDeduplication) {
             seqNo = NextSeqNo;
         }
+
+        YQL_ENSURE(!Buffer.empty(), "Buffer is empty");
+
+        if (ExactlyOnceExcTransactionId && !DeferredPublication) {
+            CreateDeferredPublication();
+            return;
+        }
+
         SINK_LOG_T("Write message into PQ session: " << Buffer.front());
-        WriteSession->Write(std::move(token), Buffer.front(), seqNo);
+        YQL_ENSURE(!ExactlyOnceExcTransactionId || DeferredPublication, "Deferred publication is not ready");
+
+        NYdb::NTopic::TWriteMessage message(Buffer.front());
+        message.SeqNo(seqNo);
+        message.DeferredPublication(DeferredPublication);
+        WriteSession->Write(std::move(token), std::move(message));
+
+        if (ExactlyOnceExcTransactionId && IsSeqNoForFirstCheckpoint(NextSeqNo)) {
+            DeferredCheckpoints.front().DeferredPublication = DeferredPublication;
+            DeferredPublication.reset();
+            CreateDeferredPublication();
+        }
+
         auto itemSize = GetItemSize(Buffer.front());
         WaitingAcks.emplace(itemSize, TInstant::Now(), NextSeqNo);
         NextSeqNo++;
@@ -463,10 +615,23 @@ private:
         Buffer.pop();
     }
 
-    void Fail(TString message) {
-        TIssues issues;
-        issues.AddIssue(message);
+    void Fail(const TIssues& issues) {
         Callbacks->OnAsyncOutputError(OutputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR);
+    }
+
+    void Fail(const TString& message) {
+        Fail({TIssue(message)});
+    }
+
+    void Fail(const NYdb::TStatus& status, const TString& message) {
+        YQL_ENSURE(!status.IsSuccess());
+
+        TIssue rootIssue(TStringBuilder() << message << ". Status: " << status.GetStatus() << ".");
+        for (const auto& issue : status.GetIssues()) {
+            rootIssue.AddSubIssue(MakeIntrusive<TIssue>(NYdb::NAdapters::ToYqlIssue(issue)));
+        }
+
+        Fail({rootIssue});
     }
 
     struct TTopicEventProcessor {
@@ -506,11 +671,11 @@ private:
                 LOG_T(Self.LogPrefix << "Ack seq no (from WaitingAcks) " << seqNo);
                 Self.WaitingAcks.pop();
 
-                if (!Self.DeferredCheckpoints.empty() && std::get<0>(Self.DeferredCheckpoints.front()) == seqNo) {
+                if (Self.IsSeqNoForFirstCheckpoint(seqNo)) {
                     Self.ConfirmedSeqNo = seqNo;
-                    const auto& checkpoint = std::get<1>(Self.DeferredCheckpoints.front());
-                    LOG_D(Self.LogPrefix << MakeStringForLog(checkpoint) << "Send a deferred checkpoint, seqNo: " << seqNo);
-                    Self.Callbacks->OnAsyncOutputStateSaved(Self.BuildState(checkpoint), Self.OutputIndex, checkpoint);
+                    const auto& info = Self.DeferredCheckpoints.front();
+                    LOG_D(Self.LogPrefix << MakeStringForLog(info.Checkpoint) << "Send a deferred checkpoint, seqNo: " << seqNo);
+                    Self.Callbacks->OnAsyncOutputStateSaved(Self.BuildState(info.Checkpoint, info.DeferredPublication), Self.OutputIndex, info.Checkpoint);
                     Self.DeferredCheckpoints.pop();
                     Self.Metrics.InFlyCheckpoints->Dec();
                 }
@@ -563,6 +728,7 @@ private:
 
     IFederatedTopicClient::TPtr FederatedTopicClient;
     std::shared_ptr<NYdb::NTopic::IWriteSession> WriteSession;
+    IDeferredPublishClient::TPtr DeferredPublishClient;
     TString SourceId;
     ui64 NextSeqNo = 1;
     ui64 ConfirmedSeqNo = 0;
@@ -571,11 +737,18 @@ private:
     bool ShouldNotifyNewFreeSpace = false;
     std::queue<TString> Buffer;
     std::queue<TAckInfo> WaitingAcks; // Size of items which are waiting for acks (used to update free space)
-    std::queue<std::tuple<ui64, NDqProto::TCheckpoint>> DeferredCheckpoints;
+    std::queue<TCheckpointInto> DeferredCheckpoints;
     IPqStaticGateway::TPtr PqGateway;
     ui64 TaskId;
-    bool Inited = false;
+    bool Initted = false;
     bool EnableDeduplication = false;
+
+    TString ExactlyOnceExcTransactionId;
+    std::optional<NYdb::NTopic::TDeferredPublication> DeferredPublication;
+    THashMap<std::pair<ui64, ui64>, NYdb::NTopic::TDeferredPublication> PendingCommitPublications;
+    std::queue<NYdb::NTopic::TDeferredPublication> PendingPublishPublications;
+    bool WaitDeferredPublicationCreation = false;
+    bool WaitDeferredPublicationPublish = false;
 };
 
 std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateDqPqWriteActor(

@@ -359,7 +359,7 @@ public:
         return result.Cast();
     }
 
-    NNodes::TCoNameValueTupleList BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, TExprContext& ctx) const {
+    TMaybeNode<TCoNameValueTupleList> BuildTopicWriteSettings(const TString& cluster, TPositionHandle pos, std::optional<TCoNameValueTupleList> settings, TExprContext& ctx) const {
         TVector<TCoNameValueTuple> props;
 
         auto clusterConfiguration = State_->Configuration->ClustersConfigurationSettings.FindPtr(cluster);
@@ -374,6 +374,39 @@ public:
 
         if (clusterConfiguration->AddBearerToToken) {
             Add(props, AddBearerToTokenSetting, "1", pos, ctx);
+        }
+
+        if (settings) {
+            for (const auto& setting : settings->Raw()->Children()) {
+                const auto settingName = setting->Child(0)->Content();
+                if (settingName == "deliveryguarantee"sv) {
+                    if (setting->ChildrenSize() != 2) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "Expected `DELIVERY_GUARANTEE` = value"));
+                        return {};
+                    }
+
+                    const auto settingValue = setting->Child(1);
+                    if (!EnsureAtom(*settingValue, ctx)) {
+                        return {};
+                    }
+
+                    if (!IsIn({"exactly_once"sv, "at_least_once"sv}, settingValue->Content())) {
+                        ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), "`DELIVERY_GUARANTEE` must be \"at_least_once\" or \"exactly_once\""));
+                        return {};
+                    }
+
+                    if (settingValue->Content() == "exactly_once"sv && !State_->ExactlyOnceTransactionPrefix) {
+                        TIssue issue(ctx.GetPosition(setting->Pos()), "`DELIVERY_GUARANTEE` = \"exactly_once\" can not be used in current query context, falling back to \"at_least_once\"");
+                        issue.Severity = TSeverityIds::S_WARNING;
+                        ctx.AddWarning(issue);
+                    }
+
+                    Add(props, DeliveryGuaranteeSetting, settingValue->Content(), setting->Pos(), ctx);
+                } else {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting->Pos()), TStringBuilder() << "Unknown setting '" << settingName << "'"));
+                    return {};
+                }
+            }
         }
 
         return Build<TCoNameValueTupleList>(ctx, pos)
@@ -407,7 +440,7 @@ public:
 
         auto dqPqTopicSinkSettingsBuilder = Build<TDqPqTopicSink>(ctx, write.Pos());
         dqPqTopicSinkSettingsBuilder.Topic(topicNode);
-        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), ctx));
+        dqPqTopicSinkSettingsBuilder.Settings(BuildTopicWriteSettings(cluster, write.Pos(), std::nullopt, ctx).Cast());
         dqPqTopicSinkSettingsBuilder.Token<TCoSecureParam>().Name().Build("cluster:default_" + cluster).Build();
         auto dqPqTopicSinkSettings = dqPqTopicSinkSettingsBuilder.Done();
 
@@ -448,11 +481,16 @@ public:
             return nullptr;
         }
 
+        auto settings = BuildTopicWriteSettings(cluster, insert.Pos(), insert.Settings(), ctx);
+        if (!settings) {
+            return nullptr;
+        }
+
         auto dqSinkBuilder = Build<TDqSink>(ctx, insert.Pos())
             .DataSink(insert.DataSink())
             .Settings<TDqPqTopicSink>()
                 .Topic(topicNode)
-                .Settings(BuildTopicWriteSettings(cluster, insert.Pos(), ctx))
+                .Settings(settings.Cast())
                 .Token<TCoSecureParam>()
                     .Name()
                         .Value(TStringBuilder() << "cluster:default_" << cluster)

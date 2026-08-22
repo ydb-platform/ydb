@@ -133,7 +133,7 @@ public:
     }
 
     TStatus HandleInsert(TExprBase input, TExprContext& ctx) {
-        if (!EnsureArgsCount(input.Ref(), 4U, ctx)) {
+        if (!EnsureArgsCount(input.Ref(), 5U, ctx)) {
             return TStatus::Error;
         }
 

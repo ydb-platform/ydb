@@ -689,6 +689,11 @@ public:
                         sinkDesc.SetUseSsl(FromString<bool>(Value(setting)));
                     } else if (name == AddBearerToTokenSetting) {
                         sinkDesc.SetAddBearerToToken(FromString<bool>(Value(setting)));
+                    } else if (name == DeliveryGuaranteeSetting) {
+                        if (Value(setting) == "exactly_once") {
+                            YQL_ENSURE(State_->ExactlyOnceTransactionPrefix, "Exactly once transaction is not enabled");
+                            sinkDesc.SetExactlyOnceTransactionPrefix(State_->ExactlyOnceTransactionPrefix);
+                        }
                     }
                 }
 

@@ -131,6 +131,7 @@ message TDqPqTopicSink {
     EClusterType ClusterType = 7;
     bool UseActorSystemThreadsInTopicClient = 8;
     bool EnableDeduplication = 9;
+    string ExactlyOnceTransactionPrefix = 10; // If empty, writing will be performed as at least once
 }
 
 message TEvDqPqUpdateCounterValue {

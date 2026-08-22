@@ -644,7 +644,7 @@ NOlap::TIndexInfo BuildTableInfo(const std::vector<NArrow::NTest::TTestColumn>& 
 struct TestTableDescription {
     std::vector<NArrow::NTest::TTestColumn> Schema = NTxUT::TTestSchema::YdbSchema();
     std::vector<NArrow::NTest::TTestColumn> Pk = NTxUT::TTestSchema::YdbPkSchema();
-    bool InStore = true;
+    bool InStore = false;
 
     std::vector<ui32> GetColumnIds(const std::vector<TString>& names) const {
         return NTxUT::TTestSchema::GetColumnIds(Schema, names);

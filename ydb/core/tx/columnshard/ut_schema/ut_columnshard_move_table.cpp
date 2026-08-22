@@ -254,7 +254,7 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         ProposeSchemaTxFail(runtime, sender, TTestSchema::MoveTableTxBody(srcPathId, srcPathId, 1), ++txId);
     }
 
-    Y_UNIT_TEST(WaitTxsIgnoresUnrelatedTxCompleted) {
+    Y_UNIT_TEST_DUO(WaitTxsIgnoresUnrelatedTxCompleted, InStore) {
         TTestBasicRuntime runtime;
         TTester::Setup(runtime);
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
@@ -262,6 +262,7 @@ Y_UNIT_TEST_SUITE(MoveTable) {
 
         const ui64 srcPathId = 1;
         TestTableDescription testTable{};
+        testTable.InStore = InStore;
         Y_UNUSED(PrepareTablet(runtime, srcPathId, testTable.Schema));
 
         ui64 txId = 10;
@@ -289,13 +290,9 @@ Y_UNIT_TEST_SUITE(MoveTable) {
         TPlanStep lastPlanStep = commitSrcPlanStep;
         {
             constexpr ui64 auxPathId = 99;
-            NKikimrTxColumnShard::TSchemaTxBody auxTx;
-            Y_ABORT_UNLESS(auxTx.ParseFromString(TTestSchema::CreateTableTxBody(auxPathId, testTable.Schema, testTable.Pk)));
-            auxTx.MutableSeqNo()->SetRound(2);
-            TString auxTxBody;
-            Y_PROTOBUF_SUPPRESS_NODISCARD auxTx.SerializeToString(&auxTxBody);
-            const auto auxPlan = ProposeSchemaTx(runtime, sender, auxTxBody, ++txId);
-            PlanSchemaTx(runtime, sender, { auxPlan, txId });
+            TestTableDescription auxTable{};
+            auxTable.InStore = testTable.InStore;
+            const auto auxPlan = PrepareTablet(runtime, auxPathId, auxTable.Schema);
             lastPlanStep = auxPlan;
         }
 

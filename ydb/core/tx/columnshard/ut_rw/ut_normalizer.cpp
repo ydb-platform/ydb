@@ -88,12 +88,17 @@ public:
         }
 
         {
+            // Resolve actual internal pathId from TableInfo to support both InStore and standalone table modes
+            auto rowset = db.Table<Schema::TableInfo>().Select();
+            UNIT_ASSERT(rowset.IsReady());
+            UNIT_ASSERT(!rowset.EndOfSet());
+            const auto pathId = TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableInfo::PathId>());
             // Add invalid widow table version, if SchemaVersionCleaner will not erase it, then test will fail
             NKikimrTxColumnShard::TTableVersionInfo versionInfo;
             versionInfo.SetSchemaPresetId(1);
             versionInfo.SetSinceStep(5);
             versionInfo.SetSinceTxId(1);
-            db.Table<Schema::TableVersionInfo>().Key(1, 5, 1).Update(
+            db.Table<Schema::TableVersionInfo>().Key(pathId.GetRawValue(), 5, 1).Update(
                 NIceDb::TUpdate<Schema::TableVersionInfo::InfoProto>(versionInfo.SerializeAsString()));
         }
     }

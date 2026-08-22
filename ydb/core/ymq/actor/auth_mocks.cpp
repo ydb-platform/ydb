@@ -47,8 +47,17 @@ public:
         if (++RequestNumber % 3 == 0) {
             result->Status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::UNAVAILABLE, false);
         } else {
-            if (ev->Get()->Request.Hasiam_token()) {
-                result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+            if (request.has_iam_token()) {
+                TStringBuf id = request.iam_token();
+                if (id.SkipPrefix(SERVICE_ACCOUNT_PREFIX)) {
+                    auto& serviceAccount = *response.mutable_subject()->mutable_service_account();
+                    serviceAccount.set_id(TString(id));
+                    serviceAccount.set_folder_id(TString::Join("FOLDER_", id));
+                } else if (id.SkipPrefix(USER_ACCOUNT_PREFIX)) {
+                    response.mutable_subject()->mutable_user_account()->set_id(TString(id));
+                } else {
+                    status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                }
             } else {
                 TString idStr = ev->Get()->Request.Getsignature().Getaccess_key_id();
 

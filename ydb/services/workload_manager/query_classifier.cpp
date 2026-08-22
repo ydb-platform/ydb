@@ -8,9 +8,6 @@
 
 namespace NKikimr::NWorkloadManager {
 
-inline constexpr char RESOLVER_IS_USER[] = "User request";
-inline constexpr char DEFAULT_RESOLVER[] = "Default";
-
 class TQueryClassifier : public IQueryClassifier {
 public:
     TQueryClassifier(TResourcePoolMapPtr resourcePoolMap,
@@ -37,13 +34,13 @@ public:
 
         // User requested an explicit pool
         if (Context.PoolId) {
-            TryResolve(Context.PoolId, PreClassifyResult, RESOLVER_IS_USER);
+            TryResolve(Context.PoolId, PreClassifyResult, TResolver::Direct());
             return *PreClassifyResult;
         }
 
         // If no classification, use default pool
         if (!ClassifierView) {
-            TryResolve(NResourcePool::DEFAULT_POOL_ID, PreClassifyResult, DEFAULT_RESOLVER);
+            TryResolve(NResourcePool::DEFAULT_POOL_ID, PreClassifyResult, TResolver::Default());
             return *PreClassifyResult;
         }
 
@@ -77,7 +74,7 @@ public:
         }
 
         // No suitable classification, use default pool
-        TryResolve(NResourcePool::DEFAULT_POOL_ID, PreClassifyResult, DEFAULT_RESOLVER);
+        TryResolve(NResourcePool::DEFAULT_POOL_ID, PreClassifyResult, TResolver::Default());
         return *PreClassifyResult;
     }
 
@@ -88,7 +85,7 @@ public:
 
         if (userRequestContext.IsStreamingQuery && ResourcePoolForSharedReading.has_value()) {
             if (UsesSharedReading(preparedQuery.GetPhysicalQuery())) {
-                static constexpr auto resolver = "ResourcePoolForSharedReading";
+                const auto resolver = TResolver::SharedReading();
                 if (Context.PoolId && Context.PoolId != *ResourcePoolForSharedReading) {
                     PostClassifyResult = TReject{
                         .Code = Ydb::StatusIds::PRECONDITION_FAILED,
@@ -96,8 +93,8 @@ public:
                             << "Explicit resource pool '" << Context.PoolId
                             << "' conflicts with required pool for shared reading '"
                             << *ResourcePoolForSharedReading << "'"
-                            << ", resolved by: " << resolver,
-                        .Resolver = resolver,
+                            << ", resolved by: " << resolver.ToLogString(),
+                        .Resolver = resolver.ToLogString(),
                     };
                     return *PostClassifyResult;
                 }
@@ -111,12 +108,12 @@ public:
 
             // No shared reading — apply the original user pool, if any.
             if (Context.PoolId) {
-                TryResolve(Context.PoolId, PostClassifyResult, RESOLVER_IS_USER);
+                TryResolve(Context.PoolId, PostClassifyResult, TResolver::Direct());
                 return *PostClassifyResult;
             }
 
             if (!ClassifierView) {
-                TryResolve(NResourcePool::DEFAULT_POOL_ID, PostClassifyResult, DEFAULT_RESOLVER);
+                TryResolve(NResourcePool::DEFAULT_POOL_ID, PostClassifyResult, TResolver::Default());
                 return *PostClassifyResult;
             }
         }
@@ -147,7 +144,7 @@ public:
         }
 
         // No suitable classification, use default pool
-        TryResolve(NResourcePool::DEFAULT_POOL_ID, PostClassifyResult, DEFAULT_RESOLVER);
+        TryResolve(NResourcePool::DEFAULT_POOL_ID, PostClassifyResult, TResolver::Default());
         return *PostClassifyResult;
     }
 
@@ -268,7 +265,7 @@ private:
     bool TryResolve(const NResourcePool::TClassifierSettings& classifier, TStore& store) {
         Y_ABORT_UNLESS(classifier.ResourcePool.has_value(),
             "ResourcePool must be set for non-Reject classifiers");
-        return TryResolve(*classifier.ResourcePool, store, TStringBuilder() << "Classifier with rank: " << classifier.Rank);
+        return TryResolve(*classifier.ResourcePool, store, TResolver::Classifier(ToString(classifier.Rank)));
     }
 
     static TReject MakeRejectFromClassifier(const TResourcePoolClassifierConfig& config) {
@@ -277,7 +274,7 @@ private:
         return TReject{
             .Code = Ydb::StatusIds::PRECONDITION_FAILED,
             .Message = TStringBuilder() << "Request is rejected by classifier '" << name << "' (rank=" << rank << ")",
-            .Resolver = TStringBuilder() << "Classifier with rank: " << rank,
+            .Resolver = TResolver::Classifier(ToString(rank)).ToLogString(),
         };
     }
 
@@ -295,7 +292,7 @@ private:
     ///     preserved for accounting/observability.
     ///
     template<typename TStore>
-    bool TryResolve(const TString& poolId, TStore& store, const TString& resolver, bool mandatoryPool = false) {
+    bool TryResolve(const TString& poolId, TStore& store, TResolver resolver, bool mandatoryPool = false) {
         const auto* poolInfo = FindPool(poolId);
 
         if (!poolInfo) {
@@ -304,12 +301,12 @@ private:
                     .Code = Ydb::StatusIds::NOT_FOUND,
                     .Message = TStringBuilder()
                         << "Resource pool: " << poolId << " not found"
-                        << ", resolved by: " << resolver,
-                    .Resolver = resolver,
+                        << ", resolved by: " << resolver.ToLogString(),
+                    .Resolver = resolver.ToLogString(),
                 };
                 return true;
             }
-            store = TResolvedPoolId{.PoolId = poolId, .Resolver = resolver};
+            store = TResolvedPoolId{.PoolId = poolId, .Resolver = std::move(resolver)};
             return false;
         }
 
@@ -318,8 +315,8 @@ private:
                 .Code = Ydb::StatusIds::NOT_FOUND,
                 .Message = TStringBuilder()
                     << "Resource pool: " << poolId << " not found or you don't have describe permissions"
-                    << ", resolved by: " << resolver,
-                .Resolver = resolver
+                    << ", resolved by: " << resolver.ToLogString(),
+                .Resolver = resolver.ToLogString()
             };
             return false;
         }
@@ -329,23 +326,23 @@ private:
                 .Code = Ydb::StatusIds::UNAUTHORIZED,
                 .Message = TStringBuilder()
                     << "No access permissions for resource pool: " << poolId
-                    << ", resolved by: " << resolver,
-                .Resolver = resolver
+                    << ", resolved by: " << resolver.ToLogString(),
+                .Resolver = resolver.ToLogString()
             };
             return false;
         }
 
         if (!poolInfo->Config.IsWorkloadServiceRequired() && !mandatoryPool) {
-            store = TBypass{.Resolver = resolver};
+            store = TBypass{.Resolver = resolver.ToLogString()};
         } else if (!poolInfo->Config.IsAdmissionRequired()) {
             store = TResolvedPoolId{
                 .PoolId = poolId,
-                .Resolver = resolver,
+                .Resolver = std::move(resolver),
                 .SkipAdmission = true,
                 .PoolConfig = poolInfo->Config,
             };
         } else {
-            store = TResolvedPoolId{.PoolId = poolId, .Resolver = resolver};
+            store = TResolvedPoolId{.PoolId = poolId, .Resolver = std::move(resolver)};
         }
 
         return true;

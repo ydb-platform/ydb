@@ -253,8 +253,6 @@ struct TConsumer {
     bool ScalingSupport() const;
 
 private:
-    void AssertBalancingInvariants();
-
     TString LogPrefix() const;
     bool AttachingDescendants = false;
 

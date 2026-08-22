@@ -837,7 +837,6 @@ void TPersQueueReadBalancer::UpdateActivePartitions() {
 // Balancing
 //
 
-// Finish/start/release are bound to a pipe and are stale after a PQRB restart.
 // Commit/status comes from the PQ tablet and must survive InitDone.
 void TPersQueueReadBalancer::EnqueueUntilInitDone(TAutoPtr<IEventHandle> ev) {
     InitBalancerEvents.emplace_back(ev.Release());
@@ -1180,6 +1179,7 @@ STFUNC(TPersQueueReadBalancer::StateInit) {
         HFunc(NSchemeShard::TEvSchemeShard::TEvSubDomainPathIdFound, Handle);
         HFunc(TEvTxProxySchemeCache::TEvWatchNotifyUpdated, Handle);
         HFunc(TEvPersQueue::TEvGetPartitionsLocation, HandleOnInit);
+        // Finish/start/release are bound to a pipe and are stale after a PQRB restart.
         IgnoreFunc(TEvPersQueue::TEvPartitionReleased);
         IgnoreFunc(TEvPersQueue::TEvReadingPartitionStartedRequest);
         IgnoreFunc(TEvPersQueue::TEvReadingPartitionFinishedRequest);

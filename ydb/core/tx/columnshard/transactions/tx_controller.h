@@ -332,6 +332,10 @@ public:
             return TxInfo.PlanStep;
         }
 
+        bool IsPlanned() const {
+            return TxInfo.PlanStep != 0;
+        }
+
         OpType GetOpType() const {
             return DoGetOpType();
         }

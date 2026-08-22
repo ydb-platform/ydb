@@ -1167,6 +1167,73 @@ Y_UNIT_TEST(DelayedMergeDisconnectTargetBeforeUnlockLocksChild) {
     env.AssertLocked(2);
 }
 
+Y_UNIT_TEST(DisconnectAfterUncommittedMergeDoesNotDoubleLock) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    env.RegisterSession("session-0");
+    env.Merge(0, 1);
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.AssertSameSession({0, 1, 2});
+
+    env.RegisterSession("session-1");
+    env.AssertSameSession({0, 1, 2});
+
+    const TString holder = env.SessionOf(2);
+    env.CloseSession(holder);
+    env.AssertSameSession({0, 1, 2});
+    env.AssertEvenDistribution(3, 1);
+}
+
+Y_UNIT_TEST(DisconnectAfterDelayedMergeDoesNotDoubleLock) {
+    TScaleEnv env;
+    env.CreateParents(2);
+    auto [s0, s1] = env.TwoSessionsOnParents();
+    env.Merge(0, 1);
+
+    env.Finish(s0, 0);
+    env.Finish(s1, 1, /*scaleAware=*/true, /*fromEnd=*/true, /*pump=*/false);
+
+    auto pending = env.WaitRelease();
+    UNIT_ASSERT_C(pending, "second finished parent must trigger a family release to merge");
+    auto pipeIt = env.Pipes.find(pending->Session);
+    UNIT_ASSERT(pipeIt != env.Pipes.end());
+    env.AckRelease(pipeIt->second, pending->Partition, pending->Session);
+    env.Pump();
+    env.AssertLocked(2);
+
+    const TString holder = env.SessionOf(2);
+    UNIT_ASSERT_C(!holder.empty(), "merged child must stay assigned");
+    UNIT_ASSERT_C(env.Pipes.size() > 1, "a second session must keep the consumer alive");
+    env.CloseSession(holder);
+    env.AssertSameSession({0, 1, 2});
+    env.AssertEvenDistribution(3, 1);
+}
+
+Y_UNIT_TEST(ChainedMergeDescendantsStayTogetherThenReconnectOnce) {
+    TScaleEnv env;
+    env.CreateParents(3);
+    env.RegisterSession("session-0");
+    env.Merge(0, 1);
+    env.Finish("session-0", 0);
+    env.Finish("session-0", 1);
+    env.AssertLocked(3);
+
+    env.Merge(3, 2);
+    env.AssertNotLocked(4);
+    env.Finish("session-0", 3);
+    env.Finish("session-0", 2);
+    env.AssertSameSession({0, 1, 2, 3, 4});
+
+    env.RegisterSession("session-1");
+    env.AssertSameSession({0, 1, 2, 3, 4});
+
+    const TString holder = env.SessionOf(4);
+    env.CloseSession(holder);
+    env.AssertSameSession({0, 1, 2, 3, 4});
+    env.AssertEvenDistribution(5, 1);
+}
+
 } // Y_UNIT_TEST_SUITE(TPqrbMergeBalancing)
 
 Y_UNIT_TEST_SUITE(TPqrbSplitBalancing) {
@@ -1439,6 +1506,45 @@ Y_UNIT_TEST(ChainedSplitWaitsForAncestors) {
     env.Finish(env.SessionOf(1), 1);
     env.AssertLocked(3);
     env.AssertLocked(4);
+}
+
+Y_UNIT_TEST(ChainedSplitDescendantsStayTogetherThenIndependentAfterCommit) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.Split(1);
+    env.Finish(env.SessionOf(1), 1);
+    env.AssertSameSession({0, 1, 2, 3, 4});
+
+    env.RegisterSession("session-1");
+    env.AssertSameSession({0, 1, 2, 3, 4});
+
+    env.Commit(0);
+    env.Commit(1);
+    env.AssertEvenDistribution(5, 2);
+}
+
+Y_UNIT_TEST(DisconnectAfterSplitThenMergeDoesNotDoubleLock) {
+    TScaleEnv env;
+    env.CreateParents(1);
+    env.RegisterSession("session-0");
+    env.Split(0);
+    env.Finish("session-0", 0);
+    env.Merge(1, 2);
+    env.Finish(env.SessionOf(1), 1);
+    env.Finish(env.SessionOf(2), 2);
+    env.AssertLocked(3);
+    env.AssertSameSession({0, 1, 2, 3});
+
+    env.RegisterSession("session-1");
+    env.AssertSameSession({0, 1, 2, 3});
+
+    const TString holder = env.SessionOf(3);
+    env.CloseSession(holder);
+    env.AssertSameSession({0, 1, 2, 3});
+    env.AssertEvenDistribution(4, 1);
 }
 
 Y_UNIT_TEST(SplitAfterParentAlreadyFinished) {

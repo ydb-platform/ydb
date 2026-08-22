@@ -412,15 +412,6 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
             "Cannot attach unreadable partition %u to family %lu", partitionId, Id);
     }
 
-    auto appendUniqueRoots = [&](const std::vector<ui32>& partitions) {
-        absl::flat_hash_set<ui32> seen(RootPartitions.begin(), RootPartitions.end());
-        for (auto partitionId : partitions) {
-            if (seen.insert(partitionId).second) {
-                RootPartitions.push_back(partitionId);
-            }
-        }
-    };
-
     if (IsActive()) {
         if (!Session) {
             YDB_LOG_CRIT("Attaching partitions to an active family without a session",
@@ -429,7 +420,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
         }
         if (!Session->AllPartitionsReadable(newPartitions)) {
             WantedPartitions.insert(newPartitions.begin(), newPartitions.end());
-            appendUniqueRoots(newPartitions);
+            AppendUniqueRoots(newPartitions);
             UpdateSpecialSessions();
             Release(ctx);
             return;
@@ -437,7 +428,7 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
 
         Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
         UpdatePartitionMapping(newPartitions);
-        appendUniqueRoots(newPartitions);
+        AppendUniqueRoots(newPartitions);
 
         for (auto partitionId : newPartitions) {
             LockPartition(partitionId, ctx);
@@ -447,13 +438,13 @@ void TPartitionFamily::AttachePartitions(const std::vector<ui32>& partitions, co
     } else if (IsFree()) {
         Partitions.insert(Partitions.end(), newPartitions.begin(), newPartitions.end());
         UpdatePartitionMapping(newPartitions);
-        appendUniqueRoots(newPartitions);
+        AppendUniqueRoots(newPartitions);
         for (auto partitionId : newPartitions) {
             WantedPartitions.erase(partitionId);
         }
     } else if (IsReleasing()) {
         WantedPartitions.insert(newPartitions.begin(), newPartitions.end());
-        appendUniqueRoots(newPartitions);
+        AppendUniqueRoots(newPartitions);
     }
 
     // Removing sessions wich can't read the family now
@@ -482,6 +473,9 @@ void TPartitionFamily::AttachReadyWantedPartitions(const TActorContext& ctx) {
         bool allParentsInFamily = true;
         for (auto* parent : node->DirectParents) {
             if (!parent) {
+                YDB_LOG_WARN("Partition graph has a null DirectParents pointer",
+                    {"logPrefix", LogPrefix()},
+                    {"partitionId", partitionId});
                 allParentsInFamily = false;
                 break;
             }
@@ -516,7 +510,16 @@ void TPartitionFamily::InactivatePartition(ui32 partitionId) {
     ChangePartitionCounters(-1, 1);
 }
 
- void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
+void TPartitionFamily::AppendUniqueRoots(const std::vector<ui32>& partitions) {
+    absl::flat_hash_set<ui32> seen(RootPartitions.begin(), RootPartitions.end());
+    for (auto partitionId : partitions) {
+        if (seen.insert(partitionId).second) {
+            RootPartitions.push_back(partitionId);
+        }
+    }
+}
+
+void TPartitionFamily::ChangePartitionCounters(ssize_t active, ssize_t inactive) {
     Y_VERIFY_DEBUG((ssize_t)ActivePartitionCount + active >= 0, "ActivePartitionCount: %lu, active: %ld", ActivePartitionCount, active);
     Y_VERIFY_DEBUG((ssize_t)InactivePartitionCount + inactive >= 0, "InactivePartitionCount: %lu, inactive: %ld", InactivePartitionCount, inactive);
 
@@ -542,7 +545,7 @@ void TPartitionFamily::Merge(TPartitionFamily* other) {
     UpdatePartitionMapping(other->Partitions);
     other->Partitions.clear();
 
-    RootPartitions.insert(RootPartitions.end(), other->RootPartitions.begin(), other->RootPartitions.end());
+    AppendUniqueRoots(other->RootPartitions);
     other->RootPartitions.clear();
 
     for (auto partitionId : Partitions) {
@@ -1084,7 +1087,12 @@ void TConsumer::AttachReadableDescendants(TPartitionFamily* family, const TActor
         });
     }
 
-    for (auto id : descendants) {
+    // Hash-set order is not stable. Sort so a chain (root → parent → grandchild)
+    // merges in a deterministic survivor family.
+    std::vector<ui32> ordered(descendants.begin(), descendants.end());
+    std::sort(ordered.begin(), ordered.end());
+
+    for (auto id : ordered) {
         auto* node = GetPartitionGraph().GetPartition(id);
         if (!node) {
             continue;
@@ -1094,6 +1102,9 @@ void TConsumer::AttachReadableDescendants(TPartitionFamily* family, const TActor
         if (node->DirectParents.size() > 1) {
             for (auto* parent : node->DirectParents) {
                 if (!parent) {
+                    YDB_LOG_WARN("Partition graph has a null DirectParents pointer",
+                        {"logPrefix", LogPrefix()},
+                        {"partitionId", id});
                     allParentsMerged = false;
                     continue;
                 }
@@ -1302,7 +1313,13 @@ bool TConsumer::IsReadable(ui32 partitionId) {
 
     auto parentsProcessed = [&](const auto& parents) {
         for (auto* parent : parents) {
-            if (!parent || !IsInactive(parent->Id)) {
+            if (!parent) {
+                YDB_LOG_WARN("Partition graph has a null parent pointer",
+                    {"logPrefix", LogPrefix()},
+                    {"partitionId", partitionId});
+                return false;
+            }
+            if (!IsInactive(parent->Id)) {
                 return false;
             }
         }

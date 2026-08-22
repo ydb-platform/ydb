@@ -1,0 +1,177 @@
+// Scheme change records subscriber protocol. Subscribers register with a
+// stable string ID, fetch records in order, pull bodies for the subset they
+// need, and ack consumed ranges.
+syntax = "proto3";
+
+package NKikimrSchemeShard;
+
+option java_package = "ru.yandex.kikimr.proto";
+
+import "ydb/core/scheme/protos/pathid.proto";
+
+// Status enum for scheme change records subscriber protocol results.
+message TSchemeChangeRecordsStatus {
+    enum EStatus {
+        STATUS_UNSPECIFIED = 0;
+        STATUS_SUCCESS = 1;
+        STATUS_NOT_REGISTERED = 2;
+        STATUS_INVALID_REQUEST = 3;
+        STATUS_INTERNAL_ERROR = 4;
+    }
+}
+
+// Lifecycle state of a subscriber's cursor.
+message TSchemeChangeSubscriberState {
+    enum EState {
+        STATE_UNSPECIFIED = 0;
+        // Streaming normally.
+        STATE_READY = 1;
+        // Reserved for snapshot backfill; no mechanism exists yet.
+        STATE_SCAN = 2;
+        // Cursor advanced past records never received; SkippedEntries
+        // says how many.
+        STATE_LOST = 3;
+    }
+}
+
+// How precisely a record's PlanStep locates it in the coordinator timeline.
+message TSchemeChangePosition {
+    enum EKind {
+        KIND_UNSPECIFIED = 0;
+        // PlanStep is the coordinator step this operation was actually planned
+        // at. Safe to interleave against data records carrying the same clock.
+        KIND_EXACT = 1;
+        // The operation never reached a coordinator, so PlanStep is a LOWER
+        // BOUND: the highest step already applied. Use for window assignment
+        // only; such records touched no shard.
+        KIND_BUCKETED = 2;
+    }
+}
+
+// Register a subscriber to the scheme change records log. Idempotent.
+message TEvRegisterSubscriber {
+    string SubscriberId = 1;
+    // Absent => start at the tail.
+    // Present => clamped up to the retention floor if below it
+    // (State=STATE_LOST + SkippedEntries); rejected if beyond the tail.
+    optional uint64 StartOrder = 2;
+}
+
+// CurrentOrder is the subscriber's cursor after registration.
+message TEvRegisterSubscriberResult {
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+    uint64 CurrentOrder = 3;
+    optional TSchemeChangeSubscriberState.EState State = 4;
+    // Non-zero only when an explicit StartOrder was clamped up: records
+    // already swept and never deliverable to this subscriber.
+    uint64 SkippedEntries = 5;
+}
+
+// One user-level TModifyScheme. `Body` (via TEvFetchSchemeChangeRecordBodies)
+// is the source of truth; the metadata fields below are advisory and may be
+// unset when the operation targets no single identifiable path.
+message TSchemeChangeRecord {
+    uint64 Order = 1;
+    uint64 TxId = 2;
+    uint64 PlanStep = 3;
+    uint32 OperationType = 4;
+    NKikimrProto.TPathID PathId = 5;
+    string Path = 6;
+    uint32 ObjectType = 7;
+    optional uint32 Status = 8;
+    string UserSID = 9;
+    uint64 SchemaVersion = 10;
+    uint64 CompletedAtUs = 11;
+    uint64 BodySizeBytes = 13;
+    // Window membership ranks by (PlanStep, PositionKind), EXACT < BUCKETED.
+    // No tiebreak: records equal on both are concurrent, so consumers must not
+    // infer an order from delivery. TxId is identity, never an order.
+    optional TSchemeChangePosition.EKind PositionKind = 14;
+}
+
+// Request metadata for records after the given order, up to MaxCount entries.
+message TEvFetchSchemeChangeRecords {
+    string SubscriberId = 1;
+    uint64 AfterOrder = 2;
+    uint32 MaxCount = 3;
+}
+
+// Response containing metadata entries. Bodies must be fetched separately
+// via TEvFetchSchemeChangeRecordBodies. Tail order is Entries.back().Order.
+message TEvFetchSchemeChangeRecordsResult {
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+    repeated TSchemeChangeRecord Entries = 3;
+    bool HasMore = 5;
+    // Entries fast-forwarded because AfterOrder was behind the persisted
+    // LastAckedOrder. Informational: those records are already acked.
+    uint64 SkippedEntries = 6;
+    // STATE_LOST means unconsumed records were swept; SkippedEntries counts them.
+    optional TSchemeChangeSubscriberState.EState State = 8;
+    // Highest PlanStep through which the stream is COMPLETE. A consumer may
+    // close window (S_prev, S] once this is >= S. Needed because Order is
+    // completion order while PlanStep is plan order, and the two diverge.
+    uint64 ClosedThroughPlanStep = 7;
+}
+
+// Acknowledge consumption up to UpToOrder. Advances the subscriber cursor
+// and may trigger inline cleanup of acked records.
+message TEvAckSchemeChangeRecords {
+    string SubscriberId = 1;
+    uint64 UpToOrder = 2;
+}
+
+// Response to ack; LastAckedOrder reflects the actual cursor position
+// after clamping.
+message TEvAckSchemeChangeRecordsResult {
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+    uint64 LastAckedOrder = 3;
+}
+
+// Advance a subscriber's cursor to the tail regardless of consumption. Used
+// to unblock overflow caused by a dead subscriber.
+message TEvForceAdvanceSubscriber {
+    string SubscriberId = 1;
+}
+
+// Response to force-advance.
+message TEvForceAdvanceSubscriberResult {
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+    uint64 LastAckedOrder = 3;
+}
+
+// Remove a subscriber.
+message TEvUnregisterSubscriber {
+    string SubscriberId = 1;
+}
+
+// Response to unregister.
+message TEvUnregisterSubscriberResult {
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+}
+
+// Pull bodies for specific record orders. Requires a registered subscriber.
+message TEvFetchSchemeChangeRecordBodies {
+    string SubscriberId = 1;
+    repeated uint64 Orders = 2;
+}
+
+// Response containing serialized TModifyScheme bodies for the requested
+// orders. Records that have been cleaned up since the corresponding Fetch
+// are silently skipped.
+message TEvFetchSchemeChangeRecordBodiesResult {
+    message TEntry {
+        uint64 Order = 1;
+        bytes Body = 2;
+        // Serialized TEvDescribeSchemeResult as of when the record was
+        // written. Travels with Body because it is large.
+        bytes Description = 3;
+    }
+    optional TSchemeChangeRecordsStatus.EStatus Status = 1;
+    string Reason = 2;
+    repeated TEntry Entries = 3;
+}

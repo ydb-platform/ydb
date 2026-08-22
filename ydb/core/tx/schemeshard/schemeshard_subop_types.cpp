@@ -339,6 +339,18 @@ bool IsDrop(ETxType t) {
     }
 }
 
+// Ops that fire on internal churn and must never reach the scheme change
+// records outbox. Add an entry here to exclude an op; everything else is
+// logged, including Internal=true ops.
+bool IsChurnOp(NKikimrSchemeOp::EOperationType opType) {
+    switch (opType) {
+        case NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions:
+            return true;
+        default:
+            return false;
+    }
+}
+
 bool CanDeleteParts(ETxType t) {
     switch (t) {
         case TxDropTable:

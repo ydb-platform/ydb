@@ -3,6 +3,7 @@
 #include "schemeshard__operation_db_changes.h"
 #include "schemeshard__operation_memory_changes.h"
 #include "schemeshard_impl.h"
+#include "schemeshard_path_describer.h"
 
 #include <ydb/core/tx/tx_processing.h>
 
@@ -984,7 +985,67 @@ void TSideEffects::DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContex
     PendingFullBackupItemDone.clear();
 }
 
+
+void TSideEffects::DoPersistSchemeChangeRecords(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
+    if (DoneTransactions.empty()) {
+        return;
+    }
+
+    // Runs regardless of whether a subscriber exists now: what matters is
+    // whether one existed at propose, recorded by a non-empty SchemeChangeSlots.
+    NIceDb::TNiceDb db(txc.DB);
+
+    for (const auto& txId : DoneTransactions) {
+        auto opIt = ss->Operations.find(txId);
+        if (opIt == ss->Operations.end() || !opIt->second->IsReadyToDone(ctx)) {
+            continue;
+        }
+        const TOperation::TPtr& operation = opIt->second;
+        if (operation->SchemeChangeSlots.empty()) {
+            continue;
+        }
+
+        TStepId planStep = InvalidStepId;
+        // EPathStateDrop on a part's target means AbortUnsafe force-completed
+        // it (a force-drop of an ancestor); any other state is a real success.
+        bool aborted = false;
+        for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
+            auto it = ss->TxInFlight.find(TOperationId(txId, partIdx));
+            if (it == ss->TxInFlight.end()) {
+                continue;
+            }
+            if (planStep == InvalidStepId && it->second.PlanStep != InvalidStepId) {
+                planStep = it->second.PlanStep;
+            }
+            if (auto* path = ss->PathsById.FindPtr(it->second.TargetPathId)) {
+                if ((*path)->PathState == NKikimrSchemeOp::EPathState::EPathStateDrop) {
+                    aborted = true;
+                }
+            }
+        }
+
+        // No cap relief here: an outbox overflow is handled by the propose
+        // gate refusing DDL, or by an admin force-advance, not by discarding records.
+
+        for (const auto& slot : operation->SchemeChangeSlots) {
+            ss->FinalizeSchemeChangeRecord(db, ctx, slot, planStep, aborted);
+            ss->PersistRemoveSchemeChangePendingOrder(db, txId, slot.UserTxIdx);
+
+            ss->UpdateSchemeChangeGauges();
+
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "DoPersistSchemeChangeRecords: finalised user-level entry"
+                    << " order=" << slot.Order
+                    << " txId=" << txId
+                    << " userTxIdx=" << slot.UserTxIdx
+                    << " path=" << slot.Path
+                    << " planStep=" << planStep);
+        }
+    }
+}
+
 void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTransactionContext &txc, const TActorContext &ctx) {
+    DoPersistSchemeChangeRecords(ss, txc, ctx);  // persist scheme change records before operations are erased
     for (auto& txId: DoneTransactions) {
 
         if (!ss->Operations.contains(txId)) {

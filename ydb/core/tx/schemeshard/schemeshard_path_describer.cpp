@@ -1741,7 +1741,7 @@ void TSchemeShard::DescribeReplication(const TPathId& pathId, const TString& nam
     DescribeReplication(pathId, name, it->second, desc);
 }
 
-static void ClearSensitiveFields(google::protobuf::Message* message) {
+void ClearSensitiveFields(google::protobuf::Message* message) {
     const auto* desc = message->GetDescriptor();
     const auto* self = message->GetReflection();
 

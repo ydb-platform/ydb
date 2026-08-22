@@ -14,6 +14,29 @@ struct TOperation: TSimpleRefCount<TOperation> {
     ui32 PreparedParts = 0;
     TVector<ISubOperation::TPtr> Parts;
 
+    // User-level transactions driving this operation. In-memory, and only for
+    // the propose that created them: outbox rows are written before it commits.
+    TVector<TTxTransaction> UserLevelTransactions;
+
+    // Outbox rows reserved at propose, one per emitting user-level transaction.
+    struct TSchemeChangeSlot {
+        ui32 UserTxIdx = 0;
+        ui64 Order = 0;
+        // Carried in memory because finalisation cannot re-read it.
+        TString Path;
+        // The DDL issuer's SID, captured at propose time. Empty if the
+        // caller had no token; finalisation must not substitute the
+        // target's owner for a missing issuer.
+        TString UserSid;
+    };
+    TVector<TSchemeChangeSlot> SchemeChangeSlots;
+
+    // NextSchemeChangeOrder before this operation reserved any orders;
+    // AbortOperationPropose rewinds to it. The flag is required because the
+    // counter starts at 0, so on the first reserving DDL the base is also 0.
+    ui64 SchemeChangeOrderBase = 0;
+    bool SchemeChangeOrdersReserved = false;
+
     THashSet<TActorId> Subscribers;
     THashSet<TTxId> DependentOperations;
     THashSet<TTxId> WaitOperations;

@@ -334,17 +334,19 @@ void TMapElement::SetExpression(TExpression expr) {
 /**
  * OpMap operator methods
  */
-TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool ordered)
+TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVector<TMapElement>& mapElements, bool ordered, bool needsToBePushed)
     : IUnaryOperator(EOperator::Map, pos, input)
     , MapElements(mapElements)
-    , Ordered(ordered) {
+    , Ordered(ordered)
+    , NeedsToBePushed(needsToBePushed) {
 }
 
 TOpMap::TOpMap(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhysicalOpProps& props, const TVector<TMapElement>& mapElements,
-               bool ordered)
+               bool ordered, bool needsToBePushed)
     : IUnaryOperator(EOperator::Map, pos, props, input)
     , MapElements(mapElements)
-    , Ordered(ordered) {
+    , Ordered(ordered) 
+    , NeedsToBePushed(needsToBePushed) {
 }
 
 TMapElement* TOpMap::FindOutputElement(const TInfoUnit& output) {

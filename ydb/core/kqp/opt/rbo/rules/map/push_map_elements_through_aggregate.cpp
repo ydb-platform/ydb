@@ -160,6 +160,7 @@ void PruneCollidingTargets(const TVector<TInfoUnit>& aggregateOutput, TVector<TC
 
 bool TPushMapElementsThroughAggregateRule::QuickMatch(const TIntrusivePtr<IOperator>& input) const {
     return input->Kind == EOperator::Map &&
+        CastOperator<TOpMap>(input)->NeedsToBePushed &&
         input->Children.front()->Kind == EOperator::Aggregate;
 }
 
@@ -170,7 +171,7 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    if (topMap->GetInput()->Kind != EOperator::Aggregate) {
+    if (!topMap->NeedsToBePushed || topMap->GetInput()->Kind != EOperator::Aggregate) {
         return input;
     }
     auto aggregate = CastOperator<TOpAggregate>(topMap->GetInput());
@@ -264,7 +265,7 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
     if (topMap->MapElements.empty()) {
         return aggregate;
     }
-    return MakeIntrusive<TOpMap>(aggregate, topMap->Pos, topMap->MapElements, topMap->Ordered);
+    return MakeIntrusive<TOpMap>(aggregate, topMap->Pos, topMap->MapElements, topMap->Ordered, true);
 }
 
 } // namespace NKqp

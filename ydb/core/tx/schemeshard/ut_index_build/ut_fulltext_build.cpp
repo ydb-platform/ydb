@@ -117,18 +117,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             R"(["1";"yellow";["3"]]];)"
         "%false]]]", rows);
 
-        rows = ReadShards(runtime, TTestTxConfig::SchemeShard, index+"/indexImplDictTable").at(0);
-        Cerr << index << "/indexImplDictTable rows: " << rows << "\n";
-        UNIT_ASSERT_VALUES_EQUAL("[[[["
-            R"(["1";"and"];)"
-            R"(["3";"apple"];)"
-            R"(["1";"blue"];)"
-            R"(["1";"car"];)"
-            R"(["1";"green"];)"
-            R"(["2";"red"];)"
-            R"(["1";"yellow"]];)"
-        "%false]]]", rows);
-
         rows = ReadShards(runtime, TTestTxConfig::SchemeShard, index+"/indexImplDocsTable").at(0);
         Cerr << index << "/indexImplDocsTable rows: " << rows << "\n";
         UNIT_ASSERT_VALUES_EQUAL("[[[["
@@ -251,7 +239,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
     // Regression test for the crash at build_index__progress.cpp SendUploadFulltextBordersRequest:
     // building a *prefixed* relevance index (e.g. ALTER TABLE ... ADD INDEX ... ON (lang, text))
     // hit `Y_ENSURE(buildInfo.IndexColumns.size() == 1)` because IndexColumns is [lang, text].
-    // The borders upload (indexImplDictTable) must use the text column (IndexColumns.back()), not [0].
     Y_UNIT_TEST(PrefixedRelevanceBuilds) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -275,16 +262,6 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
             UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
                 Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
         }
-
-        // The dictionary table (produced by SendUploadFulltextBordersRequest) exists and is populated.
-        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplDictTable"), {
-            NLs::PathExist,
-        });
-        auto dictRows = ReadShards(runtime, TTestTxConfig::SchemeShard,
-            "/MyRoot/texts/fulltext_idx/indexImplDictTable").at(0);
-        Cerr << "indexImplDictTable rows: " << dictRows << "\n";
-        // "apple" appears in the corpus, so the dictionary borders must contain it.
-        UNIT_ASSERT_C(dictRows.Contains("apple"), "indexImplDictTable missing tokens: " << dictRows);
 
         // The posting impl-table is keyed with the prefix column prepended before the token.
         TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), {
@@ -1078,7 +1055,7 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
 
     Y_UNIT_TEST(RowIdOptIn_CompactBuildsOverCustomPkAndDropsRowIdSrc) {
         // Compact rowid-mode build over a custom (Utf8) PK: it runs the row-id source prepass, builds the
-        // compact posting/dict tables and, on completion, the transient "rowidsrc" build table is dropped.
+        // compact posting tables and, on completion, the transient "rowidsrc" build table is dropped.
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
         EnableCompactAutoProvisionFlags(runtime);
